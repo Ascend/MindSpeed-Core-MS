@@ -1,6 +1,6 @@
 import torch
 import torch_npu
-from megatron.model.enums import AttnMaskType
+from megatron.core.transformer.enums import AttnMaskType
 
 
 class ScaledUpperTriangMaskedSoftmax:
