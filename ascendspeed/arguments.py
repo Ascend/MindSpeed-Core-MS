@@ -1,77 +1,68 @@
 from functools import wraps
 
 
+def extra_args_provider_decorator(extra_args_provider):
+    @wraps(extra_args_provider)
+    def wrapper(parser):
+        if extra_args_provider is not None:
+            parser = extra_args_provider(parser)
+        parser = process_args(parser)
+        return parser
+
+    return wrapper
+
+
+def parse_args_decorator(parse_args):
+    @wraps(parse_args)
+    def wrapper(extra_args_provider=None, ignore_unknown_args=False):
+        decorated_provider = extra_args_provider_decorator(extra_args_provider)
+        return parse_args(decorated_provider, ignore_unknown_args)
+
+    return wrapper
+
+
+def process_args(parser):
+    parser.conflict_handler = 'resolve'
+    parser = _add_distributed_args(parser)
+    parser = _add_training_args(parser)
+    parser = _add_data_args(parser)
+
+    return parser
+
+
+def _add_data_args(parser):
+    group = parser.add_argument_group(title='data and dataloader')
+    group.add_argument('--tokenizer-type', type=str,
+                       default=None,
+                       choices=['BertWordPieceLowerCase',
+                                'BertWordPieceCase',
+                                'GPT2BPETokenizer',
+                                'SentencePieceTokenizer',
+                                'GPTSentencePieceTokenizer',
+                                'LLama2Tokenizer',
+                                'PretrainedFromHF'],
+                       help='What type of tokenizer to use.')
+    group.add_argument("--tokenizer-name-or-path", type=str, default=None,
+                       help="Name or path of the huggingface tokenizer.")
+    group.add_argument("--tokenizer-not-use-fast", action='store_false',
+                       help="HuggingFace tokenizer not use the fast version.")
+    return parser
+
+
 def _add_distributed_args(parser):
     group = parser.add_argument_group(title='distributed')
 
-    group.add_argument('--tensor-model-parallel-size', type=int, default=1,
-                       help='Degree of tensor model parallelism.')
-    group.add_argument('--pipeline-model-parallel-size', type=int, default=1,
-                       help='Degree of pipeline model parallelism.')
-    group.add_argument('--pipeline-model-parallel-split-rank',
-                       type=int, default=None,
-                       help='Rank where encoder and decoder should be split.')
-    group.add_argument('--model-parallel-size', type=int, default=None,
-                       help='Old model parallel argument, do not use. Use '
-                       '--tensor-model-parallel-size instead.')
-    group.add_argument('--num-layers-per-virtual-pipeline-stage', type=int, default=None,
-                       help='Number of layers per virtual pipeline stage')
-    group.add_argument('--no-overlap-p2p-communication', action='store_false',
-                       help='overlap pipeline parallel communication with forward and backward chunks',
-                       dest='overlap_p2p_comm')
-    group.add_argument('--distributed-backend', default='nccl',
-                       choices=['nccl', 'gloo'],
-                       help='Which backend to use for distributed training.')
-    group.add_argument('--distributed-timeout-minutes', type=int, default=10,
-                       help='Timeout minutes for torch.distributed.')
-    group.add_argument('--overlap-grad-reduce', action='store_true',
-                       default=False, help='If set, overlap DDP grad reduce.')
-    group.add_argument('--no-delay-grad-reduce', action='store_false',
-                       help='If not set, delay / synchronize grad reductions in all but first PP stage.',
-                       dest='delay_grad_reduce')
-    group.add_argument('--overlap-param-gather', action='store_true',
-                       default=False, help='If set, overlap param all-gather in distributed optimizer.')
-    group.add_argument('--delay-param-gather', action='store_true',
-                       default=False, help='If set, delay / synchronize param all-gathers in all but first PP stage.')
-    group.add_argument('--no-scatter-gather-tensors-in-pipeline', action='store_false',
-                       help='If not set, use scatter/gather to optimize communication of tensors in pipeline.',
-                       dest='scatter_gather_tensors_in_pipeline')
-    group.add_argument('--use-ring-exchange-p2p', action='store_true',
-                       default=False, help='If set, use custom-built ring exchange '
-                       'for p2p communications. Note that this option will require '
-                       'a custom built image that support ring-exchange p2p.')
-    group.add_argument('--local_rank', type=int, default=None,
-                       help='local rank passed from distributed launcher.')
     group.add_argument('--local-rank', type=int, default=None,
-                       help='local rank passed from distributed launcher.')
-    group.add_argument('--lazy-mpu-init', type=bool, required=False,
-                       help='If set to True, initialize_megatron() '
-                       'skips DDP initialization and returns function to '
-                       'complete it instead.Also turns on '
-                       '--use-cpu-initialization flag. This is for '
-                       'external DDP manager.')
-    group.add_argument('--use-cpu-initialization', action='store_true',
-                       default=None, help='If set, affine parallel weights '
-                       'initialization uses CPU')
-    group.add_argument('--empty-unused-memory-level', default=0, type=int,
-                       choices=[0, 1, 2],
-                       help='Call torch.cuda.empty_cache() each iteration '
-                       '(training and eval), to reduce fragmentation.'
-                       '0=off, 1=moderate, 2=aggressive.')
-    group.add_argument('--standalone-embedding-stage', action='store_true',
-                       default=False, help='If set, *input* embedding layer '
-                       'is placed on its own pipeline stage, without any '
-                       'transformer layers. (For T5, this flag currently only '
-                       'affects the encoder embedding.)')
-    group.add_argument('--use-distributed-optimizer', action='store_true',
-                       help='Use distributed optimizer.')
-    group.add_argument('--expert-model-parallel-size', type=int, default=1,
-                       help='Degree of expert model parallelism.')
-    group.add_argument('--context-parallel-size', type=int, default=1,
-                       help='Degree of context parallelism.')
-    group.add_argument('--nccl-communicator-config-path', type=str, default=None,
-                       help='Path to the yaml file with NCCL communicator '
-                       'configurations. The number of min/max thread groups and thread '
-                       'group cluster size of each communicator can be configured by '
-                       'setting `min_ctas`, `max_ctas`, and `cga_cluster_size`.')
+                       help='Local rank passed from distributed launcher for torch2.x.')
+    return parser
+
+
+def _add_training_args(parser):
+    group = parser.add_argument_group(title='training')
+    # gradient_accumulation_fusion保持常闭
+    group.add_argument('--no-gradient-accumulation-fusion',
+                       action='store_false', default=False,
+                       help='Disable fusing gradient accumulation to weight '
+                            'gradient computation of linear layers',
+                       dest='gradient_accumulation_fusion')
     return parser

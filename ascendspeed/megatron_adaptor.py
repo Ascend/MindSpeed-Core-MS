@@ -56,6 +56,7 @@ def exe_adaptation():
     from .model.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN
     from .model.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
+    from .arguments import parse_args_decorator
 
     # Megatron monkey patching
     megatron.initialize._compile_dependencies = _compile_dependencies  # remove cuda kernel compile
@@ -71,6 +72,7 @@ def exe_adaptation():
     megatron.model.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax = forward_fused_softmax
     megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
     megatron.core.tensor_parallel.random._set_cuda_rng_state = _set_cuda_rng_state  # default_generators need replace after set_device
+    megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
     for k, v in sys.modules.items():
         if 'megatron' in k and hasattr(v, 'clip_grad_norm_fp32'):
             setattr(v, 'clip_grad_norm_fp32', clip_grad_norm_fp32)  # replace  clip_grad_norm_fp32
