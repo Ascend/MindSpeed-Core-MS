@@ -21,6 +21,7 @@ def ensure_contiguous(fn):
         if not tensor.is_contiguous():
             tensor = tensor.contiguous()
         return fn(tensor, *args, **kwargs)
+
     return wrapper
 
 
@@ -48,7 +49,6 @@ def exe_adaptation():
     import megatron
     import megatron.optimizer
     import megatron.core.pipeline_parallel
-    from .arguments import _add_distributed_args
     from .initialize import _compile_dependencies, set_jit_fusion_options
     from .core.pipeline_parallel.p2p_communication import _batched_p2p_ops
     from .core.tensor_parallel.random import _set_cuda_rng_state
@@ -73,11 +73,10 @@ def exe_adaptation():
     megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
     megatron.core.tensor_parallel.random._set_cuda_rng_state = _set_cuda_rng_state  # default_generators need replace after set_device
     megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
+
     for k, v in sys.modules.items():
         if 'megatron' in k and hasattr(v, 'clip_grad_norm_fp32'):
             setattr(v, 'clip_grad_norm_fp32', clip_grad_norm_fp32)  # replace  clip_grad_norm_fp32
 
-    # Megatron wrappers
-    megatron.arguments._add_distributed_args = _add_distributed_args
 
 exe_adaptation()
