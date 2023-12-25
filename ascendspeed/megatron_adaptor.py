@@ -1,8 +1,8 @@
 import sys
 import types
+from functools import wraps
 import torch
 import apex
-from functools import wraps
 from torch_npu.contrib import transfer_to_npu
 
 
@@ -45,9 +45,11 @@ def multi_tensor_l2norm(overflow_buf, tensor_lists, per_parameter):
 
 
 def multi_tensor_scale(overflow_buf, tensor_lists, scale):
-    assert len(tensor_lists) == 2, 'The size of tensor list must be 2, but got {}'.format(len(tensor_lists))
-    assert len(tensor_lists[0]) == len(tensor_lists[1]), 'The size of tensor list must be same, but got {} and {}' \
-        .format(len(tensor_lists[0]), len(tensor_lists[1]))
+    if len(tensor_lists) != 2:
+        raise AssertionError('The size of tensor list must be 2, but got {}'.format(len(tensor_lists)))
+    if len(tensor_lists[0]) != len(tensor_lists[1]):
+        raise AssertionError('The size of tensor list must be same, but got {} and {}'.format(len(tensor_lists[0]),
+                                                                                              len(tensor_lists[1])))
 
     with torch.no_grad():
         for i in range(len(tensor_lists[0])):
