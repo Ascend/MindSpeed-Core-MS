@@ -39,8 +39,9 @@ def _add_data_args(parser):
                                 'GPT2BPETokenizer',
                                 'SentencePieceTokenizer',
                                 'GPTSentencePieceTokenizer',
-                                'LLama2Tokenizer',
-                                'PretrainedFromHF'],
+                                'Llama2Tokenizer',
+                                'PretrainedFromHF',
+                                'NullTokenizer'],
                        help='What type of tokenizer to use.')
     group.add_argument("--tokenizer-name-or-path", type=str, default=None,
                        help="Name or path of the huggingface tokenizer.")
