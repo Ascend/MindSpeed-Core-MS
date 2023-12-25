@@ -2,7 +2,6 @@ import sys
 import types
 from functools import wraps
 import torch
-import torch_npu
 import apex
 from torch_npu.contrib import transfer_to_npu
 
@@ -29,6 +28,34 @@ def multi_tensor_applier(op, noop_flag_buffer, tensor_lists, *args):
     return op(noop_flag_buffer, tensor_lists, *args)
 
 
+def multi_tensor_l2norm(overflow_buf, tensor_lists, per_parameter):
+    total_norm = 0.0
+    norm_type = 2.0
+    ret_per_tensor = [] if per_parameter else None
+    for grads_for_norm in tensor_lists:
+        for grad in grads_for_norm:
+            grad_norm = torch.norm(grad, norm_type)
+            total_norm += grad_norm ** norm_type
+        if per_parameter:
+            ret_per_tensor.append(total_norm.clone())
+    if not tensor_lists:
+        grad_norm = torch.cuda.FloatTensor([0])
+        total_norm = grad_norm ** norm_type
+    return total_norm ** (1 / norm_type), ret_per_tensor
+
+
+def multi_tensor_scale(overflow_buf, tensor_lists, scale):
+    if len(tensor_lists) != 2:
+        raise AssertionError('The size of tensor list must be 2, but got {}'.format(len(tensor_lists)))
+    if len(tensor_lists[0]) != len(tensor_lists[1]):
+        raise AssertionError('The size of tensor list must be same, but got {} and {}'.format(len(tensor_lists[0]),
+                                                                                              len(tensor_lists[1])))
+
+    with torch.no_grad():
+        for i in range(len(tensor_lists[0])):
+            tensor_lists[1][i].copy_(tensor_lists[0][i] * scale)
+
+
 def exe_adaptation():
     # Need replace modules before import megatron
     sys.modules['transformer_engine'] = types.ModuleType('transformer_engine')
@@ -37,46 +64,55 @@ def exe_adaptation():
     setattr(sys.modules['transformer_engine'].pytorch, 'DotProductAttention', torch.nn.Module)
     sys.modules['fused_layer_norm_cuda'] = types.ModuleType('fused_layer_norm_cuda')
     sys.modules['amp_C'] = types.ModuleType('amp_C')
+    setattr(sys.modules['amp_C'], 'multi_tensor_l2norm', multi_tensor_l2norm)
+    setattr(sys.modules['amp_C'], 'multi_tensor_scale', multi_tensor_scale)
 
-    # About torch replace
-    from .optimizer.adam import AdamW
-    apex.optimizers.FusedAdam = AdamW  # replace apex fused adam
+    # Torch and Apex monkey patching
+    apex.optimizers.FusedAdam = torch.optim.AdamW  # replace apex fused adam
     apex.multi_tensor_apply.multi_tensor_applier = multi_tensor_applier
     torch.nn.parameter.Parameter.type = type_wrapper(torch.nn.parameter.Parameter.type)  # replace npu type to gpu type
     torch.Tensor.type = type_wrapper(torch.Tensor.type)  # replace npu type to gpu type
     torch.Tensor.view = ensure_contiguous(torch.Tensor.view)  # patch view to ensure tensor is contiguous
 
-    import megatron
-    import megatron.optimizer
+    # Megatron core monkey patching
+    import megatron.core.tensor_parallel
     import megatron.core.pipeline_parallel
-    from .initialize import _compile_dependencies, set_jit_fusion_options
+    from .arguments import parse_args_decorator
     from .core.pipeline_parallel.p2p_communication import _batched_p2p_ops
     from .core.tensor_parallel.random import _set_cuda_rng_state
-    from .optimizer.clip_grads import clip_grad_norm_fp32
-    from .model.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN
-    from .model.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
+    from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN
+    from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
-    from .arguments import parse_args_decorator
 
-    # Megatron monkey patching
-    megatron.initialize._compile_dependencies = _compile_dependencies  # remove cuda kernel compile
-    megatron.initialize.set_jit_fusion_options = set_jit_fusion_options  # remove cuda jit nvfuser
-
-    megatron.model.fused_layer_norm.FusedLayerNormAffineFunction = FusedLayerNormAffineFunction
-    megatron.model.fused_layer_norm.FastLayerNormFN = FastLayerNormFN
-    megatron.model.fused_softmax.ScaledUpperTriangMaskedSoftmax = ScaledUpperTriangMaskedSoftmax
-    megatron.model.fused_softmax.ScaledMaskedSoftmax = ScaledMaskedSoftmax
-    megatron.model.fused_softmax.ScaledSoftmax = ScaledSoftmax
-
-    megatron.model.fused_softmax.FusedScaleMaskSoftmax.is_kernel_available = is_kernel_available  # replace kernel check
-    megatron.model.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax = forward_fused_softmax
     megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
     megatron.core.tensor_parallel.random._set_cuda_rng_state = _set_cuda_rng_state  # default_generators need replace after set_device
-    megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
+    megatron.core.fusions.fused_layer_norm.FusedLayerNormAffineFunction = FusedLayerNormAffineFunction
+    megatron.core.fusions.fused_layer_norm.FastLayerNormFN = FastLayerNormFN
+    megatron.core.fusions.fused_softmax.ScaledUpperTriangMaskedSoftmax = ScaledUpperTriangMaskedSoftmax
+    megatron.core.fusions.fused_softmax.ScaledMaskedSoftmax = ScaledMaskedSoftmax
+    megatron.core.fusions.fused_softmax.ScaledSoftmax = ScaledSoftmax
+    megatron.core.fusions.fused_softmax.FusedScaleMaskSoftmax.is_kernel_available = is_kernel_available  # replace kernel check
+    megatron.core.fusions.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax = forward_fused_softmax
 
-    for k, v in sys.modules.items():
-        if 'megatron' in k and hasattr(v, 'clip_grad_norm_fp32'):
-            setattr(v, 'clip_grad_norm_fp32', clip_grad_norm_fp32)  # replace  clip_grad_norm_fp32
+    # Megatron others modules monkey patching
+    try:
+        import megatron.initialize
+        from .initialize import _compile_dependencies, set_jit_fusion_options
+
+        megatron.initialize._compile_dependencies = _compile_dependencies  # remove cuda kernel compile
+        megatron.initialize.set_jit_fusion_options = set_jit_fusion_options  # remove cuda jit nvfuser
+        megatron.model.fused_layer_norm.FusedLayerNormAffineFunction = FusedLayerNormAffineFunction
+        megatron.model.fused_layer_norm.FastLayerNormFN = FastLayerNormFN
+        megatron.model.fused_softmax.ScaledUpperTriangMaskedSoftmax = ScaledUpperTriangMaskedSoftmax
+        megatron.model.fused_softmax.ScaledMaskedSoftmax = ScaledMaskedSoftmax
+        megatron.model.fused_softmax.ScaledSoftmax = ScaledSoftmax
+        megatron.model.fused_softmax.FusedScaleMaskSoftmax.is_kernel_available = is_kernel_available  # replace kernel check
+        megatron.model.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax = forward_fused_softmax
+
+        # Megatron wrappers
+        megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
+    except ModuleNotFoundError:
+        pass
 
 
 exe_adaptation()
