@@ -80,12 +80,16 @@ def exe_adaptation():
     from .arguments import parse_args_decorator
     from .core.pipeline_parallel.p2p_communication import _batched_p2p_ops
     from .core.tensor_parallel.random import _set_cuda_rng_state
+    from .core.tensor_parallel.layers import VocabParallelEmbeddingForward
+    from .core.tensor_parallel.cross_entropy import _VocabParallelCrossEntropyForward
     from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
 
     megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
     megatron.core.tensor_parallel.random._set_cuda_rng_state = _set_cuda_rng_state  # default_generators need replace after set_device
+    megatron.core.tensor_parallel.layers.VocabParallelEmbedding.forward = VocabParallelEmbeddingForward
+    megatron.core.tensor_parallel.cross_entropy._VocabParallelCrossEntropy.forward = _VocabParallelCrossEntropyForward
     megatron.core.fusions.fused_layer_norm.FusedLayerNormAffineFunction = FusedLayerNormAffineFunction
     megatron.core.fusions.fused_layer_norm.FastLayerNormFN = FastLayerNormFN
     megatron.core.fusions.fused_softmax.ScaledUpperTriangMaskedSoftmax = ScaledUpperTriangMaskedSoftmax
@@ -116,3 +120,4 @@ def exe_adaptation():
 
 
 exe_adaptation()
+
