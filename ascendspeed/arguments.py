@@ -23,10 +23,20 @@ def parse_args_decorator(parse_args):
 
 def process_args(parser):
     parser.conflict_handler = 'resolve'
+    parser = _add_network_size_args(parser)
     parser = _add_distributed_args(parser)
     parser = _add_training_args(parser)
     parser = _add_data_args(parser)
 
+    return parser
+
+
+def _add_network_size_args(parser):
+    group = parser.add_argument_group(title='network size')
+    group.add_argument("--use-fused-rmsnorm", action='store_true',
+                       help="Use fused rmsnorm.")
+    group.add_argument("--use-fused-swiglu", action='store_true',
+                       help="Use fused swiglu.")
     return parser
 
 
@@ -67,3 +77,21 @@ def _add_training_args(parser):
                             'gradient computation of linear layers',
                        dest='gradient_accumulation_fusion')
     return parser
+
+
+def validate_args_decorator(validate_args):
+    @wraps(validate_args)
+    def wrapper(args, defaults):
+        validate_args(args, defaults)
+        if args.use_fused_rmsnorm:
+            if args.normalization != "RMSNorm":
+                raise AssertionError(
+                    '--use-fused-rmsnorm must enable with '
+                    '--normalization=RMSNorm, but got normalization'
+                    '={}.'.format(args.normalization))
+        if args.use_fused_swiglu:
+            if not args.swiglu:
+                raise AssertionError(
+                    '--use-fused-swiglu must enable with --swiglu, '
+                    'but --swiglu={}.'.format(args.swiglu))
+    return wrapper

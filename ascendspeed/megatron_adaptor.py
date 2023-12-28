@@ -77,7 +77,7 @@ def exe_adaptation():
     # Megatron core monkey patching
     import megatron.core.tensor_parallel
     import megatron.core.pipeline_parallel
-    from .arguments import parse_args_decorator
+    from .arguments import parse_args_decorator, validate_args_decorator
     from .core.pipeline_parallel.p2p_communication import _batched_p2p_ops
     from .core.tensor_parallel.random import _set_cuda_rng_state
     from .core.tensor_parallel.layers import VocabParallelEmbeddingForward
@@ -85,6 +85,8 @@ def exe_adaptation():
     from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
+    from .core.fusions.rms_norm import rms_norm_init, rms_norm_forward
+    from .core.fusions.transformer import parallel_mlp_init
 
     megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
     megatron.core.tensor_parallel.random._set_cuda_rng_state = _set_cuda_rng_state  # default_generators need replace after set_device
@@ -112,9 +114,13 @@ def exe_adaptation():
         megatron.model.fused_softmax.ScaledSoftmax = ScaledSoftmax
         megatron.model.fused_softmax.FusedScaleMaskSoftmax.is_kernel_available = is_kernel_available  # replace kernel check
         megatron.model.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax = forward_fused_softmax
+        megatron.model.rms_norm.RMSNorm.__init__ = rms_norm_init
+        megatron.model.rms_norm.RMSNorm.forward = rms_norm_forward
+        megatron.model.transformer.ParallelMLP.__init__ = parallel_mlp_init
 
         # Megatron wrappers
         megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
+        megatron.initialize.validate_args = validate_args_decorator(megatron.initialize.validate_args)
     except ModuleNotFoundError:
         pass
 
