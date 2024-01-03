@@ -120,6 +120,7 @@ def exe_adaptation():
 
         # Megatron wrappers
         megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
+        megatron.arguments.parse_args = parse_args_decorator(megatron.arguments.parse_args)
         megatron.initialize.validate_args = validate_args_decorator(megatron.initialize.validate_args)
     except ModuleNotFoundError:
         pass
