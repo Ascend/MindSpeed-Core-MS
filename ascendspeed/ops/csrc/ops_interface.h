@@ -16,22 +16,12 @@
 #ifndef ASCENDSPEED_OPS_CSRC_COMMON_H
 #define ASCENDSPEED_OPS_CSRC_COMMON_H
 
-std::tuple<at::Tensor, at::Tensor> flash_attention(const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
-                                                   const c10::optional<at::Tensor> &atten_mask, const c10::optional<at::Tensor> &alibi_mask,
-                                                   const c10::optional<at::Tensor> &drop_mask, float scale_value, int64_t head_num,
-                                                   int64_t io_layout, float keep_prob, int64_t pre_tokens, int64_t next_tokens,
-                                                   int64_t precise_mode, int64_t groups);
-
-std::tuple<at::Tensor, at::Tensor, at::Tensor> flash_attention_grad(const at::Tensor &dy, const at::Tensor &softmax_log_max_sum, const at::Tensor &attention_out,
-                                                                    const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
-                                                                    const c10::optional<at::Tensor> &atten_mask, const c10::optional<at::Tensor> &alibi_mask,
-                                                                    const c10::optional<at::Tensor> &drop_mask, float scale_value, int64_t head_num, int64_t io_layout,
-                                                                    float keep_prob, int64_t pre_tokens, int64_t next_tokens, int64_t precise_mode, int64_t groups);
-                                                   
-std::tuple<at::Tensor, int64_t, int64_t, int64_t> gen_mask(const at::Tensor &self, double keep_prob,
-    int64_t head_num, std::string input_layout, bool gen_mask_parallel, bool sync);
-
-at::Tensor exist_gen_mask(const at::Tensor &self, double keep_prob, bool gen_mask_parallel, bool sync,
-    int64_t seed, int64_t offset, int64_t numels);
+at::Tensor npu_flash_attention(
+    const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
+    const c10::optional<at::Tensor> &atten_mask, const c10::optional<at::Tensor> &alibi_mask,
+    float scale_value = 1.0, float q_scale = 1.0, int64_t head_num = 1,
+    std::string io_layout = "BNSD", float keep_prob = 1.0, int64_t pre_tokens = 2147483647, int64_t next_tokens = 1,
+    int64_t precise_mode = 0, int64_t groups = -1,
+    bool sync = false, bool parallel = true);
 
 #endif

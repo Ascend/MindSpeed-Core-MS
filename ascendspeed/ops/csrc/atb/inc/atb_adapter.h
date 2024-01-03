@@ -19,34 +19,15 @@
 #include <string>
 #include <torch/script.h>
 #include <torch/custom_class.h>
+#include <torch_npu/csrc/framework/OpCommand.h>
 #include "atb/types.h"
 #include "atb/operation.h"
 #include "atb/utils.h"
 
-static atb::Context* msContext = nullptr;
 atb::Tensor AtTensor2Tensor(const at::Tensor atTensor);
 atb::Context* GetContext();
 at::Tensor GetWorkspaceTensor(uint64_t workspaceSize, atb::Operation *operation);
 uint64_t OperationSetup(atb::VariantPack variantPack, atb::Operation *operation, atb::Context* contextPtr);
-#define RUN_ATB_CMD(param, paramsetter, name)                                                                \
-    atb::Operation* op = nullptr;                                                                            \
-    auto contextPtr = GetContext();                                                                          \
-    atb::CreateOperation(param, &op);                                                                        \
-    TORCH_CHECK(op != nullptr, "get op failed!");                                                            \
-    uint64_t workspaceSize = OperationSetup(paramsetter.variantPack, op, contextPtr);                        \
-    auto workspaceTensor = GetWorkspaceTensor(workspaceSize, op);                                            \
-    const void *workspacePtr = nullptr;                                                                            \
-    workspacePtr = workspaceTensor.storage().data();                                                         \
-    auto acl_call = [op, contextPtr, paramsetter, workspacePtr, workspaceSize]() -> int {                    \
-        auto st = op->Execute(paramsetter.variantPack, (uint8_t *)workspacePtr, workspaceSize, contextPtr);  \
-        DestroyOperation(op);                                                                                \
-        return 0;                                                                                            \
-    };                                                                                                       \
-    at_npu::native::OpCommand cmd;                                                                           \
-    cmd.Name(name);                                                                                          \
-    cmd.SetCustomHandler(acl_call);                                                                          \
-    cmd.Run();                                                                                               \
-
 class ParamSetter {
 public:
     ParamSetter& Input(const at::Tensor &tensor);
@@ -54,5 +35,7 @@ public:
     ParamSetter& Output(at::Tensor &tensor);
     atb::VariantPack variantPack;
 };
+
+void RunAtbCmd(atb::Operation *op, const ParamSetter &paramsetter, const std::string &name);
 
 #endif

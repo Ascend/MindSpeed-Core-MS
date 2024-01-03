@@ -1,1 +1,2 @@
-from .flash_attention import flash_attention
+import ascendspeed_ops
+from ascendspeed_ops import flash_attention
