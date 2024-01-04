@@ -1,4 +1,4 @@
-
+import math
 import torch
 import torch.nn.functional as F
 import megatron
@@ -7,6 +7,11 @@ from megatron.core import tensor_parallel
 from megatron.model.utils import openai_gelu, erf_gelu
 from megatron.model.transformer import ParallelMLP
 import torch_npu
+
+try:
+    from einops import rearrange
+except ImportError:
+    rearrange = None
 
 
 def parallel_mlp_init(self, config, is_expert=False):
@@ -66,3 +71,50 @@ def parallel_mlp_init(self, config, is_expert=False):
         input_is_parallel=True,
         is_expert=is_expert,
     )
+
+
+def flash_self_attention_forward(self, q, k, v):
+    """Implements the multihead softmax attention.
+    Arguments
+    ---------
+        q, k, v: The tensor containing the query, key, and value. (B, S, H, D)
+    """
+    args = get_args()
+
+    batch_size, seq_length, head_num, head_dim = q.shape[0], q.shape[1], q.shape[2], q.shape[3]
+
+    if not hasattr(self, 'attention_mask'):
+        self.attention_mask = torch.triu(torch.ones(seq_length, seq_length), 1).bool().npu()
+
+    if args.shape_order == 'BSH':
+        q, k, v = [rearrange(x, 'b s h d -> b s (h d)') for x in [q, k, v]]
+    elif args.shape_order == 'SBH':
+        q, k, v = [rearrange(x, 'b s h d -> s b (h d)') for x in [q, k, v]]
+    elif args.shape_order != 'BSND':
+        raise ValueError('Invalid shape-order: {}, shape-order must be SBH or BSH or BSND'.format(args.shape_order))
+
+    try:
+        scale = 1.0 / math.sqrt(head_dim) if self.softmax_scale is None else self.softmax_scale
+    except Exception as e:
+        raise ValueError('Invalid head_dim: {}'.format(head_dim)) from e
+
+    output = torch_npu.npu_fusion_attention( \
+        q, k, v, head_num, args.shape_order, \
+        pse=None, \
+        padding_mask=None, \
+        atten_mask=self.attention_mask, \
+        scale=scale, \
+        pre_tockens=args.pre_tockens, \
+        next_tockens=args.next_tockens, \
+        keep_prob=1 - self.dropout_p, \
+        inner_precise=0
+    )[0]
+
+    if args.shape_order == 'BSH':
+        output = rearrange(output, 'b s (h d) -> b s h d', h=head_num)
+    elif args.shape_order == 'SBH':
+        output = rearrange(output, 's b (h d) -> b s h d', h=head_num)
+    elif args.shape_order != 'BSND':
+        raise ValueError('Invalid shape-order: {}, shape-order must be SBH or BSH or BSND'.format(args.shape_order))
+
+    return output

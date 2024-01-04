@@ -37,6 +37,8 @@ def _add_network_size_args(parser):
                        help="Use fused rmsnorm.")
     group.add_argument("--use-fused-swiglu", action='store_true',
                        help="Use fused swiglu.")
+    group.add_argument("--use-fused-rotary-pos-emb", action='store_true',
+                       help="Use fused rotary-pos-emb.")
     return parser
 
 
@@ -76,6 +78,13 @@ def _add_training_args(parser):
                        help='Disable fusing gradient accumulation to weight '
                             'gradient computation of linear layers',
                        dest='gradient_accumulation_fusion')
+    group.add_argument('--pre-tockens', type=int, default=65536,
+                       help='pre-tockens is used by Flash attention')
+    group.add_argument('--next-tockens', type=int, default=0,
+                       help='next-tockens is used by Flash attention')
+    group.add_argument('--shape-order', type=str, default='SBH',
+                       choices=['SBH', 'BSH', 'BSND'],
+                       help='input shape order used by Flash attention')
     return parser
 
 
@@ -94,4 +103,9 @@ def validate_args_decorator(validate_args):
                 raise AssertionError(
                     '--use-fused-swiglu must enable with --swiglu, '
                     'but --swiglu={}.'.format(args.swiglu))
+        if args.use_fused_rotary_pos_emb:
+            if not args.use_rotary_position_embeddings:
+                raise AssertionError(
+                    '--use-fused-rotary-pos-emb must enable with --use-rotary-position-embeddings, '
+                    'but --use-rotary-position-embeddings={}.'.format(args.use_rotary_position_embeddings))
     return wrapper

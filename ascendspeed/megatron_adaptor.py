@@ -66,6 +66,8 @@ def exe_adaptation():
     sys.modules['amp_C'] = types.ModuleType('amp_C')
     setattr(sys.modules['amp_C'], 'multi_tensor_l2norm', multi_tensor_l2norm)
     setattr(sys.modules['amp_C'], 'multi_tensor_scale', multi_tensor_scale)
+    sys.modules['flash_attn.flash_attn_interface'] = types.ModuleType('flash_attn_flash_attn_interface')
+    setattr(sys.modules['flash_attn.flash_attn_interface'], 'flash_attn_unpadded_func', torch.nn.Module)
 
     # Torch and Apex monkey patching
     apex.optimizers.FusedAdam = torch.optim.AdamW  # replace apex fused adam
@@ -86,7 +88,8 @@ def exe_adaptation():
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
     from .core.fusions.rms_norm import rms_norm_init, rms_norm_forward
-    from .core.fusions.transformer import parallel_mlp_init
+    from .core.fusions.transformer import parallel_mlp_init, flash_self_attention_forward
+    from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb
 
     megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
     megatron.core.tensor_parallel.random._set_cuda_rng_state = _set_cuda_rng_state  # default_generators need replace after set_device
@@ -99,6 +102,7 @@ def exe_adaptation():
     megatron.core.fusions.fused_softmax.ScaledSoftmax = ScaledSoftmax
     megatron.core.fusions.fused_softmax.FusedScaleMaskSoftmax.is_kernel_available = is_kernel_available  # replace kernel check
     megatron.core.fusions.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax = forward_fused_softmax
+    megatron.core.transformer.attention.apply_rotary_pos_emb = apply_fused_rotary_pos_emb
 
     # Megatron others modules monkey patching
     try:
@@ -117,6 +121,8 @@ def exe_adaptation():
         megatron.model.rms_norm.RMSNorm.__init__ = rms_norm_init
         megatron.model.rms_norm.RMSNorm.forward = rms_norm_forward
         megatron.model.transformer.ParallelMLP.__init__ = parallel_mlp_init
+        megatron.model.transformer.FlashSelfAttention.forward = flash_self_attention_forward
+        megatron.model.transformer.apply_rotary_pos_emb = apply_fused_rotary_pos_emb
 
         # Megatron wrappers
         megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
@@ -125,6 +131,8 @@ def exe_adaptation():
     except ModuleNotFoundError:
         pass
 
+    # accelerate package will check TE on sys.modules，so we need remove this patch
+    del sys.modules['transformer_engine']
 
 exe_adaptation()
 
