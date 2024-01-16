@@ -251,9 +251,9 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> flash_attention_grad(const at::Te
                                 key, value,
                                 head_num, io_layout);
 
-    at::Tensor tensor_query_grad = CreateAtTensor(query.sizes(), at::ScalarType::Float);
-    at::Tensor tensor_key_grad = CreateAtTensor(query.sizes(), at::ScalarType::Float);
-    at::Tensor tensor_value_grad = CreateAtTensor(query.sizes(), at::ScalarType::Float);
+    at::Tensor tensor_query_grad = CreateAtTensor(query.sizes(), query.scalar_type());
+    at::Tensor tensor_key_grad = CreateAtTensor(query.sizes(), query.scalar_type());
+    at::Tensor tensor_value_grad = CreateAtTensor(query.sizes(), query.scalar_type());
 
     ParamSetter paramsetter;
     paramsetter.Input(dy)

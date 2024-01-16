@@ -27,7 +27,7 @@ at::Tensor CreateAtTensor(at::IntArrayRef shape, at::ScalarType inputDtype)
     at::TensorOptions options = at::TensorOptions(torch_npu::utils::get_npu_device_type());
     options = options.dtype(inputDtype);
     options = options.layout(torch::kStrided).requires_grad(false);
-    at::Tensor newTensor = at::zeros(shape, options);
+    at::Tensor newTensor = at::empty(shape, options);
     if (!newTensor.is_contiguous()) {
         newTensor = newTensor.contiguous();
     }
