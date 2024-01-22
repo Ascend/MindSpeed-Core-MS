@@ -17,8 +17,11 @@
 #include "ops_interface.h"
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("npu_multi_head_attention_forward", &flash_attention, "the fast realization of self-attention forward-function on ascend device");
-    m.def("npu_multi_head_attention_backward", &flash_attention_grad, "the fast realization of self-attention backward-function on ascend device");
-    m.def("npu_gen_mask", &gen_mask, "generate random mask on ascend device");
-    m.def("npu_gen_mask_by_seed", &exist_gen_mask, "generate random mask by seed on ascend device");
+    m.def("flash_attention", &npu_flash_attention, "the fast realization of self-attention on ascend device",
+    pybind11::arg("query"), pybind11::arg("key"), pybind11::arg("value"),
+    pybind11::arg("atten_mask"), pybind11::arg("alibi_mask"),
+    pybind11::arg("scale_value")=1.0, pybind11::arg("q_scale")=1.0, pybind11::arg("head_num")=1,
+    pybind11::arg("io_layout")="BNSD", pybind11::arg("keep_prob")=1.0, pybind11::arg("pre_tokens")=2147483647,
+    pybind11::arg("next_tokens")=1, pybind11::arg("precise_mode")=0, pybind11::arg("groups")=-1,
+    pybind11::arg("sync")=false, pybind11::arg("parallel")=true);
 }

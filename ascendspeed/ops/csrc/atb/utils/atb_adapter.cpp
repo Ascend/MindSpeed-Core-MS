@@ -18,9 +18,10 @@
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 #include <torch_npu/csrc/core/npu/DeviceUtils.h>
 #include <torch_npu/csrc/core/npu/NPUFormat.h>
-#include <torch_npu/csrc/framework/OpCommand.h>
 
 using namespace std;
+
+static atb::Context* msContext = nullptr;
 
 at::Tensor FormatTrans(const at::Tensor &at_tensor)
 {
@@ -59,8 +60,30 @@ atb::Tensor AtTensor2Tensor(const at::Tensor atTensor)
     return tensor;
 }
 
+void RunAtbCmd(atb::Operation *op, const ParamSetter &paramsetter, const std::string &name)
+{
+    auto contextPtr = GetContext();
+    uint64_t workspaceSize = OperationSetup(paramsetter.variantPack, op, contextPtr);
+    auto workspaceTensor = GetWorkspaceTensor(workspaceSize, op);
+    const void *workspacePtr = nullptr;
+    workspacePtr = workspaceTensor.storage().data();
+    auto acl_call = [op, contextPtr, paramsetter, workspacePtr, workspaceSize]() -> int {
+        auto st = op->Execute(paramsetter.variantPack, (uint8_t *)workspacePtr, workspaceSize, contextPtr);
+        DestroyOperation(op);
+        return 0;
+    };
+    at_npu::native::OpCommand cmd;
+    cmd.Name(name);
+    cmd.SetCustomHandler(acl_call);
+    cmd.Run();
+}
+
 ParamSetter& ParamSetter::Input(const at::Tensor &tensor)
 {
+    if (!tensor.defined()) {
+        variantPack.inTensors.push_back(atb::Tensor());
+        return *this;
+    }
     at::Tensor newTensor = FormatTrans(tensor);
     if(!newTensor.is_contiguous()) {
         newTensor = newTensor.contiguous();
@@ -92,14 +115,13 @@ uint64_t OperationSetup(atb::VariantPack variantPack, atb::Operation *operation,
     uint64_t workspaceSize = 0;
     atb::Status status = operation->Setup(variantPack, workspaceSize, contextPtr);
     TORCH_CHECK(status == 0, "setup failed!");
-    TORCH_CHECK(workspaceSize > 0, "get workspace size failed!");
     return workspaceSize;
 }
 
 at::Tensor GetWorkspaceTensor(uint64_t workspaceSize, atb::Operation *operation)
 {
     at::TensorOptions options = at::TensorOptions(torch_npu::utils::get_npu_device_type());
-    at::Tensor workspaceTensor = at::empty({workspaceSize}, options.dtype(at::kByte));
+    at::Tensor workspaceTensor = at::empty(at::IntArrayRef(workspaceSize), options.dtype(at::kByte));
     return workspaceTensor;
 }
 
@@ -116,4 +138,3 @@ atb::Context* GetContext()
     }
     return msContext;
 }
-

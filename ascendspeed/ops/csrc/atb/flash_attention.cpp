@@ -16,14 +16,14 @@
 
 #include <string>
 #include <vector>
-#include <torch_npu/csrc/core/npu/NPUStream.h>
-#include <torch_npu/csrc/core/npu/DeviceUtils.h>
-#include <torch_npu/csrc/framework/OpCommand.h>
 #include <torch/script.h>
 #include <torch/custom_class.h>
+#include <torch/csrc/autograd/custom_function.h>
+#include <torch_npu/csrc/core/npu/NPUStream.h>
+#include <torch_npu/csrc/core/npu/DeviceUtils.h>
 #include <torch_npu/csrc/aten/NPUGeneratorImpl.h>
+#include <torch_npu/csrc/framework/OpCommand.h>
 #include "../ops_interface.h"
-#include "inc/adapter.h"
 
 #ifdef ENABLE_ATB
 #include "inc/atb_adapter.h"
@@ -32,7 +32,8 @@
 #endif 
 
 using namespace std;
-
+using torch::autograd::AutogradContext;
+using torch::autograd::Function;
 namespace {
 const static int QKV_DIM_NUM = 3;
 const static int QKV_DIM_NUM_BNSD = 4;
@@ -45,6 +46,7 @@ const static int BSH_DIM_H = 2;
 const static int SBH_DIM_B = 1;
 const static int SBH_DIM_S = 0;
 const static int SBH_DIM_H = 2;
+const static int N = 32;
 
 enum FlashAttentionFormat : int {
     BNSD = 0,
@@ -69,32 +71,30 @@ DropOutStatus get_status(double keep_prob)
     return DropOutStatus::DROPOUT_NORMAL;
 }
 
-at::Tensor gen_mask_impl(const at::Tensor &self, const at::Scalar &keep_prob, const at::Scalar &seed,
-    const int64_t offset, const int64_t numels)
+void gen_mask_impl(const at::Tensor &self, const at::Scalar &keep_prob, const at::Scalar &seed,
+                   const int64_t offset, const int64_t numels, at::Tensor &mask)
 {
     int64_t length = (numels + 256 - 1) / 256 * 256 / 8;
     c10::TensorOptions options = self.options();
-    at::Tensor mask = at::empty(at::IntArrayRef{length + 32}, options.dtype(at::kByte));
+    mask = at::empty(at::IntArrayRef(length + 32), options.dtype(at::kByte));
     at::SmallVector<int64_t, N> offsetList = {0, offset};
     const int64_t seed1 = 0;
     at_npu::native::OpCommand cmd;
     cmd.Name("StatelessDropOutGenMask")
-        .Input(at::IntArrayRef{numels})
+        .Input(at::IntArrayRef(numels))
         .Input(keep_prob, self.scalar_type(), at_npu::native::CompileType::MEMORY_HOST_COMPILE_DEPENDENT)
         .Input(seed, at::ScalarType::Int)
         .Input(at::Scalar(seed1), at::ScalarType::Int)
         .Input(offsetList, at::kLong, at_npu::native::CompileType::MEMORY_HOST_COMPILE_INDEPENDENT)
         .Output(mask)
         .Run();
-    return mask;
 }
 
-at::Tensor gen_mask_dispatch(const at::Tensor &self, const at::Scalar &keep_prob, const at::Scalar &seed,
-    const int64_t offset, const int64_t numels, const bool gen_mask_parallel, const bool sync)
+// select gen_mask method
+void gen_mask_dispatch(const at::Tensor &self, const at::Scalar &keep_prob, const at::Scalar &seed,
+                       const int64_t offset, const int64_t numels, const bool parallel, const bool sync, at::Tensor &mask)
 {
-    at::Tensor mask;
-    mask = gen_mask_impl(self, keep_prob, seed, offset, numels);
-    return mask;
+    gen_mask_impl(self, keep_prob, seed, offset, numels, mask);
 }
 
 void InferShapeFlashAttention(c10::SmallVector<int64_t, N> &size, int64_t io_layout, int64_t head_num, const at::Tensor &query)
@@ -180,17 +180,17 @@ void CheckFlashAttentionBackward(const at::Tensor &dy, const at::Tensor &softmax
                 "Input attention_out dtype ", attention_out.scalar_type(),
                 " invalid, should be float16 or bfloat16");
 }
-} // namespace
 
-std::tuple<at::Tensor, at::Tensor> flash_attention(const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
-                                                   const c10::optional<at::Tensor> &atten_mask, const c10::optional<at::Tensor> &alibi_mask,
-                                                   const c10::optional<at::Tensor> &drop_mask, float scale_value, int64_t head_num,
-                                                   int64_t io_layout, float keep_prob, int64_t pre_tokens, int64_t next_tokens,
-                                                   int64_t precise_mode, int64_t groups)
+// compute flash_attention_forward
+void flash_attention(const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
+                     const c10::optional<at::Tensor> &atten_mask, const c10::optional<at::Tensor> &alibi_mask,
+                     const c10::optional<at::Tensor> &drop_mask, float scale_value, int64_t head_num,
+                     int64_t io_layout, float keep_prob, int64_t pre_tokens, int64_t next_tokens,
+                     int64_t precise_mode, int64_t groups, at::Tensor &tensor_softmax, at::Tensor &tensor_attention_out)
 {
 #ifndef ENABLE_ATB
     TORCH_CHECK(false, "flash_attention not implemented");
-#else 
+#else
     atb::train::FlashAttentionParam param;
     param.scaleValue = scale_value;
     param.headNum = head_num;
@@ -201,16 +201,6 @@ std::tuple<at::Tensor, at::Tensor> flash_attention(const at::Tensor &query, cons
     param.keepProb = keep_prob;
     param.groups = groups;
 
-    //infer shape
-    CheckFlashAttention(query, key, value, head_num, io_layout);
-    c10::SmallVector<int64_t, N> tensor_softmax_shape;
-    InferShapeFlashAttention(tensor_softmax_shape, io_layout, head_num, query);
-
-    //apply tensor
-    at::Tensor tensor_softmax = CreateAtTensor(tensor_softmax_shape, 
-                                               at::ScalarType::Float);
-    at::Tensor tensor_attention_out = CreateAtTensor(query.sizes(),
-                                                     query.scalar_type());
     //set input and output
     ParamSetter paramsetter;
     paramsetter.Input(query)
@@ -222,16 +212,20 @@ std::tuple<at::Tensor, at::Tensor> flash_attention(const at::Tensor &query, cons
                .Output(tensor_attention_out)
                .Output(tensor_softmax);
 
-    RUN_ATB_CMD(param, paramsetter, "fa_forward")
-    return std::make_tuple(tensor_attention_out, tensor_softmax);
+    atb::Operation* op = nullptr;
+    atb::CreateOperation(param, &op);
+    TORCH_CHECK(op != nullptr, "flash_attention get op failed!");
+    RunAtbCmd(op, paramsetter, "fa_forward");
 #endif
 }
 
-std::tuple<at::Tensor, at::Tensor, at::Tensor> flash_attention_grad(const at::Tensor &dy, const at::Tensor &softmax_log_max_sum, const at::Tensor &attention_out,
-                                                                    const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
-                                                                    const c10::optional<at::Tensor> &atten_mask, const c10::optional<at::Tensor> &alibi_mask,
-                                                                    const c10::optional<at::Tensor> &drop_mask, float scale_value, int64_t head_num, int64_t io_layout,
-                                                                    float keep_prob, int64_t pre_tokens, int64_t next_tokens, int64_t precise_mode, int64_t groups)
+// compute flash_attention_backward
+void flash_attention_grad(const at::Tensor &dy, const at::Tensor &softmax_log_max_sum, const at::Tensor &attention_out,
+                          const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
+                          const c10::optional<at::Tensor> &atten_mask, const c10::optional<at::Tensor> &alibi_mask,
+                          const c10::optional<at::Tensor> &drop_mask, float scale_value, int64_t head_num, int64_t io_layout,
+                          float keep_prob, int64_t pre_tokens, int64_t next_tokens, int64_t precise_mode, int64_t groups,
+                          at::Tensor &tensor_query_grad, at::Tensor &tensor_key_grad, at::Tensor &tensor_value_grad)
 {
 #ifndef ENABLE_ATB
     TORCH_CHECK(false, "flash_attention_grad not implemented");
@@ -245,15 +239,6 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> flash_attention_grad(const at::Te
     param.ioLayout = (atb::train::FlashAttentionBackwardParam::IoLayout)io_layout;
     param.keepProb = keep_prob;
     param.groups = groups;
-
-    CheckFlashAttentionBackward(dy, softmax_log_max_sum,
-                                attention_out, query,
-                                key, value,
-                                head_num, io_layout);
-
-    at::Tensor tensor_query_grad = CreateAtTensor(query.sizes(), query.scalar_type());
-    at::Tensor tensor_key_grad = CreateAtTensor(query.sizes(), query.scalar_type());
-    at::Tensor tensor_value_grad = CreateAtTensor(query.sizes(), query.scalar_type());
 
     ParamSetter paramsetter;
     paramsetter.Input(dy)
@@ -269,52 +254,190 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> flash_attention_grad(const at::Te
                .Output(tensor_key_grad)
                .Output(tensor_value_grad);
 
-    RUN_ATB_CMD(param, paramsetter, "fa_backward");
-    return std::make_tuple(tensor_query_grad, tensor_key_grad, tensor_value_grad);
+    atb::Operation* op = nullptr;
+    atb::CreateOperation(param, &op);
+    TORCH_CHECK(op != nullptr, "flash_attention get op failed!");
+    RunAtbCmd(op, paramsetter, "fa_backward");
 #endif
 }
 
-std::tuple<at::Tensor, int64_t, int64_t, int64_t> gen_mask(const at::Tensor &self, double keep_prob,
-    int64_t head_num, std::string input_layout, bool gen_mask_parallel, bool sync)
+// gen mask for flash_attention_forward , get seed offset numels for backward to gen mask
+void gen_mask(const at::Tensor &self, double keep_prob,
+              int64_t head_num, int64_t input_layout, bool parallel,
+              bool sync, int64_t &seed, int64_t &offset, int64_t &numels, at::Tensor &drop_mask)
 {
-    int64_t seed;
-    int64_t offset;
-    int64_t numels;
-    at::Tensor drop_mask;
-    if (input_layout == "BSH") {
+    if (input_layout == BSH) {
         numels = self.size(0) * head_num * self.size(1) * self.size(1); // [B,N,S,S]
-    } else if (input_layout == "SBH") {
+    } else if (input_layout == SBH) {
         numels = self.size(1) * head_num * self.size(0) * self.size(0); // [B,N,S,S]
-    } else if (input_layout == "BNSD") {
+    } else if (input_layout == BNSD) {
         numels = self.size(0) * self.size(1) * self.size(2) * self.size(2); // [B,N,S,S]
     }
-    int64_t length = (numels + 256 - 1) / 256 * 256 / 8;
-    length += 32;
     if (get_status(keep_prob) == DropOutStatus::DROPOUT_NORMAL) {
         const auto gen = at_npu::detail::getDefaultNPUGenerator();
         auto pair = at::check_generator<at_npu::NPUGeneratorImpl>(gen)->philox_engine_inputs(10);
         seed = pair.first;
         offset = pair.second;
-        drop_mask = gen_mask_dispatch(self, at::Scalar(keep_prob), at::Scalar(seed),
-            offset, numels, gen_mask_parallel, sync);
+        gen_mask_dispatch(self, at::Scalar(keep_prob), at::Scalar(seed),
+            offset, numels, parallel, sync, drop_mask);
     } else if (get_status(keep_prob) == DropOutStatus::DROPOUT_ALL) {
-        drop_mask = at::zeros(at::IntArrayRef{length}, self.options().dtype(at::kByte));
+        int64_t length = (numels + 256 - 1) / 256 * 256 / 8 + 32;
+        drop_mask = at::zeros(at::IntArrayRef(length), self.options().dtype(at::kByte));
     }
-
-    return std::make_tuple(drop_mask, seed, offset, numels);
 }
 
-at::Tensor exist_gen_mask(const at::Tensor &self, double keep_prob, bool gen_mask_parallel, bool sync,
-                          int64_t seed, int64_t offset, int64_t numels)
+// gen mask for flash_attention_backward , use seed offset numels generate mask
+void gen_mask(const at::Tensor &self, double keep_prob, bool parallel, bool sync,
+              int64_t seed, int64_t offset, int64_t numels, at::Tensor &drop_mask)
 {
-    int64_t length = (numels + 256 - 1) / 256 * 256 / 8;
-    length += 32;
-    at::Tensor drop_mask;
     if (get_status(keep_prob) == DropOutStatus::DROPOUT_NORMAL) {
-        drop_mask = gen_mask_dispatch(self, at::Scalar(keep_prob), at::Scalar(seed), offset, numels,
-                                      gen_mask_parallel, sync);
+        gen_mask_dispatch(self, at::Scalar(keep_prob), at::Scalar(seed), offset, numels,
+                          parallel, sync, drop_mask);
     } else if (get_status(keep_prob) == DropOutStatus::DROPOUT_ALL) {
-        drop_mask = at::zeros(at::IntArrayRef{length}, self.options().dtype(at::kByte));
+        int64_t length = (numels + 256 - 1) / 256 * 256 / 8 + 32;
+        drop_mask = at::zeros(at::IntArrayRef(length), self.options().dtype(at::kByte));
     }
-    return drop_mask;
+}
+
+int64_t transLayout(std::string io_layout)
+{
+    int64_t layout;
+    if (io_layout == "BSH") {
+        layout = BSH;
+    } else if (io_layout == "SBH") {
+        layout = SBH;
+    } else if (io_layout == "BNSD") {
+        layout = BNSD;
+    } else {
+        TORCH_CHECK(false, "The input_layout should be BSH/SBH/BNSD(case-insensitive), but got ", io_layout);
+    }
+    return layout;
+}
+
+class NPUFlashAttentionFunction : public torch::autograd::Function<NPUFlashAttentionFunction> {
+public:
+    static at::Tensor forward(
+        AutogradContext *ctx, const at::Tensor &query, const at::Tensor &key,
+        const at::Tensor &value, const c10::optional<at::Tensor> &atten_mask_opt,
+        const c10::optional<at::Tensor> &alibi_mask_opt, float scale_value = 1.0,
+        float q_scale = 1.0, int64_t head_num = 1, std::string io_layout = "BNSD",
+        float keep_prob = 1.0, int64_t pre_tokens = 2147483647,
+        int64_t next_tokens = 1, int64_t precise_mode = 0, int64_t groups = -1,
+        bool sync = false, bool parallel = true)
+    {
+#ifndef ENABLE_ATB
+        TORCH_CHECK(false, "flash_attention not implemented");
+#else
+        at::AutoNonVariableTypeMode g;
+        int64_t layout = transLayout(io_layout);
+        CheckFlashAttention(query, key, value, head_num, layout);
+
+        const at::Tensor &atten_mask = atten_mask_opt.value_or(at::Tensor());
+        const at::Tensor &alibi_mask = alibi_mask_opt.value_or(at::Tensor());
+
+        at::Tensor drop_mask;
+        int64_t seed;
+        int64_t offset;
+        int64_t numels;
+        gen_mask(query, keep_prob, head_num, layout,
+                 parallel, sync, seed, offset, numels, drop_mask);
+
+        c10::SmallVector<int64_t, N> tensor_softmax_shape;
+        InferShapeFlashAttention(tensor_softmax_shape, layout, head_num, query);
+        // apply tensor
+        at::Tensor tensor_softmax = at::empty(at::IntArrayRef(tensor_softmax_shape),
+                                              query.options().dtype(at::ScalarType::Float));
+        at::Tensor tensor_attention_out = at::empty(query.sizes(), query.options());
+
+        flash_attention(query, key, value, atten_mask, alibi_mask, drop_mask,
+                        scale_value, head_num, layout, keep_prob, pre_tokens, next_tokens,
+                        precise_mode, groups, tensor_softmax, tensor_attention_out);
+        
+        ctx->save_for_backward({query, key, value, atten_mask, alibi_mask,
+                                tensor_attention_out, tensor_softmax});
+        ctx->saved_data["scale_value"] = scale_value;
+        ctx->saved_data["q_scale"] = q_scale;
+        ctx->saved_data["keep_prob"] = keep_prob;
+        ctx->saved_data["pre_tokens"] = pre_tokens;
+        ctx->saved_data["next_tokens"] = next_tokens;
+        ctx->saved_data["head_num"] = head_num;
+        ctx->saved_data["layout"] = layout;
+        ctx->saved_data["parallel"] = parallel;
+        ctx->saved_data["sync"] = sync;
+        ctx->saved_data["groups"] = groups;
+        ctx->saved_data["precise_mode"] = precise_mode;
+        ctx->saved_data["seed"] = seed;
+        ctx->saved_data["offset"] = offset;
+        ctx->saved_data["numels"] = numels;
+
+        return tensor_attention_out;
+#endif
+    }
+
+    static std::vector<at::Tensor> backward(AutogradContext *ctx, std::vector<at::Tensor> grad_output)
+    {
+#ifndef ENABLE_ATB
+        TORCH_CHECK(false, "flash_attention_grad not implemented");
+#else
+        auto scale_value = ctx->saved_data["scale_value"].toDouble();
+        auto keep_prob = ctx->saved_data["keep_prob"].toDouble();
+        auto pre_tokens = ctx->saved_data["pre_tokens"].toInt();
+        auto next_tokens = ctx->saved_data["next_tokens"].toInt();
+        auto head_num = ctx->saved_data["head_num"].toInt();
+        auto layout = ctx->saved_data["layout"].toInt();
+        auto precise_mode = ctx->saved_data["precise_mode"].toInt();
+        auto seed = ctx->saved_data["seed"].toInt();
+        auto offset = ctx->saved_data["offset"].toInt();
+        auto numels = ctx->saved_data["numels"].toInt();
+        auto groups = ctx->saved_data["groups"].toInt();
+        auto parallel = ctx->saved_data["parallel"].toBool();
+        auto sync = ctx->saved_data["sync"].toBool();
+
+        auto saved = ctx->get_saved_variables();
+        auto query = saved[0];
+        auto key = saved[1];
+        auto value = saved[2];
+        auto atten_mask = saved[3];
+        auto alibi_mask = saved[4];
+        auto attention_out = saved[5];
+        auto softmax_log_max_sum = saved[6];
+        CheckFlashAttentionBackward(grad_output[0], softmax_log_max_sum,
+                                    attention_out, query,
+                                    key, value,
+                                    head_num, layout);
+        at::Tensor drop_mask;
+        gen_mask(query, keep_prob, parallel, sync,
+                 seed, offset, numels, drop_mask);
+
+        at::Tensor tensor_query_grad = at::empty(query.sizes(), query.options());
+        at::Tensor tensor_key_grad = at::empty(key.sizes(), key.options());
+        at::Tensor tensor_value_grad = at::empty(value.sizes(), value.options());
+
+        flash_attention_grad(grad_output[0], softmax_log_max_sum, attention_out, query,
+                             key, value, atten_mask, alibi_mask, drop_mask,
+                             scale_value, head_num, layout, keep_prob,
+                             pre_tokens, next_tokens, precise_mode, groups,
+                             tensor_query_grad, tensor_key_grad,
+                             tensor_value_grad);
+
+        return {tensor_query_grad, tensor_key_grad, tensor_value_grad,
+                at::Tensor(), at::Tensor(), at::Tensor(), at::Tensor(), at::Tensor(),
+                at::Tensor(), at::Tensor(), at::Tensor(), at::Tensor(), at::Tensor(),
+                at::Tensor(), at::Tensor(), at::Tensor()};
+#endif
+    }
+};
+} // namespace
+
+at::Tensor npu_flash_attention(
+    const at::Tensor &query, const at::Tensor &key, const at::Tensor &value,
+    const c10::optional<at::Tensor> &atten_mask, const c10::optional<at::Tensor> &alibi_mask,
+    float scale_value, float q_scale, int64_t head_num,
+    std::string io_layout, float keep_prob, int64_t pre_tokens, int64_t next_tokens,
+    int64_t precise_mode, int64_t groups,
+    bool sync, bool parallel)
+{
+    return NPUFlashAttentionFunction::apply(query, key, value, atten_mask, alibi_mask, scale_value, q_scale,
+        head_num, io_layout, keep_prob, pre_tokens, next_tokens, precise_mode, groups,
+        sync, parallel);
 }
