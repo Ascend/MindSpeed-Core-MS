@@ -28,10 +28,10 @@ def layernorm_wrapper(fn):
         if int(os.getenv('NPU_DETECT', '0')):
             from torch_npu.hook_module.hook_module import HOOKModule
 
-            def vocabparallelembedding_hook(grad):
+            def layernorm_hook(grad):
                 HOOKModule.layernorm_list.append(torch.norm(grad))
 
-            self.weight.register_hook(vocabparallelembedding_hook)
+            self.weight.register_hook(layernorm_hook)
         return res
 
     return wrapper
