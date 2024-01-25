@@ -1,3 +1,4 @@
+import os
 import sys
 import types
 from functools import wraps
@@ -84,7 +85,7 @@ def exe_adaptation():
     from .core.tensor_parallel.random import _set_cuda_rng_state
     from .core.tensor_parallel.layers import VocabParallelEmbeddingForward
     from .core.tensor_parallel.cross_entropy import _VocabParallelCrossEntropyForward
-    from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN
+    from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN, fused_layer_norm_affine
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
     from .core.fusions.rms_norm import rms_norm_init, rms_norm_forward
@@ -104,6 +105,8 @@ def exe_adaptation():
     megatron.core.fusions.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax = forward_fused_softmax
     megatron.core.transformer.attention.apply_rotary_pos_emb = apply_fused_rotary_pos_emb
 
+    apex.normalization.fused_layer_norm.fused_layer_norm_affine = fused_layer_norm_affine
+
     # Megatron others modules monkey patching
     try:
         import megatron.initialize
@@ -113,6 +116,8 @@ def exe_adaptation():
         megatron.initialize.set_jit_fusion_options = set_jit_fusion_options  # remove cuda jit nvfuser
         megatron.model.fused_layer_norm.FusedLayerNormAffineFunction = FusedLayerNormAffineFunction
         megatron.model.fused_layer_norm.FastLayerNormFN = FastLayerNormFN
+        megatron.model.fused_layer_norm.fused_layer_norm_affine = fused_layer_norm_affine
+
         megatron.model.fused_softmax.ScaledUpperTriangMaskedSoftmax = ScaledUpperTriangMaskedSoftmax
         megatron.model.fused_softmax.ScaledMaskedSoftmax = ScaledMaskedSoftmax
         megatron.model.fused_softmax.ScaledSoftmax = ScaledSoftmax
@@ -128,11 +133,32 @@ def exe_adaptation():
         megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
         megatron.arguments.parse_args = parse_args_decorator(megatron.arguments.parse_args)
         megatron.initialize.validate_args = validate_args_decorator(megatron.initialize.validate_args)
+
+        if int(os.getenv('NPU_DETECT', '0')):
+            from .core.tensor_parallel.layers import embedding_wrapper, linear_wrapper
+            from .core.fusions.fused_layer_norm import layernorm_wrapper
+            from .training import train_step
+
+            megatron.core.tensor_parallel.layers.VocabParallelEmbedding.__init__ = embedding_wrapper(
+                megatron.core.tensor_parallel.layers.VocabParallelEmbedding.__init__)
+            megatron.core.tensor_parallel.layers.ColumnParallelLinear.__init__ = linear_wrapper(
+                megatron.core.tensor_parallel.layers.ColumnParallelLinear.__init__)
+            megatron.core.tensor_parallel.layers.RowParallelLinear.__init__ = linear_wrapper(
+                megatron.core.tensor_parallel.layers.RowParallelLinear.__init__)
+            megatron.model.rms_norm.RMSNorm.__init__ = layernorm_wrapper(
+                megatron.model.rms_norm.RMSNorm.__init__)
+            megatron.model.RMSNorm.__init__ = layernorm_wrapper(
+                megatron.model.RMSNorm.__init__)
+            megatron.model.fused_layer_norm.MixedFusedLayerNorm.__init__ = layernorm_wrapper(
+                megatron.model.fused_layer_norm.MixedFusedLayerNorm.__init__)
+
+            import megatron.training
+            megatron.training.train_step = train_step
     except ModuleNotFoundError:
         pass
 
     # accelerate package will check TE on sys.modules，so we need remove this patch
     del sys.modules['transformer_engine']
 
-exe_adaptation()
 
+exe_adaptation()

@@ -1,3 +1,6 @@
+import os
+from functools import wraps
+
 import torch
 import torch.nn.functional as F
 import megatron
@@ -29,3 +32,34 @@ def VocabParallelEmbeddingForward(self, input_):
     output = reduce_from_tensor_model_parallel_region(output_parallel)
     return output
 
+
+def embedding_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        res = fn(self, *args, **kwargs)
+        if int(os.getenv('NPU_DETECT', '0')):
+            from torch_npu.hook_module.hook_module import HOOKModule
+
+            def vocabparallelembedding_hook(grad):
+                HOOKModule.embedding_list.append(torch.norm(grad))
+
+            self.weight.register_hook(vocabparallelembedding_hook)
+        return res
+
+    return wrapper
+
+
+def linear_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        res = fn(self, *args, **kwargs)
+        if int(os.getenv('NPU_DETECT', '0')):
+            from torch_npu.hook_module.hook_module import HOOKModule
+
+            def vocabparallelembedding_hook(grad):
+                HOOKModule.linear_list.append(torch.norm(grad))
+
+            self.weight.register_hook(vocabparallelembedding_hook)
+        return res
+
+    return wrapper
