@@ -137,7 +137,7 @@ def exe_adaptation():
         if int(os.getenv('NPU_DETECT', '0')):
             from .core.tensor_parallel.layers import embedding_wrapper, linear_wrapper
             from .core.fusions.fused_layer_norm import layernorm_wrapper
-            from .training import train_step
+            from .optimizer.optimizer import mixed_precision_optimizer_step, fp32_optimizer_step
 
             megatron.core.tensor_parallel.layers.VocabParallelEmbedding.__init__ = embedding_wrapper(
                 megatron.core.tensor_parallel.layers.VocabParallelEmbedding.__init__)
@@ -152,8 +152,9 @@ def exe_adaptation():
             megatron.model.fused_layer_norm.MixedFusedLayerNorm.__init__ = layernorm_wrapper(
                 megatron.model.fused_layer_norm.MixedFusedLayerNorm.__init__)
 
-            import megatron.training
-            megatron.training.train_step = train_step
+            import megatron.optimizer
+            megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = mixed_precision_optimizer_step
+            megatron.optimizer.optimizer.FP32Optimizer.step = fp32_optimizer_step
     except ModuleNotFoundError:
         pass
 
