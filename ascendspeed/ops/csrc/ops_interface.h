@@ -25,5 +25,6 @@ at::Tensor npu_flash_attention(
     bool sync = false, bool parallel = true);
 
 at::Tensor npu_swiglu(const at::Tensor &x, int32_t dim = -1);
+at::Tensor npu_rms_norm(const at::Tensor &x, const at::Tensor &gamma, float epsilon);
 
 #endif

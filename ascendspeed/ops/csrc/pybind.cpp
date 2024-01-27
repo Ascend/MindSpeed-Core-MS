@@ -25,4 +25,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     pybind11::arg("next_tokens")=1, pybind11::arg("precise_mode")=0, pybind11::arg("groups")=-1,
     pybind11::arg("sync")=false, pybind11::arg("parallel")=true);
     m.def("swiglu", &npu_swiglu, "swiglu realization", pybind11::arg("x"), pybind11::arg("dim")=-1);
+    m.def("rms_norm", &npu_rms_norm, "rms_norm on ascend device",
+        pybind11::arg("x"), pybind11::arg("gamma"), pybind11::arg("epsilon")=1e-6);
 }
