@@ -63,6 +63,8 @@ try:
         '-D__FILENAME__=\"$(notdir $(abspath $<))\"',
         '-I' + os.path.join(imp.find_module('torch_npu')[1], "include", "third_party", "acl", "inc"),
         '-I' + os.path.join(ASCEND_TOOLKIT_HOME, 'include'),
+        '-fstack-protector-all', '-Wl,-z,relro,-z,now,-z,noexecstack',
+        '-fPIC', '-pie', '-Wl,--disable-new-dtags,--rpath',
     ],
     )
     if os.getenv('ENABLE_ATB', '0') == '1':
@@ -83,6 +85,8 @@ try:
                 '-I' + os.path.join(imp.find_module('torch_npu')[1], "include", "third_party", "acl", "inc"),
                 '-I' + os.path.join(ASCEND_TOOLKIT_HOME, 'include'),
                 '-I' + os.path.join(ATB_HOME_PATH, 'include'), '-D ENABLE_ATB',
+                '-fstack-protector-all', '-Wl,-z,relro,-z,now,-z,noexecstack',
+                '-fPIC', '-pie', '-Wl,--disable-new-dtags,--rpath',
             ],
             extra_link_args=[
                 '-L' + os.path.join(ATB_HOME_PATH, 'lib'),
