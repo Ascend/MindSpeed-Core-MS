@@ -26,15 +26,18 @@
 #include "../ops_interface.h"
 
 #ifdef ENABLE_ATB
+#include <torch_npu/csrc/core/npu/SecondaryStreamGuard.h>
+#include <torch_npu/csrc/include/ops.h>
 #include "inc/atb_adapter.h"
 #include "atb/operation.h"
 #include "atb/train_op_params.h"
-#endif 
+#endif
 
 using namespace std;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 namespace {
+#ifdef ENABLE_ATB
 const static int QKV_DIM_NUM = 3;
 const static int QKV_DIM_NUM_BNSD = 4;
 const static int BNSD_DIM_B = 0;
@@ -91,10 +94,14 @@ void gen_mask_impl(const at::Tensor &self, const at::Scalar &keep_prob, const at
 }
 
 // select gen_mask method
-void gen_mask_dispatch(const at::Tensor &self, const at::Scalar &keep_prob, const at::Scalar &seed,
+void gen_mask_dispatch(const at::Tensor &self, const double &keep_prob, const int64_t &seed,
                        const int64_t offset, const int64_t numels, const bool parallel, const bool sync, at::Tensor &mask)
 {
-    gen_mask_impl(self, keep_prob, seed, offset, numels, mask);
+    if (parallel) {
+        mask = at_npu::native::npu_dropout_gen_mask(self, at::IntArrayRef(numels), keep_prob, seed, offset, parallel, sync);
+    } else {
+        gen_mask_impl(self, at::Scalar(keep_prob), at::Scalar(seed), offset, numels, mask);
+    }
 }
 
 void InferShapeFlashAttention(c10::SmallVector<int64_t, N> &size, int64_t io_layout, int64_t head_num, const at::Tensor &query)
@@ -188,9 +195,6 @@ void flash_attention(const at::Tensor &query, const at::Tensor &key, const at::T
                      int64_t io_layout, float keep_prob, int64_t pre_tokens, int64_t next_tokens,
                      int64_t precise_mode, int64_t groups, at::Tensor &tensor_softmax, at::Tensor &tensor_attention_out)
 {
-#ifndef ENABLE_ATB
-    TORCH_CHECK(false, "flash_attention not implemented");
-#else
     atb::train::FlashAttentionParam param;
     param.scaleValue = scale_value;
     param.headNum = head_num;
@@ -216,7 +220,6 @@ void flash_attention(const at::Tensor &query, const at::Tensor &key, const at::T
     atb::CreateOperation(param, &op);
     TORCH_CHECK(op != nullptr, "flash_attention get op failed!");
     RunAtbCmd(op, paramsetter, "fa_forward");
-#endif
 }
 
 // compute flash_attention_backward
@@ -227,9 +230,6 @@ void flash_attention_grad(const at::Tensor &dy, const at::Tensor &softmax_log_ma
                           float keep_prob, int64_t pre_tokens, int64_t next_tokens, int64_t precise_mode, int64_t groups,
                           at::Tensor &tensor_query_grad, at::Tensor &tensor_key_grad, at::Tensor &tensor_value_grad)
 {
-#ifndef ENABLE_ATB
-    TORCH_CHECK(false, "flash_attention_grad not implemented");
-#else
     atb::train::FlashAttentionBackwardParam param;
     param.scaleValue = scale_value;
     param.headNum = head_num;
@@ -258,7 +258,6 @@ void flash_attention_grad(const at::Tensor &dy, const at::Tensor &softmax_log_ma
     atb::CreateOperation(param, &op);
     TORCH_CHECK(op != nullptr, "flash_attention get op failed!");
     RunAtbCmd(op, paramsetter, "fa_backward");
-#endif
 }
 
 // gen mask for flash_attention_forward , get seed offset numels for backward to gen mask
@@ -278,7 +277,7 @@ void gen_mask(const at::Tensor &self, double keep_prob,
         auto pair = at::check_generator<at_npu::NPUGeneratorImpl>(gen)->philox_engine_inputs(10);
         seed = pair.first;
         offset = pair.second;
-        gen_mask_dispatch(self, at::Scalar(keep_prob), at::Scalar(seed),
+        gen_mask_dispatch(self, keep_prob, seed,
             offset, numels, parallel, sync, drop_mask);
     } else if (get_status(keep_prob) == DropOutStatus::DROPOUT_ALL) {
         int64_t length = (numels + 256 - 1) / 256 * 256 / 8 + 32;
@@ -291,7 +290,7 @@ void gen_mask(const at::Tensor &self, double keep_prob, bool parallel, bool sync
               int64_t seed, int64_t offset, int64_t numels, at::Tensor &drop_mask)
 {
     if (get_status(keep_prob) == DropOutStatus::DROPOUT_NORMAL) {
-        gen_mask_dispatch(self, at::Scalar(keep_prob), at::Scalar(seed), offset, numels,
+        gen_mask_dispatch(self, keep_prob, seed, offset, numels,
                           parallel, sync, drop_mask);
     } else if (get_status(keep_prob) == DropOutStatus::DROPOUT_ALL) {
         int64_t length = (numels + 256 - 1) / 256 * 256 / 8 + 32;
@@ -313,6 +312,7 @@ int64_t transLayout(std::string io_layout)
     }
     return layout;
 }
+#endif
 
 class NPUFlashAttentionFunction : public torch::autograd::Function<NPUFlashAttentionFunction> {
 public:
