@@ -24,4 +24,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     pybind11::arg("io_layout")="BNSD", pybind11::arg("keep_prob")=1.0, pybind11::arg("pre_tokens")=2147483647,
     pybind11::arg("next_tokens")=1, pybind11::arg("precise_mode")=0, pybind11::arg("groups")=-1,
     pybind11::arg("sync")=false, pybind11::arg("parallel")=true);
+    m.def("swiglu", &npu_swiglu, "swiglu realization", pybind11::arg("x"), pybind11::arg("dim")=-1);
 }

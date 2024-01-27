@@ -24,4 +24,6 @@ at::Tensor npu_flash_attention(
     int64_t precise_mode = 0, int64_t groups = -1,
     bool sync = false, bool parallel = true);
 
+at::Tensor npu_swiglu(const at::Tensor &x, int32_t dim = -1);
+
 #endif
