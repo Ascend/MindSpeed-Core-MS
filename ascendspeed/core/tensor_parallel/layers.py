@@ -31,35 +31,3 @@ def VocabParallelEmbeddingForward(self, input_):
     # Reduce across all the model parallel GPUs.
     output = reduce_from_tensor_model_parallel_region(output_parallel)
     return output
-
-
-def embedding_wrapper(fn):
-    @wraps(fn)
-    def wrapper(self, *args, **kwargs):
-        res = fn(self, *args, **kwargs)
-        if int(os.getenv('NPU_DETECT', '0')):
-            from torch_npu.hook_module.hook_module import HOOKModule
-
-            def embedding_hook(grad):
-                HOOKModule.embedding_list.append(torch.norm(grad))
-
-            self.weight.register_hook(embedding_hook)
-        return res
-
-    return wrapper
-
-
-def linear_wrapper(fn):
-    @wraps(fn)
-    def wrapper(self, *args, **kwargs):
-        res = fn(self, *args, **kwargs)
-        if int(os.getenv('NPU_DETECT', '0')):
-            from torch_npu.hook_module.hook_module import HOOKModule
-
-            def linear_hook(grad):
-                HOOKModule.linear_list.append(torch.norm(grad))
-
-            self.weight.register_hook(linear_hook)
-        return res
-
-    return wrapper

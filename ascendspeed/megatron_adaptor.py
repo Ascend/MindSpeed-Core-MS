@@ -135,22 +135,13 @@ def exe_adaptation():
         megatron.initialize.validate_args = validate_args_decorator(megatron.initialize.validate_args)
 
         if int(os.getenv('NPU_DETECT', '0')):
-            from .core.tensor_parallel.layers import embedding_wrapper, linear_wrapper
             from .core.fusions.fused_layer_norm import layernorm_wrapper
             from .optimizer.optimizer import mixed_precision_optimizer_step, fp32_optimizer_step
 
-            megatron.core.tensor_parallel.layers.VocabParallelEmbedding.__init__ = embedding_wrapper(
-                megatron.core.tensor_parallel.layers.VocabParallelEmbedding.__init__)
-            megatron.core.tensor_parallel.layers.ColumnParallelLinear.__init__ = linear_wrapper(
-                megatron.core.tensor_parallel.layers.ColumnParallelLinear.__init__)
-            megatron.core.tensor_parallel.layers.RowParallelLinear.__init__ = linear_wrapper(
-                megatron.core.tensor_parallel.layers.RowParallelLinear.__init__)
             megatron.model.rms_norm.RMSNorm.__init__ = layernorm_wrapper(
                 megatron.model.rms_norm.RMSNorm.__init__)
             megatron.model.RMSNorm.__init__ = layernorm_wrapper(
                 megatron.model.RMSNorm.__init__)
-            megatron.model.fused_layer_norm.MixedFusedLayerNorm.__init__ = layernorm_wrapper(
-                megatron.model.fused_layer_norm.MixedFusedLayerNorm.__init__)
 
             import megatron.optimizer
             megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = mixed_precision_optimizer_step

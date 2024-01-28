@@ -29,7 +29,7 @@ def layernorm_wrapper(fn):
             from torch_npu.hook_module.hook_module import HOOKModule
 
             def layernorm_hook(grad):
-                HOOKModule.layernorm_list.append(torch.norm(grad))
+                HOOKModule.layernorm_list.append(torch.norm(grad.float()))
 
             self.weight.register_hook(layernorm_hook)
         return res
