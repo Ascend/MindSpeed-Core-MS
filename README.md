@@ -1,7 +1,77 @@
 <p align="center"> <img src="sources/images/logo.png" height="90px" width="400px"></p>
 
-持续更新中...
+AscendSpeed是针对华为昇腾设备的大模型加速库。
 
+大模型训练是一种非常复杂的过程，涉及到许多技术和挑战，其中大模型训练需要大量的显存资源是一个难题，对计算卡提出了不小的挑战。为了在单个计算卡显存资源不足时，可以通过多张计算卡进行计算，业界出现了类似 Megatron、DeepSpeed 等第三方大模型加速库，对模型、输入数据等进行切分并分配到不同的计算卡上，最后在通过集合通信对结果进行汇总。 
+
+昇腾提供AscendSpeed加速库，使能客户大模型业务快速迁移至昇腾设备，并且支持昇腾专有算法，确保开箱可用。
+
+##  模型训练软件配套
+
+| 软件      | [版本](https://www.hiascend.com/zh/) |
+| --------- | ------------------------------------------------------------ |
+| Python    | 3.8.18                                                       |
+| driver    | [2023Q4商发](https://support.huawei.com/enterprise/zh/ascend-computing/ascend-hdk-pid-252764743/software/258924109?idAbsPath=fixnode01%7C23710424%7C251366513%7C22892968%7C252764743) |
+| firmware  | [2023Q4商发](https://support.huawei.com/enterprise/zh/ascend-computing/ascend-hdk-pid-252764743/software/258924109?idAbsPath=fixnode01%7C23710424%7C251366513%7C22892968%7C252764743) |
+| CANN      | [2023Q4商发](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software/258923273?idAbsPath=fixnode01%7C23710424%7C251366513%7C22892968%7C251168373) |
+| kernel    | [2023Q4商发](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software/258923273?idAbsPath=fixnode01%7C23710424%7C251366513%7C22892968%7C251168373) |
+| torch     | 2.1.0                                                        |
+| torch_npu | [2023Q4商发](https://gitee.com/ascend/pytorch/releases)      |
+| apex      | [2023Q4商发](https://pytorch-package.obs.cn-north-4.myhuaweicloud.com/pta/Daily/v2.1.0/20231225.2/pytorch_v2.1.0_py38.tar.gz) |
+
+## 支持特性
+
+AscendSpeed对Megatron对基本功能进行了适配，已适配如下加速特性：
+
+- 张量并行
+- 流水线并行
+- 序列并行
+- 重计算
+- 分布式优化器
+- 异步分布式数据并行
+
+## 快速上手
+
+1. 安装AscendSpeed
+
+   从git直接安装
+
+   ```shell
+   pip install git+https://gitee.com/ascend/AscendSpeed.git
+   ```
+
+   或者，下载源码安装
+
+   ```shell
+   git clone https://gitee.com/ascend/AscendSpeed.git
+   cd AscendSpeed
+   pip install -e .
+   ```
+
+2. 获取Megatron-LM并指定commit id
+
+   ```shell
+   git clone https://github.com/NVIDIA/Megatron-LM.git
+   cd Megatron-LM
+   git checkout bcce6f54e075e3c3374ea67adefe54f3f2da2b07
+   ```
+
+3. 在Megatron-LM目录下修改`pretrain_gpt.py`文件，在`import torch`下新增一行`import ascendspeed.megatron_adaptor`
+
+    ```diff
+     import os
+     import torch
+    +import ascendspeed.megatron_adaptor
+     from torch import Tensor
+     from functools import partial
+     from typing import Union
+    ```
+
+4. 在Megatron-LM目录下，准备好训练数据，并在示例脚本中填写对应路径，然后执行。
+
+    ```shell
+    bash examples/pretrain_gpt_distributed.sh
+    ```
 
 ## 说明
 
