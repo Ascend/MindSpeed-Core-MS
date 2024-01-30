@@ -2,3 +2,6 @@ import ascendspeed_ops
 from ascendspeed_ops import flash_attention
 from ascendspeed_ops import swiglu
 from ascendspeed_ops import rms_norm
+from .fusion_attention import ascend_fusion_attention
+from .dropout_add_layer_norm import NPUDropoutAddLayerNorm
+from .dropout_add_rms_norm import NPUDropoutAddRMSNorm

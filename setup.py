@@ -53,6 +53,7 @@ try:
     op_files = []
     op_files += glob.glob("ascendspeed/ops/csrc/*.cpp")
     op_files += glob.glob("ascendspeed/ops/csrc/atb/*.cpp")
+    op_files += glob.glob("ascendspeed/ops/csrc/cann/*.cpp")
     ext_ops = cpp_extension.NpuExtension(
         name="ascendspeed_ops",
         sources=op_files,
