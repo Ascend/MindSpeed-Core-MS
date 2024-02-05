@@ -1,5 +1,4 @@
 import sys
-import os
 import setuptools
 
 if sys.version_info < (3,):
@@ -15,7 +14,6 @@ __keywords__ = 'Ascend, langauge, deep learning, NLP'
 __license__ = 'See https://gitee.com/ascend/AscendSpeed'
 __package_name__ = 'ascendspeed'
 __contact_names__ = 'Ascend'
-
 
 try:
     with open("README.md", "r") as fh:
@@ -43,66 +41,7 @@ install_requires = req_file("requirements.txt")
 cmd_class = {}
 exts = []
 
-try:
-    import imp
-    import glob
-    from torch_npu.utils import cpp_extension
-    from torch.utils.cpp_extension import BuildExtension
-
-    ASCEND_TOOLKIT_HOME = os.environ.get("ASCEND_TOOLKIT_HOME")
-    op_files = []
-    op_files += glob.glob("ascendspeed/ops/csrc/*.cpp")
-    op_files += glob.glob("ascendspeed/ops/csrc/atb/*.cpp")
-    op_files += glob.glob("ascendspeed/ops/csrc/cann/*.cpp")
-    ext_ops = cpp_extension.NpuExtension(
-        name="ascendspeed_ops",
-        sources=op_files,
-        extra_compile_args=[
-        '-Wno-sign-compare',
-        '-Wno-deprecated-declarations',
-        '-Wno-return-type',
-        '-D__FILENAME__=\"$(notdir $(abspath $<))\"',
-        '-I' + os.path.join(imp.find_module('torch_npu')[1], "include", "third_party", "acl", "inc"),
-        '-I' + os.path.join(ASCEND_TOOLKIT_HOME, 'include'),
-        '-fstack-protector-all', '-Wl,-z,relro,-z,now,-z,noexecstack',
-        '-fPIC', '-pie', '-Wl,--disable-new-dtags,--rpath', '-s',
-    ],
-    )
-    if os.getenv('ENABLE_ATB', '0') == '1':
-        ATB_HOME_PATH = os.environ.get("ATB_HOME_PATH")
-        if ATB_HOME_PATH is None:
-            print('Can not find env : ATB_HOME_PATH, will not enable ATB')
-            exts.append(ext_ops)
-        else:
-            op_files += glob.glob("ascendspeed/ops/csrc/atb/utils/*.cpp")
-            ext_ops = cpp_extension.NpuExtension(
-                name="ascendspeed_ops",
-                sources=op_files,
-                extra_compile_args=[
-                '-Wno-sign-compare',
-                '-Wno-deprecated-declarations',
-                '-Wno-return-type',
-                '-D__FILENAME__=\"$(notdir $(abspath $<))\"',
-                '-I' + os.path.join(imp.find_module('torch_npu')[1], "include", "third_party", "acl", "inc"),
-                '-I' + os.path.join(ASCEND_TOOLKIT_HOME, 'include'),
-                '-I' + os.path.join(ATB_HOME_PATH, 'include'), '-D ENABLE_ATB',
-                '-fstack-protector-all', '-Wl,-z,relro,-z,now,-z,noexecstack',
-                '-fPIC', '-pie', '-Wl,--disable-new-dtags,--rpath', '-s',
-            ],
-            extra_link_args=[
-                '-L' + os.path.join(ATB_HOME_PATH, 'lib'),
-                '-latb'
-            ],
-            )
-            exts.append(ext_ops)
-    else:
-        exts.append(ext_ops)
-    cmd_class = {"build_ext": BuildExtension.with_options(use_ninja=False)}
-except Exception:
-    print('Can not find env : ASCEND_TOOLKIT_HOME or ATB_HOME_PATH, ops setup failed')
-
 setuptools.setup(
-    package_data={'ascendspeed':['ascendspeed/data/Makefile']},
     name=__package_name__,
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
@@ -139,6 +78,9 @@ setuptools.setup(
     install_requires=install_requires,
     # Add in any packaged data.
     include_package_data=True,
+    install_package_data=True,
+    exclude_package_data={'': ['**/*.md']},
+    package_data={'ascendspeed': ['**/*.h', '**/*.cpp']},
     zip_safe=False,
     # PyPI package information.
     keywords=__keywords__,

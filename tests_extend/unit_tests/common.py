@@ -18,6 +18,7 @@ import torch.distributed as dist
 import pytest
 from _pytest.outcomes import Skipped
 from _pytest.fixtures import FixtureLookupError, FixtureFunctionMarker
+from torch_npu.contrib import transfer_to_npu
 
 # Worker timeout for tests that hang
 TEST_TIMEOUT = 600

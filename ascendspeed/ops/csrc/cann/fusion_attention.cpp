@@ -13,7 +13,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+#include <torch/extension.h>
 #include "torch_npu/csrc/framework/utils/RandomOpAdapter.h"
 #include "torch_npu/csrc/framework/utils/OpAdapter.h"
 #include "torch_npu/csrc/core/npu/NPUFormat.h"
@@ -347,4 +347,9 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor, int64_t, int64_t, int
 
     return std::make_tuple(attention_score, softmax_max, softmax_sum, softmax_out,
         seed, offset, numels);
+}
+
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def("npu_fusion_attention", &npu_fusion_attention, "fusion attention forward");
+    m.def("npu_fusion_attention_grad", &npu_fusion_attention_grad, "fusion attention backward");
 }
