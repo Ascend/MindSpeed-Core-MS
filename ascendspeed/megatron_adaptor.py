@@ -137,6 +137,7 @@ def exe_adaptation():
         if int(os.getenv('NPU_DETECT', '0')):
             from .core.fusions.fused_layer_norm import layernorm_wrapper
             from .optimizer.optimizer import mixed_precision_optimizer_step, fp32_optimizer_step
+            from .optimizer.clip_grads import clip_grad_norm_fp32
 
             megatron.model.rms_norm.RMSNorm.__init__ = layernorm_wrapper(
                 megatron.model.rms_norm.RMSNorm.__init__)
@@ -146,6 +147,9 @@ def exe_adaptation():
             import megatron.optimizer
             megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = mixed_precision_optimizer_step
             megatron.optimizer.optimizer.FP32Optimizer.step = fp32_optimizer_step
+            megatron.optimizer.clip_grads.clip_grad_norm_fp32 = clip_grad_norm_fp32
+            megatron.optimizer.optimizer.clip_grad_norm_fp32 = clip_grad_norm_fp32
+
     except ModuleNotFoundError:
         pass
 

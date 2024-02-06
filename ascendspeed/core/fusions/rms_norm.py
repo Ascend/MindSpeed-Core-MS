@@ -1,3 +1,4 @@
+import os
 import torch
 from torch import nn
 from megatron.model.rms_norm import RMSNorm
@@ -22,6 +23,16 @@ def rms_norm_init(self,
     self.use_fused_rmsnorm = args.use_fused_rmsnorm
     self.eps = eps
     self.weight = nn.Parameter(torch.ones(dim))
+    if int(os.getenv('NPU_DETECT', '0')):
+        from torch_npu.hook_module.hook_module import HOOKModule
+
+        def norm_hook(grad):
+            if HOOKModule.collect_flag:
+                if grad.dtype == torch.float16:
+                    grad = grad.float()
+                HOOKModule.layernorm_list.append(torch.norm(grad))
+
+        self.weight.register_hook(norm_hook)
 
     setattr(self.weight, 'sequence_parallel', sequence_parallel)
 
