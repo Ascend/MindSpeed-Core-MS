@@ -1,1 +1,2 @@
 from .fusion_attention_builder import FusionAttentionOpBuilder
+from .algorithm_builder import AlgorithmOpBuilder

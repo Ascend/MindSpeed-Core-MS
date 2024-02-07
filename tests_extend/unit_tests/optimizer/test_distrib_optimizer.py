@@ -42,6 +42,7 @@ class DummyArgs:
     overlap_param_gather = False
     barrier_with_L1_time = False
     fp16 = True
+    reuse_fp32_param = False
 
 
 def step_optimizer(model, use_distributed: bool, seed: int = None):

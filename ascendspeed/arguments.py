@@ -27,6 +27,7 @@ def process_args(parser):
     parser = _add_distributed_args(parser)
     parser = _add_training_args(parser)
     parser = _add_data_args(parser)
+    parser = _add_algorithm_args(parser)
 
     return parser
 
@@ -88,6 +89,14 @@ def _add_training_args(parser):
     return parser
 
 
+def _add_algorithm_args(parser):
+    group = parser.add_argument_group(title='training')
+    group.add_argument('--reuse-fp32-param', action='store_true',
+                       help='The distributed training optimizer frees up '
+                       'param copies of FP32 to save memory.')
+    return parser
+
+
 def validate_args_decorator(validate_args):
     @wraps(validate_args)
     def wrapper(args, defaults):
@@ -108,4 +117,6 @@ def validate_args_decorator(validate_args):
                 raise AssertionError(
                     '--use-fused-rotary-pos-emb must enable with --use-rotary-position-embeddings, '
                     'but --use-rotary-position-embeddings={}.'.format(args.use_rotary_position_embeddings))
+        if args.reuse_fp32_param and not args.bf16:
+            raise AssertionError('--reuse-fp32-param only support for `bf16`')
     return wrapper

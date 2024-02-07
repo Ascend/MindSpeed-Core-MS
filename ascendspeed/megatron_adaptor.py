@@ -111,6 +111,7 @@ def exe_adaptation():
     try:
         import megatron.initialize
         from .initialize import _compile_dependencies, set_jit_fusion_options
+        from .optimizer.optimizer import mixed_precision_optimizer_step, fp32_optimizer_step, reuse_fp32_param_init_warpper
 
         megatron.initialize._compile_dependencies = _compile_dependencies  # remove cuda kernel compile
         megatron.initialize.set_jit_fusion_options = set_jit_fusion_options  # remove cuda jit nvfuser
@@ -134,19 +135,19 @@ def exe_adaptation():
         megatron.arguments.parse_args = parse_args_decorator(megatron.arguments.parse_args)
         megatron.initialize.validate_args = validate_args_decorator(megatron.initialize.validate_args)
 
+        import megatron.optimizer
+        megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = mixed_precision_optimizer_step
+        megatron.optimizer.optimizer.FP32Optimizer.step = fp32_optimizer_step
+        megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__ = \
+            reuse_fp32_param_init_warpper(megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__)
+
         if int(os.getenv('NPU_DETECT', '0')):
             from .core.fusions.fused_layer_norm import layernorm_wrapper
-            from .optimizer.optimizer import mixed_precision_optimizer_step, fp32_optimizer_step
             from .optimizer.clip_grads import clip_grad_norm_fp32
-
             megatron.model.rms_norm.RMSNorm.__init__ = layernorm_wrapper(
                 megatron.model.rms_norm.RMSNorm.__init__)
             megatron.model.RMSNorm.__init__ = layernorm_wrapper(
                 megatron.model.RMSNorm.__init__)
-
-            import megatron.optimizer
-            megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = mixed_precision_optimizer_step
-            megatron.optimizer.optimizer.FP32Optimizer.step = fp32_optimizer_step
             megatron.optimizer.clip_grads.clip_grad_norm_fp32 = clip_grad_norm_fp32
             megatron.optimizer.optimizer.clip_grad_norm_fp32 = clip_grad_norm_fp32
 
