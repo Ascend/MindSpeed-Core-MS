@@ -57,6 +57,13 @@ def multi_tensor_scale(overflow_buf, tensor_lists, scale):
             tensor_lists[1][i].copy_(tensor_lists[0][i] * scale)
 
 
+def repeat_interleave(inputs, repeats, dim):
+    shape = inputs.shape
+    new_shape = shape[:dim + 1] + (repeats,) + shape[dim + 1:]
+    out_shape = shape[:dim] + (shape[dim] * repeats,) + shape[dim + 1:]
+    return inputs.unsqueeze(dim + 1).expand(new_shape).reshape(out_shape)
+
+
 def exe_adaptation():
     # Need replace modules before import megatron
     sys.modules['transformer_engine'] = types.ModuleType('transformer_engine')
@@ -76,6 +83,7 @@ def exe_adaptation():
     torch.nn.parameter.Parameter.type = type_wrapper(torch.nn.parameter.Parameter.type)  # replace npu type to gpu type
     torch.Tensor.type = type_wrapper(torch.Tensor.type)  # replace npu type to gpu type
     torch.Tensor.view = ensure_contiguous(torch.Tensor.view)  # patch view to ensure tensor is contiguous
+    torch.Tensor.repeat_interleave = repeat_interleave # replace npu implementation of torch.repeat_interleave
 
     # Megatron core monkey patching
     import megatron.core.tensor_parallel
