@@ -1,5 +1,5 @@
 from functools import wraps
-
+import argparse
 
 def extra_args_provider_decorator(extra_args_provider):
     @wraps(extra_args_provider)
@@ -29,6 +29,7 @@ def process_args(parser):
     parser = _add_data_args(parser)
     parser = _add_network_args(parser)
     parser = _add_algorithm_args(parser)
+    parser = _add_alibi_args(parser)
 
     return parser
 
@@ -133,3 +134,28 @@ def validate_args_decorator(validate_args):
         if args.reuse_fp32_param and not args.bf16:
             raise AssertionError('--reuse-fp32-param only support for `bf16`')
     return wrapper
+
+
+def add_parser_argument_choices_value(parser, argument_name, value):
+    if parser._actions:
+        for action in parser._actions:
+            if isinstance(action, argparse._ArgumentGroup):
+                add_parser_argument_choices_value(action, argument_name)
+            elif isinstance(action, argparse.Action) and argument_name in action.option_strings:
+                action.choices.append(value)
+
+
+def _add_alibi_args(parser):
+    add_parser_argument_choices_value(parser, "--position-embedding-type", 'alibi')
+
+    group = parser.add_argument_group(title='alibi')
+    group.add_argument('--square-alibi-mask',
+                       action='store_true',
+                       default=False,
+                       help='attention mask of alibi is squared')
+    group.add_argument('--fill-neg-inf',
+                       action='store_true',
+                       default=False,
+                       help='fill alibi with negative inf')
+
+    return parser
