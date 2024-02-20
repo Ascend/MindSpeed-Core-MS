@@ -6,6 +6,7 @@ from megatron import get_args
 from megatron.core import tensor_parallel
 from megatron.model.utils import openai_gelu, erf_gelu
 from megatron.model.transformer import ParallelMLP
+from functools import wraps
 import torch_npu
 
 try:
@@ -118,3 +119,38 @@ def flash_self_attention_forward(self, q, k, v):
         raise ValueError('Invalid shape-order: {}, shape-order must be SBH or BSH or BSND'.format(args.shape_order))
 
     return output
+    
+    
+def ParallelAttention_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        fn(self, *args, **kwargs)
+        config = args[0]
+        query_projection_size = config.kv_channels * config.num_attention_heads
+        _args = get_args()
+        if _args.group_query_attention:
+            kv_projection_size = _args.kv_channels * _args.num_query_groups
+        else:
+            kv_projection_size = _args.kv_channels * _args.num_attention_heads
+        # qkv bias
+        bias = _args.add_qkv_bias or _args.add_bias_linear
+        self.query_key_value = tensor_parallel.ColumnParallelLinear(
+            config.hidden_size,
+            query_projection_size + 2 * kv_projection_size,
+            config=config,
+            init_method=config.init_method,
+            bias=bias,
+            gather_output=False)
+        # dense bias
+        bias = _args.add_dense_bias or _args.add_bias_linear
+        skip_bias_add = _args.skip_bias_add
+        # Output.
+        self.dense = tensor_parallel.RowParallelLinear(
+            query_projection_size,
+            config.hidden_size,
+            config=config,
+            init_method=config.output_layer_init_method,
+            bias=bias,
+            input_is_parallel=True,
+            skip_bias_add=skip_bias_add)
+    return wrapper

@@ -27,6 +27,7 @@ def process_args(parser):
     parser = _add_distributed_args(parser)
     parser = _add_training_args(parser)
     parser = _add_data_args(parser)
+    parser = _add_network_args(parser)
     parser = _add_algorithm_args(parser)
 
     return parser
@@ -86,6 +87,18 @@ def _add_training_args(parser):
     group.add_argument('--shape-order', type=str, default='SBH',
                        choices=['SBH', 'BSH', 'BSND'],
                        help='input shape order used by Flash attention')
+    return parser
+    
+    
+def _add_network_args(parser):
+    group = parser.add_argument_group(title='network')
+
+    group.add_argument("--add-qkv-bias", action="store_true", default=False, 
+                       help='Configuration for the qkv bias.')
+    group.add_argument("--add-dense-bias", action="store_true", default=False, 
+                       help='Configuration for the dense bias.')
+    group.add_argument("--skip-bias-add", action="store_false", default=True, 
+                       help='Configuration for the skip bias.')
     return parser
 
 

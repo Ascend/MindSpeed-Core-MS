@@ -99,6 +99,7 @@ def exe_adaptation():
     from .core.fusions.rms_norm import rms_norm_init, rms_norm_forward
     from .core.fusions.transformer import parallel_mlp_init, flash_self_attention_forward
     from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb
+    from .core.fusions.transformer import ParallelAttention_wrapper
 
     megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
     megatron.core.tensor_parallel.random._set_cuda_rng_state = _set_cuda_rng_state  # default_generators need replace after set_device
@@ -137,6 +138,7 @@ def exe_adaptation():
         megatron.model.transformer.ParallelMLP.__init__ = parallel_mlp_init
         megatron.model.transformer.FlashSelfAttention.forward = flash_self_attention_forward
         megatron.model.transformer.apply_rotary_pos_emb = apply_fused_rotary_pos_emb
+        megatron.model.transformer.ParallelAttention.__init__ = ParallelAttention_wrapper(megatron.model.transformer.ParallelAttention.__init__)
 
         # Megatron wrappers
         megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
