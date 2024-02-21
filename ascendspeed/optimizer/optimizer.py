@@ -185,7 +185,7 @@ def fp32_optimizer_step(self, args, timers):
     return True, grad_norm, num_zeros_in_grad
 
 
-def reuse_fp32_param_init_warpper(init_func):
+def reuse_fp32_param_init_wrapper(init_func):
     @wraps(init_func)
     def reuse_fp32_param_init(*args, **kwargs):
         init_func(*args, **kwargs)

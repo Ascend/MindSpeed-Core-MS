@@ -121,7 +121,10 @@ def exe_adaptation():
     try:
         import megatron.initialize
         from .initialize import _compile_dependencies, set_jit_fusion_options
-        from .optimizer.optimizer import mixed_precision_optimizer_step, fp32_optimizer_step, reuse_fp32_param_init_warpper
+        from .optimizer.optimizer import mixed_precision_optimizer_step, fp32_optimizer_step, reuse_fp32_param_init_wrapper
+        from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
+        from .core.tensor_parallel.random import checkponit_function_backward_wrapper
+        from .core.transformer.transformer import parallel_transformer_layer_forward_wrapper, parallel_transformer_checkpointed_forward_wrapper
 
         megatron.initialize._compile_dependencies = _compile_dependencies  # remove cuda kernel compile
         megatron.initialize.set_jit_fusion_options = set_jit_fusion_options  # remove cuda jit nvfuser
@@ -148,12 +151,23 @@ def exe_adaptation():
         megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
         megatron.arguments.parse_args = parse_args_decorator(megatron.arguments.parse_args)
         megatron.initialize.validate_args = validate_args_decorator(megatron.initialize.validate_args)
+        megatron.core.tensor_parallel.layers.RowParallelLinear.forward = row_parallel_nocomm_optimizer_wrapper(
+            megatron.core.tensor_parallel.layers.RowParallelLinear.forward)
+        megatron.core.tensor_parallel.random.CheckpointFunction.backward = checkponit_function_backward_wrapper(
+            megatron.core.tensor_parallel.random.CheckpointFunction.backward
+        )
+        megatron.model.transformer.ParallelTransformerLayer.forward = parallel_transformer_layer_forward_wrapper(
+            megatron.model.transformer.ParallelTransformerLayer.forward
+        )
+        megatron.model.transformer.ParallelTransformer._checkpointed_forward = parallel_transformer_checkpointed_forward_wrapper(
+            megatron.model.transformer.ParallelTransformer._checkpointed_forward
+        )
 
         import megatron.optimizer
         megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = mixed_precision_optimizer_step
         megatron.optimizer.optimizer.FP32Optimizer.step = fp32_optimizer_step
         megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__ = \
-            reuse_fp32_param_init_warpper(megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__)
+            reuse_fp32_param_init_wrapper(megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__)
 
         if int(os.getenv('NPU_DETECT', '0')):
             from .core.fusions.fused_layer_norm import layernorm_wrapper

@@ -108,6 +108,8 @@ def _add_algorithm_args(parser):
     group.add_argument('--reuse-fp32-param', action='store_true',
                        help='The distributed training optimizer frees up '
                        'param copies of FP32 to save memory.')
+    group.add_argument('--optimize-recomp-communication-level', type=int, default=0,
+            help='The algorithm optimize the level of tp communication in the recompute stage.')
     return parser
 
 
@@ -133,6 +135,9 @@ def validate_args_decorator(validate_args):
                     'but --use-rotary-position-embeddings={}.'.format(args.use_rotary_position_embeddings))
         if args.reuse_fp32_param and not args.bf16:
             raise AssertionError('--reuse-fp32-param only support for `bf16`')
+        if args.optimize_recomp_communication_level > 0:
+            if not hasattr(args, "optimize_recomp_communication_status"):
+                args.optimize_recomp_communication_status = 0
     return wrapper
 
 
