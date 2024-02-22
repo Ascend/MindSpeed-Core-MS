@@ -108,6 +108,8 @@ def _add_algorithm_args(parser):
     group.add_argument('--reuse-fp32-param', action='store_true',
                        help='The distributed training optimizer frees up '
                        'param copies of FP32 to save memory.')
+    group.add_argument('--rotary-base', type=float, help='rotary-base.')
+
     group.add_argument('--optimize-recomp-communication-level', type=int, default=0,
             help='The algorithm optimize the level of tp communication in the recompute stage.')
     return parser

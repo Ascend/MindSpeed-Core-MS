@@ -99,6 +99,8 @@ def exe_adaptation():
     from .core.fusions.rms_norm import rms_norm_init, rms_norm_forward
     from .core.fusions.transformer import parallel_mlp_init, flash_self_attention_forward
     from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb
+    from .core.fusions.rotary_pos_embedding import RotaryEmbedding_wrapper
+
     from .core.fusions.transformer import ParallelAttention_wrapper
     from .model.transformer import core_attention_wrapper, core_attention_forward
     
@@ -114,6 +116,9 @@ def exe_adaptation():
     megatron.core.fusions.fused_softmax.FusedScaleMaskSoftmax.is_kernel_available = is_kernel_available  # replace kernel check
     megatron.core.fusions.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax = forward_fused_softmax
     megatron.core.transformer.attention.apply_rotary_pos_emb = apply_fused_rotary_pos_emb
+    megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.__init__ = RotaryEmbedding_wrapper(
+        megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.__init__
+    )
 
     apex.normalization.fused_layer_norm.fused_layer_norm_affine = fused_layer_norm_affine
 
