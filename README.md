@@ -90,6 +90,26 @@ AscendSpeed对Megatron对基本功能进行了适配，已适配如下加速特�
 
 + 使用方法: 设置`--optimize-recomp-communication-level`，可选项为`1`或者`2`，其中level1代表仅对MLP层进行通信优化，level2代表对MLP/ATTN层都进行通信优化。
 
+### 内存碎片优化
+   + 问题分析：在模型训练的过程中，需要大量的显存来存储模型参数、中间计算结果、优化器状态以及批量输入数据等。频繁地申请和释放内存空间容易引发内存碎片问题。<br />
+   + Motivation：通过对不同生命周期的tensor进行分别管理，以减少内存碎片 <br />
+   + 解决思路：<br />
+       + **识别不同生命周期的tensor**： <br />
+       一次训练过程中，长生命周期的tensor主要有四种： <br />
+       （1）模型初始化创建的权重、梯度等。<br />
+       （2）在前向时产生的激活值。<br />
+       （3）用户没有进行垃圾回收的tensor会保留到下一个step。<br />
+       （4）梯度收敛后产生的优化器状态tensor。<br />
+       + **使用不同的内存池隔离管理**：<br />
+       （1）将识别出的长短生命周期tensor放入不同的内存池分别管理。<br />
+       （2）对长生命周期的大tensor精准分配与tensor大小相同的block，并采取优化后的多级分配策略，以避免长生命周期tensor对应的内存池产生碎片。<br />
+    使用方法：<br />
+        设置环境变量'MEMORY_FRAGMENTATION = 1'，即开启内存碎片优化特性<br />
+    主要收益场景：<br />
+        llama2 7B，llama2 13B<br />
+        <p align="center"> <img src="sources/images/llama2_13b_memory_fragmentation.png">
+        <p align="center"> <img src="sources/images/llama2_7b_memory_fragmentation.png">
+
 ## 说明
 
 ### 安全加固方案

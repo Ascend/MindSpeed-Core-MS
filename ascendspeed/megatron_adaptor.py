@@ -184,6 +184,22 @@ def exe_adaptation():
             megatron.optimizer.clip_grads.clip_grad_norm_fp32 = clip_grad_norm_fp32
             megatron.optimizer.optimizer.clip_grad_norm_fp32 = clip_grad_norm_fp32
 
+        if int(os.getenv('MEMORY_FRAGMENTATION', '0')):
+            from .core.memory.memory_fragmentation.pluggable_allocator_adpator import change_allocator
+            change_allocator()
+
+            import megatron.training
+            from .core.memory.memory_fragmentation.memory_recorder import memory_recorder_wrap
+            megatron.training.setup_model_and_optimizer = memory_recorder_wrap(
+                megatron.training.setup_model_and_optimizer)
+
+            from .core.memory.memory_fragmentation.malloc_recorder import malloc_recorder_wrap
+            megatron.training.train_step = malloc_recorder_wrap(megatron.training.train_step)
+
+            from .core.memory.memory_fragmentation.optimizer_init_precise import optimizer_init_wrap
+            megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = optimizer_init_wrap(
+                megatron.optimizer.optimizer.MixedPrecisionOptimizer.step)
+
     except ModuleNotFoundError:
         pass
 
