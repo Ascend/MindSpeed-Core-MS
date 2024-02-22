@@ -110,6 +110,19 @@ AscendSpeed对Megatron对基本功能进行了适配，已适配如下加速特�
         <p align="center"> <img src="sources/images/llama2_13b_memory_fragmentation.png">
         <p align="center"> <img src="sources/images/llama2_7b_memory_fragmentation.png">
 
+### 自适应选择重计算
+
+- Motivation：
+为了在最大限度地利用NPU内存的同时，提高模型训练的性能，我们支持通过自动调整训练内存大小来自动选择重新计算策略。这一特性称为自适应选择重计算。
+- 解决思路：
+自适应选择重计算设计主要包括重计算策略搜索、SwapManager功能和内存管理三大部分。其中重计算策略搜索依赖SwapManager功能及时将tensor换到CPU，避免OOM导致训练中断；自动选择重计算策略流程如下图所示：<p align="center"> <img src="sources/images/adaptive_recompute_a.png" height="500px" width="400px"></p>SwapManager功能需要内存管理适配PTA的NPUPluggableAllocator接口拦截OOM，让SwapManager功能可以介入，流程如下图所示：
+<p align="center"> <img src="sources/images/adaptive_recompute_b.png" height="300px" width="500px"></p>
+
+- 使用方法
+1. 启用自适应选择重计算，请使用`--adaptive-recompute-device-swap`标志开启自适应选择重计算策略。
+2. （可选）支持手动调整训练内存大小来自动选择重计算策略，请使用`--adaptive-recompute-device-size`进行设置来指定自适应选择重计算策略的训练内存大小（单位：MB）。该方式如果发生OOM，您需要重新选择一个新的内存值来重启模型训练。您也可以通过二分法的方式获得最优解。
+3. （可选）支持设置停止profiling的训练step，请使用`--adaptive-recompute-profiling-step`进行设置。默认在第10步停止profiling。如果当前训练step小于5，则profiling将在step 5之后停止。
+
 ## 说明
 
 ### 安全加固方案

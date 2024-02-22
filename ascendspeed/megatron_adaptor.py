@@ -90,7 +90,7 @@ def exe_adaptation():
     import megatron.core.pipeline_parallel
     from .arguments import parse_args_decorator, validate_args_decorator
     from .core.pipeline_parallel.p2p_communication import _batched_p2p_ops
-    from .core.tensor_parallel.random import _set_cuda_rng_state
+    from .core.tensor_parallel.random import _set_cuda_rng_state, backward
     from .core.tensor_parallel.layers import VocabParallelEmbeddingForward
     from .core.tensor_parallel.cross_entropy import _VocabParallelCrossEntropyForward
     from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN, fused_layer_norm_affine
@@ -106,6 +106,7 @@ def exe_adaptation():
     
     megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
     megatron.core.tensor_parallel.random._set_cuda_rng_state = _set_cuda_rng_state  # default_generators need replace after set_device
+    megatron.core.tensor_parallel.random.CheckpointFunction.backward = backward
     megatron.core.tensor_parallel.layers.VocabParallelEmbedding.forward = VocabParallelEmbeddingForward
     megatron.core.tensor_parallel.cross_entropy._VocabParallelCrossEntropy.forward = _VocabParallelCrossEntropyForward
     megatron.core.fusions.fused_layer_norm.FusedLayerNormAffineFunction = FusedLayerNormAffineFunction
@@ -128,7 +129,6 @@ def exe_adaptation():
         from .initialize import _compile_dependencies, set_jit_fusion_options
         from .optimizer.optimizer import mixed_precision_optimizer_step, fp32_optimizer_step, reuse_fp32_param_init_wrapper
         from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
-        from .core.tensor_parallel.random import checkponit_function_backward_wrapper
         from .core.transformer.transformer import parallel_transformer_layer_forward_wrapper, parallel_transformer_checkpointed_forward_wrapper
 
         megatron.initialize._compile_dependencies = _compile_dependencies  # remove cuda kernel compile
@@ -158,9 +158,6 @@ def exe_adaptation():
         megatron.initialize.validate_args = validate_args_decorator(megatron.initialize.validate_args)
         megatron.core.tensor_parallel.layers.RowParallelLinear.forward = row_parallel_nocomm_optimizer_wrapper(
             megatron.core.tensor_parallel.layers.RowParallelLinear.forward)
-        megatron.core.tensor_parallel.random.CheckpointFunction.backward = checkponit_function_backward_wrapper(
-            megatron.core.tensor_parallel.random.CheckpointFunction.backward
-        )
         megatron.model.transformer.ParallelTransformerLayer.forward = parallel_transformer_layer_forward_wrapper(
             megatron.model.transformer.ParallelTransformerLayer.forward
         )
@@ -200,6 +197,13 @@ def exe_adaptation():
             megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = optimizer_init_wrap(
                 megatron.optimizer.optimizer.MixedPrecisionOptimizer.step)
 
+        if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')):
+            from .core.memory.adaptive_recomputing.pluggable_allocator_adpator import change_allocator
+            change_allocator()
+            import megatron.training
+            from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_decorator
+            megatron.training.setup_model_and_optimizer = setup_model_and_optimizer_decorator(
+                megatron.training.setup_model_and_optimizer)
     except ModuleNotFoundError:
         pass
 
