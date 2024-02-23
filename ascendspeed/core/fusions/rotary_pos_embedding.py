@@ -25,7 +25,7 @@ def RotaryEmbedding_wrapper(fn):
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         _args = get_args()
-        if hasattr(_args, "rotary_base"):
+        if _args.rotary_base:
             kwargs["rotary_base"] = _args.rotary_base
         fn(self, *args, **kwargs)
 
