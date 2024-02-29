@@ -165,6 +165,37 @@ def exe_adaptation():
             megatron.model.transformer.ParallelTransformer._checkpointed_forward
         )
 
+        # MoE relative.
+        from .core.parallel_state import initialize_model_parallel_decorator
+        from .core.parallel_state import destroy_model_parallel_decorator
+        from .core.parallel_state import get_expert_parallel_group
+        from .core.parallel_state import get_expert_parallel_rank
+        from .core.parallel_state import get_expert_model_parallel_rank
+        from .core.parallel_state import get_expert_parallel_world_size
+        from .core.parallel_state import get_expert_model_parallel_world_size
+        from .core.parallel_state import set_expert_model_parallel_rank
+        from .core.parallel_state import set_expert_model_parallel_world_size
+
+        megatron.core.parallel_state.initialize_model_parallel = initialize_model_parallel_decorator(
+            megatron.core.parallel_state.initialize_model_parallel)
+        megatron.core.parallel_state.destroy_model_parallel = destroy_model_parallel_decorator(
+            megatron.core.parallel_state.destroy_model_parallel)
+        setattr(
+            megatron.core.parallel_state, "get_expert_parallel_group", get_expert_parallel_group)
+        setattr(
+            megatron.core.parallel_state, "get_expert_parallel_rank", get_expert_parallel_rank)
+        setattr(
+            megatron.core.parallel_state, "get_expert_model_parallel_rank", get_expert_model_parallel_rank)
+        setattr(
+            megatron.core.parallel_state, "get_expert_parallel_world_size", get_expert_parallel_world_size)
+        setattr(
+            megatron.core.parallel_state, "get_expert_model_parallel_world_size", get_expert_model_parallel_world_size)
+        setattr(
+            megatron.core.parallel_state, "set_expert_model_parallel_rank", set_expert_model_parallel_rank)
+        setattr(
+            megatron.core.parallel_state, "set_expert_model_parallel_world_size", set_expert_model_parallel_world_size)
+        megatron.core.mpu = megatron.core.parallel_state
+
         import megatron.optimizer
         megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = mixed_precision_optimizer_step
         megatron.optimizer.optimizer.FP32Optimizer.step = fp32_optimizer_step
