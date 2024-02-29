@@ -2,3 +2,4 @@ from .fusion_attention_builder import FusionAttentionOpBuilder
 from .algorithm_builder import AlgorithmOpBuilder
 from .memory_fragmentation_builder import MemoryFragmentationBuilder
 from .adaptive_recomputing_builder import AdaptiveRecomputingPluggableAllocatorBuilder
+from .npu_dropout_add_layer_norm_builder import NpuDropoutAddLayerNormOpBuilder
