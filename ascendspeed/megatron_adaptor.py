@@ -202,15 +202,12 @@ def exe_adaptation():
         megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__ = \
             reuse_fp32_param_init_wrapper(megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__)
 
-        if int(os.getenv('NPU_DETECT', '0')):
-            from .core.fusions.fused_layer_norm import layernorm_wrapper
-            from .optimizer.clip_grads import clip_grad_norm_fp32
-            megatron.model.rms_norm.RMSNorm.__init__ = layernorm_wrapper(
-                megatron.model.rms_norm.RMSNorm.__init__)
-            megatron.model.RMSNorm.__init__ = layernorm_wrapper(
-                megatron.model.RMSNorm.__init__)
-            megatron.optimizer.clip_grads.clip_grad_norm_fp32 = clip_grad_norm_fp32
-            megatron.optimizer.optimizer.clip_grad_norm_fp32 = clip_grad_norm_fp32
+        if int(os.getenv('NPU_ASD_ENABLE', '0')):
+            from .optimizer.optimizer import set_loss_scale_wrapper
+            megatron.optimizer.grad_scaler.DynamicGradScaler.__init__ = \
+                set_loss_scale_wrapper(megatron.optimizer.grad_scaler.DynamicGradScaler.__init__)
+            megatron.optimizer.grad_scaler.DynamicGradScaler.update = \
+                set_loss_scale_wrapper(megatron.optimizer.grad_scaler.DynamicGradScaler.update)
 
         if int(os.getenv('MEMORY_FRAGMENTATION', '0')):
             from .core.memory.memory_fragmentation.pluggable_allocator_adpator import change_allocator

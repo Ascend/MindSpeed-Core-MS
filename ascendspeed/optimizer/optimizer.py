@@ -7,56 +7,6 @@ from megatron.core import tensor_parallel
 from megatron.optimizer.optimizer import Float16OptimizerWithFloat16Params
 
 
-def clear_silent_check():
-    if int(os.getenv('NPU_DETECT', '0')):
-        from torch_npu.utils.silent_error import clear_hookmodule_list
-        clear_hookmodule_list()
-
-
-def exec_silent_check(loss_scale):
-    if int(os.getenv('NPU_DETECT', '0')):
-        from torch_npu.utils.silent_error import silent_fault_check
-        silent_fault_check(loss_scale)
-
-
-def get_silent_check_flag():
-    if int(os.getenv('NPU_DETECT', '0')):
-        from torch_npu.utils.silent_error import get_silent_check
-        return get_silent_check()
-    return False
-
-
-def print_silent_check_log():
-    import torch_npu
-    if hasattr(torch_npu.npu, "print_error_plog"):
-        torch_npu.npu.print_error_plog("NPUCheckEvent:AICore Numerical error happen, skip this step!")
-
-
-def clear_silent_check():
-    if int(os.getenv('NPU_DETECT', '0')):
-        from torch_npu.utils.silent_error import clear_hookmodule_list
-        clear_hookmodule_list()
-
-
-def exec_silent_check(loss_scale):
-    if int(os.getenv('NPU_DETECT', '0')):
-        from torch_npu.utils.silent_error import silent_fault_check
-        silent_fault_check(loss_scale)
-
-
-def get_silent_check_flag():
-    if int(os.getenv('NPU_DETECT', '0')):
-        from torch_npu.utils.silent_error import get_silent_check
-        return get_silent_check()
-    return False
-
-
-def print_silent_check_log():
-    import torch_npu
-    if hasattr(torch_npu.npu, "print_error_plog"):
-        torch_npu.npu.print_error_plog("NPUCheckEvent:AICore Numerical error happen, skip this step!")
-
-
 @torch.no_grad()
 def mixed_precision_optimizer_step(self, args, timers):
     # Copy gradients from model params to main params.
@@ -86,11 +36,7 @@ def mixed_precision_optimizer_step(self, args, timers):
 
         # If we found inf/nan, skip the update.
         if found_inf_flag:
-            clear_silent_check()
             return False, None, None
-
-    loss_scale = 1.0 if self.grad_scaler is None else self.grad_scaler.inv_scale.item()
-    exec_silent_check(loss_scale)
 
     # Clip the main gradients.
     timers('optimizer-clip-main-grad', log_level=1).start(
@@ -101,37 +47,31 @@ def mixed_precision_optimizer_step(self, args, timers):
                                         self.check_for_nan_in_grad)
     timers('optimizer-clip-main-grad').stop()
 
-    found_silent_flag = get_silent_check_flag()
-    if not found_silent_flag or not (int(os.getenv('NPU_RECOVERY', '0'))):
-        # Count the zeros in the grads.
-        timers('optimizer-count-zeros', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
-        num_zeros_in_grad = self.count_zeros() if \
-            self.log_num_zeros_in_grad else None
-        timers('optimizer-count-zeros').stop()
 
-        # Step the optimizer.
-        timers('optimizer-inner-step', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
-        self.optimizer.step()
-        timers('optimizer-inner-step').stop()
+    # Count the zeros in the grads.
+    timers('optimizer-count-zeros', log_level=1).start(
+        barrier=args.barrier_with_L1_time)
+    num_zeros_in_grad = self.count_zeros() if \
+        self.log_num_zeros_in_grad else None
+    timers('optimizer-count-zeros').stop()
 
-        # Update params from main params.
-        timers('optimizer-copy-main-to-model-params', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
-        if args.reuse_fp32_param:
-            # fp32 -> bf16 + res
-            for int32_float32_param_group, float16_param_group in zip(
-                self.int32_float32_groups, self.float16_float32_groups):
-                fp32_tensors_to_bf16_tensors(int32_float32_param_group, float16_param_group)
-        else:
-            self._copy_main_params_to_model_params()
-        timers('optimizer-copy-main-to-model-params').stop()
+    # Step the optimizer.
+    timers('optimizer-inner-step', log_level=1).start(
+        barrier=args.barrier_with_L1_time)
+    self.optimizer.step()
+    timers('optimizer-inner-step').stop()
 
+    # Update params from main params.
+    timers('optimizer-copy-main-to-model-params', log_level=1).start(
+        barrier=args.barrier_with_L1_time)
+    if args.reuse_fp32_param:
+        # fp32 -> bf16 + res
+        for int32_float32_param_group, float16_param_group in zip(
+            self.int32_float32_groups, self.float16_float32_groups):
+            fp32_tensors_to_bf16_tensors(int32_float32_param_group, float16_param_group)
     else:
-        # The silent error is found, and skip the step, then call print_error_plog api to print log in plog.
-        print_silent_check_log()
-        return False, None, None
+        self._copy_main_params_to_model_params()
+    timers('optimizer-copy-main-to-model-params').stop()
 
     # Successful update.
     return True, grad_norm, num_zeros_in_grad
@@ -152,7 +92,6 @@ def fp32_optimizer_step(self, args, timers):
 
     timers('optimizer-copy-to-main-grad').stop()
 
-    exec_silent_check(1.0)
     # Clip gradients.
     timers('optimizer-clip-main-grad', log_level=1).start(
         barrier=args.barrier_with_L1_time)
@@ -162,24 +101,18 @@ def fp32_optimizer_step(self, args, timers):
                                         self.check_for_nan_in_grad)
     timers('optimizer-clip-main-grad').stop()
 
-    found_silent_flag = get_silent_check_flag()
-    if not found_silent_flag or not (int(os.getenv('NPU_RECOVERY', '0'))):
-        # count the zeros in the grads
-        timers('optimizer-count-zeros', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
-        num_zeros_in_grad = self.count_zeros() if \
-            self.log_num_zeros_in_grad else None
-        timers('optimizer-count-zeros').stop()
+    # count the zeros in the grads
+    timers('optimizer-count-zeros', log_level=1).start(
+        barrier=args.barrier_with_L1_time)
+    num_zeros_in_grad = self.count_zeros() if \
+        self.log_num_zeros_in_grad else None
+    timers('optimizer-count-zeros').stop()
 
-        # Update parameters.
-        timers('optimizer-inner-step', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
-        self.optimizer.step()
-        timers('optimizer-inner-step').stop()
-    else:
-        # The silent error is found, and skip the step, then call print_error_plog api to print log in plog.
-        print_silent_check_log()
-        return False, None, None
+    # Update parameters.
+    timers('optimizer-inner-step', log_level=1).start(
+        barrier=args.barrier_with_L1_time)
+    self.optimizer.step()
+    timers('optimizer-inner-step').stop()
 
     # No overflow for FP32 optimizer.
     return True, grad_norm, num_zeros_in_grad
@@ -278,3 +211,15 @@ def bf16_tensors_to_fp32_tensors(int32_tensors, bf16_fp32_tensors):
             return
         bf16_fp32_tensor.copy_(bf16_fp32_tensor.view(2, -1).transpose(1,0).contiguous())
         int32_tensor.sub_(32768)
+
+
+def set_loss_scale_wrapper(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        res = func(*args, **kwargs)
+        if int(os.getenv('NPU_ASD_ENABLE', '0')):
+            from torch_npu.utils import set_loss_scale
+            set_loss_scale(args[0]._scale)
+        return res
+
+    return wrapper

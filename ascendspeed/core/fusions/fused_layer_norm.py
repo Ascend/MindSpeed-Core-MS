@@ -19,19 +19,3 @@ class FastLayerNormFN:
 
 def fused_layer_norm_affine(input_, weight, bias, normalized_shape, eps):
     return torch.nn.functional.layer_norm(input_, normalized_shape, weight, bias, eps)
-
-
-def layernorm_wrapper(fn):
-    @wraps(fn)
-    def wrapper(self, *args, **kwargs):
-        res = fn(self, *args, **kwargs)
-        if int(os.getenv('NPU_DETECT', '0')):
-            from torch_npu.hook_module.hook_module import HOOKModule
-
-            def layernorm_hook(grad):
-                HOOKModule.layernorm_list.append(torch.norm(grad.float()))
-
-            self.weight.register_hook(layernorm_hook)
-        return res
-
-    return wrapper
