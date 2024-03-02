@@ -105,10 +105,8 @@ AscendSpeed对Megatron对基本功能进行了适配，已适配如下加速特�
        （2）对长生命周期的大tensor精准分配与tensor大小相同的block，并采取优化后的多级分配策略，以避免长生命周期tensor对应的内存池产生碎片。<br />
     使用方法：<br />
         设置环境变量'MEMORY_FRAGMENTATION = 1'，即开启内存碎片优化特性<br />
-    主要收益场景：<br />
-        llama2 7B，llama2 13B<br />
-        <p align="center"> <img src="sources/images/llama2_13b_memory_fragmentation.png">
-        <p align="center"> <img src="sources/images/llama2_7b_memory_fragmentation.png">
+    主要收益场景：llama2-7B、13B、70B <br />
+
 
 ### 自适应选择重计算
 
