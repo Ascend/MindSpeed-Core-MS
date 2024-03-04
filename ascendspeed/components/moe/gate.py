@@ -131,21 +131,14 @@ def top2gating(logits: Tensor, config: Config) -> Tuple[Tensor, Tensor, Tensor, 
 
     # everything is in fp32 in this function
     gates = F.softmax(logits, dim=1)
+    num_experts = int(gates.shape[1])
 
     capacity = _capacity(gates, torch.tensor(config.capacity_factor * 2), torch.tensor(config.min_capacity))
 
-    # Create a mask for 1st's expert per token
-    indices1_s = torch.argmax(gates, dim=1)
-    num_experts = int(gates.shape[1])
-    mask1 = F.one_hot(indices1_s, num_classes=num_experts)
-
-    # Create a mask for 2nd's expert per token using Gumbel-max trick
-    # https://timvieira.github.io/blog/post/2014/07/31/gumbel-max-trick/
-    logits_w_noise = logits + gumbel_rsample(logits.shape, device=logits.device)
-    # Replace top-expert with min value
-    logits_except1 = logits_w_noise.masked_fill(mask1.bool(), float("-inf"))
-    indices2_s = torch.argmax(logits_except1, dim=1)
-    mask2 = F.one_hot(indices2_s, num_classes=num_experts)
+    _, selected_experts = torch.topk(gates, config.topk, dim=-1)
+    mask = F.one_hot(selected_experts, num_classes=num_experts)
+    mask1 = mask[:, 0, :]
+    mask2 = mask[:, 1, :]
 
     # Compute locations in capacity buffer
     locations1 = torch.cumsum(mask1, dim=0) - 1
