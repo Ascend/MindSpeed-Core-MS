@@ -213,13 +213,13 @@ def bf16_tensors_to_fp32_tensors(int32_tensors, bf16_fp32_tensors):
         int32_tensor.sub_(32768)
 
 
-def set_loss_scale_wrapper(func):
+def set_asd_loss_scale_wrapper(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         res = func(*args, **kwargs)
         if int(os.getenv('NPU_ASD_ENABLE', '0')):
-            from torch_npu.utils import set_loss_scale
-            set_loss_scale(args[0]._scale)
+            from torch_npu.utils import set_asd_loss_scale
+            set_asd_loss_scale(args[0]._scale)
         return res
 
     return wrapper
