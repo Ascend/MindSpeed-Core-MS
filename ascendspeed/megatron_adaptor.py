@@ -10,7 +10,10 @@ from torch_npu.contrib import transfer_to_npu
 def type_wrapper(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        return fn(*args, **kwargs).replace('npu', 'cuda')
+        res = fn(*args, **kwargs)
+        if isinstance(res, str):
+            res = res.replace('npu', 'cuda')
+        return res
 
     return wrapper
 

@@ -1,28 +1,53 @@
 <p align="center"> <img src="sources/images/logo.png" height="90px" width="400px"></p>
 
-AscendSpeed是针对华为昇腾设备的大模型加速库。
+AscendSpeed 是针对华为昇腾设备的大模型加速库。
 
 大模型训练是一种非常复杂的过程，涉及到许多技术和挑战，其中大模型训练需要大量的显存资源是一个难题，对计算卡提出了不小的挑战。为了在单个计算卡显存资源不足时，可以通过多张计算卡进行计算，业界出现了类似 Megatron、DeepSpeed 等第三方大模型加速库，对模型、输入数据等进行切分并分配到不同的计算卡上，最后在通过集合通信对结果进行汇总。 
 
-昇腾提供AscendSpeed加速库，使能客户大模型业务快速迁移至昇腾设备，并且支持昇腾专有算法，确保开箱可用。
+昇腾提供 AscendSpeed 加速库，使能客户大模型业务快速迁移至昇腾设备，并且支持昇腾专有算法，确保开箱可用。
 
-##  模型训练软件配套
+## 模型训练软件配套
 
 | 软件      | [版本](https://www.hiascend.com/zh/) |
-| --------- | ------------------------------------------------------------ |
-| Python    | 3.8.18                                                       |
-| driver    | [2023Q4商发](https://support.huawei.com/enterprise/zh/ascend-computing/ascend-hdk-pid-252764743/software/258924109?idAbsPath=fixnode01%7C23710424%7C251366513%7C22892968%7C252764743) |
-| firmware  | [2023Q4商发](https://support.huawei.com/enterprise/zh/ascend-computing/ascend-hdk-pid-252764743/software/258924109?idAbsPath=fixnode01%7C23710424%7C251366513%7C22892968%7C252764743) |
-| CANN      | [2023Q4商发](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software/258923273?idAbsPath=fixnode01%7C23710424%7C251366513%7C22892968%7C251168373) |
-| kernel    | [2023Q4商发](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software/258923273?idAbsPath=fixnode01%7C23710424%7C251366513%7C22892968%7C251168373) |
-| torch     | 2.1.0                                                        |
-| torch_npu | [2023Q4商发](https://gitee.com/ascend/pytorch/releases)      |
-| apex      | [2023Q4商发](https://pytorch-package.obs.cn-north-4.myhuaweicloud.com/pta/Daily/v2.1.0/20231225.2/pytorch_v2.1.0_py38.tar.gz) |
+| --------- |------------------------------------|
+| Python    | 推荐 3.8                             |
+| driver    | Ascend HDK 23.0.0                  |
+| firmware  | Ascend HDK 23.0.0                  |
+| CANN      | CANN 7.0.0                         |
+| kernel    | CANN 7.0.0                         |
+| torch     | 2.1.0                              |
+| torch_npu | release v5.0.0                     |
+| apex      | v5.0.rc3                           |
 
-## 支持特性
+## 安装
 
-AscendSpeed对Megatron对基本功能进行了适配，已适配如下加速特性：
+1. 安装 AscendSpeed
 
+    方式一、从 git 直接安装
+    
+    ```shell
+    pip install git+https://gitee.com/ascend/AscendSpeed.git
+    ```
+    
+    方式二、下载源码安装
+    
+    ```shell
+    git clone https://gitee.com/ascend/AscendSpeed.git
+    cd AscendSpeed
+    pip install -e .
+    ```
+
+2. 获取 Megatron-LM 并指定 commit id
+
+    ```shell
+    git clone https://github.com/NVIDIA/Megatron-LM.git
+    cd Megatron-LM
+    git checkout bcce6f54e075e3c3374ea67adefe54f3f2da2b07
+    ```
+## AscendSpeed 特性
+
+### Megatron-LM NPU 适配
+AscendSpeed 对 Megatron-LM 的基本功能进行了适配，已适配如下特性：
 - 张量并行
 - 流水线并行
 - 序列并行
@@ -30,33 +55,8 @@ AscendSpeed对Megatron对基本功能进行了适配，已适配如下加速特�
 - 分布式优化器
 - 异步分布式数据并行
 
-## 快速上手
-
-1. 安装AscendSpeed
-
-   从git直接安装
-
-   ```shell
-   pip install git+https://gitee.com/ascend/AscendSpeed.git
-   ```
-
-   或者，下载源码安装
-
-   ```shell
-   git clone https://gitee.com/ascend/AscendSpeed.git
-   cd AscendSpeed
-   pip install -e .
-   ```
-
-2. 获取Megatron-LM并指定commit id
-
-   ```shell
-   git clone https://github.com/NVIDIA/Megatron-LM.git
-   cd Megatron-LM
-   git checkout bcce6f54e075e3c3374ea67adefe54f3f2da2b07
-   ```
-
-3. 在Megatron-LM目录下修改`pretrain_gpt.py`文件，在`import torch`下新增一行`import ascendspeed.megatron_adaptor`
+使用方式：
+1. 在 Megatron-LM 目录下修改`pretrain_gpt.py`文件，在`import torch`下新增一行`import ascendspeed.megatron_adaptor`
 
     ```diff
      import os
@@ -67,59 +67,26 @@ AscendSpeed对Megatron对基本功能进行了适配，已适配如下加速特�
      from typing import Union
     ```
 
-4. 在Megatron-LM目录下，准备好训练数据，并在示例脚本中填写对应路径，然后执行。
-
+2. 在 Megatron-LM 目录下，准备好训练数据，并在示例脚本中填写对应路径，然后执行。
     ```shell
     bash examples/pretrain_gpt_distributed.sh
     ```
 
-## 算法
-
 ### TP重计算通信优化
 
-+ 问题分析：在大部分大模型训练客户场景，开启重计算和TP并行属于必须配置，开启重计算虽然能节省内存，但是会导致TP维度通信耗时增长50%，整体计算耗时会增长30%~40%。
-+ Motivation: 重计算通信算子消除，优化重计算层划分，实现大模型训练通信性能提升。
-+ 解决思路:
-    + **重计算通信优化**：开启张量并行时，在前向层FFN末端会插入AllReduce算子，其反向对应的是Identity，由于重计算只是为了获取中间激活值，所以其末端AllReduce的输出是冗余的，因此可以消除末端AllReduce，而不影响中间计算和后续的反向计算，如下图所示；
-    <p align="center"> <img src="sources/images/algo_tp_comm_optimize_a.png" height="357px" width="388px"></p>
-
-    + **反向通信Overlap**：开启序列并行时，在前向层末端FFN会插入ReduceScatter通信，同时在反向中会插入AllGather通信，重计算时可以直接消除ReduceScatter通信，同时将反向时的AllGather隐藏在前向计算中，如上图所示；
-
-    + **重计算层划分优化**：如下图所示，按照通信算子的位置去划分重计算层，可以将层内通信转化成层末端通信，通过上述重计算通信优化方式，可以完全消除重计算引入的通信耗时，E2E TP维度通信耗时可以缩减1/3。
-    <p align="center"> <img src="sources/images/algo_tp_comm_optimize_b.png" height="173px" width="295px"></p>
-
-+ 使用方法: 设置`--optimize-recomp-communication-level`，可选项为`1`或者`2`，其中level1代表仅对MLP层进行通信优化，level2代表对MLP/ATTN层都进行通信优化。
+优化重计算中通信算子，提升模型性能。  
+具体信息请查看：[link](./docs/recomputation-communication.md)
 
 ### 内存碎片优化
-   + 问题分析：在模型训练的过程中，需要大量的显存来存储模型参数、中间计算结果、优化器状态以及批量输入数据等。频繁地申请和释放内存空间容易引发内存碎片问题。<br />
-   + Motivation：通过对不同生命周期的tensor进行分别管理，以减少内存碎片 <br />
-   + 解决思路：<br />
-       + **识别不同生命周期的tensor**： <br />
-       一次训练过程中，长生命周期的tensor主要有四种： <br />
-       （1）模型初始化创建的权重、梯度等。<br />
-       （2）在前向时产生的激活值。<br />
-       （3）用户没有进行垃圾回收的tensor会保留到下一个step。<br />
-       （4）梯度收敛后产生的优化器状态tensor。<br />
-       + **使用不同的内存池隔离管理**：<br />
-       （1）将识别出的长短生命周期tensor放入不同的内存池分别管理。<br />
-       （2）对长生命周期的大tensor精准分配与tensor大小相同的block，并采取优化后的多级分配策略，以避免长生命周期tensor对应的内存池产生碎片。<br />
-    使用方法：<br />
-        设置环境变量'MEMORY_FRAGMENTATION = 1'，即开启内存碎片优化特性<br />
-    主要收益场景：llama2-7B、13B、70B <br />
+
+通过对不同生命周期的 tensor 进行分别管理，以减少显存碎片。  
+具体信息请查看：[link](./docs/memory-fragmentation.md)
 
 
 ### 自适应选择重计算
 
-- Motivation：
-为了在最大限度地利用NPU内存的同时，提高模型训练的性能，我们支持通过自动调整训练内存大小来自动选择重新计算策略。这一特性称为自适应选择重计算。
-- 解决思路：
-自适应选择重计算设计主要包括重计算策略搜索、SwapManager功能和内存管理三大部分。其中重计算策略搜索依赖SwapManager功能及时将tensor换到CPU，避免OOM导致训练中断；自动选择重计算策略流程如下图所示：<p align="center"> <img src="sources/images/adaptive_recompute_a.png" height="500px" width="400px"></p>SwapManager功能需要内存管理适配PTA的NPUPluggableAllocator接口拦截OOM，让SwapManager功能可以介入，流程如下图所示：
-<p align="center"> <img src="sources/images/adaptive_recompute_b.png" height="300px" width="500px"></p>
-
-- 使用方法
-1. 启用自适应选择重计算，请使用`--adaptive-recompute-device-swap`标志开启自适应选择重计算策略。
-2. （可选）支持手动调整训练内存大小来自动选择重计算策略，请使用`--adaptive-recompute-device-size`进行设置来指定自适应选择重计算策略的训练内存大小（单位：MB）。该方式如果发生OOM，您需要重新选择一个新的内存值来重启模型训练。您也可以通过二分法的方式获得最优解。
-3. （可选）支持设置停止profiling的训练step，请使用`--adaptive-recompute-profiling-step`进行设置。默认在第10步停止profiling。如果当前训练step小于5，则profiling将在step 5之后停止。
+自动调整训练显存大小，选择重计算策略，提高模型训练的性能。  
+具体信息请查看：[link](./docs/adaptive-recompute.md)
 
 ## 说明
 
