@@ -49,7 +49,7 @@ class AdaptiveRecomputePolicy:
         # device memory free default is maxsize
         self.default_device_memory = sys.maxsize
         all_args = get_args()
-        if all_args.adaptive_recompute_device_size > 0:
+        if all_args.adaptive_recompute_device_size >= 0:
             self.default_device_memory = all_args.adaptive_recompute_device_size
         self.hccl_memory = 0
 

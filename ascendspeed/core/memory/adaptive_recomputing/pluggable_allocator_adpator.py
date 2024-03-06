@@ -16,10 +16,10 @@ def change_allocator():
     myallocator = ctypes.CDLL(adaptive_recompute_module_path)
     init_fn = ctypes.cast(getattr(myallocator, "my_init"), ctypes.c_void_p).value
     empty_fn = ctypes.cast(getattr(myallocator, "my_empty_cache"), ctypes.c_void_p).value
-    get_device_stats_fn = ctypes.cast(getattr(myallocator, "my_get_device_stats"), ctypes.c_void_p).value # todo 待PTA合入
-    reset_peak_stats_fn = ctypes.cast(getattr(myallocator, "my_reset_peak_stats"), ctypes.c_void_p).value # todo 待PTA合入
+    get_device_stats_fn = ctypes.cast(getattr(myallocator, "my_get_device_stats"), ctypes.c_void_p).value
+    reset_peak_stats_fn = ctypes.cast(getattr(myallocator, "my_reset_peak_stats"), ctypes.c_void_p).value
 
     new_alloc.allocator().set_init_fn(init_fn)
     new_alloc.allocator().set_reset_fn(empty_fn)
-    new_alloc.allocator().set_get_device_stats_fn(get_device_stats_fn) # todo 待PTA合入
-    new_alloc.allocator().set_reset_peak_status_fn(reset_peak_stats_fn) # todo 待PTA合入
+    new_alloc.allocator().set_get_device_stats_fn(get_device_stats_fn)
+    new_alloc.allocator().set_reset_peak_status_fn(reset_peak_stats_fn)

@@ -115,7 +115,7 @@ class SwapManager(metaclass=SwapManagerMeta):
             size = max(size, self.layers_interval_peak_memory[self.cur_post_hook_layer_name])
         # swap device memory size multiple
         config = os.getenv('SWAP_SIZE_MULTIPLE')
-        swap_size_multiple = 1
+        swap_size_multiple = 10
         if config is not None:
             swap_size_multiple = max(1, int(config))
 
