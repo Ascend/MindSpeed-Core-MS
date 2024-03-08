@@ -14,7 +14,7 @@
 #### **重计算通信优化**
 
 开启张量并行时，在前向层FFN末端会插入AllReduce算子，其反向对应的是Identity，由于重计算只是为了获取中间激活值，所以其末端AllReduce的输出是冗余的，因此可以消除末端AllReduce，而不影响中间计算和后续的反向计算，如下图所示。
-  <p align="center"> <img src="../sources/images/algo_tp_comm_optimize_a.png" height="357px" width="388px"></p>
+  <p align="center"> <img src="../../sources/images/algo_tp_comm_optimize_a.png" height="357px" width="388px"></p>
 
 #### **反向通信Overlap**
 
@@ -24,7 +24,7 @@
 
 如下图所示，按照通信算子的位置去划分重计算层，可以将层内通信转化成层末端通信，通过上述重计算通信优化方式，可以完全消除重计算引入的通信耗时，E2E TP维度通信耗时可以缩减1/3。
 
-  <p align="center"> <img src="../sources/images/algo_tp_comm_optimize_b.png" height="173px" width="295px"></p>
+  <p align="center"> <img src="../../sources/images/algo_tp_comm_optimize_b.png" height="173px" width="295px"></p>
 
 ## 使用场景
 

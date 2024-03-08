@@ -16,10 +16,10 @@
 
 自动选择重计算策略流程如下图所示：
 
-<p align="center"> <img src="../sources/images/adaptive_recompute_a.png" height="500px" width="400px"></p>
+<p align="center"> <img src="../../sources/images/adaptive_recompute_a.png" height="500px" width="400px"></p>
 
 SwapManager 能需要内存管理适配 PTA 的 NPUPluggableAllocator 接口拦截 OOM，让 SwapManager 功能可以介入，流程如下图所示：
-<p align="center"> <img src="../sources/images/adaptive_recompute_b.png" height="300px" width="500px"></p>
+<p align="center"> <img src="../../sources/images/adaptive_recompute_b.png" height="300px" width="500px"></p>
 
 ## 使用场景
 
