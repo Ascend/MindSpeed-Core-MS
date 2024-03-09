@@ -214,7 +214,7 @@ class AdaptiveRecomputePolicy:
         solver.layer_without_recompute_combination = get_graph_solver().layer_without_recompute_combination
         solver.layer_recompute_one_combination = get_graph_solver().layer_recompute_one_combination
         solver.layers_combination = get_graph_solver().layers_combination
-        solver.get_layers_module(context)
+        solver.get_layers_module(context, "")
         solver.get_no_recompute_layer()
         solver.apply_policy_to_model(recompute_policy_list)
         return context
@@ -285,8 +285,8 @@ class MemoryPeakPrediction:
         if SwapManager().swap_status and supple_size > 0:
             SwapManager().swap_out_by_size(peak_memory, is_prediction=True)
 
-    def record_interval_peak_memory(self, layer_name, memory_info):
-        if len(self.previous_layer_info) == 0 or "layers" in layer_name:
+    def record_interval_peak_memory(self, current_ctx, memory_info):
+        if not self.previous_layer_info or 'is_recomputing_layer' in current_ctx:
             return
         pre_layer_name = self.previous_layer_info['layer_name']
         interval_peak_memory = memory_info['max_memory_allocated'] - self.previous_layer_info['memory_info'][
@@ -317,6 +317,10 @@ class AdaptiveRecompute:
         self.context = {
             'module': []
         }
+        #record allowed recomputing module
+        self.allowed_recomputing_module = []
+        # profiling prefix
+        self.profiling_prefix = ""
         # save origin modules
         self.checkpointed_modules = []
         # save modules hook, remove it after apply policy
@@ -368,7 +372,7 @@ class AdaptiveRecompute:
         SwapManager().cur_pre_hook_layer_name = layer_name
         SwapManager().cur_post_hook_layer_name = ""
         memory_info = self.get_memory_status()
-        get_memory_peak_prediction().record_interval_peak_memory(layer_name, memory_info)
+        get_memory_peak_prediction().record_interval_peak_memory(state, memory_info)
         torch.npu.reset_max_memory_allocated()
         state['memory'] = memory_info['used_memory']
         state['time'] = time.time()
@@ -391,7 +395,7 @@ class AdaptiveRecompute:
         SwapManager().cur_pre_hook_layer_name = ""
         SwapManager().cur_post_hook_layer_name = layer_name
         memory_info = self.get_memory_status()
-        get_memory_peak_prediction().record_interval_peak_memory(layer_name, memory_info)
+        get_memory_peak_prediction().record_interval_peak_memory(state, memory_info)
         get_memory_peak_prediction().record_interval_memory_info(layer_name, memory_info)
         torch.npu.reset_max_memory_allocated()
         memory_info['memory'] = state['memory']
@@ -423,12 +427,7 @@ class AdaptiveRecompute:
         if not get_adaptive_recomputing_policy().is_find_target_device_memory:
             get_memory_peak_prediction().check_forward_mem_info(state, layer_name, memory_info, is_pre_hook=False)
 
-    def forward_pre_hook(self, prefix, name, parent_ctx, ctx):
-        ctx['name'] = name
-        ctx['prefix_name'] = prefix
-        if 'layers' in parent_ctx:
-            parent_ctx['layers'].append(ctx)
-
+    def forward_pre_hook(self, prefix, name, ctx):
         def hook(module, *args, **kargs):
             if 'module' in self.context:
                 self.context['module'].append(ctx)
@@ -444,24 +443,81 @@ class AdaptiveRecompute:
 
         return hook
 
-    def register_recursive_hook(self, prefix_name, model, ctx):
+    def construct_context_recursive(self, prefix_name, model, ctx, have_allowed_recomputing):
+        # 1.construct context
+        next_have_allowed_recomputing = have_allowed_recomputing
         for name, module in model.named_children():
-            if str.isdigit(name) and name != "0":
+            if 'layers' not in ctx:
+                ctx['layers'] = []
+
+            current_ctx = {'name': name, 'prefix_name': prefix_name}
+            if 'layers' in ctx:
+                ctx['layers'].append(current_ctx)
+
+            next_name = prefix_name + "." + name if prefix_name != "" else name
+
+            # 2.tag allowed_recomputing module
+            if have_allowed_recomputing:
+                for allowed_recomputing_module in self.allowed_recomputing_module:
+                    if isinstance(module, allowed_recomputing_module):
+                        current_ctx['allowed_recomputing'] = True
+                        if isinstance(model, torch.nn.ModuleList):
+                            ctx['is_module_list'] = True
+                            ctx['is_recomputing_layer'] = True
+                        else:
+                            current_ctx['is_recomputing_layer'] = True
+                        next_have_allowed_recomputing = False
+            self.construct_context_recursive(next_name, module, current_ctx, next_have_allowed_recomputing)
+
+    def register_recursive_hook(self, model, ctx, profiling_prefix):
+        index = 0
+        for module in model.children():
+            if 'layers' not in ctx:
+                continue
+            current_ctx = ctx['layers'][index]
+            # only has allowed_recomputing Tag can set recomputing hook            
+            if 'is_module_list' in ctx and 'allowed_recomputing' in current_ctx and index != 0:
                 # transformer layer
                 module.no_checkpoint_forward = module.forward
                 module.forward = get_recompute_hook().hook_checkpoint_forward(module.forward)
                 self.checkpointed_modules.append(module)
+            prefix_name = current_ctx['prefix_name']
+            name = current_ctx['name']
 
-            if 'layers' not in ctx:
-                ctx['layers'] = []
-            current_ctx = {}
+            # profiling entire module
+            if "module" == prefix_name:
+                pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
+                post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
+                self.modules_hooks.append(pre_hook)
+                self.modules_hooks.append(post_hook)
 
-            next_name = prefix_name + "." + name if prefix_name != "" else name
-            pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, ctx, current_ctx))
-            post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
-            self.modules_hooks.append(pre_hook)
-            self.modules_hooks.append(post_hook)
-            self.register_recursive_hook(next_name, module, current_ctx)
+            # profiling transformer Layers
+            if isinstance(module, torch.nn.ModuleList) and 'is_recomputing_layer' in current_ctx:
+                pre_hook = model.register_forward_pre_hook(self.forward_pre_hook(ctx['prefix_name'], ctx['name'], ctx))
+                post_hook = model.register_forward_hook(self.forward_post_hook(ctx['prefix_name'], ctx['name'], ctx))
+                self.modules_hooks.append(pre_hook)
+                self.modules_hooks.append(post_hook)
+            elif 'is_recomputing_layer' in current_ctx:
+                profiling_prefix = prefix_name + "." + name
+                pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
+                post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
+                self.modules_hooks.append(pre_hook)
+                self.modules_hooks.append(post_hook)
+
+            # only has allowed_recomputing Tag and its submodule can set profiling hook
+            if ('allowed_recomputing' in current_ctx and index == 0):
+                profiling_prefix = prefix_name + "." + name
+                pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
+                post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
+                self.modules_hooks.append(pre_hook)
+                self.modules_hooks.append(post_hook)
+            elif profiling_prefix and prefix_name.startswith(profiling_prefix):
+                pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
+                post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
+                self.modules_hooks.append(pre_hook)
+                self.modules_hooks.append(post_hook)
+            self.register_recursive_hook(module, current_ctx, profiling_prefix)
+            index += 1
 
     def reset_modules(self):
         for m in self.checkpointed_modules:
@@ -527,7 +583,7 @@ class AdaptiveRecompute:
             print_rank_0("ADAPTIVE-RECOMPUTE: applying policy to the model")
             config = {
                 "pre_layer_full_name": "",
-                "pre_layer_name": "",
+                "pre_layer_ctx": {},
                 "cur_layer_name": "module",
             }
             apply_adaptive_recompute(config, models, self.context)
@@ -556,6 +612,10 @@ class AdaptiveRecompute:
         self.stop_profiling_step = step
         self.solve_graph_at_step = step + 1
 
+    def add_allowed_recomputing_module(self, module):
+        if module not in self.allowed_recomputing_module:
+            self.allowed_recomputing_module.append(module)
+
     def _cal_tensor_size(self, tensor):
         try:
             return get_tensor_mem_size(tensor) / self.unit_mb
@@ -574,7 +634,7 @@ def is_activate_adaptive_recompute():
     profiling_step = 0
     if all_args.adaptive_recompute_device_size < 0 and not all_args.adaptive_recompute_device_swap:
         print_rank_0("[ERROR] failed to activate adaptive selective recompute train, please add param: "
-                     "\"ADAPTIVE-RECOMPUTE-device-swap\", or set param: \"ADAPTIVE-RECOMPUTE-device-size\".")
+                     "\"adaptive-recompute-device-swap\", or set param: \"adaptive-recompute-device-size\".")
         return False, profiling_step
     if all_args.recompute_granularity is not None or all_args.recompute_method is not None:
         print_rank_0("[ERROR] failed to activate adaptive selective recompute train, please check whether the "
@@ -583,14 +643,14 @@ def is_activate_adaptive_recompute():
     max_profiling_step = all_args.train_iters // 10
     profiling_step = all_args.adaptive_recompute_profiling_step
     if profiling_step < 5 or profiling_step > max_profiling_step:
-        print_rank_0(f"[WARNING] consider set \"ADAPTIVE-RECOMPUTE-profiling-step\" value >=5"
+        print_rank_0(f"[WARNING] consider set \"adaptive-recompute-profiling-step\" value >=5"
                      f"and <={max_profiling_step}, or remove it.")
     if profiling_step <= 0:
-        print_rank_0("[WARNING] \"ADAPTIVE-RECOMPUTE-profiling-step\" value can not <=0, will use default value 10.")
+        print_rank_0("[WARNING] \"adaptive-recompute-profiling-step\" value can not <=0, will use default value 10.")
         profiling_step = 10
     print_rank_0(
-        "success to activate adaptive recompute train: ADAPTIVE-RECOMPUTE-device-swap={}, ADAPTIVE-RECOMPUTE-device-size={}, "
-        "ADAPTIVE-RECOMPUTE-profiling-step={}".format(all_args.adaptive_recompute_device_swap,
+        "success to activate adaptive recompute train: adaptive-recompute-device-swap={}, adaptive-recompute-device-size={}, "
+        "adaptive-recompute-profiling-step={}".format(all_args.adaptive_recompute_device_swap,
                                                   all_args.adaptive_recompute_device_size, profiling_step))
     return True, profiling_step
 
@@ -608,10 +668,17 @@ def setup_model_and_optimizer_decorator(setup_model_and_optimizer):
         optimizer.step = recomputing.hook_step_func(optimizer.step, models)
         if isinstance(models, list):
             for model in models:
-                recomputing.register_recursive_hook("module", model, recomputing.context)
+                recomputing.construct_context_recursive("module", model, recomputing.context, True)
+                recomputing.register_recursive_hook(model, recomputing.context, recomputing.profiling_prefix)
         else:
-            recomputing.register_recursive_hook("module", models, recomputing.context)
+            recomputing.construct_context_recursive("module", models, recomputing.context, True)
+            recomputing.register_recursive_hook(models, recomputing.context, recomputing.profiling_prefix)
         print_rank_0("ADAPTIVE-RECOMPUTE: successfully hooking module")
         return models, optimizer, opt_param_scheduler
 
     return wrapper
+
+
+def allowed_recomputing_module_wrapper(allowed_recomputing_module):
+    recomputing = get_adaptive_recomputing()
+    recomputing.add_allowed_recomputing_module(allowed_recomputing_module)

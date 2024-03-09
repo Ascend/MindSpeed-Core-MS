@@ -27,6 +27,7 @@ class TestAdaptiveRecomputing(DistributedTest):
      {
         "prefix_name": "xxx",
         "name": "%d",
+        "allowed_recomputing": true,
         "layers": [{
             "prefix_name": "xxx",
             "name": "input_layernorm",
@@ -196,6 +197,8 @@ class TestAdaptiveRecomputing(DistributedTest):
                     "layers": [{
                         "prefix_name": "xxx",
                         "name": "layers",
+                        "is_recomputing_layer": true,
+                        "is_module_list": true,
                         "layers": [%s]
                     }],
                     "memory_bytes": 0,

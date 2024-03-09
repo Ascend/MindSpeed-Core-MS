@@ -2,6 +2,7 @@ from ascendspeed import megatron_adaptor
 import torch.nn as nn
 from ascendspeed.core.memory.adaptive_recomputing.adaptive_recompute import get_adaptive_recomputing
 from ascendspeed.core.memory.adaptive_recomputing.adaptive_recompute_apply import get_recompute_hook
+from ascendspeed.core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
 
 from unit_tests.common import DistributedTest
 
@@ -29,14 +30,46 @@ class TwoLayerModel(nn.Module):
 class TestRecursiveHook(DistributedTest):
     world_size = 1
 
+    def test_allowed_recomputing_module_wrapper(self):
+        recomputing = get_adaptive_recomputing()
+        assert len(recomputing.allowed_recomputing_module) == 0
+        allowed_recomputing_module_wrapper(nn.Linear)
+        assert len(recomputing.allowed_recomputing_module) == 1
+
+    def test_construct_context_recursive(self):
+        model = TwoLayerModel(10, 10, 10)
+        recomputing = get_adaptive_recomputing()
+        allowed_recomputing_module_wrapper(nn.Linear)
+        recomputing.construct_context_recursive("module", model, recomputing.context, True)
+
     def test_register_recursive_hook(self):
         model = TwoLayerModel(10, 10, 10)
-        ctx = {}
+        ctx = {
+            "module":[],
+            "layers":[
+                {
+                    "name": "fc1",
+                    "prefix_name": "module",
+                    "allowed_recomputing": True,
+                    "is_recomputing_layer": True
+                },
+                {
+                    "name": "fc2",
+                    "prefix_name": "module",
+                    "allowed_recomputing": True,
+                    "is_recomputing_layer": True
+                },
+                {
+                    "name": "relu",
+                    "prefix_name": "module"
+                }
+            ]
+        }
 
         recomputing = get_adaptive_recomputing()
         recomputing.set_profiling_step(10)
         assert len(recomputing.modules_hooks) == 0
-        recomputing.register_recursive_hook("module", model, ctx)
+        recomputing.register_recursive_hook(model, ctx, recomputing.profiling_prefix)
 
         assert len(recomputing.modules_hooks) != 0
 

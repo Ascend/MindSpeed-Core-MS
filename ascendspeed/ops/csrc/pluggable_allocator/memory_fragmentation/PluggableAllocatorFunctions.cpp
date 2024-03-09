@@ -9,30 +9,41 @@
 #include "Recorder.h"
 
 extern "C" {
-void *memory_fragmentation_malloc(size_t size, int device, aclrtStream stream) {
+void *memory_fragmentation_malloc(size_t size, int device, aclrtStream stream)
+{
     void *ptr;
     ptr = PluggableAllocator::getInstance().malloc(device, size, stream);
     return ptr;
 }
 
-void memory_fragmentation_free(void *ptr, size_t size, int device, aclrtStream stream) {
+void memory_fragmentation_free(void *ptr, size_t size, int device, aclrtStream stream)
+{
     PluggableAllocator::getInstance().free(ptr);
 }
 
-void memory_fragmentation_init(int device_count) {
+void memory_fragmentation_init(int device_count)
+{
     PluggableAllocator::getInstance().init(device_count);
 }
 
-void memory_fragmentation_empty_cache(bool check_error) {
+void memory_fragmentation_empty_cache(bool check_error)
+{
     PluggableAllocator::getInstance().emptyCache(true);
 }
 
-void memory_fragmentation_memory_fraction(double fraction, int device) {
+void memory_fragmentation_memory_fraction(double fraction, int device)
+{
     PluggableAllocator::getInstance().setMemoryFraction(fraction, device);
 }
 
-DeviceStats memory_fragmentation_get_device_stats(int device) {
+DeviceStats memory_fragmentation_get_device_stats(int device)
+{
     return PluggableAllocator::getInstance().getDeviceStats(device);
+}
+
+void my_reset_peak_stats(int device)
+{
+    return PluggableAllocator::getInstance().resetPeakStats(device);
 }
 }
 

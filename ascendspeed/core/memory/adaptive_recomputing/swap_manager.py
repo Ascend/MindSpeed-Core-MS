@@ -35,6 +35,8 @@ class SwapManager(metaclass=SwapManagerMeta):
     def is_allowed_wrap_tensor(tensor):
         if isinstance(tensor, SwappableTensor):
             return False
+        if not tensor.is_contiguous():
+            return False
         # min wrap tensor size, default is 1024B
         config = os.getenv('MIN_SWAP_TENSOR_SIZE')
         min_swap_tensor_size = 1024
@@ -115,7 +117,7 @@ class SwapManager(metaclass=SwapManagerMeta):
             size = max(size, self.layers_interval_peak_memory[self.cur_post_hook_layer_name])
         # swap device memory size multiple
         config = os.getenv('SWAP_SIZE_MULTIPLE')
-        swap_size_multiple = 10
+        swap_size_multiple = 1
         if config is not None:
             swap_size_multiple = max(1, int(config))
 

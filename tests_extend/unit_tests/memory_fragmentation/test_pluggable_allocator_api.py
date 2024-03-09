@@ -2,6 +2,7 @@ import pytest
 import torch
 import torch_npu
 import collections
+from ascendspeed import megatron_adaptor
 from ascendspeed.core.memory.memory_fragmentation.pluggable_allocator_adpator import change_allocator
 
 

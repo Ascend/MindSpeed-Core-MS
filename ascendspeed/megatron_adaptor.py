@@ -227,11 +227,19 @@ def exe_adaptation():
             from .core.memory.memory_fragmentation.optimizer_init_precise import optimizer_init_wrap
             megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = optimizer_init_wrap(
                 megatron.optimizer.optimizer.MixedPrecisionOptimizer.step)
+            import megatron.training
+            from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
+            allowed_recomputing_module_wrapper(megatron.model.transformer.ParallelTransformerLayer)
+            from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_decorator
+            megatron.training.setup_model_and_optimizer = setup_model_and_optimizer_decorator(
+                megatron.training.setup_model_and_optimizer)
 
-        if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')):
+        if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) and not int(os.getenv('MEMORY_FRAGMENTATION', '0')):
             from .core.memory.adaptive_recomputing.pluggable_allocator_adpator import change_allocator
             change_allocator()
             import megatron.training
+            from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
+            allowed_recomputing_module_wrapper(megatron.model.transformer.ParallelTransformerLayer)
             from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_decorator
             megatron.training.setup_model_and_optimizer = setup_model_and_optimizer_decorator(
                 megatron.training.setup_model_and_optimizer)

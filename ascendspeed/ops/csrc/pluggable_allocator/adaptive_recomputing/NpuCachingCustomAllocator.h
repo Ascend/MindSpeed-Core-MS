@@ -527,6 +527,7 @@ class DeviceCachingAllocator {
         PyGILState_STATE state = PyGILState_Ensure();
         PyObject *pModule = PyImport_ImportModule("ascendspeed.core.memory.adaptive_recomputing.swap_manager");
         if (!pModule) {
+          PyGILState_Release(state);
           std::cout << "No Ascendspeed Module" << std::endl;
           break;
         }

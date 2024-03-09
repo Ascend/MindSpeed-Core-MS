@@ -1,4 +1,5 @@
 #include "DeviceCachingAllocator.h"
+#include <torch/csrc/python_headers.h>
 
 DeviceCachingAllocator::DeviceCachingAllocator()
     : long_lc_pools(BLOCK_POOL_LONG), default_lc_pools(BLOCK_POOL_DEFAULT) {
@@ -95,120 +96,152 @@ Block* DeviceCachingAllocator::malloc_internal(int device, size_t orig_size, acl
     size_t alloc_size = 0;
     AllocParams params(device, size, stream, pool_list[0], alloc_size, stats);
     bool block_found = false;
-    BlockPool* pool;
-    pool_idx = 0;
 
-    for (auto iter_pool : pool_list) {
-        pool = iter_pool;
-        alloc_size = get_allocation_size(
-                size, pool == &long_lc_pools.large_blocks ? LifeCycleType::LONG_LC : LifeCycleType::DEFAULT_LC);
-        AllocParams _params(device, size, stream, pool, alloc_size, stats);
-        _params.stat_types = get_stat_types_for_pool(*pool);
+    while (!block_found) {
+        BlockPool* pool;
+        pool_idx = 0;
 
-        if (CachingAllocatorConfig::open_memory_optimize()) { // When the tensor lifecycle conflicts
-            block_found =
-                    // Search pool
-                    get_free_block_memory_optimize(_params, tensor_forward_end, tensor_step_end, tensor_forward_start,
-                                                   tensor_step_start)
-                    // Trigger callbacks and retry search
-                    || (trigger_free_memory_callbacks(_params) &&
+        for (auto iter_pool : pool_list) {
+            pool = iter_pool;
+            alloc_size = get_allocation_size(
+                    size, pool == &long_lc_pools.large_blocks ? LifeCycleType::LONG_LC : LifeCycleType::DEFAULT_LC);
+            AllocParams _params(device, size, stream, pool, alloc_size, stats);
+            _params.stat_types = get_stat_types_for_pool(*pool);
+
+            if (CachingAllocatorConfig::open_memory_optimize()) { // When the tensor lifecycle conflicts
+                block_found =
+                        // Search pool
                         get_free_block_memory_optimize(_params, tensor_forward_end, tensor_step_end, tensor_forward_start,
-                                                       tensor_step_start));
-        } else {
+                                                       tensor_step_start)
+                        // Trigger callbacks and retry search
+                        || (trigger_free_memory_callbacks(_params) &&
+                            get_free_block_memory_optimize(_params, tensor_forward_end, tensor_step_end, tensor_forward_start,
+                                                           tensor_step_start));
+            } else {
+                block_found =
+                        // Search pool
+                        get_free_block(_params)
+                        // Trigger callbacks and retry search
+                        || (trigger_free_memory_callbacks(_params) && get_free_block(_params));
+            }
+
+            params = _params;
+
+            if (block_found) {
+                break;
+            }
+            pool_idx++;
+        }
+
+        if (!block_found) {
+            pool = pool_list[0];
+            alloc_size = get_allocation_size(
+                    size, pool == &long_lc_pools.large_blocks ? LifeCycleType::LONG_LC : LifeCycleType::DEFAULT_LC);
+            AllocParams _params(device, size, stream, pool, alloc_size, stats);
+            _params.stat_types = get_stat_types_for_pool(*pool);
+
             block_found =
-                    // Search pool
-                    get_free_block(_params)
-                    // Trigger callbacks and retry search
-                    || (trigger_free_memory_callbacks(_params) && get_free_block(_params));
+                    // Attempt allocate
+                    alloc_block(_params, false) ||
+                    // Free enough available cached blocks to satisfy alloc and retry alloc.
+                    (release_available_cached_blocks(_params) && alloc_block(_params, false));
+            params = _params;
         }
 
-        params = _params;
+        pool_idx = 0;
+        if (!block_found) {
+            // Prioritize searching in another pool
+            for (auto pool_it = pool_list.rbegin(); pool_it != pool_list.rend(); ++pool_it) {
+                pool = *pool_it;
+                alloc_size = get_allocation_size(
+                    size, pool == &long_lc_pools.large_blocks ? LifeCycleType::LONG_LC : LifeCycleType::DEFAULT_LC);
+                AllocParams _params(device, size, stream, pool, alloc_size, stats);
+                _params.stat_types = get_stat_types_for_pool(*pool);
 
-        if (block_found){
-            break;
-        }
-        pool_idx++;
-    }
+                block_found =
+                        // Search pool
+                        get_free_block_after_alloc(_params)
+                        // Trigger callbacks and retry search
+                        || (trigger_free_memory_callbacks(_params) && get_free_block_after_alloc(_params));
 
-    if (!block_found) {
-        pool = pool_list[0];
-        alloc_size = get_allocation_size(
-                size, pool == &long_lc_pools.large_blocks ? LifeCycleType::LONG_LC : LifeCycleType::DEFAULT_LC);
-        AllocParams _params(device, size, stream, pool, alloc_size, stats);
-        _params.stat_types = get_stat_types_for_pool(*pool);
-
-        block_found =
-                // Attempt allocate
-                alloc_block(_params, false)
-                // Free enough available cached blocks to satisfy alloc and retry alloc.
-                || (release_available_cached_blocks(_params) && alloc_block(_params, false));
                 params = _params;
-    }
 
-    pool_idx = 0;
-    if (!block_found) {
-        // Prioritize searching in another pool
-        for (auto pool_it = pool_list.rbegin(); pool_it != pool_list.rend(); ++pool_it) {
-            pool = *pool_it;
+                if (block_found) {
+                    break;
+                }
+                pool_idx++;
+            }
+        }
+
+        // When it is a small tensor, search in a large memory pool to prevent OOM
+        if (!block_found && size <= kSmallSize) {
+            pool_list = get_pool_list(kLargeBuffer, lc);
+            for (auto pool_it = pool_list.begin(); pool_it != pool_list.end(); ++pool_it) {
+                pool = *pool_it;
+                alloc_size = get_allocation_size(
+                    size, pool == &long_lc_pools.large_blocks ? LifeCycleType::LONG_LC : LifeCycleType::DEFAULT_LC);
+                AllocParams _params(device, size, stream, pool, alloc_size, stats);
+                _params.stat_types = get_stat_types_for_pool(*pool);
+
+                block_found =
+                        // Search pool
+                        get_free_block_after_alloc(_params)
+                        // Trigger callbacks and retry search
+                        || (trigger_free_memory_callbacks(_params) && get_free_block_after_alloc(_params));
+
+                params = _params;
+
+                if (block_found) {
+                    break;
+                }
+                pool_idx++;
+            }
+        }
+
+        if (!block_found) {
+            pool = pool_list[0];
             alloc_size = get_allocation_size(
                     size, pool == &long_lc_pools.large_blocks ? LifeCycleType::LONG_LC : LifeCycleType::DEFAULT_LC);
+
+            if (pool == &long_lc_pools.large_blocks || pool == &long_lc_pools.small_blocks) {
+                printf("try long_lc pool fail, size:%lu\n", alloc_size);
+            } else {
+                printf("try default_lc pool fail, size:%lu\n", alloc_size);
+            }
             AllocParams _params(device, size, stream, pool, alloc_size, stats);
             _params.stat_types = get_stat_types_for_pool(*pool);
-
-            block_found =
-                    // Search pool
-                    get_free_block_after_alloc(_params)
-                    // Trigger callbacks and retry search
-                    || (trigger_free_memory_callbacks(_params) && get_free_block_after_alloc(_params));
-
+            block_found = release_cached_blocks_default(true) && release_cached_blocks_long(true) && alloc_block(_params, true);
             params = _params;
+        }
 
-            if (block_found) {
+        if (!block_found) {
+            if (params.err == ACL_ERROR_NONE) {
                 break;
             }
-            pool_idx++;
-        }
-    }
-
-    // When it is a small tensor, search in a large memory pool to prevent OOM
-    if (!block_found && size <= kSmallSize) {
-        pool_list = get_pool_list(kLargeBuffer, lc);
-        for (auto pool_it = pool_list.begin(); pool_it != pool_list.end(); ++pool_it) {
-            pool = *pool_it;
-            alloc_size = get_allocation_size(
-                    size, pool == &long_lc_pools.large_blocks ? LifeCycleType::LONG_LC : LifeCycleType::DEFAULT_LC);
-            AllocParams _params(device, size, stream, pool, alloc_size, stats);
-            _params.stat_types = get_stat_types_for_pool(*pool);
-
-            block_found =
-                    // Search pool
-                    get_free_block_after_alloc(_params)
-                    // Trigger callbacks and retry search
-                    || (trigger_free_memory_callbacks(_params) && get_free_block_after_alloc(_params));
-
-            params = _params;
-
-            if (block_found) {
+            PyGILState_STATE state = PyGILState_Ensure();
+            PyObject *pModule = PyImport_ImportModule("ascendspeed.core.memory.adaptive_recomputing.swap_manager");
+            if (!pModule) {
+                std::cout << "No Ascendspeed Module" << std::endl;
+                PyGILState_Release(state);
                 break;
             }
-            pool_idx++;
-        }
-    }
+            PyObject *pFunc1 = PyObject_GetAttrString(pModule, "SwapManager");
+            PyObject *pClass = PyObject_CallObject(pFunc1, nullptr);
+            PyObject *pFunc2 = PyObject_GetAttrString(pClass, "swap_out_by_size");
 
-    if (!block_found) {
-        pool = pool_list[0];
-        alloc_size = get_allocation_size(
-                size, pool == &long_lc_pools.large_blocks ? LifeCycleType::LONG_LC : LifeCycleType::DEFAULT_LC);
+            PyObject *pArgs = PyTuple_New(1);
+            PyTuple_SetItem(pArgs, 0, PyLong_FromLong(size));
 
-        if (pool == &long_lc_pools.large_blocks || pool == &long_lc_pools.small_blocks) {
-            printf("try long_lc pool fail, size:%lu\n", alloc_size);
-        } else {
-            printf("try default_lc pool fail, size:%lu\n", alloc_size);
+            PyObject *pResult = PyObject_CallObject(pFunc2, pArgs);
+            bool ret = false;
+            PyArg_Parse(pResult, "p", &ret);
+            PyGILState_Release(state);
+            if (!ret) {
+                std::cout << "SWAP Failed" << std::endl;
+                break;
+            }
+            params.err = ACL_ERROR_NONE;
         }
-        AllocParams _params(device, size, stream, pool, alloc_size, stats);
-        _params.stat_types = get_stat_types_for_pool(*pool);
-        block_found = release_cached_blocks_default(true) && release_cached_blocks_long(true) && alloc_block(_params, true);
-        params = _params;
     }
 
     if (!block_found) {

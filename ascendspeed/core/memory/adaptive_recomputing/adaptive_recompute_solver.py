@@ -239,7 +239,10 @@ class GraphSolver:
     def apply_policy_to_model(self, recompute_policy_list):
         full_layers = []
         for layer in self.num_layers_module:
-            full_layers.extend(layer["layers"])
+            if 'is_module_list' in layer:
+                full_layers.extend(layer["layers"])
+            else:
+                full_layers.append(layer)
         if len(recompute_policy_list) == 0:
             return
         idx = 0
@@ -568,24 +571,24 @@ class GraphSolver:
             fmt_str += "{} {}\n".format(n, policy_name)
         self.final_policy_info = fmt_str.rstrip("\n")
 
-    def get_layers_module(self, model):
-        if "name" in model and model["name"] == "layers":
+    def get_layers_module(self, model, parent_ctx):
+        if 'is_recomputing_layer' in model:
+            if 'is_module_list' in model and 'memory' in parent_ctx:
+                self.transformer_module_memory += parent_ctx['memory']
+            elif 'is_module_list' not in model and 'memory' in model:
+                self.transformer_module_memory += model['memory']
             self.num_layers_module.append(model)
             if "layers" in model:
                 self.layers_num += len(model["layers"])
-            return True
+            return
         if "layers" not in model:
-            return False
-        has_transformer_layer = False
+            return
         for sub_model in model["layers"]:
-            has_transformer_layer = (has_transformer_layer or self.get_layers_module(sub_model))
-        if has_transformer_layer:
-            self.transformer_module_memory += model['memory']
-        return False
+            self.get_layers_module(sub_model, model)
 
     def build_solver_info(self, model, pp):
         self.pp = max(self.pp, pp)
-        self.get_layers_module(model)
+        self.get_layers_module(model, "")
         self.total_recompute_cost = sys.maxsize
         # first layer is not recompute
         self.get_no_recompute_layer()
