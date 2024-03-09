@@ -40,9 +40,9 @@ Tried to allocated 3384.00 MiB (NPU 2; 61.22 GiB total capacity; 53.87 GiB alrea
 |   llama2-7B    |  seq-length=4096、mico-batch-size=4、global-batch-size=16、TP=8、PP=1、DP=1、开启FA  | 8卡（单机）  |
 |   llama2-7B    |  seq-length=6144、mico-batch-size=4、global-batch-size=16、TP=8、PP=1、DP=1、开启FA  | 8卡（单机）  |
 |   llama2-13B   |  seq-length=8192、mico-batch-size=4、global-batch-size=16、TP=8、PP=1、DP=1、开启FA  | 8卡（单机）  |
-|   llama2-13B   |  seq-length=4096、mico-batch-size=2、global-batch-size=16、TP=8、PP=1、DP=1、开启FA  | 8卡（单机）  |
-|   llama2-13B   |  seq-length=6144、mico-batch-size=2、global-batch-size=16、TP=8、PP=1、DP=1、开启FA  | 8卡（单机）  |
-|   llama2-13B   |  seq-length=8192、mico-batch-size=2、global-batch-size=16、TP=8、PP=1、DP=1、开启FA  | 8卡（单机）  |
+|   llama2-13B   |  seq-length=4096、mico-batch-size=2、global-batch-size=16、TP=8、PP=1、DP=1、开启FA  | 16卡（双机） |
+|   llama2-13B   |  seq-length=6144、mico-batch-size=2、global-batch-size=16、TP=8、PP=1、DP=1、开启FA  | 16卡（双机） |
+|   llama2-13B   |  seq-length=8192、mico-batch-size=2、global-batch-size=16、TP=8、PP=1、DP=1、开启FA  | 16卡（双机） |
 |   llama2-70B   | seq-length=4096、mico-batch-size=2、global-batch-size=1024、TP=8、PP=4、DP=1、开启FA | 32卡（4机） |
 |   llama2-70B   | seq-length=6144、mico-batch-size=2、global-batch-size=1024、TP=8、PP=4、DP=1、开启FA | 32卡（4机） |
 |   llama2-70B   | seq-length=8192、mico-batch-size=2、global-batch-size=1024、TP=8、PP=4、DP=1、开启FA | 32卡（4机） |
