@@ -51,13 +51,12 @@ class TestNpuDropoutAddLayerNorm(DistributedTest):
                        is_rms_norm,
                        return_dropout_mask):
         if is_rms_norm:
-            return npu_dropout_add_rms_norm(x0, residual, weight, bias, rowscale, layerscale,
-                                            dropout_p, epsilon, prenorm, residual_in_fp32, return_dropout_mask)
+            return npu_dropout_add_rms_norm(x0, residual, weight, bias, dropout_p, epsilon,
+                                            rowscale, layerscale, prenorm, residual_in_fp32, return_dropout_mask)
         else:
-            return npu_dropout_add_layer_norm(x0, residual, weight, bias, rowscale, layerscale,
-                                              dropout_p, epsilon, prenorm, residual_in_fp32, return_dropout_mask)
+            return npu_dropout_add_layer_norm(x0, residual, weight, bias, dropout_p, epsilon,
+                                              rowscale, layerscale, prenorm, residual_in_fp32, return_dropout_mask)
 
-    @pytest.mark.skipif(DEVICE_NAME != 'Ascend910B', reason='device type is not supported, skip this UT!')
     def test_npu_dropout_add_layer_norm(self):
         batch, seq, hidden_size = 6, 60, 1024
         x0 = torch.randn((batch, seq, hidden_size)).to(torch.float).npu()
