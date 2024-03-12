@@ -205,13 +205,6 @@ def exe_adaptation():
         megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__ = \
             reuse_fp32_param_init_wrapper(megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__)
 
-        if int(os.getenv('NPU_ASD_ENABLE', '0')):
-            from .optimizer.optimizer import set_asd_loss_scale_wrapper
-            megatron.optimizer.grad_scaler.DynamicGradScaler.__init__ = \
-                set_asd_loss_scale_wrapper(megatron.optimizer.grad_scaler.DynamicGradScaler.__init__)
-            megatron.optimizer.grad_scaler.DynamicGradScaler.update = \
-                set_asd_loss_scale_wrapper(megatron.optimizer.grad_scaler.DynamicGradScaler.update)
-
         if int(os.getenv('MEMORY_FRAGMENTATION', '0')):
             from .core.memory.memory_fragmentation.pluggable_allocator_adpator import change_allocator
             change_allocator()
