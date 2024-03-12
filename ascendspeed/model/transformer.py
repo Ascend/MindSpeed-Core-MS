@@ -140,7 +140,20 @@ def core_attention_forward(self, query_layer, key_layer, value_layer, attention_
             beta=0.0, alpha=(1.0 / self.norm_factor))
     else:
         if self.alibi.matmul_result is None or self.alibi.output_size != output_size:
+            args = get_args()
+            
             self.alibi.output_size = output_size
+            alibi = _build_alibi_tensor(args.seq_length,
+                                        args.num_attention_heads,
+                                        args.square_alibi_mask,
+                                        args.fill_neg_inf
+                                        ).to(torch.cuda.current_device())
+            if args.params_dtype == torch.float16:
+                alibi = alibi.to(torch.float16)
+            elif args.params_dtype == torch.bfloat16:
+                alibi = alibi.to(torch.bfloat16)
+            self.alibi.alibi = alibi
+            
             if self.fill_neg_inf:
                 _alibi = self.alibi.alibi[:, :output_size[3], :output_size[3]]
                 attention_mask = attention_mask.repeat(output_size[0], 1, 1, 1)[:output_size[0], :, :, :]
