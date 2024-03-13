@@ -81,69 +81,6 @@ void NpuCachingCustomAllocator::resetPeakStats(int device) {
 
 std::string NpuCachingCustomAllocator::name() { return "native"; }
 
-void NpuCachingCustomAllocator::setMemoryFraction(double fraction, int device) {
-  c10_npu::SetDevice(device);
-  device_allocator[device]->setMemoryFraction(fraction);
-}
-
-void NpuCachingCustomAllocator::cacheInfo(int dev_id, size_t *cachedAndFree, size_t *largestBlock) {
-  device_allocator[dev_id]->cacheInfo(cachedAndFree, largestBlock);
-}
-
-void *NpuCachingCustomAllocator::getBaseAllocation(void *ptr, size_t *outSize) {
-  Block *block = get_allocated_block(ptr);
-  if (!block) {
-    AT_ERROR("invalid device pointer: ", ptr);
-  }
-  return device_allocator[block->device]->getBaseAllocation(block, outSize);
-}
-
-void NpuCachingCustomAllocator::recordStream(const c10::DataPtr &ptr, c10_npu::NPUStream stream) {
-  if (!ptr.get()) {
-    return;
-  }
-  if (ptr.get_deleter() != &local_raw_delete) {
-    return;
-  }
-  Block *block = get_allocated_block(ptr.get());
-  TORCH_INTERNAL_ASSERT(block != nullptr, "No allocated block can be found");
-  device_allocator[block->device]->recordStream(block, stream);
-}
-
-void NpuCachingCustomAllocator::eraseStream(const c10::DataPtr &ptr, c10_npu::NPUStream stream) {
-  if (!ptr.get()) {
-    return;
-  }
-  if (ptr.get_deleter() != &local_raw_delete) {
-    return;
-  }
-  Block *block = get_allocated_block(ptr.get());
-  if (!block) {
-    AT_ERROR("invalid device pointer: ", ptr.get());
-  }
-  if (block->stream != c10_npu::getCurrentNPUStream(block->device).stream(false)) {
-    return;
-  }
-  device_allocator[block->device]->eraseStream(block, stream);
-}
-
-std::vector<SegmentInfo> NpuCachingCustomAllocator::snapshot() {
-  std::vector<SegmentInfo> result;
-  int count = static_cast<int>(device_allocator.size());
-  for (int i = 0; i < count; i++) {
-    auto snap = device_allocator[i]->snapshot();
-    result.insert(result.end(), snap.begin(), snap.end());
-  }
-  return result;
-}
-
-void NpuCachingCustomAllocator::resetAccumulatedStats(int device) {
-  assertValidDevice(device);
-  device_allocator[device]->resetAccumulatedStats();
-}
-
-void NpuCachingCustomAllocator::FreeDeviceCachedMemory(int device) { device_allocator[device]->emptyCache(true); }
-
 void CachingAllocatorConfig::lexArgs(const char *env, std::vector<std::string> &config) {
   std::vector<char> buf;
 
@@ -207,7 +144,7 @@ size_t CachingAllocatorConfig::parseExpandableSegments(const std::vector<std::st
       void *ptr = nullptr;
       auto status = aclrtReserveMemAddress(&ptr, 512, 0, NULL, 1);
       if (status == ACL_ERROR_NONE) {
-        NPU_CHECK_ERROR(aclrtReleaseMemAddress(ptr));
+        aclrtReleaseMemAddress(ptr);
       } else {
         NPU_CHECK_SUPPORTED_OR_ERROR(status);
         m_expandable_segments = false;

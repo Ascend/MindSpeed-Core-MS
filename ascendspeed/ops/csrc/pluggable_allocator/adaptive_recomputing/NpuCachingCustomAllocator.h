@@ -169,12 +169,12 @@ struct ExpandableSegment {
         segment_size_(size) {
     size_t device_free;
     size_t device_total;
-    NPU_CHECK_ERROR(aclrtGetMemInfo(ACL_HBM_MEM, &device_free, &device_total));
+    aclrtGetMemInfo(ACL_HBM_MEM, &device_free, &device_total);
     // we allocate enough address space for 1 1/8 the total memory on the NPU.
     // This allows for some cases where we have to unmap pages earlier in the
     // segment to put them at the end.
     max_handles_ = numSegments(device_total + device_total / 8);
-    NPU_CHECK_ERROR(aclrtReserveMemAddress(&ptr_, segment_size_ * max_handles_, 0, NULL, 1));
+    aclrtReserveMemAddress(&ptr_, segment_size_ * max_handles_, 0, NULL, 1);
   }
   // begin must be aligned to segment_size_.
   // returns the actual range mapped, which may be
@@ -205,16 +205,15 @@ struct ExpandableSegment {
         for (auto j : c10::irange(begin, i)) {
           auto h = handles_.at(j).value();
           handles_.at(j) = c10::nullopt;
-          NPU_CHECK_ERROR(aclrtFreePhysical(h));
+          aclrtFreePhysical(h);
         }
         trimHandles();
         return rangeFromHandles(begin, begin);
       }
-      NPU_CHECK_ERROR(status);
       handles_.at(i) = handle;
     }
     for (auto i : c10::irange(begin, end)) {
-      NPU_CHECK_ERROR(aclrtMapMem(ptr_ + i * segment_size_, segment_size_, 0, handles_.at(i).value(), 0));
+      aclrtMapMem(ptr_ + i * segment_size_, segment_size_, 0, handles_.at(i).value(), 0);
     }
     return rangeFromHandles(begin, end);
   }
@@ -238,7 +237,7 @@ struct ExpandableSegment {
 
   ~ExpandableSegment() {
     forEachAllocatedRange([&](size_t begin, size_t end) { unmapHandles(begin, end); });
-    NPU_CHECK_ERROR(aclrtReleaseMemAddress(ptr_));
+    aclrtReleaseMemAddress(ptr_);
   }
 
  private:
@@ -250,12 +249,12 @@ struct ExpandableSegment {
     // cannot call c10::npu::stream_synchronize because
     // it might grab the GIL which can lead to a deadlock
     // Locking order must be GIL -> Allocator Lock
-    NPU_CHECK_ERROR(aclrtSynchronizeStream(stream_));
+    aclrtSynchronizeStream(stream_);
     for (auto i : c10::irange(begin, end)) {
       aclrtDrvMemHandle h = handles_.at(i).value();
       handles_.at(i) = c10::nullopt;
-      NPU_CHECK_ERROR(aclrtUnmapMem(ptr_ + segment_size_ * i));
-      NPU_CHECK_ERROR(aclrtFreePhysical(h));
+      aclrtUnmapMem(ptr_ + segment_size_ * i);
+      aclrtFreePhysical(h);
     }
     trimHandles();
   }
@@ -430,7 +429,7 @@ class CachingAllocatorConfig {
     void *ptr = nullptr;
     auto status = aclrtReserveMemAddress(&ptr, 512, 0, NULL, 1);
     if (status == ACL_ERROR_NONE) {
-      NPU_CHECK_ERROR(aclrtReleaseMemAddress(ptr));
+      aclrtReleaseMemAddress(ptr);
     } else {
       m_expandable_segments = false;
     }
@@ -486,7 +485,7 @@ class DeviceCachingAllocator {
     std::unique_lock<std::recursive_mutex> lock(mutex);
 
     if (device == -1) {
-      NPU_CHECK_ERROR(c10_npu::GetDevice(&device));
+      c10_npu::GetDevice(&device);
     }
 
     // process outstanding npuEvents
@@ -553,7 +552,7 @@ class DeviceCachingAllocator {
       if (params.err == ACL_ERROR_RT_MEMORY_ALLOCATION) {
         size_t device_free;
         size_t device_total;
-        NPU_CHECK_ERROR(aclrtGetMemInfo(ACL_HBM_MEM, &device_free, &device_total));
+        aclrtGetMemInfo(ACL_HBM_MEM, &device_free, &device_total);
 
         std::string allowed_info;
         if (set_fraction) {
@@ -588,7 +587,7 @@ class DeviceCachingAllocator {
                  " reserved in total by PyTorch)",
                  " If reserved memory is >> allocated memory try setting max_split_size_mb to avoid fragmentation.");
       } else {
-        NPU_CHECK_ERROR(params.err);
+        params.err;
       }
     }
 
@@ -692,67 +691,10 @@ class DeviceCachingAllocator {
                 stats.allocated_bytes[static_cast<size_t>(StatType::AGGREGATE)].current);
   }
 
-  void *getBaseAllocation(Block *block, size_t *outSize) {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
-    while (block->prev) {
-      block = block->prev;
-    }
-    void *basePtr = block->ptr;
-    if (outSize) {
-      size_t size = 0;
-      while (block) {
-        size += block->size;
-        block = block->next;
-      }
-      *outSize = size;
-    }
-    return basePtr;
-  }
-
-  void recordStream(Block *block, c10_npu::NPUStream stream) {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
-    block->stream_uses.insert(stream);
-  }
-
-  void eraseStream(Block *block, c10_npu::NPUStream stream) {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
-    block->stream_uses.erase(stream);
-
-    // free block, lazy destory block related events
-    for (auto it = npu_events[stream].begin(); it != npu_events[stream].end();) {
-      if (block != it->second) {
-        it++;
-        continue;
-      }
-      it = npu_events[stream].erase(it);
-      block->event_count--;
-      if (block->event_count == 0) {
-        free_block(block);
-        break;
-      }
-    }
-  }
-
-  /** set memory fraction to limit maximum allocated memory **/
-  void setMemoryFraction(double fraction) {
-    size_t device_free;
-    size_t device_total;
-    NPU_CHECK_ERROR(aclrtGetMemInfo(ACL_HBM_MEM, &device_free, &device_total));
-    allowed_memory_maximum = static_cast<size_t>(fraction * device_total);
-    set_fraction = true;
-  }
-
   /** returns cached blocks to the system allocator **/
   void emptyCache(bool check_error) {
     std::lock_guard<std::recursive_mutex> lock(mutex);
     release_cached_blocks(check_error);
-  }
-
-  /** Retrieves info (total size + largest block) of the memory cache **/
-  void cacheInfo(size_t *total, size_t *largest) {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
-    cache_info_aux(large_blocks, total, largest);
-    cache_info_aux(small_blocks, total, largest);
   }
 
   /** Returns a copy of the memory allocator stats **/
@@ -801,53 +743,6 @@ class DeviceCachingAllocator {
 
     reset_peak_stat(stats.oversize_allocations);
     reset_peak_stat(stats.oversize_segments);
-  }
-
-  /** Dump a complete snapshot of the memory held by the allocator. Potentially VERY expensive. **/
-  std::vector<SegmentInfo> snapshot() const {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
-
-    std::vector<SegmentInfo> result;
-    const auto all_blocks = get_all_blocks();
-
-    for (const Block *const head_block : all_blocks) {
-      // For expandable segments, we report one segment for each continguous
-      // mapped range of memory
-      if (head_block->prev && head_block->prev->mapped) {
-        continue;
-      }
-      result.emplace_back();
-      SegmentInfo &segment_info = result.back();
-      segment_info.device = head_block->device;
-      segment_info.address = reinterpret_cast<uintptr_t>(head_block->ptr);
-      segment_info.is_large = (!head_block->pool->is_small);
-      segment_info.is_expandable = head_block->expandable_segment_;
-
-      const Block *block = head_block;
-      while (block != nullptr && block->mapped) {
-        segment_info.blocks.emplace_back();
-        BlockInfo &block_info = segment_info.blocks.back();
-
-        block_info.size = block->size;
-        block_info.allocated = block->allocated;
-        block_info.active = block->allocated || (block->event_count > 0);
-
-        segment_info.total_size += block_info.size;
-        if (block_info.allocated) {
-          segment_info.allocated_size += block_info.size;
-        }
-        if (block_info.active) {
-          segment_info.active_size += block_info.size;
-        }
-
-        block = block->next;
-      }
-    }
-
-    std::sort(result.begin(), result.end(),
-              [](const SegmentInfo &a, const SegmentInfo &b) { return a.address < b.address; });
-
-    return result;
   }
 
   static size_t round_size(size_t size) {
@@ -1415,7 +1310,7 @@ class DeviceCachingAllocator {
         Block *block = e.second;
 
         if (check_error) {
-          NPU_CHECK_ERROR(aclrtSynchronizeEvent(*event));
+          aclrtSynchronizeEvent(*event);
         } else {
           aclrtSynchronizeEvent(*event);
         }
@@ -1438,7 +1333,7 @@ class DeviceCachingAllocator {
     stream_set streams(std::move(block->stream_uses));
     AT_ASSERT(block->stream_uses.empty());
     for (auto &stream : streams) {
-      NPU_CHECK_ERROR(c10_npu::SetDevice(stream.device_index()));
+      c10_npu::SetDevice(stream.device_index());
 
       EventPool::Event event = create_event_internal(stream.device_index());
       event->record(stream);
@@ -1448,7 +1343,7 @@ class DeviceCachingAllocator {
       npu_events[stream].emplace_back(std::move(event), block);
     }
     if (ret_ctx == ACL_ERROR_NONE) {
-      NPU_CHECK_ERROR(aclrtSetCurrentContext(compiler_ctx));
+      aclrtSetCurrentContext(compiler_ctx);
     }
   }
 
@@ -1498,7 +1393,7 @@ class DeviceCachingAllocator {
 
 void local_raw_delete(void *ptr);
 
-class NpuCachingCustomAllocator : public c10_npu::NPUCachingAllocator::NPUAllocator {
+class NpuCachingCustomAllocator {
  private:
   std::mutex mutex;
 
@@ -1516,50 +1411,16 @@ class NpuCachingCustomAllocator : public c10_npu::NPUCachingAllocator::NPUAlloca
   std::mutex *getFreeMutex() const;
   Block *get_allocated_block(void *ptr, bool remove = false);
 
-  void setMemoryFraction(double fraction, int device) override;
-  void cacheInfo(int dev_id, size_t *cachedAndFree, size_t *largestBlock) override;
-  void *getBaseAllocation(void *ptr, size_t *outSize) override;
-  void recordStream(const c10::DataPtr &ptr, c10_npu::NPUStream stream) override;
-  void eraseStream(const c10::DataPtr &ptr, c10_npu::NPUStream stream) override;
-  void resetAccumulatedStats(int device) override;
-  void FreeDeviceCachedMemory(int device) override;
-  void init(int device_count) override;
-  bool initialized() override;
-  void emptyCache(bool check_error) override;
-  DeviceStats getDeviceStats(int device) override;
-  void resetPeakStats(int device) override;
-  std::vector<SegmentInfo> snapshot() override;
-  std::string name() override;
+  void setMemoryFraction(double fraction, int device);
+  void init(int device_count);
+  bool initialized();
+  void emptyCache(bool check_error);
+  DeviceStats getDeviceStats(int device);
+  void resetPeakStats(int device);
+  std::string name();
   void *malloc(int device, size_t size, aclrtStream stream);
   void free(void *ptr);
   void assertValidDevice(int device);
-
-  void *raw_alloc(size_t nbytes) override {
-    if (nbytes == 0) {
-      return nullptr;
-    }
-    int device = 0;
-    NPU_CHECK_ERROR(c10_npu::GetDevice(&device));
-    return nullptr;
-  }
-
-  void *raw_alloc_with_stream(size_t nbytes, aclrtStream stream) override {
-    if (nbytes == 0) {
-      return nullptr;
-    }
-    int device;
-    NPU_CHECK_ERROR(c10_npu::GetDevice(&device));
-    return malloc(device, nbytes, stream);
-  }
-
-  void raw_delete(void *ptr) override { this->free(ptr); }
-
-  c10::DataPtr allocate(size_t size) const override {
-    int device = 0;
-    NPU_CHECK_ERROR(c10_npu::GetDevice(&device));
-    void *r = nullptr;
-    return {r, r, &local_raw_delete, c10::Device(c10::DeviceType::PrivateUse1, device)};
-  }
 };
 
 extern NpuCachingCustomAllocator my_allocator;
