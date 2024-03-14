@@ -27,7 +27,7 @@
 说明torch中可能产生了较多的内存碎片，此时可考虑开启该特性以减少内存碎片，避免内存不足的问题 <br />
 **示例** ：<br />
 Tried to allocated 3384.00 MiB (NPU 2; 61.22 GiB total capacity; 53.87 GiB already allocated; 53.87 GiB current activate; 1.59 GiB free; <br />
-56.60 GiB reserved in total by PyTorch), 发现reserved-allocated=2.37G，碎片较多，可以考虑开启该特性
+56.60 GiB reserved in total by PyTorch), 发现reserved-allocated=2.73G，碎片较多，可以考虑开启该特性
 
 ## 使用方法
 设置环境变量'MEMORY_FRAGMENTATION = 1'，即开启内存碎片优化特性。
