@@ -43,7 +43,7 @@ class AdaptiveRecomputePolicy:
         # device memory dichotomy for solve graph
         self.device_memory_dichotomy_left = 0
         self.device_memory_dichotomy_right = 0
-        self.cur_device_memory = 0
+        self.cur_device_memory = -1
         self.stop_dichotomy_value = 1
 
         # device memory free default is maxsize
@@ -136,7 +136,7 @@ class AdaptiveRecomputePolicy:
             self.device_memory_dichotomy_left = self.first_non_oom_device_memory
             self.device_memory_dichotomy_right = self.cur_device_memory
         self.is_find_target_device_memory = False
-        if self.cur_device_memory == 0:
+        if self.cur_device_memory == -1:
             return self.default_device_memory
 
         # OOM
