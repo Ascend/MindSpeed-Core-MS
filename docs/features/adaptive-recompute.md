@@ -23,16 +23,7 @@ SwapManager 能需要内存管理适配 PTA 的 NPUPluggableAllocator 接口拦�
 
 ## 使用场景
 
-该特性主要用于训练场景，如果用户发现 NPU 报显存不足时，reserved 和 allocated 的显存差距很大 (如 reserved-allocated > 1G)，则说明 torch 中可能产生了较多内存碎片，可以考虑开启该特性。
-
-示例：内存不足时报错信息：Tried to allocate 384.00 MiB (NPU 2; 61.22 GiB total capacity; 53.87 GiB already allocated; 53.87 GiB current active; 1.59 GiB free; 56.60 GiB reserved in total by PyTorch)，发现reserved-allocated=2.73G，则可以考虑开启该特性。
-
-**注意：** 由于该特性在内存充足时倾向于新申请内存而非将已申请内存空间碎片化，因此在少量情况下可能和 hccl 抢占显存，而导致 hccl 在显存不足时无法通知 torch 释放额外预留的空闲空间，从而报 hccl 显存不足的错误。
-通过 `torch_npu.npu.set_per_process_memory_fraction` 接口设置允许 torch 占用的内存上限可解决该问题。
-
-> `torch_npu.npu.set_per_process_memory_fraction` 接口设置：  
-> 位置：AscendSpeed/ascendspeed/core/memory/memory_fragmentation/memory_recorder.py  
-> 添加：torch_npu.npu.set_per_process_memory_fraction(X)，其中 X 为想要限制 torch 占用内存的最高比例，例如 0.94
+该特性主要用于训练场景，如果用户发现开启了全重计算功能后， NPU显存剩余较多，此时若想充分利用显存，从而提高训练性能，可以考虑开启该特性。
 
 ## 使用方法
 
@@ -42,4 +33,4 @@ SwapManager 能需要内存管理适配 PTA 的 NPUPluggableAllocator 接口拦�
 
 ## 使用效果
 
-Llama2-7B 节省约 1.64GB，Llama2-13B 节省约 1.34GB。
+相比全重计算，Llama2-7B场景下，性能提升约 16.29%，Llama2-13B 性能提升约12.05%。
