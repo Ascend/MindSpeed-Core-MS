@@ -2,7 +2,7 @@ from functools import reduce
 import torch
 from torch.nn import functional as F
 
-from .cc_utils import check_equal
+from .coc_utils import check_equal
 from .min_comm_cfg import min_comm_config
 
 
@@ -32,7 +32,7 @@ def ceil_div(a, b):
     return (a + b - 1) // b
 
 
-def ceil_cc(a, b):
+def ceil_coc(a, b):
     if b == 0:
         raise ZeroDivisionError
     return ((a + b - 1) // b) * b
@@ -44,7 +44,7 @@ kPackage32 = 32
 
 
 def compute_pad_num(single_dim_size, element_size, kPackage=kPackage512):
-    least_size = ceil_cc(single_dim_size, ceil_div(kPackage, element_size))
+    least_size = ceil_coc(single_dim_size, ceil_div(kPackage, element_size))
     pad_num = least_size - single_dim_size
     return pad_num
 

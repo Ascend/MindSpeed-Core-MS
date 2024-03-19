@@ -1,7 +1,7 @@
 import torch
 
 from .min_comm_cfg import min_comm_config
-from .cc_utils import set_context, async_gather_along_first_dim, reshape_to_2D, is_grad_needed
+from .coc_utils import set_context, async_gather_along_first_dim, reshape_to_2D, is_grad_needed
 
 
 class RewriteColumnSeqParallelFunction(torch.autograd.Function):
@@ -57,7 +57,7 @@ class RewriteRowSeqParallelFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input_, weight, bias):
         set_context(ctx, input_, weight, bias)
-        # ctx.world_size is needed for the case: rewrite forward (manually skipped) with cc backward
+        # ctx.world_size is needed for the case: rewrite forward (manually skipped) with coc backward
         ctx.world_size = min_comm_config.tp_world_size
         output_ = torch.matmul(input_, weight.t())
         output_parallel = min_comm_config.reduce_scatter_along_first_dim(output_)

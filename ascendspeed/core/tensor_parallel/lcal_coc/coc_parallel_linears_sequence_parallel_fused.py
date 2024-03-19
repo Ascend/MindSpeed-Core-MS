@@ -3,27 +3,15 @@ import torch
 import torch_npu
 
 from .min_comm_cfg import min_comm_config
-from .cc_utils import get_parallel_num, set_context, reshape_to_2D
-from .cc_utils import async_gather_along_first_dim, is_grad_needed, check_equal
-from .cc_parallel_linears_sequence_parallel import CCColumnSeqParallelFunction, CCRowSeqParallelFunction
+from .coc_utils import get_parallel_num, set_context, is_grad_needed, check_equal
+from .coc_utils import async_gather_along_first_dim, reshape_to_2D, allocate_for_output
+from .coc_parallel_linears_sequence_parallel import COCColumnSeqParallelFunction, COCRowSeqParallelFunction
 from .rewrite_parallel_linears_sequence_parallel import RewriteColumnSeqParallelFunction, RewriteRowSeqParallelFunction
 
 ALIGN_SIZE = 512
-device = torch.npu.current_device()
 
 
-# input1 is required to be 2-dimensional here.
-def allocate_for_output(input1, input2=None, tp_world_size=1, is_gather=True):
-    if input2 is not None:
-        dim_size = list(input1.shape)[:-1] + list([input2.shape[1]])
-    else:
-        dim_size = list(input1.shape)
-    dim_size[0] = dim_size[0] * tp_world_size if is_gather else dim_size[0] // tp_world_size
-    output = torch.empty(dim_size, dtype=input1.dtype, device=torch.npu.current_device())
-    return output
-
-
-class FusedCCColumnSeqParallelFunction(torch.autograd.Function):
+class FusedCOCColumnSeqParallelFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input_, weight, bias):
         from ascendspeed.ops.lcal_functional import coc_ops
@@ -35,7 +23,7 @@ class FusedCCColumnSeqParallelFunction(torch.autograd.Function):
         if parallel_num == 1:
             return RewriteColumnSeqParallelFunction.forward(ctx, input_, weight, bias)
         elif parallel_num in [2, 4, 8]:
-            return CCColumnSeqParallelFunction.forward(ctx, input_, weight, bias)
+            return COCColumnSeqParallelFunction.forward(ctx, input_, weight, bias)
 
         output_shape = list(input_.shape)[:-1] + list([weight.shape[0]])
         output_shape[0] = output_shape[0] * min_comm_config.tp_world_size
@@ -44,9 +32,7 @@ class FusedCCColumnSeqParallelFunction(torch.autograd.Function):
         output = allocate_for_output(input1=input_, input2=weight.t(),
                                      tp_world_size=min_comm_config.tp_world_size, is_gather=True)
 
-        coc_ops.all_gather_matmul(input_, weight, output, bias=None)
-        if bias is not None:
-            output = output + bias
+        coc_ops.all_gather_matmul(input_, weight, output, bias)
         output = output.reshape(output_shape)
 
         return output
@@ -76,7 +62,7 @@ class FusedCCColumnSeqParallelFunction(torch.autograd.Function):
                 total_input = ctx.total_input
             total_input = reshape_to_2D(total_input)
 
-            if min_comm_config.enable_cc_in_column_backward:
+            if min_comm_config.enable_coc_in_column_backward:
                 coc_ops.matmul_reduce_scatter(grad_output, weight, sub_grad_input, bias=None)
             else:
                 grad_input = grad_output.matmul(weight)
@@ -91,7 +77,7 @@ class FusedCCColumnSeqParallelFunction(torch.autograd.Function):
             if is_grad_bias_needed and ctx.use_bias:
                 grad_bias = grad_output.sum(dim=0) if grad_output.is_contiguous() else grad_output.t().sum(dim=1)
 
-            if not min_comm_config.enable_cc_in_column_backward:
+            if not min_comm_config.enable_coc_in_column_backward:
                 sub_grad_input_work.wait()
 
         else:
@@ -102,7 +88,7 @@ class FusedCCColumnSeqParallelFunction(torch.autograd.Function):
         return sub_grad_input, grad_weight, grad_bias
 
 
-class FusedCCRowSeqParallelFunction(torch.autograd.Function):
+class FusedCOCRowSeqParallelFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input_, weight, bias):
         from ascendspeed.ops.lcal_functional import coc_ops
@@ -115,16 +101,14 @@ class FusedCCRowSeqParallelFunction(torch.autograd.Function):
         if parallel_num == 1:
             return RewriteRowSeqParallelFunction.forward(ctx, input_, weight, bias)
         elif parallel_num in [2, 4, 8]:
-            return CCRowSeqParallelFunction.forward(ctx, input_, weight, bias)
+            return COCRowSeqParallelFunction.forward(ctx, input_, weight, bias)
 
         output_shape = list(input_.shape)[:-1] + list([weight.shape[0]])
         output_shape[0] = output_shape[0] // min_comm_config.tp_world_size
         input_ = reshape_to_2D(input_)
 
         output = allocate_for_output(input_, weight.t(), min_comm_config.tp_world_size, is_gather=False)
-        coc_ops.matmul_reduce_scatter(input_, weight, output, bias=None)
-        if bias is not None:
-            output = output + bias
+        coc_ops.matmul_reduce_scatter(input_, weight, output, bias)
         output = output.reshape(output_shape)
 
         return output
@@ -142,7 +126,7 @@ class FusedCCRowSeqParallelFunction(torch.autograd.Function):
         if parallel_num == 1:
             return RewriteRowSeqParallelFunction.backward(ctx, grad_output)
         elif parallel_num in [2, 4, 8]:
-            return CCRowSeqParallelFunction.backward(ctx, grad_output)
+            return COCRowSeqParallelFunction.backward(ctx, grad_output)
 
         grad_input_shape = list(grad_output.shape)[:-1] + list([weight.shape[-1]])
         grad_input_shape[0] = grad_input_shape[0] * min_comm_config.tp_world_size

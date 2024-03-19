@@ -47,18 +47,18 @@ class ModuleType(Enum):
     ORIGINAL_SEQ_PARALLEL = 1
     REWRITE_ALL_REDUCE = 2
     REWRITE_SEQ_PARALLEL = 3
-    CC_FOR_ALL_REDUCE = 4
-    CC_FOR_SEQ_PARALLEL = 5
+    COC_FOR_ALL_REDUCE = 4
+    COC_FOR_SEQ_PARALLEL = 5
 
 
 class MinCommConfig:
-    def __init__(self, cc_mode, cc_parallel_num, cc_fused_kernel):
+    def __init__(self, coc_mode, coc_parallel_num, coc_fused_kernel):
         # basic settings acquired from environmental variables
         # default module_type is ModuleType.ORIGINAL_SEQ_PARALLEL
         self.module_type: ModuleType = ModuleType.ORIGINAL_SEQ_PARALLEL
-        self.cc_mode = cc_mode
-        self.parallel_num = cc_parallel_num
-        self.cc_fused_kernel = cc_fused_kernel
+        self.coc_mode = coc_mode
+        self.parallel_num = coc_parallel_num
+        self.coc_fused_kernel = coc_fused_kernel
 
         # configurations registered from framework
         self.ColumnParallelLinear = None
@@ -82,25 +82,37 @@ class MinCommConfig:
         self.all_gather_recomputation_enabled = False
         self.print_tensor_value_enabled = False
         self.matmul_soc_friendly_enabled = True
-        self.customized_cc_dict = {}
-        self.enable_cc_in_column_backward = True  # currently only applicable to fused cc kernel
+        self.customized_coc_dict = {}
+        self.enable_coc_in_column_backward = True
 
     def print_settings(self):
-        if self.cc_fused_kernel:
-            enable_cc_in_column_backward = True if self.enable_cc_in_column_backward else False
+        if self.coc_fused_kernel:
+            enable_coc_in_column_backward = True if self.enable_coc_in_column_backward else False
         else:
-            enable_cc_in_column_backward = False
-        settings_dict = {
-            "cc_mode": self.cc_mode,
-            "parallel_num": self.parallel_num,
-            "module_type": self.module_type.name,
-            "get_aligned_mm_inputs": self.matmul_soc_friendly_enabled,
-            "sequence_parallel_enabled": self.sequence_parallel_enabled,
-            "use_fused_cc_kernel": self.cc_fused_kernel,
-            "enable_cc_in_column_backward": enable_cc_in_column_backward
-        }
+            enable_coc_in_column_backward = False
+        if self.coc_fused_kernel:
+            settings_dict = {
+                "is coc turned on": True,
+                "use script or use fused kernel": "fused kernel",
+                "is sequence parallel enabled": self.sequence_parallel_enabled,
+                "is coc enabled in column backward": enable_coc_in_column_backward
+            }
+        elif "ORIGINAL" in self.module_type.name:
+            settings_dict = {
+                "is coc turned on": False
+            }
+        else:
+            settings_dict = {
+                "is coc turned on": True,
+                "use script or use fused kernel": "script",
+                "coc mode": self.coc_mode,
+                "parallel num": self.parallel_num,
+                "module type": self.module_type.name,
+                "is sequence parallel enabled": self.sequence_parallel_enabled,
+                "if get aligned mm inputs": self.matmul_soc_friendly_enabled
+            }
         if torch.npu.current_device() == 0:
-            print("\n-----------------------------CC Settings: -------------------------------------")
+            print("\n-----------------------------COC Settings: ------------------------------------")
             for key, value in settings_dict.items():
                 print(f"{key}: {value}")
             print("-------------------------------------------------------------------------------\n")
@@ -150,14 +162,14 @@ class MinCommConfig:
     def register_check_fcn(self, check_fcn):
         self.check_fcn = check_fcn
 
-    def register_customized_cc(self, customized_cc):
-        if len(customized_cc) == 0:
+    def register_customized_coc(self, customized_coc):
+        if len(customized_coc) == 0:
             return
-        for cc_shape_yaml_str in customized_cc.keys():
-            key_list = ast.literal_eval(cc_shape_yaml_str)
-            cc_shape_key_str = str(key_list)
-            self.customized_cc_dict.update({cc_shape_key_str: customized_cc[cc_shape_yaml_str]})
-        print("self.customized_cc_dict: ", self.customized_cc_dict)
+        for coc_shape_yaml_str in customized_coc.keys():
+            key_list = ast.literal_eval(coc_shape_yaml_str)
+            coc_shape_key_str = str(key_list)
+            self.customized_coc_dict.update({coc_shape_key_str: customized_coc[coc_shape_yaml_str]})
+        print("self.customized_coc_dict: ", self.customized_coc_dict)
 
     def register_matmul_soc_friendly_setting(self, matmul_soc_friendly, k_min, k_max):
         self.matmul_soc_friendly_enabled = matmul_soc_friendly
@@ -170,35 +182,35 @@ class MinCommConfig:
     def register_print_tensor_value_switch(self, print_tensor_value_enabled):
         self.print_tensor_value_enabled = print_tensor_value_enabled
 
-    def register_column_backward_cc_switch(self, enable_cc_in_column_backward):
-        self.enable_cc_in_column_backward = enable_cc_in_column_backward
+    def register_column_backward_coc_switch(self, enable_coc_in_column_backward):
+        self.enable_coc_in_column_backward = enable_coc_in_column_backward
 
     def acquire_module_type(self, tp_size):
         sequence_parallel_types = [ModuleType.ORIGINAL_SEQ_PARALLEL,
                                    ModuleType.REWRITE_SEQ_PARALLEL,
-                                   ModuleType.CC_FOR_SEQ_PARALLEL]
+                                   ModuleType.COC_FOR_SEQ_PARALLEL]
         all_reduce_types = [ModuleType.ORIGINAL_ALL_REDUCE,
                             ModuleType.REWRITE_ALL_REDUCE,
-                            ModuleType.CC_FOR_ALL_REDUCE]
+                            ModuleType.COC_FOR_ALL_REDUCE]
 
         if self.parallel_num not in [1, 2, 4, 8]:
-            raise RuntimeError("CC_PARALLEL_NUM must be either 1, 2, 4 or 8. Current value not supported")
-        if self.cc_mode not in [-1, 0, 1, 2]:
-            raise RuntimeError("CC_MODE must be either 0, 1, or 2. Current value not supported")
+            raise RuntimeError("COC_PARALLEL_NUM must be either 1, 2, 4 or 8. Current value not supported")
+        if self.coc_mode not in [-1, 0, 1, 2]:
+            raise RuntimeError("COC_MODE must be either 0, 1, or 2. Current value not supported")
 
-        if self.cc_mode == -1:
-            self.cc_mode = 0 if self.parallel_num == 1 else 2
+        if self.coc_mode == -1:
+            self.coc_mode = 0 if self.parallel_num == 1 else 2
 
         if tp_size == 1:
-            self.cc_mode = 0
+            self.coc_mode = 0
             self.parallel_num = 1
 
         if self.sequence_parallel_enabled:
-            self.module_type = sequence_parallel_types[self.cc_mode]
+            self.module_type = sequence_parallel_types[self.coc_mode]
         else:
-            self.module_type = all_reduce_types[self.cc_mode]
+            self.module_type = all_reduce_types[self.coc_mode]
 
-        if "CC" in self.module_type.name:
+        if "COC" in self.module_type.name:
             self.prefix = f"module_{self.module_type.name}_parallel_num_{self.parallel_num}"
         else:
             self.prefix = f"module_{self.module_type.name}"
@@ -206,10 +218,10 @@ class MinCommConfig:
         self.print_settings()
 
 
-# 0 = original, 1 = rewrite, 2 = cc default
-cc_mode_from_env = int(os.getenv("CC_MODE", -1))
-cc_parallel_num_from_env = int(os.getenv("CC_PARALLEL_NUM", 1))
-cc_fused_kernel_from_env = int(os.getenv("USE_CC_FUSED_KERNEL", 0))
+# 0 = original, 1 = rewrite, 2 = coc default
+coc_mode_from_env = int(os.getenv("COC_MODE", -1))
+coc_parallel_num_from_env = int(os.getenv("COC_PARALLEL_NUM", 1))
+coc_fused_kernel_from_env = int(os.getenv("USE_COC_FUSED_KERNEL", 0))
 
-min_comm_config = MinCommConfig(cc_mode=cc_mode_from_env, cc_parallel_num=cc_parallel_num_from_env,
-                                cc_fused_kernel=cc_fused_kernel_from_env)
+min_comm_config = MinCommConfig(coc_mode=coc_mode_from_env, coc_parallel_num=coc_parallel_num_from_env,
+                                coc_fused_kernel=coc_fused_kernel_from_env)

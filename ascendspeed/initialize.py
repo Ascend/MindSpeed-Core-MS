@@ -43,9 +43,9 @@ def coc_registration_wrapper(fn):
     def wrapper(*args, **kwargs):
         res = fn(*args, **kwargs)
         from megatron import get_args
-        from ascendspeed.core.tensor_parallel.lcal_coc.user_config import initialize_cc_from_cfg
+        from ascendspeed.core.tensor_parallel.lcal_coc.user_config import initialize_coc_from_cfg
         args = get_args()
-        initialize_cc_from_cfg(args)
+        initialize_coc_from_cfg(args)
         return res
 
     return wrapper

@@ -4,15 +4,15 @@ import torch_npu
 
 from .min_comm_cfg import min_comm_config
 from .matmul_soc_friendly import get_aligned_mm_inputs
-from .cc_utils import CommunicationType, CCParallel, get_output_shape
-from .cc_utils import shuffle_as_cc_reduce_scatter, shuffle_as_cc_all_gather
-from .cc_utils import set_context, reshape_to_2D, async_gather_along_first_dim, is_grad_needed, get_parallel_num
+from .coc_utils import CommunicationType, COCParallel, get_output_shape
+from .coc_utils import shuffle_as_coc_reduce_scatter, shuffle_as_coc_all_gather
+from .coc_utils import set_context, reshape_to_2D, async_gather_along_first_dim, is_grad_needed, get_parallel_num
 from .rewrite_parallel_linears_sequence_parallel import RewriteColumnSeqParallelFunction, RewriteRowSeqParallelFunction
 
 ALIGN_SIZE = 512
 
 
-class CCColumnSeqParallelFunction(torch.autograd.Function):
+class COCColumnSeqParallelFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input_, weight, bias):
         set_context(ctx, input_, weight, bias)
@@ -36,12 +36,12 @@ class CCColumnSeqParallelFunction(torch.autograd.Function):
             torch.matmul(input_tensor, trans_weight, out=output_tensor)
             return output_tensor
 
-        cc_parallel = CCParallel(input_, CommunicationType.ALL_GATHER, compute_fcn, compute_first=False,
+        coc_parallel = COCParallel(input_, CommunicationType.ALL_GATHER, compute_fcn, compute_first=False,
                                  weight_shape_list=list(trans_weight.shape), parallel_num=parallel_num)
-        output = cc_parallel.run()
-        output = shuffle_as_cc_reduce_scatter(output, min_comm_config.tp_world_size, parallel_num)
+        output = coc_parallel.run()
+        output = shuffle_as_coc_reduce_scatter(output, min_comm_config.tp_world_size, parallel_num)
         if not min_comm_config.all_gather_recomputation_enabled:
-            total_input = shuffle_as_cc_reduce_scatter(cc_parallel.comm_output, min_comm_config.tp_world_size,
+            total_input = shuffle_as_coc_reduce_scatter(coc_parallel.comm_output, min_comm_config.tp_world_size,
                                                        parallel_num)
             ctx.total_input = total_input.reshape(gathered_input_shape)
         output = output.reshape(output_orig_shape)
@@ -87,7 +87,7 @@ class CCColumnSeqParallelFunction(torch.autograd.Function):
         return sub_grad_input, grad_weight, grad_bias
 
 
-class CCRowSeqParallelFunction(torch.autograd.Function):
+class COCRowSeqParallelFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input_, weight, bias):
         set_context(ctx, input_, weight, bias)
@@ -110,10 +110,10 @@ class CCRowSeqParallelFunction(torch.autograd.Function):
             sub_output = torch.matmul(input_tensor, trans_weight)
             return sub_output
 
-        input_ = shuffle_as_cc_all_gather(input_, ctx.world_size, parallel_num)
-        cc_reduce_scatter = CCParallel(input_, CommunicationType.REDUCE_SCATTER, compute_fcn, compute_first=True,
+        input_ = shuffle_as_coc_all_gather(input_, ctx.world_size, parallel_num)
+        coc_reduce_scatter = COCParallel(input_, CommunicationType.REDUCE_SCATTER, compute_fcn, compute_first=True,
                                        weight_shape_list=list(trans_weight.shape), parallel_num=parallel_num)
-        output_ = cc_reduce_scatter.run()
+        output_ = coc_reduce_scatter.run()
         output_ = output_.reshape(output_orig_shape)
         if bias is not None:
             output_ = output_ + bias
@@ -144,18 +144,18 @@ class CCRowSeqParallelFunction(torch.autograd.Function):
 
         is_grad_weight_needed, is_grad_bias_needed = is_grad_needed(ctx.needs_input_grad)
 
-        cc_all_gather = CCParallel(grad_output, CommunicationType.ALL_GATHER, compute_fcn, compute_first=False,
+        coc_all_gather = COCParallel(grad_output, CommunicationType.ALL_GATHER, compute_fcn, compute_first=False,
                                    weight_shape_list=list(weight.shape), parallel_num=parallel_num)
-        grad_input = cc_all_gather.run()
-        grad_input = shuffle_as_cc_reduce_scatter(grad_input, ctx.world_size, parallel_num)
+        grad_input = coc_all_gather.run()
+        grad_input = shuffle_as_coc_reduce_scatter(grad_input, ctx.world_size, parallel_num)
 
         grad_input = grad_input.reshape(grad_input_orig_shape)
 
         grad_weight, grad_bias = None, None
 
         if is_grad_weight_needed:
-            grad_output = cc_all_gather.comm_output
-            grad_output = shuffle_as_cc_reduce_scatter(grad_output, ctx.world_size, parallel_num)
+            grad_output = coc_all_gather.comm_output
+            grad_output = shuffle_as_coc_reduce_scatter(grad_output, ctx.world_size, parallel_num)
             total_input = reshape_to_2D(total_input)
             grad_weight = grad_output.t().matmul(total_input)
             if is_grad_bias_needed and ctx.use_bias:

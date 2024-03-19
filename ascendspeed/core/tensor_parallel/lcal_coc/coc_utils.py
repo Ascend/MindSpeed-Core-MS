@@ -46,14 +46,14 @@ def async_gather_along_first_dim(input_, group, world_size):
     return work, output_
 
 
-def shuffle_as_cc_reduce_scatter(input_, world_size, parallel_num):
+def shuffle_as_coc_reduce_scatter(input_, world_size, parallel_num):
     per = input_.shape[0] // parallel_num // world_size
     input_shape = list(input_.shape)
     reshape_tensor = torch.reshape(input_, [parallel_num, world_size, per] + input_shape[1:])
     return torch.reshape(reshape_tensor.transpose(0, 1), tuple(input_shape))
 
 
-def shuffle_as_cc_all_gather(input_, world_size, parallel_num):
+def shuffle_as_coc_all_gather(input_, world_size, parallel_num):
     per = input_.shape[0] // parallel_num // world_size
     input_shape = list(input_.shape)
     reshape_tensor = torch.reshape(input_, [world_size, parallel_num, per] + input_shape[1:])
@@ -63,19 +63,19 @@ def shuffle_as_cc_all_gather(input_, world_size, parallel_num):
 def is_grad_needed(needs_input_grad):
     is_grad_input_needed, is_grad_weight_needed, is_grad_bias_needed = needs_input_grad
     if not is_grad_input_needed:
-        raise RuntimeError("To use CC, grad_input is necessary to compute. Check if optimizer update is turned off by \
+        raise RuntimeError("To use COC, grad_input is necessary to compute. Check if optimizer update is turned off by \
                            mistake.")
     if not is_grad_weight_needed and is_grad_bias_needed:
-        raise RuntimeError("To use CC, grad_weight must be needed if grad_bias is required.")
+        raise RuntimeError("To use COC, grad_weight must be needed if grad_bias is required.")
     return is_grad_weight_needed, is_grad_bias_needed
 
 
 def get_parallel_num(m, k, n, default_parallel_num=min_comm_config.parallel_num):
     parallel_num = default_parallel_num
     shape_str = str([m, k, n])
-    if len(min_comm_config.customized_cc_dict) > 0 and str(shape_str) in min_comm_config.customized_cc_dict.keys():
-        parallel_num = min_comm_config.customized_cc_dict.get(shape_str)
-    if not min_comm_config.cc_fused_kernel and m < parallel_num:
+    if len(min_comm_config.customized_coc_dict) > 0 and str(shape_str) in min_comm_config.customized_coc_dict.keys():
+        parallel_num = min_comm_config.customized_coc_dict.get(shape_str)
+    if not min_comm_config.coc_fused_kernel and m < parallel_num:
         return 1
     if parallel_num not in [-1, 1, 2, 4, 8]:
         raise RuntimeError("invalid parallel num, only support integer from 1, 2, 4 or 8.")
@@ -93,13 +93,24 @@ def get_output_shape(input1, input2=None, tp_world_size=1, is_gather=True):
     return output_shape
 
 
+# input1 is required to be 2-dimensional here.
+def allocate_for_output(input1, input2=None, tp_world_size=1, is_gather=True):
+    if input2 is not None:
+        dim_size = list(input1.shape)[:-1] + list([input2.shape[1]])
+    else:
+        dim_size = list(input1.shape)
+    dim_size[0] = dim_size[0] * tp_world_size if is_gather else dim_size[0] // tp_world_size
+    output = torch.empty(dim_size, dtype=input1.dtype, device=torch.npu.current_device())
+    return output
+
+
 class CommunicationType(Enum):
     ALL_GATHER = 0
     ALL_REDUCE = 1
     REDUCE_SCATTER = 2
 
 
-class CCParallel:
+class COCParallel:
     def __init__(self, input_data, comm_type, compute_fcn, compute_first=True, synchronize=True, weight_shape_list=None,
                  parallel_num=min_comm_config.parallel_num):
         self.input_data = input_data
@@ -118,7 +129,7 @@ class CCParallel:
         if weight_shape_list is None:
             self.compute_output_shape_slice = list(input_data.shape)
         else:
-            check_equal(input_data.shape[-1], weight_shape_list[0], error_info="In CCParallel, input_data should be of \
+            check_equal(input_data.shape[-1], weight_shape_list[0], error_info="In COCParallel, input_data should be of \
                         shape [m,k] and weight_shape_list should be [k,n]")
             self.compute_output_shape_slice = infer_matmul_out_shape(list(input_data.shape), weight_shape_list)
         self.output = self.allocate_output_memory()
@@ -205,7 +216,7 @@ class CCParallel:
         return self.output[i * self.output_slice: (i + 1) * self.output_slice]
 
     def run_communicate_first(self):
-        check_equal(self.synchronize, True, error_info="In CCParallel, must synchronize before return if communicate \
+        check_equal(self.synchronize, True, error_info="In COCParallel, must synchronize before return if communicate \
                     first")
         pre_work = None
         pre_output = None

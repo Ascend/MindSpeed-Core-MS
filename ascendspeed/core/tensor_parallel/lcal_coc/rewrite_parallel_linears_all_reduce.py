@@ -1,7 +1,7 @@
 import torch
 
 from .min_comm_cfg import min_comm_config
-from .cc_utils import set_context, reshape_to_2D, is_grad_needed
+from .coc_utils import set_context, reshape_to_2D, is_grad_needed
 
 
 class RewriteColumnAllReduceFunction(torch.autograd.Function):

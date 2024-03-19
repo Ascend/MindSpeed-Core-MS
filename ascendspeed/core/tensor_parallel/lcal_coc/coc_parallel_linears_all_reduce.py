@@ -5,11 +5,11 @@ import torch_npu
 from .min_comm_cfg import min_comm_config
 from .matmul_soc_friendly import get_aligned_mm_inputs
 from .rewrite_parallel_linears_all_reduce import RewriteColumnAllReduceFunction, RewriteRowAllReduceFunction
-from .cc_utils import set_context, CommunicationType, CCParallel
-from .cc_utils import reshape_to_2D, is_grad_needed, get_parallel_num, get_output_shape
+from .coc_utils import set_context, CommunicationType, COCParallel
+from .coc_utils import reshape_to_2D, is_grad_needed, get_parallel_num, get_output_shape
 
 
-class CCColumnAllReduceFunction(RewriteColumnAllReduceFunction):
+class COCColumnAllReduceFunction(RewriteColumnAllReduceFunction):
     @staticmethod
     def backward(ctx, grad_output):
         input_, weight = ctx.saved_tensors
@@ -28,7 +28,7 @@ class CCColumnAllReduceFunction(RewriteColumnAllReduceFunction):
         return grad_input, grad_weight, grad_bias
 
 
-class CCRowAllReduceFunction(RewriteRowAllReduceFunction):
+class COCRowAllReduceFunction(RewriteRowAllReduceFunction):
     @staticmethod
     def forward(ctx, input_, weight, bias):
         set_context(ctx, input_, weight, bias)
@@ -51,9 +51,9 @@ class CCRowAllReduceFunction(RewriteRowAllReduceFunction):
             torch.matmul(input_tensor, trans_weight, out=output_tensor)
             return output_tensor
 
-        cc_all_gather = CCParallel(input_, CommunicationType.ALL_REDUCE, compute_fcn, compute_first=True,
+        coc_all_gather = COCParallel(input_, CommunicationType.ALL_REDUCE, compute_fcn, compute_first=True,
                                    weight_shape_list=list(trans_weight.shape))
-        output_ = cc_all_gather.run()
+        output_ = coc_all_gather.run()
         output_ = output_.reshape(output_orig_shape)
         if bias is not None:
             output_ = output_ + bias
