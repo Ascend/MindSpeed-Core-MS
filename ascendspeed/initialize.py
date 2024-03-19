@@ -1,4 +1,5 @@
 import time
+from functools import wraps
 import torch
 from megatron.initialize import _warmup_jit_function
 
@@ -35,3 +36,16 @@ def set_jit_fusion_options():
         torch._C._jit_override_can_fuse_on_gpu(True)
 
     _warmup_jit_function()
+
+
+def coc_registration_wrapper(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        res = fn(*args, **kwargs)
+        from megatron import get_args
+        from ascendspeed.core.tensor_parallel.lcal_coc.user_config import initialize_cc_from_cfg
+        args = get_args()
+        initialize_cc_from_cfg(args)
+        return res
+
+    return wrapper
