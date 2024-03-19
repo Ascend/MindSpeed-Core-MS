@@ -26,6 +26,8 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 
 ### 2. 安装 AscendSpeed
 
+如有旧版本 AscendSpeed 请先卸载，再进行安装操作。
+
 方式一：从 git 直接安装
 
  ```shell
@@ -101,16 +103,16 @@ AscendSpeed 对 Megatron-LM
 
 | 算子                         | 介绍                                             |
 |----------------------------|------------------------------------------------|
-| flash_attention            | [link](docs/ops/flash_attention.md)            |
+| 【Prototype】flash_attention | [link](docs/ops/flash_attention.md)            |
 | npu_dropout_add_layer_norm | [link](docs/ops/npu_dropout_add_layer_norm.md) |
-| pad_seqlen                 | [link](docs/ops/pad_seqlen.md)                 |
-| rms_norm                   | [link](docs/ops/rms_norm.md)                   |
-| swiglu                     | [link](docs/ops/swiglu.md)                     |
-| unpad_gen_attention_mask   | [link](docs/ops/unpad_gen_attention_mask.md)   |
-| unpad_rope                 | [link](docs/ops/unpad_rope.md)                 |
-| unpad_seqlen               | [link](docs/ops/unpad_seqlen.md)               |
-| unpad_softmax              | [link](docs/ops/unpad_softmax.md)              |
-| unpad_strided_batch_matmul | [link](docs/ops/unpad_strided_batch_matmul.md) |
+| 【Prototype】pad_seqlen                 | [link](docs/ops/pad_seqlen.md)                 |
+| 【Prototype】rms_norm                   | [link](docs/ops/rms_norm.md)                   |
+| 【Prototype】swiglu                     | [link](docs/ops/swiglu.md)                     |
+| 【Prototype】unpad_gen_attention_mask   | [link](docs/ops/unpad_gen_attention_mask.md)   |
+| 【Prototype】unpad_rope                 | [link](docs/ops/unpad_rope.md)                 |
+| 【Prototype】unpad_seqlen               | [link](docs/ops/unpad_seqlen.md)               |
+| 【Prototype】unpad_softmax              | [link](docs/ops/unpad_softmax.md)              |
+| 【Prototype】unpad_strided_batch_matmul | [link](docs/ops/unpad_strided_batch_matmul.md) |
 
 # 安全声明
 
