@@ -10,4 +10,5 @@ from .unpad_seqlen_builder import UnpadSeqLenOpBuilder
 from .unpad_rope_builder import UnpadRopeOpBuilder
 from .unpad_softmax_builder import UnpadSoftMaxOpBuilder
 from .unpad_strided_batch_matmul_builder import UnpadStridedBatchMatmulOpBuilder
+from .swiglu_builder import SwigluOpBuilder
 from .lcal_builder import LcalOpBuilder

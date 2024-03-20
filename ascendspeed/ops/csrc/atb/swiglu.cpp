@@ -16,6 +16,7 @@
 
 #include <string>
 #include <vector>
+#include <torch/extension.h>
 #include <torch/csrc/autograd/custom_function.h>
 #include <torch/script.h>
 #include <torch/custom_class.h>
@@ -129,4 +130,8 @@ public:
 at::Tensor npu_swiglu(const at::Tensor &x, int32_t dim)
 {
     return NPUSwigluFunction::apply(x, dim);
+}
+
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def("swiglu", &npu_swiglu, "swiglu realization", pybind11::arg("x"), pybind11::arg("dim")=-1);
 }
