@@ -2,6 +2,7 @@ import time
 from functools import wraps
 import torch
 from megatron.initialize import _warmup_jit_function
+from ascendspeed.core.tensor_parallel.ascend_turbo.initialize import initialize_cfg_from_args
 
 
 def _compile_dependencies():
@@ -46,6 +47,18 @@ def coc_registration_wrapper(fn):
         from ascendspeed.core.tensor_parallel.lcal_coc.user_config import initialize_coc_from_cfg
         args = get_args()
         initialize_coc_from_cfg(args)
+        return res
+
+    return wrapper
+
+
+def mc2_wrapper(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        res = fn(*args, **kwargs)
+        from megatron import get_args
+        args = get_args()
+        initialize_cfg_from_args(args)
         return res
 
     return wrapper
