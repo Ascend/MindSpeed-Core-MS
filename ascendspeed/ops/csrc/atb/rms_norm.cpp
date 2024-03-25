@@ -19,7 +19,6 @@
 #include <torch/csrc/autograd/custom_function.h>
 #include <torch/script.h>
 #include <torch/custom_class.h>
-#include "../ops_interface.h"
 
 #ifdef ENABLE_ATB
 #include "inc/atb_adapter.h"

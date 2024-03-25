@@ -19,7 +19,6 @@
 #include <ATen/Tensor.h>
 #include <torch/extension.h>
 
-#include "../ops_interface.h"
 #include "inc/adapter.h"
 
 #ifdef ENABLE_ATB

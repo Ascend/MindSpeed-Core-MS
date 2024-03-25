@@ -37,12 +37,14 @@ unpad方案:
 - qSeqLen：必选输入，数据类型int32，vector类型，长度为batch
 
 ## 案例
-```python 正向接口案例
+```python 前向接口案例
 import torch
 import torch_npu
-import ascendspeed_ops
 import numpy as np
-from unittest import TestCase
+
+from ascendspeed.op_builder import UnpadRopeOpBuilder
+
+repeatTime=5
 
 def rotate_half(x):
     x0, x1 = x.chunk(2, -1)
@@ -50,7 +52,7 @@ def rotate_half(x):
 
 def golden_compare(out_tensors, golden_out_tensors):
     return (torch.allclose(out_tensors[0].float(), golden_out_tensors[0].float(), rtol=0.001, atol=0.001)
-        and torch.allclose(out_tensors[1].float(), golden_out_tensors[1].float(), rtol=0.001, atol=0.001))
+            and torch.allclose(out_tensors[1].float(), golden_out_tensors[1].float(), rtol=0.001, atol=0.001))
 
 def test_ops():
     batch = 4
@@ -73,10 +75,11 @@ def test_ops():
     seqlen = torch.tensor(seqlen).npu().int().contiguous()
     q_embed = torch.zeros_like(q,device=q.device).half().contiguous()
     k_embed = torch.zeros_like(q,device=q.device).half().contiguous()
-    q_embed, k_embed = ascendspeed_ops.npu_rope(q, k, cos, sin, seqlen, rotaryCoeff, cosFormat)
+    ascendspeed_ops = UnpadRopeOpBuilder().load()
+    q_embed, k_embed = ascendspeed_ops.npu_unpad_rope(q, k, cos, sin, seqlen, rotaryCoeff, cosFormat)
     out_tensors = [q_embed, k_embed]
     golden_out_tensors = golden_calc(q, k, cos, sin,seqlen)
-    res_compare = self.golden_compare(out_tensors, golden_out_tensors)
+    res_compare = golden_compare(out_tensors, golden_out_tensors)
 
 def golden_calc(q, k, cos, sin,seqlen):
     ntoken = q.shape[0]
@@ -106,13 +109,16 @@ def golden_calc(q, k, cos, sin,seqlen):
     return [q_sum, k_sum]
 
 if __name__ == '__main__':
-    test_ops()
+    for index in range(repeatTime):
+        test_ops()
 ```
 ```python 反向接口案例
 import torch
 import torch_npu
-import ascendspeed_ops
 import numpy as np
+
+from ascendspeed.op_builder import UnpadRopeOpBuilder
+repeatTime=5
 
 def golden_compare(out_tensors, golden_out_tensors):
     return (torch.allclose(out_tensors[0].float(), golden_out_tensors[0].float(), rtol=0.001, atol=0.001)
@@ -122,22 +128,23 @@ def test_ops():
     batch = 16
     headDim = 128
     maxseqlen=200
-
-    seqlen =np.random.randint(1, maxseqlen, size=batch, dtype=np.int32)
-    hiddensizeQ = 2048
-    hiddensizeK = 2048
-    qembedgrad = np.random.uniform(-1, 1, size=(np.sum(seqlen), hiddensizeQ)).astype(np.float16)
-    kembedgrad = np.random.uniform(-1, 1, size=(np.sum(seqlen), hiddensizeK)).astype(np.float16)
-    cos = np.random.uniform(-1, 1, size=(maxseqlen, headDim)).astype(np.float16)
-    sin = np.random.uniform(-1, 1, size=(maxseqlen, headDim)).astype(np.float16)
-    qembedgrad=torch.tensor(qembedgrad).npu().half()
-    kembedgrad=torch.tensor(kembedgrad).npu().half()
-    cos=torch.tensor(cos).npu().half()
-    sin=torch.tensor(sin).npu().half()
-    q_grad, k_grad = ascendspeed_ops.npu_rope_grad(qembedgrad, kembedgrad, cos, sin, seqlen)
-    out_tensors = [q_grad, k_grad]
-    golden_out_tensors = golden_calc(qembedgrad, kembedgrad, cos, sin,seqlen)
-    res_compare = self.golden_compare(out_tensors, golden_out_tensors)
+    for i in range(repeatTime):
+        seqlen =np.random.randint(1, maxseqlen, size=batch, dtype=np.int32)
+        hiddensizeQ = 2048
+        hiddensizeK = 2048
+        qembedgrad = np.random.uniform(-1, 1, size=(np.sum(seqlen), hiddensizeQ)).astype(np.float16)
+        kembedgrad = np.random.uniform(-1, 1, size=(np.sum(seqlen), hiddensizeK)).astype(np.float16)
+        cos = np.random.uniform(-1, 1, size=(maxseqlen, headDim)).astype(np.float16)
+        sin = np.random.uniform(-1, 1, size=(maxseqlen, headDim)).astype(np.float16)
+        qembedgrad=torch.tensor(qembedgrad).npu().half()
+        kembedgrad=torch.tensor(kembedgrad).npu().half()
+        cos=torch.tensor(cos).npu().half()
+        sin=torch.tensor(sin).npu().half()
+        ascendspeed_ops = UnpadRopeOpBuilder().load()
+        q_grad, k_grad = ascendspeed_ops.npu_unpad_rope_grad(qembedgrad, kembedgrad, cos, sin, seqlen)
+        out_tensors = [q_grad, k_grad]
+        golden_out_tensors = golden_calc(qembedgrad, kembedgrad, cos, sin,seqlen)
+        res_compare = golden_compare(out_tensors, golden_out_tensors)
 
 def golden_calc(qembedgrad,kembedgrad, cos, sin,seqlen):
     cos_list=[cos[:x, :] for x in seqlen]

@@ -15,7 +15,7 @@
 // limitations under the License.
 #include <torch/extension.h>
 #include "torch_npu/csrc/aten/NPUNativeFunctions.h"
-#include "../ops_interface.h"
+
 #include "inc/aclnn_common.h"
 
 inline void npu_dropout_add_layer_norm_check(

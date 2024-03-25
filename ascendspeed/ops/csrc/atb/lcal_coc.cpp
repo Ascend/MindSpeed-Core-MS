@@ -24,7 +24,6 @@
 #include <torch_npu/csrc/core/npu/DeviceUtils.h>
 #include <torch_npu/csrc/aten/NPUGeneratorImpl.h>
 #include <torch_npu/csrc/framework/OpCommand.h>
-#include "../ops_interface.h"
 
 #ifdef ENABLE_ATB
 #include <torch_npu/csrc/core/npu/SecondaryStreamGuard.h>

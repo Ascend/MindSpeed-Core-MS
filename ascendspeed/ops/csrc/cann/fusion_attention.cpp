@@ -18,7 +18,7 @@
 #include "torch_npu/csrc/framework/utils/OpAdapter.h"
 #include "torch_npu/csrc/core/npu/NPUFormat.h"
 #include <torch_npu/csrc/include/ops.h>
-#include "../ops_interface.h"
+
 #include "inc/aclnn_common.h"
 
 const static int FLASH_THRESHOLD = 512;
