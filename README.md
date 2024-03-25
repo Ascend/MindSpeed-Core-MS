@@ -99,6 +99,10 @@ AscendSpeed 对 Megatron-LM
 自动调整训练显存大小，选择重计算策略，提高模型训练的性能。  
 具体信息请查看：[link](docs/features/adaptive-recompute.md)
 
+### 计算通信并行优化
+自动将LinearParallel结构中存在相互依赖且相邻的矩阵乘计算与集合通信并行掩盖执行，提高模型训练的性能。
+具体信息请查看：[link](docs/features/communication-over-computation.md)
+
 ### ATB算子
 
 | 算子                         | 介绍                                             |
@@ -113,6 +117,7 @@ AscendSpeed 对 Megatron-LM
 | 【Prototype】unpad_seqlen               | [link](docs/ops/unpad_seqlen.md)               |
 | 【Prototype】unpad_softmax              | [link](docs/ops/unpad_softmax.md)              |
 | 【Prototype】unpad_strided_batch_matmul | [link](docs/ops/unpad_strided_batch_matmul.md) |
+| 【Prototype】lcal_coc                   | [link](docs/ops/lcal_coc.md)                   |
 
 # 安全声明
 
