@@ -81,7 +81,8 @@ def exe_adaptation():
     setattr(sys.modules['flash_attn.flash_attn_interface'], 'flash_attn_unpadded_func', torch.nn.Module)
 
     # Torch and Apex monkey patching
-    apex.optimizers.FusedAdam = torch.optim.AdamW  # replace apex fused adam
+    from .optimizer.adamw import AdamW
+    apex.optimizers.FusedAdam = AdamW  # replace apex fused adam
     apex.multi_tensor_apply.multi_tensor_applier = multi_tensor_applier
     torch.nn.parameter.Parameter.type = type_wrapper(torch.nn.parameter.Parameter.type)  # replace npu type to gpu type
     torch.Tensor.type = type_wrapper(torch.Tensor.type)  # replace npu type to gpu type
