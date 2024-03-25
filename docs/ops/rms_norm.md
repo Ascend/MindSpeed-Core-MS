@@ -27,12 +27,13 @@
     import torch_npu
     import numpy as np
     import math
-	import ascendspeed.ops
+	from ascendspeed.op_builder import RmsNormOpBuilder
     
     x = torch.rand([2,4]).to(torch.float).npu()
     gamma = torch.rand([4]).to(torch.float).npu()
     // 正向接口案例
-    out = rms_norm(x, gamma) 
+    ascendspeed_ops = RmsNormOpBuilder.load()
+    out = ascendspeed_ops.rms_norm(x, gamma) 
     // 反向接口案例
     out.backward(torch.ones(out.shape).npu())
 

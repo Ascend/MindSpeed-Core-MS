@@ -16,6 +16,7 @@
 
 #include <string>
 #include <vector>
+#include <torch/extension.h>
 #include <torch/csrc/autograd/custom_function.h>
 #include <torch/script.h>
 #include <torch/custom_class.h>
@@ -136,4 +137,9 @@ public:
 at::Tensor npu_rms_norm(const at::Tensor &x, const at::Tensor &gamma, float epsilon)
 {
     return NPURmsNormFunction::apply(x, gamma, epsilon);
+}
+
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def("rms_norm", &npu_rms_norm, "rms_norm on ascend device",
+            pybind11::arg("x"), pybind11::arg("gamma"), pybind11::arg("epsilon")=1e-6);
 }

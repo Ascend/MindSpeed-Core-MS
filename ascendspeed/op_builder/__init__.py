@@ -12,3 +12,4 @@ from .unpad_softmax_builder import UnpadSoftMaxOpBuilder
 from .unpad_strided_batch_matmul_builder import UnpadStridedBatchMatmulOpBuilder
 from .swiglu_builder import SwigluOpBuilder
 from .lcal_builder import LcalOpBuilder
+from .rms_norm_builder import RmsNormOpBuilder
