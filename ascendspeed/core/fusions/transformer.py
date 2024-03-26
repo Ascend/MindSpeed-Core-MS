@@ -85,8 +85,8 @@ def flash_self_attention_forward(self, q, k, v):
     batch_size, seq_length, head_num, head_dim = q.shape[0], q.shape[1], q.shape[2], q.shape[3]
 
     if not hasattr(self, 'attention_mask'):
-        self.attention_mask = torch.triu(torch.ones(seq_length, seq_length), 1).bool().npu()
-
+        self.attention_mask = (torch.tril(torch.ones([seq_length, seq_length]), diagonal=-(args.pre_tockens + 1)) \
+                + torch.triu(torch.ones([seq_length, seq_length]), diagonal=args.next_tockens + 1)).bool().npu()
     if args.shape_order == 'BSH':
         q, k, v = [rearrange(x, 'b s h d -> b s (h d)') for x in [q, k, v]]
     elif args.shape_order == 'SBH':
