@@ -468,7 +468,6 @@ void DeviceCachingAllocator::set_memory_fraction(double fraction) {
     size_t device_total;
     aclrtGetMemInfo(ACL_HBM_MEM, &device_free, &device_total);
     allowed_memory_maximum = static_cast<size_t>(fraction * device_total);
-    printf("pluggable allowed_memory_maximum: %lu\n", allowed_memory_maximum);
     set_fraction = true;
 }
 

@@ -46,10 +46,6 @@ static aclError aclrtMalloc_wrapper(void **devPtr, size_t size, aclrtMemMallocPo
         return rc;
     }
     alr_lock.lock();
-    if (alr_recorder.find(*devPtr) != alr_recorder.end()) {
-        printf("SHOULD NOT HAPPED %p %lu\n", *devPtr, size);
-        abort();
-    }
     alr_recorder[*devPtr] = size;
     alr_total_size += size;
     alr_lock.unlock();
@@ -58,10 +54,6 @@ static aclError aclrtMalloc_wrapper(void **devPtr, size_t size, aclrtMemMallocPo
 
 static aclError aclrtFree_wrapper(void *devPtr) {
     alr_lock.lock();
-    if (alr_recorder.find(devPtr) == alr_recorder.end()) {
-        printf("SHOULD NOT HAPPED %p\n", devPtr);
-        abort();
-    }
     alr_total_size -= alr_recorder[devPtr];
     alr_recorder.erase(devPtr);
     alr_lock.unlock();
