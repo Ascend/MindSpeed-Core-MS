@@ -103,12 +103,10 @@ def exe_adaptation():
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
     from .core.fusions.rms_norm import rms_norm_init, rms_norm_forward
-    from .core.fusions.transformer import parallel_mlp_init, flash_self_attention_forward
+    from .model.transformer import parallel_mlp_init, flash_self_attention_forward
     from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb
     from .core.fusions.rotary_pos_embedding import RotaryEmbedding_wrapper
-
-    from .core.fusions.transformer import ParallelAttention_wrapper
-    from .model.transformer import core_attention_wrapper, core_attention_forward
+    from .model.transformer import core_attention_wrapper, core_attention_forward, ParallelAttention_wrapper
 
     megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
     megatron.core.pipeline_parallel.schedules.forward_backward_pipelining_with_interleaving = forward_backward_pipelining_with_interleaving # context parallel bug
