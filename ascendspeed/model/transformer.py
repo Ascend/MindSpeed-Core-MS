@@ -87,6 +87,7 @@ def core_attention_wrapper(fn):
         fn(self, *arg, **kwargs)
 
         args = get_args()
+        self.hidden_size_per_partition = self.hidden_size_per_partition // args.context_parallel_size
         self.square_alibi_mask = args.square_alibi_mask
         self.fill_neg_inf = args.fill_neg_inf
         self.beta = 1.0

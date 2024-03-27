@@ -11,15 +11,12 @@ from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
 from megatron.global_vars import set_args
-
-
-class DummyArgs:
-    optimize_recomp_communication_level = 0
+from megatron.arguments import parse_args
 
 
 class TestRecompute(DistributedTest):
     world_size = 8
-    args = DummyArgs()
+    args = parse_args(None, True)
     set_args(args)
 
     @pytest.mark.parametrize("granularity", ['selective', 'full'])

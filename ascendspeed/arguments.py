@@ -1,6 +1,7 @@
 from functools import wraps
 import argparse
 
+
 def extra_args_provider_decorator(extra_args_provider):
     @wraps(extra_args_provider)
     def wrapper(parser):
@@ -102,17 +103,19 @@ def _add_training_args(parser):
                        action='store_true', default=False,
                        help='switch to open adaptive recompute feature. '
                             'The default is False.')
+    group.add_argument('--context-parallel-algo', type=str, default='ulysses_cp_algo',
+                       choices=['ulysses_cp_algo', 'megatron_cp_algo'], help='context parallel algorithm')
     return parser
-    
-    
+
+
 def _add_network_args(parser):
     group = parser.add_argument_group(title='network')
 
-    group.add_argument("--add-qkv-bias", action="store_true", default=False, 
+    group.add_argument("--add-qkv-bias", action="store_true", default=False,
                        help='Configuration for the qkv bias.')
-    group.add_argument("--add-dense-bias", action="store_true", default=False, 
+    group.add_argument("--add-dense-bias", action="store_true", default=False,
                        help='Configuration for the dense bias.')
-    group.add_argument("--skip-bias-add", action="store_false", default=True, 
+    group.add_argument("--skip-bias-add", action="store_false", default=True,
                        help='Configuration for the skip bias.')
     return parser
 
@@ -121,12 +124,22 @@ def _add_algorithm_args(parser):
     group = parser.add_argument_group(title='training')
     group.add_argument('--reuse-fp32-param', action='store_true',
                        help='The distributed training optimizer frees up '
-                       'param copies of FP32 to save memory.')
+                            'param copies of FP32 to save memory.')
     group.add_argument('--rotary-base', type=float, help='rotary-base.')
 
     group.add_argument('--optimize-recomp-communication-level', type=int, default=0,
-            help='The algorithm optimize the level of tp communication in the recompute stage.')
+                       help='The algorithm optimize the level of tp communication in the recompute stage.')
     return parser
+
+
+def core_transformer_config_from_args_wrapper(fn):
+    @wraps(fn)
+    def wrapper(args):
+        config = fn(args)
+        config.context_parallel_algo = args.context_parallel_algo
+        return config
+
+    return wrapper
 
 
 def validate_args_decorator(validate_args):
@@ -154,6 +167,10 @@ def validate_args_decorator(validate_args):
         if args.optimize_recomp_communication_level > 0:
             if not hasattr(args, "optimize_recomp_communication_status"):
                 args.optimize_recomp_communication_status = 0
+        if args.context_parallel_size > 1 and args.context_parallel_algo == 'ulysses_cp_algo':
+            head, remainder = divmod(args.num_attention_heads, args.context_parallel_size)
+            assert head >= 1 and remainder == 0, f"num_attention_heads must be divisible by context_parallel_size"
+
     return wrapper
 
 

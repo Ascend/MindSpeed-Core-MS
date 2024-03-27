@@ -1,13 +1,17 @@
 import math
+from functools import wraps
 import torch
+import torch_npu
 import torch.nn.functional as F
 import megatron
 from megatron import get_args
+from megatron.core import mpu
 from megatron.core import tensor_parallel
 from megatron.model.utils import openai_gelu, erf_gelu
 from megatron.model.transformer import ParallelMLP
-from functools import wraps
-import torch_npu
+
+from ascendspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
+
 
 try:
     from einops import rearrange
@@ -119,8 +123,8 @@ def flash_self_attention_forward(self, q, k, v):
         raise ValueError('Invalid shape-order: {}, shape-order must be SBH or BSH or BSND'.format(args.shape_order))
 
     return output
-    
-    
+
+
 def ParallelAttention_wrapper(fn):
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
@@ -134,6 +138,8 @@ def ParallelAttention_wrapper(fn):
             kv_projection_size = _args.kv_channels * _args.num_attention_heads
         # qkv bias
         bias = _args.add_qkv_bias or _args.add_bias_linear
+        if args[0].context_parallel_size > 1 and args[0].context_parallel_algo == 'ulysses_cp_algo':
+            self.core_attention = UlyssesContextAttention(self.core_attention, mpu.get_context_parallel_group())
         self.query_key_value = tensor_parallel.ColumnParallelLinear(
             config.hidden_size,
             query_projection_size + 2 * kv_projection_size,

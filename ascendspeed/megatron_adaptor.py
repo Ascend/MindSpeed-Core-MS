@@ -92,8 +92,10 @@ def exe_adaptation():
     # Megatron core monkey patching
     import megatron.core.tensor_parallel
     import megatron.core.pipeline_parallel
-    from .arguments import parse_args_decorator, validate_args_decorator
+    from .arguments import parse_args_decorator, validate_args_decorator, core_transformer_config_from_args_wrapper
     from .core.pipeline_parallel.p2p_communication import _batched_p2p_ops
+    from .core.pipeline_parallel.schedules import forward_backward_pipelining_with_interleaving
+    from .core.pipeline_parallel.schedules import get_tensor_shapes
     from .core.tensor_parallel.random import _set_cuda_rng_state, backward
     from .core.tensor_parallel.layers import VocabParallelEmbeddingForward
     from .core.tensor_parallel.cross_entropy import _VocabParallelCrossEntropyForward
@@ -107,8 +109,10 @@ def exe_adaptation():
 
     from .core.fusions.transformer import ParallelAttention_wrapper
     from .model.transformer import core_attention_wrapper, core_attention_forward
-    
+
     megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
+    megatron.core.pipeline_parallel.schedules.forward_backward_pipelining_with_interleaving = forward_backward_pipelining_with_interleaving # context parallel bug
+    megatron.core.pipeline_parallel.schedules.get_tensor_shapes = get_tensor_shapes # context parallel bug
     megatron.core.tensor_parallel.random._set_cuda_rng_state = _set_cuda_rng_state  # default_generators need replace after set_device
     megatron.core.tensor_parallel.random.CheckpointFunction.backward = backward
     megatron.core.tensor_parallel.layers.VocabParallelEmbedding.forward = VocabParallelEmbeddingForward
@@ -127,127 +131,128 @@ def exe_adaptation():
 
     apex.normalization.fused_layer_norm.fused_layer_norm_affine = fused_layer_norm_affine
 
-    # Megatron others modules monkey patching
-    try:
-        import megatron.initialize
-        from .initialize import _compile_dependencies, set_jit_fusion_options, coc_registration_wrapper, mc2_wrapper
-        from .optimizer.optimizer import mixed_precision_optimizer_step, fp32_optimizer_step, reuse_fp32_param_init_wrapper
-        from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
-        from .core.transformer.transformer import parallel_transformer_layer_forward_wrapper, parallel_transformer_checkpointed_forward_wrapper
 
-        megatron.initialize._compile_dependencies = _compile_dependencies  # remove cuda kernel compile
-        megatron.initialize.set_jit_fusion_options = set_jit_fusion_options  # remove cuda jit nvfuser
-        megatron.model.fused_layer_norm.FusedLayerNormAffineFunction = FusedLayerNormAffineFunction
-        megatron.model.fused_layer_norm.FastLayerNormFN = FastLayerNormFN
-        megatron.model.fused_layer_norm.fused_layer_norm_affine = fused_layer_norm_affine
+    import megatron.initialize
+    from .initialize import _compile_dependencies, set_jit_fusion_options, coc_registration_wrapper
+    from .optimizer.optimizer import mixed_precision_optimizer_step, fp32_optimizer_step, reuse_fp32_param_init_wrapper
+    from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
+    from .core.transformer.transformer import parallel_transformer_layer_forward_wrapper, parallel_transformer_checkpointed_forward_wrapper
+    from .core.transformer.attention import attention_wrapper
+    from .utils import get_batch_on_this_cp_rank
 
-        megatron.model.fused_softmax.ScaledUpperTriangMaskedSoftmax = ScaledUpperTriangMaskedSoftmax
-        megatron.model.fused_softmax.ScaledMaskedSoftmax = ScaledMaskedSoftmax
-        megatron.model.fused_softmax.ScaledSoftmax = ScaledSoftmax
-        megatron.model.fused_softmax.FusedScaleMaskSoftmax.is_kernel_available = is_kernel_available  # replace kernel check
-        megatron.model.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax = forward_fused_softmax
-        megatron.model.rms_norm.RMSNorm.__init__ = rms_norm_init
-        megatron.model.rms_norm.RMSNorm.forward = rms_norm_forward
-        megatron.model.transformer.ParallelMLP.__init__ = parallel_mlp_init
-        megatron.model.transformer.FlashSelfAttention.forward = flash_self_attention_forward
-        megatron.model.transformer.apply_rotary_pos_emb = apply_fused_rotary_pos_emb
-        megatron.model.transformer.ParallelAttention.__init__ = ParallelAttention_wrapper(megatron.model.transformer.ParallelAttention.__init__)
-        megatron.model.transformer.CoreAttention.__init__ = core_attention_wrapper(
-            megatron.model.transformer.CoreAttention.__init__)
-        megatron.model.transformer.CoreAttention.forward = core_attention_forward
-        
-        # Megatron wrappers
-        megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
-        megatron.arguments.parse_args = parse_args_decorator(megatron.arguments.parse_args)
-        megatron.initialize.validate_args = validate_args_decorator(megatron.initialize.validate_args)
-        megatron.core.tensor_parallel.layers.RowParallelLinear.forward = row_parallel_nocomm_optimizer_wrapper(
-            megatron.core.tensor_parallel.layers.RowParallelLinear.forward)
-        megatron.model.transformer.ParallelTransformerLayer.forward = parallel_transformer_layer_forward_wrapper(
-            megatron.model.transformer.ParallelTransformerLayer.forward
-        )
-        megatron.model.transformer.ParallelTransformer._checkpointed_forward = parallel_transformer_checkpointed_forward_wrapper(
-            megatron.model.transformer.ParallelTransformer._checkpointed_forward
-        )
+    megatron.initialize._compile_dependencies = _compile_dependencies  # remove cuda kernel compile
+    megatron.initialize.set_jit_fusion_options = set_jit_fusion_options  # remove cuda jit nvfuser
+    megatron.utils.get_batch_on_this_cp_rank = get_batch_on_this_cp_rank
+    megatron.model.fused_layer_norm.FusedLayerNormAffineFunction = FusedLayerNormAffineFunction
+    megatron.model.fused_layer_norm.FastLayerNormFN = FastLayerNormFN
+    megatron.model.fused_layer_norm.fused_layer_norm_affine = fused_layer_norm_affine
 
-        # MoE relative.
-        from .core.parallel_state import initialize_model_parallel_decorator
-        from .core.parallel_state import destroy_model_parallel_decorator
-        from .core.parallel_state import get_expert_parallel_group
-        from .core.parallel_state import get_expert_parallel_rank
-        from .core.parallel_state import get_expert_model_parallel_rank
-        from .core.parallel_state import get_expert_parallel_world_size
-        from .core.parallel_state import get_expert_model_parallel_world_size
-        from .core.parallel_state import set_expert_model_parallel_rank
-        from .core.parallel_state import set_expert_model_parallel_world_size
+    megatron.model.fused_softmax.ScaledUpperTriangMaskedSoftmax = ScaledUpperTriangMaskedSoftmax
+    megatron.model.fused_softmax.ScaledMaskedSoftmax = ScaledMaskedSoftmax
+    megatron.model.fused_softmax.ScaledSoftmax = ScaledSoftmax
+    megatron.model.fused_softmax.FusedScaleMaskSoftmax.is_kernel_available = is_kernel_available  # replace kernel check
+    megatron.model.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax = forward_fused_softmax
+    megatron.model.rms_norm.RMSNorm.__init__ = rms_norm_init
+    megatron.model.rms_norm.RMSNorm.forward = rms_norm_forward
+    megatron.model.transformer.ParallelMLP.__init__ = parallel_mlp_init
+    megatron.model.transformer.FlashSelfAttention.forward = flash_self_attention_forward
+    megatron.model.transformer.apply_rotary_pos_emb = apply_fused_rotary_pos_emb
+    megatron.model.transformer.ParallelAttention.__init__ = ParallelAttention_wrapper(megatron.model.transformer.ParallelAttention.__init__)
+    megatron.model.transformer.CoreAttention.__init__ = core_attention_wrapper(
+        megatron.model.transformer.CoreAttention.__init__)
+    megatron.model.transformer.CoreAttention.forward = core_attention_forward
+    megatron.core.transformer.attention.Attention.__init__ = attention_wrapper(
+        megatron.core.transformer.attention.Attention.__init__)
 
-        megatron.core.parallel_state.initialize_model_parallel = initialize_model_parallel_decorator(
-            megatron.core.parallel_state.initialize_model_parallel)
-        megatron.core.parallel_state.destroy_model_parallel = destroy_model_parallel_decorator(
-            megatron.core.parallel_state.destroy_model_parallel)
-        setattr(
-            megatron.core.parallel_state, "get_expert_parallel_group", get_expert_parallel_group)
-        setattr(
-            megatron.core.parallel_state, "get_expert_parallel_rank", get_expert_parallel_rank)
-        setattr(
-            megatron.core.parallel_state, "get_expert_model_parallel_rank", get_expert_model_parallel_rank)
-        setattr(
-            megatron.core.parallel_state, "get_expert_parallel_world_size", get_expert_parallel_world_size)
-        setattr(
-            megatron.core.parallel_state, "get_expert_model_parallel_world_size", get_expert_model_parallel_world_size)
-        setattr(
-            megatron.core.parallel_state, "set_expert_model_parallel_rank", set_expert_model_parallel_rank)
-        setattr(
-            megatron.core.parallel_state, "set_expert_model_parallel_world_size", set_expert_model_parallel_world_size)
-        megatron.core.mpu = megatron.core.parallel_state
+    # Megatron wrappers
+    megatron.initialize.parse_args = parse_args_decorator(megatron.initialize.parse_args)
+    megatron.arguments.parse_args = parse_args_decorator(megatron.arguments.parse_args)
+    megatron.initialize.validate_args = validate_args_decorator(megatron.initialize.validate_args)
+    megatron.arguments.core_transformer_config_from_args = core_transformer_config_from_args_wrapper(megatron.arguments.core_transformer_config_from_args)
+    megatron.core.tensor_parallel.layers.RowParallelLinear.forward = row_parallel_nocomm_optimizer_wrapper(
+        megatron.core.tensor_parallel.layers.RowParallelLinear.forward)
+    megatron.model.transformer.ParallelTransformerLayer.forward = parallel_transformer_layer_forward_wrapper(
+        megatron.model.transformer.ParallelTransformerLayer.forward
+    )
+    megatron.model.transformer.ParallelTransformer._checkpointed_forward = parallel_transformer_checkpointed_forward_wrapper(
+        megatron.model.transformer.ParallelTransformer._checkpointed_forward
+    )
 
-        import megatron.optimizer
-        megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = mixed_precision_optimizer_step
-        megatron.optimizer.optimizer.FP32Optimizer.step = fp32_optimizer_step
-        megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__ = \
-            reuse_fp32_param_init_wrapper(megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__)
+    # MoE relative.
+    from .core.parallel_state import initialize_model_parallel_decorator
+    from .core.parallel_state import destroy_model_parallel_decorator
+    from .core.parallel_state import get_expert_parallel_group
+    from .core.parallel_state import get_expert_parallel_rank
+    from .core.parallel_state import get_expert_model_parallel_rank
+    from .core.parallel_state import get_expert_parallel_world_size
+    from .core.parallel_state import get_expert_model_parallel_world_size
+    from .core.parallel_state import set_expert_model_parallel_rank
+    from .core.parallel_state import set_expert_model_parallel_world_size
 
-        if int(os.getenv('MEMORY_FRAGMENTATION', '0')):
-            from .core.memory.memory_fragmentation.pluggable_allocator_adpator import change_allocator
-            change_allocator()
+    megatron.core.parallel_state.initialize_model_parallel = initialize_model_parallel_decorator(
+        megatron.core.parallel_state.initialize_model_parallel)
+    megatron.core.parallel_state.destroy_model_parallel = destroy_model_parallel_decorator(
+        megatron.core.parallel_state.destroy_model_parallel)
+    setattr(
+        megatron.core.parallel_state, "get_expert_parallel_group", get_expert_parallel_group)
+    setattr(
+        megatron.core.parallel_state, "get_expert_parallel_rank", get_expert_parallel_rank)
+    setattr(
+        megatron.core.parallel_state, "get_expert_model_parallel_rank", get_expert_model_parallel_rank)
+    setattr(
+        megatron.core.parallel_state, "get_expert_parallel_world_size", get_expert_parallel_world_size)
+    setattr(
+        megatron.core.parallel_state, "get_expert_model_parallel_world_size", get_expert_model_parallel_world_size)
+    setattr(
+        megatron.core.parallel_state, "set_expert_model_parallel_rank", set_expert_model_parallel_rank)
+    setattr(
+        megatron.core.parallel_state, "set_expert_model_parallel_world_size", set_expert_model_parallel_world_size)
+    megatron.core.mpu = megatron.core.parallel_state
 
-            import megatron.training
-            from .core.memory.memory_fragmentation.memory_recorder import memory_recorder_wrap
-            megatron.training.setup_model_and_optimizer = memory_recorder_wrap(
-                megatron.training.setup_model_and_optimizer)
+    import megatron.optimizer
+    megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = mixed_precision_optimizer_step
+    megatron.optimizer.optimizer.FP32Optimizer.step = fp32_optimizer_step
+    megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__ = \
+        reuse_fp32_param_init_wrapper(megatron.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__)
 
-            from .core.memory.memory_fragmentation.malloc_recorder import malloc_recorder_wrap
-            megatron.training.train_step = malloc_recorder_wrap(megatron.training.train_step)
+    if int(os.getenv('MEMORY_FRAGMENTATION', '0')):
+        from .core.memory.memory_fragmentation.pluggable_allocator_adpator import change_allocator
+        change_allocator()
 
-            from .core.memory.memory_fragmentation.optimizer_init_precise import optimizer_init_wrap
-            megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = optimizer_init_wrap(
-                megatron.optimizer.optimizer.MixedPrecisionOptimizer.step)
-            import megatron.training
-            from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
-            allowed_recomputing_module_wrapper(megatron.model.transformer.ParallelTransformerLayer)
-            from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_decorator
-            megatron.training.setup_model_and_optimizer = setup_model_and_optimizer_decorator(
-                megatron.training.setup_model_and_optimizer)
+        import megatron.training
+        from .core.memory.memory_fragmentation.memory_recorder import memory_recorder_wrap
+        megatron.training.setup_model_and_optimizer = memory_recorder_wrap(
+            megatron.training.setup_model_and_optimizer)
 
-        if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) and not int(os.getenv('MEMORY_FRAGMENTATION', '0')):
-            from .core.memory.adaptive_recomputing.pluggable_allocator_adpator import change_allocator
-            change_allocator()
-            import megatron.training
-            from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
-            allowed_recomputing_module_wrapper(megatron.model.transformer.ParallelTransformerLayer)
-            from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_decorator
-            megatron.training.setup_model_and_optimizer = setup_model_and_optimizer_decorator(
-                megatron.training.setup_model_and_optimizer)
+        from .core.memory.memory_fragmentation.malloc_recorder import malloc_recorder_wrap
+        megatron.training.train_step = malloc_recorder_wrap(megatron.training.train_step)
 
-        megatron.initialize.initialize_megatron = coc_registration_wrapper(megatron.initialize.initialize_megatron)
-        if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) or int(os.getenv('MEMORY_FRAGMENTATION', '0')):
-            megatron.training.initialize_megatron = megatron.initialize.initialize_megatron
+        from .core.memory.memory_fragmentation.optimizer_init_precise import optimizer_init_wrap
+        megatron.optimizer.optimizer.MixedPrecisionOptimizer.step = optimizer_init_wrap(
+            megatron.optimizer.optimizer.MixedPrecisionOptimizer.step)
+        import megatron.training
+        from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
+        allowed_recomputing_module_wrapper(megatron.model.transformer.ParallelTransformerLayer)
+        from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_decorator
+        megatron.training.setup_model_and_optimizer = setup_model_and_optimizer_decorator(
+            megatron.training.setup_model_and_optimizer)
 
-        if int(os.getenv('ASCEND_MC2', '0')):
-            megatron.initialize.initialize_megatron = mc2_wrapper(megatron.initialize.initialize_megatron)
+    if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) and not int(os.getenv('MEMORY_FRAGMENTATION', '0')):
+        from .core.memory.adaptive_recomputing.pluggable_allocator_adpator import change_allocator
+        change_allocator()
+        import megatron.training
+        from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
+        allowed_recomputing_module_wrapper(megatron.model.transformer.ParallelTransformerLayer)
+        from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_decorator
+        megatron.training.setup_model_and_optimizer = setup_model_and_optimizer_decorator(
+            megatron.training.setup_model_and_optimizer)
 
-    except ModuleNotFoundError:
-        pass
+    megatron.initialize.initialize_megatron = coc_registration_wrapper(megatron.initialize.initialize_megatron)
+    if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) or int(os.getenv('MEMORY_FRAGMENTATION', '0')):
+        megatron.training.initialize_megatron = megatron.initialize.initialize_megatron
 
+    if int(os.getenv('ASCEND_MC2', '0')):
+        megatron.initialize.initialize_megatron = mc2_wrapper(megatron.initialize.initialize_megatron)
     # accelerate package will check TE on sys.modules，so we need remove this patch
     del sys.modules['transformer_engine']
 
