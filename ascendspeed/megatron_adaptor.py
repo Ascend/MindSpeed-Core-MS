@@ -106,7 +106,7 @@ def exe_adaptation():
     from .model.transformer import parallel_mlp_init, flash_self_attention_forward
     from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb
     from .core.fusions.rotary_pos_embedding import RotaryEmbedding_wrapper
-    from .model.transformer import core_attention_wrapper, core_attention_forward, ParallelAttention_wrapper
+    from .model.transformer import core_attention_wrapper, core_attention_forward, ParallelAttention_wrapper, ParallelAttention_forward_wrapper, TransformerLanguageModel_init_wrapper, TransformerLanguageModel_forward_wrapper
 
     megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
     megatron.core.pipeline_parallel.schedules.forward_backward_pipelining_with_interleaving = forward_backward_pipelining_with_interleaving # context parallel bug
@@ -133,8 +133,8 @@ def exe_adaptation():
     import megatron.initialize
     from .initialize import _compile_dependencies, set_jit_fusion_options, coc_registration_wrapper, mc2_wrapper
     from .optimizer.optimizer import mixed_precision_optimizer_step, fp32_optimizer_step, reuse_fp32_param_init_wrapper
-    from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
-    from .core.transformer.transformer import parallel_transformer_layer_forward_wrapper, parallel_transformer_checkpointed_forward_wrapper
+    from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper, LinearWithGradAccumulationAndAsyncCommunication_backward_wrapper
+    from .core.transformer.transformer import parallel_transformer_layer_forward_wrapper, parallel_transformer_checkpointed_forward_wrapper, parallel_transformer_init_wrapper, parallel_transformer_forward_wrapper
     from .core.transformer.attention import attention_wrapper
     from .utils import get_batch_on_this_cp_rank
 
@@ -155,7 +155,10 @@ def exe_adaptation():
     megatron.model.transformer.ParallelMLP.__init__ = parallel_mlp_init
     megatron.model.transformer.FlashSelfAttention.forward = flash_self_attention_forward
     megatron.model.transformer.apply_rotary_pos_emb = apply_fused_rotary_pos_emb
+    megatron.model.language_model.TransformerLanguageModel.__init__ = TransformerLanguageModel_init_wrapper(megatron.model.language_model.TransformerLanguageModel.__init__)
+    megatron.model.language_model.TransformerLanguageModel.forward = TransformerLanguageModel_forward_wrapper(megatron.model.language_model.TransformerLanguageModel.forward)
     megatron.model.transformer.ParallelAttention.__init__ = ParallelAttention_wrapper(megatron.model.transformer.ParallelAttention.__init__)
+    megatron.model.transformer.ParallelAttention.forward = ParallelAttention_forward_wrapper(megatron.model.transformer.ParallelAttention.forward)
     megatron.model.transformer.CoreAttention.__init__ = core_attention_wrapper(
         megatron.model.transformer.CoreAttention.__init__)
     megatron.model.transformer.CoreAttention.forward = core_attention_forward
@@ -169,6 +172,14 @@ def exe_adaptation():
     megatron.arguments.core_transformer_config_from_args = core_transformer_config_from_args_wrapper(megatron.arguments.core_transformer_config_from_args)
     megatron.core.tensor_parallel.layers.RowParallelLinear.forward = row_parallel_nocomm_optimizer_wrapper(
         megatron.core.tensor_parallel.layers.RowParallelLinear.forward)
+    megatron.model.transformer.ParallelTransformer.__init__ = parallel_transformer_init_wrapper(
+        megatron.model.transformer.ParallelTransformer.__init__
+    )
+    megatron.model.transformer.ParallelTransformer.forward = parallel_transformer_forward_wrapper(
+        megatron.model.transformer.ParallelTransformer.forward
+    )
+    megatron.core.tensor_parallel.layers.LinearWithGradAccumulationAndAsyncCommunication.backward = LinearWithGradAccumulationAndAsyncCommunication_backward_wrapper(
+        megatron.core.tensor_parallel.layers.LinearWithGradAccumulationAndAsyncCommunication.backward)
     megatron.model.transformer.ParallelTransformerLayer.forward = parallel_transformer_layer_forward_wrapper(
         megatron.model.transformer.ParallelTransformerLayer.forward
     )

@@ -5,13 +5,24 @@ from functools import wraps
 import torch
 import torch_npu
 import torch.nn.functional as F
-from megatron import get_args, core
+from megatron import get_args, core, get_tokenizer
 from megatron.core import parallel_state, mpu, tensor_parallel
 from megatron.model.utils import openai_gelu, erf_gelu
 from megatron.model.transformer import ParallelMLP
+from megatron.model.enums import AttnType
 
 from ascendspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 
+unpad_seq_lengths = []
+
+
+def set_unpad_seq_lengths(seq_lengths):
+    global unpad_seq_lengths
+    unpad_seq_lengths = seq_lengths
+
+
+def get_unpad_seq_lengths():
+    return unpad_seq_lengths
 
 try:
     from einops import rearrange
@@ -377,4 +388,128 @@ def ParallelAttention_wrapper(fn):
             bias=bias,
             input_is_parallel=True,
             skip_bias_add=skip_bias_add)
+        
+        self.use_unpad = _args.use_unpad
+        if self.use_unpad:
+            from ascendspeed.ops.unpad_gen_attention_mask import UnpadGenAttentionMask
+            from ascendspeed.ops.unpad_rope import UnpadRope
+            from ascendspeed.ops.unpad_softmax import UnpadSoftMax
+            from ascendspeed.ops.unpad_bmm1 import UnpadBmm1
+            from ascendspeed.ops.unpad_bmm2 import UnpadBmm2
+            from ascendspeed.ops.unpad_seqlen import UnpadSeqLen
+            from ascendspeed.ops.pad_seqlen import PadSeqLen
+
+            self.bmm1 = UnpadBmm1(self.num_attention_heads_per_partition)
+            self.bmm2 = UnpadBmm2(self.num_attention_heads_per_partition)
+            self.unpad_softmax = UnpadSoftMax()
+            self.rope = UnpadRope()
+            self.hidden_size_per_partition = self.hidden_size_per_attention_head * self.num_attention_heads_per_partition
+            self.norm_factor = math.sqrt(self.hidden_size_per_attention_head)
+    return wrapper
+
+
+def ParallelAttention_forward_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        global_args = get_args()
+        use_unpad = global_args.use_unpad
+        if not use_unpad:
+            return fn(self, *args, **kwargs)
+        return ParallelAttention_forward(self, *args, **kwargs)
+    return wrapper
+
+
+def ParallelAttention_forward(self, hidden_states, attention_mask,
+                encoder_output=None, inference_params=None,
+                rotary_pos_emb=None):
+    seq_lengths = get_unpad_seq_lengths()
+
+    # =====================
+    # Query, Key, and Value
+    # =====================
+    if self.attention_type == AttnType.self_attn:
+        # Attention heads [bsq, h] --> [bsq, (np * 3 * hn)]
+        mixed_x_layer, _ = self.query_key_value(hidden_states)
+
+        # [bsq, hp] --> [bsq, ng, (np/ng + 2) * hn]
+        new_tensor_shape = mixed_x_layer.size()[:-1] + (
+            self.num_query_groups_per_partition,
+            (
+                    (self.num_attention_heads_per_partition // self.num_query_groups_per_partition + 2)
+                    * self.hidden_size_per_attention_head
+            ),
+        )
+        mixed_x_layer = mixed_x_layer.view(*new_tensor_shape)
+
+        # [bsq, (np/ng + 2) * hn] --> [bsq, ng, np/ng * hn], [bsq, ng, hn], [bsq, ng, hn]
+        (query_layer,
+        key_layer,
+        value_layer) = torch.split(
+            mixed_x_layer,
+            [
+                (
+                    self.num_attention_heads_per_partition // self.num_query_groups_per_partition
+                    * self.hidden_size_per_attention_head
+                ),
+                self.hidden_size_per_attention_head,
+                self.hidden_size_per_attention_head
+            ],
+            dim=2)
+
+        # [bsq, ng, np/ng * hn] -> [bsq, np * hn]
+        query_layer = query_layer.contiguous().view(query_layer.size(0), self.hidden_size_per_partition)
+        key_layer = key_layer.contiguous().view(key_layer.size(0), self.hidden_size_per_partition)
+        value_layer = value_layer.contiguous().view(value_layer.size(0), self.hidden_size_per_partition)
+
+    rotary_pos_emb_tmp = rotary_pos_emb[:, 0, 0, :]
+    cos = torch.cos(rotary_pos_emb_tmp).to(query_layer.dtype)
+    sin = torch.sin(rotary_pos_emb_tmp).to(query_layer.dtype)
+    query_layer, key_layer = self.rope(query_layer, key_layer, cos, sin, seq_lengths, offset=0)
+
+    # ===================================
+    # Raw attention scores.
+    # ===================================
+    attention_scores = self.bmm1(query_layer, key_layer, seq_lengths)
+
+    # ===================================
+    # Attention probs and dropout
+    # ===================================
+    attention_scores.masked_fill_(attention_mask, -10000.0)
+    attention_scores = attention_scores * (1.0 / self.norm_factor)
+    attention_scores = self.unpad_softmax(attention_scores, seq_lengths, self.num_attention_heads_per_partition)
+
+    # ===================================
+    # Context layer. [sq, b, hp]
+    # ===================================
+    context_layer = self.bmm2(attention_scores, value_layer, seq_lengths)
+    # =================
+    # Output. [bsq, h]
+    # =================
+    output, bias = self.dense(context_layer)
+    return output, bias
+
+
+def TransformerLanguageModel_init_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        fn(self, *args, **kwargs)
+        global_args = get_args()
+        use_unpad = global_args.use_unpad
+        if not use_unpad:
+            self.tokenizer = get_tokenizer()
+    return wrapper
+
+
+def TransformerLanguageModel_forward_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        enc_input_ids = args[0]
+        global_args = get_args()
+        use_unpad = global_args.use_unpad
+        if not use_unpad:
+            seq_lengths = torch.sum(enc_input_ids.ne(self.tokenizer.eod), 1)
+            seq_lengths = seq_lengths.cpu().tolist()
+            seq_lengths = [(s + 15) // 16 * 16 for s in seq_lengths]
+            set_unpad_seq_lengths(seq_lengths)
+        return fn(self, *args, **kwargs)
     return wrapper

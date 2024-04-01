@@ -11,7 +11,12 @@ from megatron.core.tensor_parallel.mappings import (
 )
 from megatron.core.tensor_parallel.layers import (linear_with_grad_accumulation_and_async_allreduce, 
                                                   linear_with_frozen_weight)
-
+from megatron.core.parallel_state import (
+    get_global_memory_buffer,
+    get_tensor_model_parallel_group,
+    get_tensor_model_parallel_rank,
+    get_tensor_model_parallel_world_size,
+)
 
 
 def VocabParallelEmbeddingForward(self, input_):
@@ -102,3 +107,116 @@ def row_parallel_nocomm(self, input_):
         output = output_
         output_bias = self.bias
     return output, output_bias
+
+
+def LinearWithGradAccumulationAndAsyncCommunication_backward_wrapper(org_func):
+    @wraps(org_func)
+    def wrapper_func(*args, **kwargs):
+        global_args = get_args()
+        use_unpad = global_args.use_unpad
+        if not use_unpad:
+            return org_func(*args, **kwargs)
+        return LinearWithGradAccumulationAndAsyncCommunication_backward(*args, **kwargs)
+    return wrapper_func
+
+
+def LinearWithGradAccumulationAndAsyncCommunication_backward(ctx, grad_output):
+    input_data, weight = ctx.saved_tensors
+    use_bias = ctx.use_bias
+
+    if ctx.sequence_parallel:
+        world_size = get_tensor_model_parallel_world_size()
+        dim_size = list(input_data.size())
+        dim_size[0] = dim_size[0] * world_size
+
+        all_gather_buffer = get_global_memory_buffer().get_tensor(dim_size, input_data.dtype, "mpu")
+        handle = torch.distributed._all_gather_base(
+            all_gather_buffer, input_data, group=get_tensor_model_parallel_group(), async_op=True
+        )
+
+        # Here we rely on CUDA_DEVICE_MAX_CONNECTIONS=1 to ensure that the
+        # gather is scheduled before the input gradient computation
+        total_input = all_gather_buffer
+    else:
+        total_input = input_data
+    grad_input = grad_output.matmul(weight)
+
+    if ctx.sequence_parallel:
+        handle.wait()
+
+    # Doing gather + slicing during the NeMo forward pass can make this tensor
+    # not be contiguous. PyTorch only checks if the tensor is contiguous, and only
+    # clones it if it's not contiguous:
+    # https://github.com/pytorch/pytorch/blob/c47cf9bc7f9e02f649ab4ed53fe4d35732c92ab6/torch/_refs/__init__.py#L2761
+    grad_output = grad_output.contiguous()
+    # Convert the tensor shapes to 2D for execution compatibility
+    if grad_output.dim() != 2:
+        grad_output = grad_output.view(
+            grad_output.shape[0] * grad_output.shape[1], grad_output.shape[2]
+        )
+    if total_input.dim() != 2:
+        total_input = total_input.view(
+            total_input.shape[0] * total_input.shape[1], total_input.shape[2]
+        )
+
+    if ctx.async_grad_allreduce:
+        # Asynchronous all-reduce
+        handle = torch.distributed.all_reduce(
+            grad_input, group=get_tensor_model_parallel_group(), async_op=True
+        )
+        # Here we rely on CUDA_DEVICE_MAX_CONNECTIONS=1 to ensure that the
+        # all-reduce is scheduled before the weight gradient computation
+
+    if ctx.sequence_parallel:
+        assert not ctx.async_grad_allreduce
+        dim_size = list(input.size())
+        sub_grad_input = torch.empty(
+            dim_size, dtype=input.dtype, device=torch.cuda.current_device(), requires_grad=False
+        )
+        # reduce_scatter
+        handle = torch.distributed._reduce_scatter_base(
+            sub_grad_input, grad_input, group=get_tensor_model_parallel_group(), async_op=True
+        )
+        # Here we rely on CUDA_DEVICE_MAX_CONNECTIONS=1 to ensure that the
+        # reduce scatter is scheduled before the weight gradient computation
+
+    if ctx.gradient_accumulation_fusion:
+        if weight.main_grad.dtype == torch.float32:
+            fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp32(
+                total_input, grad_output, weight.main_grad
+            )
+        elif weight.main_grad.dtype in (torch.float16, torch.bfloat16):
+            fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp16(
+                total_input, grad_output, weight.main_grad
+            )
+        else:
+            raise RuntimeError("Unsupported gradient type for gradient accumulation fusion")
+
+        if hasattr(weight, 'grad_added_to_main_grad'):
+            # When overlap_grad_reduce is True, need to ensure that backward hooks
+            # are all run on the main backprop thread to prevent deadlocks. Setup
+            # dummy grad_weight tensor to prevent backward hooks from being run
+            # in a background thread.
+            grad_weight = torch.empty(
+                weight.main_grad.shape,
+                dtype=input.dtype,
+                device=torch.cuda.current_device(),
+                requires_grad=False,
+            )
+            weight.grad_added_to_main_grad = True
+        else:
+            grad_weight = None
+    else:
+        grad_weight = grad_output.t().matmul(total_input)
+    grad_bias = grad_output.sum(dim=0) if use_bias else None
+
+    if ctx.sequence_parallel:
+        handle.wait()
+        res = sub_grad_input, grad_weight, grad_bias, None, None, None
+        return res
+
+    if ctx.async_grad_allreduce:
+        handle.wait()
+
+    res = grad_input, grad_weight, grad_bias, None, None, None
+    return res
