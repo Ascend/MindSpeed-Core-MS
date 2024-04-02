@@ -495,7 +495,7 @@ def TransformerLanguageModel_init_wrapper(fn):
         fn(self, *args, **kwargs)
         global_args = get_args()
         use_unpad = global_args.use_unpad
-        if not use_unpad:
+        if use_unpad:
             self.tokenizer = get_tokenizer()
     return wrapper
 
@@ -506,7 +506,7 @@ def TransformerLanguageModel_forward_wrapper(fn):
         enc_input_ids = args[0]
         global_args = get_args()
         use_unpad = global_args.use_unpad
-        if not use_unpad:
+        if use_unpad:
             seq_lengths = torch.sum(enc_input_ids.ne(self.tokenizer.eod), 1)
             seq_lengths = seq_lengths.cpu().tolist()
             seq_lengths = [(s + 15) // 16 * 16 for s in seq_lengths]
