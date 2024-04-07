@@ -13,3 +13,4 @@ from .unpad_strided_batch_matmul_builder import UnpadStridedBatchMatmulOpBuilder
 from .swiglu_builder import SwigluOpBuilder
 from .lcal_builder import LcalOpBuilder
 from .rms_norm_builder import RmsNormOpBuilder
+from .grouped_mat_mul_all_reduce_builder import GroupedMatMulAllReduceOpBuilder
