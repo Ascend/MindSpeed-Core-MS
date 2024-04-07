@@ -1,8 +1,8 @@
 import os
 import torch
 from torch import nn
-from megatron.model.rms_norm import RMSNorm
-from megatron import get_args
+from megatron.legacy.model.rms_norm import RMSNorm
+from megatron.training import get_args
 import torch_npu
 
 

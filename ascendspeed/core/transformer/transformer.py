@@ -6,10 +6,11 @@ import torch
 import torch_npu
 import torch.nn.functional as F
 
-from megatron import get_args, core, get_num_microbatches
+from megatron import core
+from megatron.training import get_args, get_num_microbatches
 from megatron.core import tensor_parallel, parallel_state, mpu
-from megatron.model.transformer import bias_dropout_add_fused_train, get_bias_dropout_add, bias_dropout_add_fused_inference
-from megatron.model.enums import AttnMaskType, LayerType, AttnType
+from megatron.legacy.model.transformer import bias_dropout_add_fused_train, get_bias_dropout_add, bias_dropout_add_fused_inference
+from megatron.legacy.model.enums import AttnMaskType, LayerType, AttnType
 from ascendspeed.model.transformer import get_unpad_seq_lengths
 
 

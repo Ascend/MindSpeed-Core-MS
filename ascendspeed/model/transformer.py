@@ -5,12 +5,13 @@ from functools import wraps
 import torch
 import torch_npu
 import torch.nn.functional as F
-from megatron import get_args, core, get_tokenizer
+from megatron import core
+from megatron.training import get_args, get_tokenizer
 from megatron.core import parallel_state, mpu, tensor_parallel
 from megatron.core.models.common.embeddings.rotary_pos_embedding import apply_rotary_pos_emb
-from megatron.model.utils import openai_gelu, erf_gelu
-from megatron.model.transformer import ParallelMLP
-from megatron.model.enums import AttnType
+from megatron.legacy.model.utils import openai_gelu, erf_gelu
+from megatron.legacy.model.transformer import ParallelMLP
+from megatron.legacy.model.enums import AttnType
 
 from ascendspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 

@@ -9,6 +9,10 @@ class FusedLayerNormAffineFunction:
     def apply(input_, weight, bias, normalized_shape, eps):
         return torch.nn.functional.layer_norm(input_, normalized_shape, weight, bias, eps)
 
+    @staticmethod
+    def forward(*args, **kwargs):
+        return FusedLayerNormAffineFunction.apply(*args, **kwargs)
+
 
 class FastLayerNormFN:
     @staticmethod

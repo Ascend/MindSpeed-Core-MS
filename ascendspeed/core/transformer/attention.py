@@ -1,5 +1,5 @@
 from functools import wraps
-from megatron import get_args
+from megatron.training import get_args
 from megatron.core import mpu
 from ascendspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 

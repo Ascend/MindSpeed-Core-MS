@@ -3,7 +3,7 @@ from functools import wraps
 import torch
 import torch.nn.functional as F
 
-from megatron import get_args
+from megatron.training import get_args
 from megatron.core.tensor_parallel.mappings import (
     reduce_from_tensor_model_parallel_region,
     reduce_scatter_to_sequence_parallel_region,

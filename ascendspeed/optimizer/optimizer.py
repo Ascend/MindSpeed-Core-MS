@@ -2,19 +2,20 @@ import os
 from functools import wraps
 
 import torch
-from megatron import get_args
+from megatron.training import get_args
 from megatron.core import tensor_parallel
-from megatron.optimizer.optimizer import Float16OptimizerWithFloat16Params
+from megatron.core.optimizer.optimizer import Float16OptimizerWithFloat16Params
 
 
 @torch.no_grad()
-def mixed_precision_optimizer_step(self, args, timers):
+def mixed_precision_optimizer_step(self):
     # Copy gradients from model params to main params.
+    timers = self.config.timers
     timers('optimizer-copy-to-main-grad', log_level=1).start(
-        barrier=args.barrier_with_L1_time)
+        barrier=self.config.barrier_with_L1_time)
     self._copy_model_grads_to_main_grads()
     timers('optimizer-copy-to-main-grad').stop()
-    if args.reuse_fp32_param:
+    if self.config.reuse_fp32_param:
         # bf16 -> fp32
         for int32_float32_group, float16_param_group in zip(
             self.int32_float32_groups, self.float16_float32_groups):
@@ -26,7 +27,7 @@ def mixed_precision_optimizer_step(self, args, timers):
 
         # Unscale and check for inf/nan.
         timers('optimizer-unscale-and-check-inf', log_level=1).start(
-            barrier=args.barrier_with_L1_time)
+            barrier=self.config.barrier_with_L1_time)
         found_inf_flag = self._unscale_main_grads_and_check_for_nan()
         timers('optimizer-unscale-and-check-inf').stop()
 
@@ -40,31 +41,30 @@ def mixed_precision_optimizer_step(self, args, timers):
 
     # Clip the main gradients.
     timers('optimizer-clip-main-grad', log_level=1).start(
-        barrier=args.barrier_with_L1_time)
+        barrier=self.config.barrier_with_L1_time)
     grad_norm = None
-    if self.clip_grad > 0.0:
-        grad_norm = self.clip_grad_norm(self.clip_grad,
-                                        self.check_for_nan_in_grad)
+    if self.config.clip_grad > 0.0:
+        grad_norm = self.clip_grad_norm(self.config.clip_grad)
     timers('optimizer-clip-main-grad').stop()
 
 
     # Count the zeros in the grads.
     timers('optimizer-count-zeros', log_level=1).start(
-        barrier=args.barrier_with_L1_time)
+        barrier=self.config.barrier_with_L1_time)
     num_zeros_in_grad = self.count_zeros() if \
-        self.log_num_zeros_in_grad else None
+        self.config.log_num_zeros_in_grad else None
     timers('optimizer-count-zeros').stop()
 
     # Step the optimizer.
     timers('optimizer-inner-step', log_level=1).start(
-        barrier=args.barrier_with_L1_time)
+        barrier=self.config.barrier_with_L1_time)
     self.optimizer.step()
     timers('optimizer-inner-step').stop()
 
     # Update params from main params.
     timers('optimizer-copy-main-to-model-params', log_level=1).start(
-        barrier=args.barrier_with_L1_time)
-    if args.reuse_fp32_param:
+        barrier=self.config.barrier_with_L1_time)
+    if self.config.reuse_fp32_param:
         # fp32 -> bf16 + res
         for int32_float32_param_group, float16_param_group in zip(
             self.int32_float32_groups, self.float16_float32_groups):
@@ -116,6 +116,17 @@ def fp32_optimizer_step(self, args, timers):
 
     # No overflow for FP32 optimizer.
     return True, grad_norm, num_zeros_in_grad
+
+
+def optimizer_config_init_wrapper(init_func):
+    @wraps(init_func)
+    def optimizer_config_init(*args, **kwargs):
+        init_func(*args, **kwargs)
+        self = args[0]
+        args = get_args()
+        self.reuse_fp32_param = args.reuse_fp32_param if hasattr(args, "reuse_fp32_param") else False
+
+    return optimizer_config_init
 
 
 def reuse_fp32_param_init_wrapper(init_func):

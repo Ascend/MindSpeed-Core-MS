@@ -5,7 +5,7 @@ from copy import deepcopy
 import torch
 import torch_npu
 
-from megatron import print_rank_0
+from megatron.training import print_rank_0
 from ascendspeed.core.memory.adaptive_recomputing.swappable_tensor import SwappableTensor
 
 

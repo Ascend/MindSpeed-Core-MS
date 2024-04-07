@@ -6,7 +6,7 @@ import torch
 import torch_npu
 import numpy as np
 
-from megatron import print_rank_0
+from megatron.training import print_rank_0
 from megatron.core import parallel_state
 
 from ascendspeed.core.memory.adaptive_recomputing.swap_manager import SwapManager

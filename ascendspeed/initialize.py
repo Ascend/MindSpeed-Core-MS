@@ -1,7 +1,7 @@
 import time
 from functools import wraps
 import torch
-from megatron.initialize import _warmup_jit_function
+from megatron.training.initialize import _warmup_jit_function
 from ascendspeed.core.tensor_parallel.ascend_turbo.initialize import initialize_cfg_from_args
 
 

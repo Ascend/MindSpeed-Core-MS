@@ -9,8 +9,8 @@ import torch
 import torch.nn
 import torch_npu
 
-from megatron import print_rank_0, get_num_microbatches
-from megatron import get_args
+from megatron.training import print_rank_0, get_num_microbatches
+from megatron.training import get_args
 from megatron.core import parallel_state
 
 from ascendspeed.core.memory.adaptive_recomputing.adaptive_recompute_apply import get_recompute_hook

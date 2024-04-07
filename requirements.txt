@@ -1,3 +1,11 @@
 pybind11
 ninja
 wheel
+numpy
+six
+regex
+decorator
+attrs
+psutil
+pyyaml
+protobuf

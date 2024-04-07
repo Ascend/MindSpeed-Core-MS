@@ -46,9 +46,10 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 ### 3. 获取 Megatron-LM 并指定 commit id
 
  ```shell
+ # 目前版本基于3.26版本
  git clone https://github.com/NVIDIA/Megatron-LM.git
  cd Megatron-LM
- git checkout bcce6f54e075e3c3374ea67adefe54f3f2da2b07
+ git checkout 9de386d08770d7296263a590171ace4ae45348ad
  ```
 
 # 快速上手

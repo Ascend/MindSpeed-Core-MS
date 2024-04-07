@@ -10,8 +10,8 @@ from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
-from megatron.global_vars import set_args
-from megatron.arguments import parse_args
+from megatron.training.global_vars import set_args
+from megatron.training.arguments import parse_args
 
 
 class TestRecompute(DistributedTest):

@@ -36,8 +36,9 @@ def initialize_model_parallel_decorator(initialize_model_parallel):
             context_parallel_size: int = 1,
             expert_model_parallel_size: int = 1,
             nccl_communicator_config_path: Optional[str] = None,
+            distributed_timeout_minutes: int = 30,
     ):
-        from megatron.utils import print_rank_0
+        from megatron.training.utils import print_rank_0
 
         initialize_model_parallel(
             tensor_model_parallel_size,
@@ -48,6 +49,7 @@ def initialize_model_parallel_decorator(initialize_model_parallel):
             context_parallel_size,
             expert_model_parallel_size,
             nccl_communicator_config_path,
+            distributed_timeout_minutes,
         )
 
         rank = torch.distributed.get_rank()
@@ -71,24 +73,6 @@ def initialize_model_parallel_decorator(initialize_model_parallel):
                     start_rank + j, end_rank, context_parallel_size * tensor_model_parallel_size
                 )
                 all_data_parallel_group_ranks.append(list(ranks))
-                group = torch.distributed.new_group(
-                    ranks, pg_options=megatron.core.parallel_state.get_nccl_options('dp', nccl_comm_cfgs)
-                )
-
-                if rank in ranks:
-                    megatron.core.parallel_state._DATA_PARALLEL_GROUP = group
-                    megatron.core.parallel_state._DATA_PARALLEL_GROUP_GLOO = None
-                    megatron.core.parallel_state._DATA_PARALLEL_GLOBAL_RANKS = ranks
-            for j in range(tensor_model_parallel_size):
-                ranks_with_cp = range(start_rank + j, end_rank, tensor_model_parallel_size)
-                group_with_cp = torch.distributed.new_group(
-                    ranks_with_cp, pg_options=megatron.core.parallel_state.get_nccl_options('dp_cp', nccl_comm_cfgs)
-                )
-
-                if rank in ranks_with_cp:
-                    megatron.core.parallel_state._DATA_PARALLEL_GROUP_WITH_CP = group_with_cp
-                    megatron.core.parallel_state._DATA_PARALLEL_GROUP_WITH_CP_GLOO = None
-                    megatron.core.parallel_state._DATA_PARALLEL_GLOBAL_RANKS_WITH_CP = ranks_with_cp
 
         # Build expert parallel groups
         global _EXPERT_PARALLEL_GROUP

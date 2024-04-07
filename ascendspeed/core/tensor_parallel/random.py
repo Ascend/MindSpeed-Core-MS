@@ -2,7 +2,7 @@ from functools import wraps
 import torch
 from torch import _C
 from torch_npu.npu import _lazy_call, device as device_ctx_manager
-from megatron import get_args
+from megatron.training import get_args
 from megatron.core.tensor_parallel.utils import gather_split_1d_tensor
 from megatron.core.tensor_parallel.random import get_cuda_rng_tracker
 from megatron.core.utils import safely_set_viewless_tensor_data
