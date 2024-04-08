@@ -147,6 +147,11 @@ def core_transformer_config_from_args_wrapper(fn):
 def validate_args_decorator(validate_args):
     @wraps(validate_args)
     def wrapper(args, defaults):
+        overlap_param_gather_without_mcore_models = False
+        if args.overlap_param_gather and not args.use_mcore_models:
+            args.use_mcore_models = True
+            overlap_param_gather_without_mcore_models = True
+
         validate_args(args, defaults)
         if args.use_fused_rmsnorm:
             if args.normalization != "RMSNorm":
@@ -180,6 +185,8 @@ def validate_args_decorator(validate_args):
         # Mandatory modification to SBH, subsequent abandonment of other formats such as BSH,BSND
         if args.shape_order != 'SBH':
             args.shape_order = 'SBH'
+        if overlap_param_gather_without_mcore_models:
+            args.use_mcore_models = False
 
     return wrapper
 
