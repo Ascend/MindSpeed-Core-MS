@@ -635,8 +635,8 @@ def ParallelAttention_eliminate_fa_transpose_forward(self, hidden_states, attent
     # apply relative positional encoding (rotary embedding)
     if rotary_pos_emb is not None:
         q_pos_emb, k_pos_emb = rotary_pos_emb
-        query_layer = apply_rotary_pos_emb(query_layer, q_pos_emb)
-        key_layer = apply_rotary_pos_emb(key_layer, k_pos_emb)
+        query_layer = apply_rotary_pos_emb(query_layer, q_pos_emb, self.config)
+        key_layer = apply_rotary_pos_emb(key_layer, k_pos_emb, self.config)
         # TODO, can apply positional embedding to value_layer so it has
         # absolute positional embedding.
         # otherwise, only relative positional embedding takes effect
