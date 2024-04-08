@@ -14,6 +14,7 @@ from megatron.legacy.model.transformer import ParallelMLP
 from megatron.legacy.model.enums import AttnType
 
 from ascendspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
+from ascendspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
 
 unpad_seq_lengths = []
 
@@ -329,17 +330,20 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
     except Exception as e:
         raise ValueError('Invalid head_dim: {}'.format(head_dim)) from e
 
-    output = torch_npu.npu_fusion_attention( \
-        q, k, v, head_num, args.shape_order, \
-        pse=None, \
-        padding_mask=None, \
-        atten_mask=self.attention_mask, \
-        scale=scale, \
-        pre_tockens=args.pre_tockens, \
-        next_tockens=args.next_tockens, \
-        keep_prob=1 - self.dropout_p, \
-        inner_precise=0
-    )[0]
+    if args.context_parallel_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
+        output = ringattn_context_parallel(q, k, v, head_num, scale, None)
+    else:
+        output = torch_npu.npu_fusion_attention( \
+            q, k, v, head_num, args.shape_order, \
+            pse=None, \
+            padding_mask=None, \
+            atten_mask=self.attention_mask, \
+            scale=scale, \
+            pre_tockens=args.pre_tockens, \
+            next_tockens=args.next_tockens, \
+            keep_prob=1 - self.dropout_p, \
+            inner_precise=0
+        )[0]
 
     return output
 
@@ -648,9 +652,9 @@ def ParallelAttention_eliminate_fa_transpose_forward(self, hidden_states, attent
     else:
         if not self.sequence_parallel:
             with tensor_parallel.get_cuda_rng_tracker().fork():
-                context_layer = self.core_attention_flash(q, k, v, attention_mask)
+                context_layer = self.core_attention_flash(query_layer, key_layer, value_layer, attention_mask)
         else:
-            context_layer = self.core_attention_flash(q, k, v, attention_mask)
+            context_layer = self.core_attention_flash(query_layer, key_layer, value_layer, attention_mask)
 
     # =================
     # Output. [sq, b, h]

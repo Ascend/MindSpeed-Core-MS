@@ -174,6 +174,9 @@ def validate_args_decorator(validate_args):
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'ulysses_cp_algo':
             head, remainder = divmod(args.num_attention_heads, args.context_parallel_size)
             assert head >= 1 and remainder == 0, f"num_attention_heads must be divisible by context_parallel_size"
+            args.use_flash_attn = True
+        if args.context_parallel_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
+            args.use_flash_attn = True
         # Mandatory modification to SBH, subsequent abandonment of other formats such as BSH,BSND
         if args.shape_order != 'SBH':
             args.shape_order = 'SBH'
