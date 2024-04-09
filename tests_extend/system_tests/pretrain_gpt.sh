@@ -51,6 +51,7 @@ GPT_ARGS="
     --accumulate-allreduce-grads-in-fp32 \
     --empty-unused-memory-level 1 \
     --openai-gelu \
+    --use-flash-attn \
     --apply-layernorm-1p \
     --apply-residual-connection-post-layernorm \
     --position-embedding-type rope \
@@ -61,6 +62,7 @@ GPT_ARGS="
     --standalone-embedding-stage \
     --use-cpu-initialization \
     --overlap-param-gather \
+    --overlap-grad-reduce \
     --use-distributed-optimizer \
     --no-bias-gelu-fusion \
     --no-bias-dropout-fusion \
