@@ -67,6 +67,16 @@ def repeat_interleave(inputs, repeats, dim):
     return inputs.unsqueeze(dim + 1).expand(new_shape).reshape(out_shape)
 
 
+def mcore_adaptation(aspm):
+    from ascendspeed.core.transformer.transformer_block import DummyTENorm, final_layernorm_wrapper
+    from ascendspeed.core.transformer.dot_product_attention import dot_product_attention_forward_wrapper
+    from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
+    aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_with_transformer_engine_spec', get_gpt_layer_local_spec)
+    aspm.register_patch('megatron.core.transformer.custom_layers.transformer_engine.TENorm', DummyTENorm)
+    aspm.register_patch('megatron.core.transformer.transformer_block.TransformerBlock._build_layers', final_layernorm_wrapper)
+    aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.forward', dot_product_attention_forward_wrapper)
+
+
 def exe_adaptation():
     # Need replace modules before import megatron
     sys.modules['transformer_engine'] = types.ModuleType('transformer_engine')
@@ -270,6 +280,8 @@ def exe_adaptation():
     from ascendspeed.patch_utils import AscendSpeedPatchesManager as aspm
     aspm.register_patch('megatron.training.initialize.set_jit_fusion_options', set_jit_fusion_options)
     aspm.register_patch('megatron.training.training.pretrain', pretrain)
+
+    mcore_adaptation(aspm)
     aspm.apply_patches()
 
     if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) or int(os.getenv('MEMORY_FRAGMENTATION', '0')):
