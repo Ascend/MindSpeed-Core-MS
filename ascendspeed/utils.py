@@ -19,17 +19,18 @@ def get_batch_on_this_cp_rank(batch):
     if cp_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
         cp_rank = mpu.get_context_parallel_rank()
         for key, val in batch.items():
-            seq_dim = 1 if key != 'attention_mask' else 2
-            val = val.view(
-                *val.shape[0:seq_dim],
-                2 * cp_size,
-                val.shape[seq_dim] // (2 * cp_size),
-                *val.shape[(seq_dim + 1):],
-            )
-            index = torch.tensor([cp_rank, (2 * cp_size - cp_rank - 1)], device=val.device)
-            val = val.index_select(seq_dim, index)
-            val = val.view(*val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2):])
-            batch[key] = val
+            if val is not None:
+                seq_dim = 1 if key != 'attention_mask' else 2
+                val = val.view(
+                    *val.shape[0:seq_dim],
+                    2 * cp_size,
+                    val.shape[seq_dim] // (2 * cp_size),
+                    *val.shape[(seq_dim + 1):],
+                )
+                index = torch.tensor([cp_rank, (2 * cp_size - cp_rank - 1)], device=val.device)
+                val = val.index_select(seq_dim, index)
+                val = val.view(*val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2):])
+                batch[key] = val
     elif cp_size > 1 and args.context_parallel_algo == 'ulysses_cp_algo':
         cp_rank = mpu.get_context_parallel_rank()
         cp_size = mpu.get_context_parallel_world_size()

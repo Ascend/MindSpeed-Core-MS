@@ -6,46 +6,33 @@ from megatron.core import mpu
 
 def flash_attn_p2p_communicate(rank, send_tensor, send_dst,
                                recv_tensor, recv_src,
-                               cp_group, batch_p2p_comm=False):
+                               cp_group):
     """Point-to-point communications of KV and dKV in Attention with context parallelism"""
     send_recv_ops = []
 
-    if batch_p2p_comm:
-        if rank % 2 == 0:
-            send_op = torch.distributed.P2POp(torch.distributed.isend,
-                                              send_tensor,
-                                              send_dst,
-                                              cp_group)
-            recv_op = torch.distributed.P2POp(torch.distributed.irecv,
-                                              recv_tensor,
-                                              recv_src,
-                                              cp_group)
-            send_recv_ops.append(send_op)
-            send_recv_ops.append(recv_op)
-        else:
-            recv_op = torch.distributed.P2POp(torch.distributed.irecv,
-                                              recv_tensor,
-                                              recv_src,
-                                              cp_group)
-            send_op = torch.distributed.P2POp(torch.distributed.isend,
-                                              send_tensor,
-                                              send_dst,
-                                              cp_group)
-            send_recv_ops.append(recv_op)
-            send_recv_ops.append(send_op)
-        send_recv_reqs = torch.distributed.batch_isend_irecv(send_recv_ops)
+    if rank % 2 == 0:
+        send_op = torch.distributed.P2POp(torch.distributed.isend,
+                                          send_tensor,
+                                          send_dst,
+                                          cp_group)
+        recv_op = torch.distributed.P2POp(torch.distributed.irecv,
+                                          recv_tensor,
+                                          recv_src,
+                                          cp_group)
+        send_recv_ops.append(send_op)
+        send_recv_ops.append(recv_op)
     else:
-        if rank % 2 == 0:
-            send_op = torch.distributed.isend(send_tensor, send_dst, cp_group)
-            recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group)
-            send_recv_ops.append(send_op)
-            send_recv_ops.append(recv_op)
-        else:
-            recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group)
-            send_op = torch.distributed.isend(send_tensor, send_dst, cp_group)
-            send_recv_ops.append(recv_op)
-            send_recv_ops.append(send_op)
-        send_recv_reqs = send_recv_ops
+        recv_op = torch.distributed.P2POp(torch.distributed.irecv,
+                                          recv_tensor,
+                                          recv_src,
+                                          cp_group)
+        send_op = torch.distributed.P2POp(torch.distributed.isend,
+                                          send_tensor,
+                                          send_dst,
+                                          cp_group)
+        send_recv_ops.append(recv_op)
+        send_recv_ops.append(send_op)
+    send_recv_reqs = torch.distributed.batch_isend_irecv(send_recv_ops)
 
     return send_recv_reqs
 
@@ -53,6 +40,7 @@ def flash_attn_p2p_communicate(rank, send_tensor, send_dst,
 def forward_update(prev_attn_out, prev_softmax_max, prev_softmax_sum,
                    cur_attn_out, cur_softmax_max, cur_softmax_sum):
     # update softmax_max
+    origin_dtype = prev_attn_out.dtype
     softmax_max = torch.maximum(prev_softmax_max, cur_softmax_max)
     prev_scale = torch.exp(prev_softmax_max - softmax_max)
     cur_scale = torch.exp(cur_softmax_max - softmax_max)
@@ -77,6 +65,7 @@ def forward_update(prev_attn_out, prev_softmax_max, prev_softmax_sum,
 
     # update output
     attn_out = prev_attn_out * prev_out_scale + cur_attn_out * cur_out_scale
+    attn_out = attn_out.to(origin_dtype)
     return attn_out, softmax_max, softmax_sum
 
 
@@ -142,8 +131,8 @@ class AttentionWithCp(torch.autograd.Function):
                     padding_mask=None,
                     atten_mask=cur_attn_mask,
                     scale=softmax_scale,
-                    pre_tockens=k.shape[0],
-                    next_tockens=0,
+                    pre_tockens=cur_k.shape[0],
+                    next_tockens=0 if cur_attn_mask is not None else cur_k.shape[0],
                     keep_prob=1.,
                 )
 
@@ -293,8 +282,8 @@ class AttentionWithCp(torch.autograd.Function):
                     softmax_sum=cur_softmax_sum,
                     attention_in=cur_attn_out,
                     scale_value=softmax_scale,
-                    pre_tockens=k.shape[0],
-                    next_tockens=0,
+                    pre_tockens=cur_k.shape[0],
+                    next_tockens=0 if cur_attn_mask is not None else cur_k.shape[0],
                     seed=ctx.rng_states[cp_size - i - 1][0],
                     offset=ctx.rng_states[cp_size - i - 1][1]
                 )
