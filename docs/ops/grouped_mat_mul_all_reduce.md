@@ -1,16 +1,43 @@
-# flash_attention对外接口
-
-CLASS GroupedMatMulAllReduce()
-
+# grouped_mat_mul_all_reduce对外接口
 ```
+def ascend_grouped_mat_mul_all_reduce(x: List[torch.Tensor],
+                                      weight: List[torch.Tensor],
+                                      hcomm: str,
+                                      *,
+                                      bias: Optional[List[torch.Tensor]] = None,
+                                      group_list: Optional[List[int]] = None,
+                                      split_item: Optional[int] = 0,
+                                      reduce_op: str = "sum",
+                                      comm_turn: int = 0) -> List[torch.Tensor]
+```
+
 计算逻辑：
-同GroupedMatmul
-```
+GroupedMatMulAllReduce算子是GroupedMatmul算子的多卡通信版本。它可以实现分组矩阵计算，每组矩阵乘的维度大小可以不同，是一种灵活的组合方式。输入数据x和输出数据y均支持切分或不切分模式，可以根据参数split_item来确定是否切分。当x需要切分时，使用group_list参数来描述x的m轴切分配置。本算子增加了AllReduce集合通信操作，可以把矩阵乘任务切分到多张卡上并行计算，然后通过AllReduce集合通信操作把所有卡的计算结果加和到一起，最终完成整个任务。根据输入x、weight和输出y的Tensor数量，本算子可以支持如下四种场景：
+- x、weight、y的tensor数量均等于组数group_num,即每组的数据对应的tensor是独立的。
+- x的tensor数量为1， weight和y的tensor数量等于组数，此时需要通过group_list来说明x在m轴方向上的分组情况。如group_list[0]=10说明x矩阵的前10行参与第一组矩阵乘计算。
+- x、weight的tensor数量均等于组数group_num, y的tensor数量为1，此时每组矩阵乘的结果放在同一个输出tensor中连续存放。
+- x、y的tensor数量均为1，weight的tensor数量等于组数，属于前两种情况的组合。
+
+计算公式为：
+对于每一组矩阵乘任务i: $$y_i = x_i * weight_i + bias_i$$
+切分到n张卡上后，计算形式可表示为：
+
+$$
+y_i = [x_{i1}, x_{i2}, ..., x_{in}] *
+\begin{bmatrix}
+{weight_{i1}} \\
+{weight_{i2}} \\
+{...} \\
+{weight_{in}}
+\end{bmatrix}
+ + \sum^{n}{bias_i/n}
+$$
+
 ## 前向接口：
 输入：
 - x：必选输入，List[Tensor]，数据类型float16，bfloat16。支持的最大长度为64个。
 - weight：必选输入，List[Tensor]，数据类型float16, bfloat16。支持的最大长度为64个。
-- bias：可选输入，List[Tensor]，数据类型float16, bfloat16。torch1.11版本缺省值为[], 2.1版本后缺省值为none。支持的最大长度为64个。
+- bias：可选输入，List[Tensor]，数据类型float16, float32。torch1.11版本缺省值为[], 2.1版本后缺省值为none。支持的最大长度为64个。
 - group_list：可选输入，Optional[List[int64]]，缺省none。代表输入和输出M方向的matmul大小分布，支持的最大长度为64个。
 
 输出：
@@ -31,6 +58,16 @@ CLASS GroupedMatMulAllReduce()
 - 属性reduce_op仅支持输入"sum"；
 - 属性comm_turn仅支持输入0；
 - 通信支持2、4、8卡。
+- 当split_item取0或2时，x的tensor数量与weight的相同；当split_item取1或3时，x的tensor数量为1。
+- 当split_item取0或2时，group_list为空；当split_item取1或3时，group_list的长度与weight的tensor个数相同。
+- 若bias不是空，其tensor数量要与weight的相同。
+- 满足矩阵乘的m/k/n维度关系。
+- 支持输入元素类型：
+  1. x中元素类型为float16，weight中元素类型为float16，bias中元素类型为float16，输出y中元素类型为float16；
+
+  2. x中元素类型为bfloat16，weight中元素类型为bfloat16，bias中元素类型为float32，输出y中元素类型为bfloat16；
+- 对于实际无bias的场景，在Pytorch1.11与2.0版本中，须手动指定“bias=[]”；在Pytorch2.1与2.2版本中，可以直接不指定bias参数或设置为None。
+- 输入中须包含通信域hcomm字符串，它需要从torch.distributed包中的接口获取。
 
 ## grouped_mat_mul_all_reduce 类的调用方式
 ```python
