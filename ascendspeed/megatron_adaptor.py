@@ -273,13 +273,13 @@ def exe_adaptation():
         megatron.training.setup_model_and_optimizer = setup_model_and_optimizer_decorator(
             megatron.training.setup_model_and_optimizer)
 
-    megatron.training.initialize.initialize_megatron = coc_registration_wrapper(
-        megatron.training.initialize.initialize_megatron)
-
     #new patch ways
     from ascendspeed.patch_utils import AscendSpeedPatchesManager as aspm
     aspm.register_patch('megatron.training.initialize.set_jit_fusion_options', set_jit_fusion_options)
     aspm.register_patch('megatron.training.training.pretrain', pretrain)
+    if int(os.getenv('ASCEND_MC2', '0')):
+        aspm.register_patch('megatron.training.initialize.initialize_megatron', mc2_wrapper)
+    aspm.register_patch('megatron.training.initialize.initialize_megatron', coc_registration_wrapper)
 
     mcore_adaptation(aspm)
     aspm.apply_patches()
@@ -287,8 +287,6 @@ def exe_adaptation():
     if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) or int(os.getenv('MEMORY_FRAGMENTATION', '0')):
         megatron.training.initialize_megatron = megatron.training.initialize.initialize_megatron
 
-    if int(os.getenv('ASCEND_MC2', '0')):
-        megatron.initialize.initialize_megatron = mc2_wrapper(megatron.training.initialize.initialize_megatron)
     # accelerate package will check TE on sys.modules，so we need remove this patch
     del sys.modules['transformer_engine']
 
