@@ -160,10 +160,15 @@ setuptools.setup(
     include_package_data=True,
     install_package_data=True,
     exclude_package_data={'': ['**/*.md']},
-    package_data={'ascendspeed': ['**/*.h', '**/*.cpp']},
+    package_data={'ascendspeed': ['**/*.h', '**/*.cpp', '*/*.sh', '**/*.patch']},
     zip_safe=False,
     # PyPI package information.
     keywords=__keywords__,
     cmdclass={},
+    entry_points={
+        "console_scripts": [
+            "ascendspeed = ascendspeed.run.run:main",
+        ]
+    },
     ext_modules=exts
 )

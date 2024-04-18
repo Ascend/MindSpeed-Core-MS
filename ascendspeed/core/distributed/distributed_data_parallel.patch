@@ -1,0 +1,13 @@
+diff --git a/megatron/core/distributed/distributed_data_parallel.py b/megatron/core/distributed/distributed_data_parallel.py
+index 393d3e07..d5bec556 100644
+--- a/megatron/core/distributed/distributed_data_parallel.py
++++ b/megatron/core/distributed/distributed_data_parallel.py
+@@ -64,8 +64,6 @@ class DistributedDataParallel(MegatronModule):
+         # in the interleaved schedule).
+         if not self.overlap_grad_reduce:
+             bucket_size = None
+-        if parallel_state.get_pipeline_model_parallel_rank() > 0:
+-            bucket_size = None
+         if disable_bucketing:
+             bucket_size = None
+ 

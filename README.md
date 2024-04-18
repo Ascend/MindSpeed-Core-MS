@@ -54,6 +54,20 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 
 # 快速上手
 
+以 GPT 模型为例：
+
+方式一：运行[`ascendspeed`](ascendspeed/run/run.py)命令    
+1. 在 Megatron-LM 目录下，运行`ascendspeed -P`命令。
+    ```shell
+     ascendspeed -P
+    ```
+
+2. 在 Megatron-LM 目录下，准备好训练数据，并在示例脚本中填写对应路径，然后执行。
+    ```shell
+    bash examples/pretrain_gpt_distributed.sh
+    ```
+
+方式二：修改本地代码
 1. 在 Megatron-LM 目录下修改`pretrain_gpt.py`文件，在`import torch`下新增一行`import ascendspeed.megatron_adaptor`
 
     ```diff
