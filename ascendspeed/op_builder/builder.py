@@ -2,10 +2,12 @@ import re
 import os
 from abc import ABC, abstractmethod
 from torch.utils.cpp_extension import load
+from torch.library import Library
 import torch_npu
 import ascendspeed
 
 ASCEND_HOME_PATH = "ASCEND_HOME_PATH"
+AS_LIBRARY = Library("ascendspeed", "DEF")
 
 
 class AscendSpeedOpBuilder(ABC):
@@ -27,6 +29,9 @@ class AscendSpeedOpBuilder(ABC):
     def get_absolute_paths(self, paths):
         ascendspeed_path = os.path.abspath(os.path.dirname(ascendspeed.__file__))
         return [os.path.join(ascendspeed_path, path) for path in paths]
+
+    def register_op_proto(self, op_proto: str):
+        AS_LIBRARY.define(op_proto)
 
     @abstractmethod
     def sources(self):
