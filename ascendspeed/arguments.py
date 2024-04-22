@@ -43,8 +43,6 @@ def _add_network_size_args(parser):
                        help="Use fused swiglu.")
     group.add_argument("--use-fused-rotary-pos-emb", action='store_true',
                        help="Use fused rotary-pos-emb.")
-    group.add_argument("--use-unpad", action='store_true',
-                       help="Use unpad.")
     return parser
 
 
