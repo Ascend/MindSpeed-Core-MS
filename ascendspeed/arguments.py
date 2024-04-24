@@ -28,10 +28,24 @@ def process_args(parser):
     parser = _add_distributed_args(parser)
     parser = _add_training_args(parser)
     parser = _add_data_args(parser)
+    parser = _add_moe_args(parser)
     parser = _add_network_args(parser)
     parser = _add_algorithm_args(parser)
     parser = _add_alibi_args(parser)
 
+    return parser
+
+
+def _add_moe_args(parser):
+    group = parser.add_argument_group(title='moe')
+    group.add_argument('--moe-model-type', type=str, default='megatron_moe',
+                       choices=['mixtral_moe', 'megatron_moe'], help='moe model type default megatron moe')
+    group.add_argument('--expert-interval', type=int, default=1,
+                       help='Use experts in every "expert-interval" layers')
+    group.add_argument('--moe-train-capacity-factor', type=float, default=1.0,
+                       help='The capacity of the MoE expert at training time')
+    group.add_argument('--noisy-gate-policy', type=str, default=None,
+                       help="noisy gate policy, valid options are 'Jitter', 'RSample' or 'None'.")
     return parser
 
 

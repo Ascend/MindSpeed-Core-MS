@@ -77,6 +77,14 @@ def mcore_adaptation(aspm):
     aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.forward', dot_product_attention_forward_wrapper)
 
 
+def moe_adaptation(aspm):
+    from .model.transformer import SwitchMLP_forward_wrapper, SwitchMLP_init_wrapper
+    from .tokenizer import build_tokenizer_decorator
+    aspm.register_patch('megatron.legacy.model.transformer.SwitchMLP.__init__', SwitchMLP_init_wrapper)
+    aspm.register_patch('megatron.legacy.model.transformer.SwitchMLP.forward', SwitchMLP_forward_wrapper)
+    aspm.register_patch('megatron.training.tokenizer.tokenizer.build_tokenizer', build_tokenizer_decorator)
+
+
 def exe_adaptation():
     # Need replace modules before import megatron
     sys.modules['transformer_engine'] = types.ModuleType('transformer_engine')
@@ -270,6 +278,8 @@ def exe_adaptation():
     aspm.register_patch('megatron.training.initialize.initialize_megatron', coc_registration_wrapper)
 
     mcore_adaptation(aspm)
+    moe_adaptation(aspm)
+
     aspm.apply_patches()
 
     if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) or int(os.getenv('MEMORY_FRAGMENTATION', '0')):

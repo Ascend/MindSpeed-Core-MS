@@ -563,3 +563,68 @@ def ParallelAttention_eliminate_fa_transpose_forward(self, hidden_states, attent
     output, bias = self.dense(context_layer)
 
     return output, bias
+
+
+def SwitchMLP_init_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        global_args = get_args()
+        if global_args.moe_model_type == 'megatron_moe':
+            fn(self, *args, **kwargs)
+            return
+        from megatron.legacy.model.transformer import SwitchMLP
+        super(SwitchMLP, self).__init__()
+        config = args[0]
+        layer_number = args[1] if len(args) > 1 else None
+        from megatron.core.parallel_state import get_expert_parallel_group
+        from ascendspeed.components.moe.moe import MoE
+        from ascendspeed.components.moe.mixtral_parallel_mlpbm import MixtralParallelMLPBM
+        try:
+            expert_parallel_group = get_expert_parallel_group()
+        except AttributeError:
+            expert_parallel_group = None
+
+        if layer_number is None:
+            self.block = MoE(
+                global_args.hidden_size,
+                MixtralParallelMLPBM(config, ),
+                num_experts=global_args.num_experts,
+                ep_size=global_args.expert_model_parallel_size,
+                k=global_args.moe_router_topk,
+                capacity_factor=global_args.moe_train_capacity_factor,
+                eval_capacity_factor=global_args.moe_train_capacity_factor,
+                aux_loss_coef=global_args.moe_aux_loss_coeff,
+                ep_group=expert_parallel_group,
+                noisy_gate_policy=global_args.noisy_gate_policy
+            )
+        else:
+            if layer_number % global_args.expert_interval == 0:
+                self.block = MoE(
+                    global_args.hidden_size,
+                    MixtralParallelMLPBM(config, ),
+                    num_experts=global_args.num_experts,
+                    ep_size=global_args.expert_model_parallel_size,
+                    k=global_args.moe_router_topk,
+                    capacity_factor=global_args.moe_train_capacity_factor,
+                    eval_capacity_factor=global_args.moe_train_capacity_factor,
+                    aux_loss_coef=global_args.moe_aux_loss_coeff,
+                    ep_group=expert_parallel_group,
+                    noisy_gate_policy=global_args.noisy_gate_policy
+                )
+            else:
+                self.block = ParallelMLP(config)
+        return
+    return wrapper
+
+
+def SwitchMLP_forward_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        global_args = get_args()
+        if global_args.moe_model_type == 'megatron_moe':
+            return fn(self, *args, **kwargs)
+        hidden_states = args[0]
+        used_token = args[1] if len(args) > 1 else None
+        output = self.block(hidden_states, used_token)
+        return output[0], None
+    return wrapper
