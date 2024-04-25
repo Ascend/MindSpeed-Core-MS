@@ -48,7 +48,7 @@ EP=2
 NUM_LAYERS=32
 
 # Set parameter moe-aux-loss-coeff to 0 when verifying accuracy
-# Set moe-model-type to mixtral_moe when train mixtral moe
+# Set moe-model-type to deepspeed_moe when train deepspeed moe
 MOE_ARGS="
     --num-experts 8 \
     --expert-model-parallel-size ${EP} \
@@ -57,7 +57,7 @@ MOE_ARGS="
     --moe-aux-loss-coeff 0.01 \
     --moe-train-capacity-factor 1.1 \
     --noisy-gate-policy RSample \
-    --moe-model-type mixtral_moe
+    --moe-model-type deepspeed_moe
 "
 
 GPT_ARGS="

@@ -39,7 +39,7 @@ def process_args(parser):
 def _add_moe_args(parser):
     group = parser.add_argument_group(title='moe')
     group.add_argument('--moe-model-type', type=str, default='megatron_moe',
-                       choices=['mixtral_moe', 'megatron_moe'], help='moe model type default megatron moe')
+                       choices=['deepspeed_moe', 'megatron_moe'], help='moe model type default megatron moe')
     group.add_argument('--expert-interval', type=int, default=1,
                        help='Use experts in every "expert-interval" layers')
     group.add_argument('--moe-train-capacity-factor', type=float, default=1.0,
