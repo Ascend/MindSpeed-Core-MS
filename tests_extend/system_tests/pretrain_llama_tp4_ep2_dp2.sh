@@ -6,7 +6,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 GPUS_PER_NODE=8
 # Change for multinode config
 MASTER_ADDR=localhost
-MASTER_PORT=6000
+MASTER_PORT=6001
 NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
@@ -14,8 +14,8 @@ WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 CKPT_DIR=./ckpt_llama
 DATA_PATH="/home/dataset/llama2/alpaca_text_document"
 TOKENIZER_MODEL="/home/dataset/model/llama-2-7b-hf/tokenizer.model"
-TP=2
-PP=4
+TP=4
+PP=1
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $GPUS_PER_NODE \
@@ -28,12 +28,12 @@ DISTRIBUTED_ARGS="
 GPT_ARGS="
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
-    --num-layers-per-virtual-pipeline-stage 2 \
-    --no-overlap-p2p-communication \
+    --sequence-parallel \
+    --expert-model-parallel-size 2 \
+    --num-experts 2 \
     --no-delay-grad-reduce \
     --delay-param-gather \
     --no-scatter-gather-tensors-in-pipeline \
-    --sequence-parallel \
     --num-layers 16 \
     --hidden-size 4096 \
     --ffn-hidden-size 11008 \
@@ -48,7 +48,7 @@ GPT_ARGS="
     --global-batch-size 32 \
     --make-vocab-size-divisible-by 1 \
     --lr 1.25e-6 \
-    --train-iters 20 \
+    --train-iters 3000 \
     --lr-decay-style cosine \
     --untie-embeddings-and-output-weights \
     --disable-bias-linear \
@@ -58,12 +58,12 @@ GPT_ARGS="
     --use-rotary-position-embeddings \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
+    --use-fused-swiglu \
     --swiglu \
     --no-position-embedding \
     --no-masked-softmax-fusion \
     --attention-softmax-in-fp32 \
     --min-lr 1.25e-7 \
-    --eval-iters 0 \
     --weight-decay 1e-1 \
     --lr-warmup-fraction 0.01 \
     --clip-grad 1.0 \
@@ -74,10 +74,11 @@ GPT_ARGS="
     --rotary-percent 1 \
     --hysteresis 2 \
     --initial-loss-scale 65536 \
-    --min-loss-scale 1
+    --min-loss-scale 1 \
     --loss-scale-window 1000 \
     --use-flash-attn \
     --no-gradient-accumulation-fusion \
+    --use-gpu-initialization \
     --bf16
 "
 
@@ -88,8 +89,8 @@ DATA_ARGS="
 
 OUTPUT_ARGS="
     --log-interval 1 \
-    --save-interval 10 \
-    --eval-interval 10 \
+    --save-interval 10000 \
+    --eval-interval 10000 \
     --eval-iters 10 \
 "
 
