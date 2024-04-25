@@ -12,61 +12,18 @@
 
 ### 准备工作
 
-1. 克隆仓库到本地服务器
+1. 按照AscendSpeed根目录下README完成AscendSpeed、Megatron-LM源码准备和上手准备
+
+2. 下载 Mixtral-8x7B 的 [词表和tokenizer](https://huggingface.co/mistralai/Mixtral-8x7B-v0.1/tree/main)
+
+在Megatron-LM目录下执行如下操作：
 
 ```shell
-git clone https://github.com/NVIDIA/Megatron-LM.git
-cd Megatron-LM
-git checkout -f 9de386d0
-# 同步megatron的bug fix，在megatron创建__init__.py文件
-touch megatron/__init__.py
+#!/bin/bash
 mkdir logs
 mkdir model_from_hf
 mkdir dataset
 mkdir ckpt
-```
-
-2. 搭建环境
-
-```bash
-# python3.8
-conda create -n test python=3.8
-conda activate test
-
-# 安装 torch 和 torch_npu
-pip install torch-2.1.0-cp38-cp38m-manylinux2014_aarch64.whl
-pip install torch_npu-2.1.0*-cp38-cp38m-linux_aarch64.whl
-pip install apex-0.1_ascend*-cp38-cp38m-linux_aarch64.whl
-
-# 修改 ascend-toolkit 路径
-# export LD_LIBRARY_PATH=
-# export ASCEND_TOOLKIT_HOME=
-# export LD_LIBRARY_PATH=
-# export LD_LIBRARY_PATH=
-# export PYTHONPATH=
-# export PATH=
-# export ASCEND_AICPU_PATH=
-# export ASCEND_OPP_PATH=
-# export TOOLCHAIN_HOME=
-# export ASCEND_HOME_PATH=
-source /usr/local/Ascend/ascend-toolkit/set_env.sh
-
-# 安装加速库
-git clone https://gitee.com/ascend/AscendSpeed.git
-cd AscendSpeed
-git checkout master
-pip install -r requirements.txt 
-pip3 install -e .
-cd ..
-
-# 安装其余依赖库
-pip install -r requirements.txt 
-```
-
-3. 下载 Mixtral-8x7B 的 [词表和tokenizer](https://huggingface.co/mistralai/Mixtral-8x7B-v0.1/tree/main)
-
-```shell
-#!/bin/bash
 cd ./model_from_hf/
 git lfs install
 git clone https://huggingface.co/mistralai/Mixtral-8x7B-v0.1

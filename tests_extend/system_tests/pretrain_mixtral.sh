@@ -1,9 +1,7 @@
 #!/bin/bash
-export ASCEND_LAUNCH_BLOCKING=1
-export WITHOUT_JIT_COMPILE=1
+
+source "tests_extend/system_tests/env_npu.sh"
 export CUDA_DEVICE_MAX_CONNECTIONS=1
-export HCCL_CONNECT_TIMEOUT=1200
-export HCCL_EXEC_TIMEOUT=120
 
 IPs=('$master_ip' '$other_ips')
 LOCAL_HOST=`hostname -I|awk -F "" '{print$1}'`
