@@ -9,3 +9,7 @@ attrs
 psutil
 pyyaml
 protobuf
+einops
+scipy
+sentencepiece
+pytest

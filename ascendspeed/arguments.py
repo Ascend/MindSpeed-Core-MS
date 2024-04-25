@@ -199,6 +199,8 @@ def validate_args_decorator(validate_args):
             args.shape_order = 'SBH'
         if overlap_param_gather_without_mcore_models:
             args.use_mcore_models = False
+        if args.transformer_impl == 'transformer_engine':
+            args.transformer_impl = 'local'
 
     return wrapper
 

@@ -41,16 +41,17 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
  ```shell
  git clone https://gitee.com/ascend/AscendSpeed.git
  cd AscendSpeed
+ pip install -r requirements.txt
  pip install -e .
  ```
 
 ### 3. 获取 Megatron-LM 并指定 commit id
 
  ```shell
- # 目前版本基于3.26版本
+ # 目前版本基于core_r0.6.0的release版本
  git clone https://github.com/NVIDIA/Megatron-LM.git
  cd Megatron-LM
- git checkout 9de386d08770d7296263a590171ace4ae45348ad
+ git checkout core_r0.6.0
  ```
 
 # 快速上手
@@ -94,7 +95,16 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
         )
     ```
 
-3. 在 Megatron-LM 目录下，准备好训练数据，并在示例脚本中填写对应路径，然后执行。
+3. 在 Megatron-LM 目录megatron/core/transformer/custom_layers下修改`transformer_engine.py`文件，删除`_te_version = packaging.version.Version(version("transformer-engine"))`。
+    ```diff
+    from megatron.core.transformer.utils import make_sharded_tensors_for_checkpoint
+
+    -   _te_version = packaging.version.Version(version("transformer-engine"))
+
+    def _get_extra_te_kwargs(config: TransformerConfig):
+    ```
+
+4. 在 Megatron-LM 目录下，准备好训练数据，并在示例脚本中填写对应路径，然后执行。
     ```shell
     bash examples/pretrain_gpt_distributed.sh
     ```
