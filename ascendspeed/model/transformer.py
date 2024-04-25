@@ -577,8 +577,8 @@ def SwitchMLP_init_wrapper(fn):
         config = args[0]
         layer_number = args[1] if len(args) > 1 else None
         from megatron.core.parallel_state import get_expert_parallel_group
-        from ascendspeed.components.moe.moe import MoE
-        from ascendspeed.components.moe.mixtral_parallel_mlpbm import MixtralParallelMLPBM
+        from ascendspeed.moe.moe import MoE
+        from ascendspeed.moe.mixtral_parallel_mlpbm import MixtralParallelMLPBM
         try:
             expert_parallel_group = get_expert_parallel_group()
         except AttributeError:
