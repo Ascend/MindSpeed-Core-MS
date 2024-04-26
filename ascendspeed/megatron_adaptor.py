@@ -7,6 +7,12 @@ import apex
 from torch_npu.contrib import transfer_to_npu
 
 
+def dummy_jit(fn):
+    def wrapper(*args, **kwargs):
+        return fn(*args, **kwargs)
+    return wrapper
+
+
 def type_wrapper(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -107,6 +113,8 @@ def exe_adaptation():
     torch.Tensor.view = ensure_contiguous(torch.Tensor.view)  # patch view to ensure tensor is contiguous
     torch.Tensor.repeat_interleave = repeat_interleave # replace npu implementation of torch.repeat_interleave
 
+    import megatron.core
+    megatron.core.jit.jit_fuser = dummy_jit
     # Megatron core monkey patching
     import megatron.core.tensor_parallel
     import megatron.core.pipeline_parallel
