@@ -40,9 +40,7 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 
  ```shell
  git clone https://gitee.com/ascend/AscendSpeed.git
- cd AscendSpeed
- pip install -r requirements.txt
- pip install -e .
+ pip install -e AscendSpeed
  ```
 
 ### 3. 获取 Megatron-LM 并指定 commit id
@@ -58,7 +56,7 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 
 以 GPT 模型为例：
 
-方式一：运行[`ascendspeed`](ascendspeed/run/run.py)命令    
+方式一：若 Megatron-LM 的 commit id 与上述一致，运行[`ascendspeed`](ascendspeed/run/run.py)命令    
 1. 在 Megatron-LM 目录下，运行`ascendspeed -P`命令。
     ```shell
      ascendspeed -P
