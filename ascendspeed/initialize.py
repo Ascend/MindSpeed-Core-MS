@@ -1,6 +1,8 @@
 import time
 from functools import wraps
 import torch
+import torch_npu
+from megatron.training import get_args
 from megatron.training.initialize import _warmup_jit_function
 from ascendspeed.core.tensor_parallel.ascend_turbo.initialize import initialize_cfg_from_args
 
@@ -36,6 +38,10 @@ def set_jit_fusion_options():
         torch._C._jit_override_can_fuse_on_cpu(True)
         torch._C._jit_override_can_fuse_on_gpu(True)
 
+    args = get_args()
+    if args.jit_compile:
+        torch_npu.npu.set_compile_mode(jit_compile=True)
+
     _warmup_jit_function()
 
 
@@ -43,7 +49,6 @@ def coc_registration_wrapper(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         res = fn(*args, **kwargs)
-        from megatron.training import get_args
         from ascendspeed.core.tensor_parallel.lcal_coc.user_config import initialize_coc_from_cfg
         args = get_args()
         initialize_coc_from_cfg(args)
@@ -56,7 +61,6 @@ def mc2_wrapper(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         res = fn(*args, **kwargs)
-        from megatron.training import get_args
         args = get_args()
         initialize_cfg_from_args(args)
         return res
