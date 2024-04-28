@@ -119,9 +119,6 @@ def exe_adaptation():
     import megatron.core.tensor_parallel
     import megatron.core.pipeline_parallel
     from .arguments import parse_args_decorator, validate_args_decorator, core_transformer_config_from_args_wrapper
-    from .core.pipeline_parallel.p2p_communication import _batched_p2p_ops
-    from .core.pipeline_parallel.schedules import forward_backward_pipelining_with_interleaving
-    from .core.pipeline_parallel.schedules import get_tensor_shapes
     from .core.tensor_parallel.random import _set_cuda_rng_state, backward
     from .core.tensor_parallel.layers import VocabParallelEmbeddingForward
     from .core.tensor_parallel.cross_entropy import _VocabParallelCrossEntropyForward
@@ -132,11 +129,8 @@ def exe_adaptation():
     from .model.transformer import parallel_mlp_init, flash_self_attention_forward
     from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb
     from .core.fusions.rotary_pos_embedding import RotaryEmbedding_wrapper
-    from .model.transformer import core_attention_wrapper, core_attention_forward, ParallelAttention_wrapper, ParallelAttention_forward_wrapper
+    from .model.transformer import core_attention_wrapper, core_attention_forward, ParallelAttention_wrapper, parallel_attention_forward
 
-    megatron.core.pipeline_parallel.p2p_communication._batched_p2p_ops = _batched_p2p_ops  # send recv bug
-    megatron.core.pipeline_parallel.schedules.forward_backward_pipelining_with_interleaving = forward_backward_pipelining_with_interleaving # context parallel bug
-    megatron.core.pipeline_parallel.schedules.get_tensor_shapes = get_tensor_shapes # context parallel bug
     megatron.core.tensor_parallel.random._set_cuda_rng_state = _set_cuda_rng_state  # default_generators need replace after set_device
     megatron.core.tensor_parallel.random.CheckpointFunction.backward = backward
     megatron.core.tensor_parallel.layers.VocabParallelEmbedding.forward = VocabParallelEmbeddingForward
@@ -183,8 +177,7 @@ def exe_adaptation():
     megatron.legacy.model.transformer.FlashSelfAttention.forward = flash_self_attention_forward
     megatron.legacy.model.transformer.ParallelAttention.__init__ = ParallelAttention_wrapper(
         megatron.legacy.model.transformer.ParallelAttention.__init__)
-    megatron.legacy.model.transformer.ParallelAttention.forward = ParallelAttention_forward_wrapper(
-        megatron.legacy.model.transformer.ParallelAttention.forward)
+    megatron.legacy.model.transformer.ParallelAttention.forward = parallel_attention_forward
     megatron.legacy.model.transformer.CoreAttention.__init__ = core_attention_wrapper(
         megatron.legacy.model.transformer.CoreAttention.__init__)
     megatron.legacy.model.transformer.CoreAttention.forward = core_attention_forward

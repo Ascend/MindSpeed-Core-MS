@@ -376,15 +376,7 @@ def ParallelAttention_wrapper(fn):
     return wrapper
 
 
-def ParallelAttention_forward_wrapper(fn):
-    @wraps(fn)
-    def wrapper(self, *args, **kwargs):
-        global_args = get_args()
-        return ParallelAttention_eliminate_fa_transpose_forward(self, *args, **kwargs)
-    return wrapper
-
-
-def ParallelAttention_eliminate_fa_transpose_forward(self, hidden_states, attention_mask,
+def parallel_attention_forward(self, hidden_states, attention_mask,
             encoder_output=None, inference_params=None,
             rotary_pos_emb=None):
     # hidden_states: [sq, b, h]
