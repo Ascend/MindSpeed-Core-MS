@@ -36,10 +36,9 @@ class TestNPUGMM(DistributedTest):
         x = torch.randn(32, 64, dtype=torch.float16)
         weight = torch.randn(8, 64, 32, dtype=torch.float16)
 
-        class split_params:
-            group_list = [1, 2, 3, 4, 5, 6, 7, 4]
-            group_list_index = [1, 3, 6, 10, 15, 21, 28, 32]
-            group_type = 0
+        group_list = [1, 2, 3, 4, 5, 6, 7, 4]
+        group_list_index = [1, 3, 6, 10, 15, 21, 28, 32]
+        group_type = 0
 
         x_npu = x.npu()
         weight_npu = weight.npu()

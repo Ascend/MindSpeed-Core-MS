@@ -29,8 +29,7 @@ y_i = [x_{i1}, x_{i2}, ..., x_{in}] *
 {weight_{i2}} \\
 {...} \\
 {weight_{in}}
-\end{bmatrix}
- + \sum^{n}{bias_i/n}
+\end{bmatrix}+\sum^{n}{bias_i/n}
 $$
 
 ## 前向接口：

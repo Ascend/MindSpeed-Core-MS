@@ -153,7 +153,7 @@ std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>, std::vector<at::Ten
 
     std::vector<at::Tensor> bias_real;
 
-    std::vector<at::Tensor> dx = npu_gmm(grad, wt, bias_real, group_list_real, -1);
+    std::vector<at::Tensor> dx = npu_gmm(grad, wt, bias_real, group_list_real, 0);
     std::vector<at::Tensor> dw = npu_gmm(xt, grad, bias_real, group_list_real, 2);
     std::vector<at::Tensor> db;
 

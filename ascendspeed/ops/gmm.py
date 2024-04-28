@@ -1,3 +1,4 @@
+from typing import List
 import torch
 from ascendspeed.op_builder import GMMOpBuilder
 
@@ -8,7 +9,9 @@ class GMMFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, bias, group_list, group_type):
         if bias is not None and bias.requires_grad:
-            raise ValueError("Bias is not supported for backward!")
+            raise ValueError("Bias is not supported to compute gradient!")
+        if (x.requires_grad or weight.requires_grad) and group_type != 0:
+            raise ValueError("group_type must be zero to compute gradients of x and weight!")
         bias = [] if bias is None else [bias]
         outputs = GMMFunction.ascendspeed_ops.npu_gmm([x], [weight], bias, group_list, group_type)
         ctx.save_for_backward(x, weight)
@@ -26,5 +29,15 @@ class GMMFunction(torch.autograd.Function):
         return dx[0], dw[0], dbias, None, None
 
 
-def npu_gmm(x, weight, *, bias=None, group_list=None, group_type=-1):
+def npu_gmm(x, weight, *, bias=None, group_list=None, group_type=0):
+    if not isinstance(x, torch.Tensor):
+        raise TypeError("arg0 must be a torch.Tensor, got {}".format(type(x)))
+    if not isinstance(weight, torch.Tensor):
+        raise TypeError("arg1 must be a torch.Tensor, got {}".format(type(weight)))
+    if not isinstance(bias, (torch.Tensor, None)):
+        raise TypeError("bias must be a torch.Tensor or None, got {}".format(type(bias)))
+    if not isinstance(group_list, (List[int], None)):
+        raise TypeError("group_list must be a List of int or None, got {}".format(type(group_list)))
+    if not isinstance(group_type, (int, None)):
+        raise TypeError("group_type must be an int or None, got {}".format(type(group_type)))
     return GMMFunction.apply(x, weight, bias, group_list, group_type)

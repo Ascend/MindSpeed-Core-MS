@@ -7,8 +7,8 @@ npu_gmm(x, weight, bias=None, group_list=None, group_type=-1)
 - x：必选输入，为tensor，数据类型float16, bfloat16, float32
 - weight：必选输入，为tensor，数据类型float16, bfloat16, float32
 - bias：可选输入，为tensor，数据类型float16, float32, 默认值为none。训练场景下，仅支持bias为none
-- group_list：可选输入，数据类型list[int64]，默认值为none。代表输入和输出M方向的matmul大小分布
-- group_type：可选输入，数据类型int64，代表需要分组的轴，如矩阵乘为C[m,n]=A[m,k]xB[k,n]，则groupType取值-1：不分组，0：m轴分组，1：n轴分组，2：k轴分组，默认值为-1。
+- group_list：可选输入，数据类型list[int64]，默认值为none。代表分组轴（见group_type参数）上不同组的索引。
+- group_type：可选输入，数据类型int64，代表需要分组的轴，如矩阵乘为C[m,n]=A[m,k]xB[k,n]，则groupType取值-1：不分组，0：m轴分组，1：n轴分组，2：k轴分组，默认值为0（限制：不支持group_type=1的场景）。
 
 输出：
 - y：必选输出，数据类型float16, bfloat16, float32
@@ -16,10 +16,10 @@ npu_gmm(x, weight, bias=None, group_list=None, group_type=-1)
 
 ## 反向接口
 输入：
-- grad：必选输入，为tensor，数据类型float16, bfloat16, float32, 正向attention_out的梯度输入
+- grad：必选输入，为tensor，数据类型float16, bfloat16, float32
 - x：必选输入，为tensor，数据类型float16, bfloat16, float32
 - weight：必选输入，为tensor，数据类型float16, bfloat16, float32
-- group_list：可选输入，数据类型list[int64]，默认值为none。代表输入和输出M方向的matmul大小分布
+- group_list：可选输入，数据类型list[int64]，默认值为none。数据来自正向输入
   
 输出：
 - grad_x：必选输出，数据类型float16, bfloat16, float32
@@ -37,7 +37,6 @@ npu_gmm(x, weight, bias=None, group_list=None, group_type=-1)
     
     num_expert, seq_len, hidden_dim = 8, 32, 256
     group_list = [1, 3, 6, 10, 15, 21, 28, 32]
-    split_item = 3
     group_type = 0
 
     x_shape = (seq_len, hidden_dim)
