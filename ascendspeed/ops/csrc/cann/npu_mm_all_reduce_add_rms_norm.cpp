@@ -62,18 +62,19 @@ std::tuple<at::Tensor, at::Tensor> npu_mm_all_reduce_add_rms_norm(
     if (!isIntegralType(x1.scalar_type()) && !isIntegralType(x2.scalar_type())) {
         ACLNN_CMD(aclnnMatmulAllReduceAddRmsNorm, x1, x2, bias_const, residual, gamma, epsilon, hcom_ptr,
                   reduce_op_ptr, comm_turn, stream_mode, y, norm_out);
-    }
-    if (isIntegralType(x1.scalar_type()) && isIntegralType(x2.scalar_type())) {
+    } else if (isIntegralType(x1.scalar_type()) && isIntegralType(x2.scalar_type())) {
         const at::Tensor &dequant_scale_real = dequant_scale.value_or(at::Tensor());
         ACLNN_CMD(aclnnQuantMatmulAllReduceAddRmsNorm, x1, x2, bias_const, dequant_scale_real, residual, gamma,
                   epsilon, hcom_ptr, reduce_op_ptr, comm_turn, stream_mode, y, norm_out);
-    }
-    if (!isIntegralType(x1.scalar_type()) && isIntegralType(x2.scalar_type())) {
+    } else if (!isIntegralType(x1.scalar_type()) && isIntegralType(x2.scalar_type())) {
         const at::Tensor &antiquant_scale_real = antiquant_scale.value_or(at::Tensor());
         const at::Tensor &antiquant_offset_real = antiquant_offset.value_or(at::Tensor());
         ACLNN_CMD(aclnnWeightQuantMatmulAllReduceAddRmsNorm, x1, x2, bias_const, antiquant_scale_real,
                   antiquant_offset_real, residual, gamma, epsilon, hcom_ptr, reduce_op_ptr, comm_turn,
                   stream_mode, antiquant_group_size, y, norm_out);
+    } else {
+        TORCH_CHECK(false, "the type of x1 and x2 should be suit the not quant scenario, "
+                    "dequant scenario, antiquant scenario.");
     }
 
     return std::make_tuple(y, norm_out);
