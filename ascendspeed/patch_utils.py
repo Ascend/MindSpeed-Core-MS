@@ -18,7 +18,11 @@ def dummy_function_wrapper(func_name):
 
 class Patch:
     def __init__(self, orig_func_name, new_func):
-        self.orig_module_name, self.orig_func_name = orig_func_name.rsplit('.', 1)
+        split_name = orig_func_name.rsplit('.', 1)
+        if len(split_name) == 1:
+            self.orig_module_name, self.orig_func_name = orig_func_name, None
+        else:
+            self.orig_module_name, self.orig_func_name = split_name
         self.orig_module = None
         self.orig_func = None
 
@@ -27,6 +31,7 @@ class Patch:
         if new_func is None:
             new_func = dummy_function_wrapper(orig_func_name)
         self.set_patch_func(new_func)
+        self.is_applied = False
 
     @property
     def orig_func_id(self):
@@ -37,14 +42,18 @@ class Patch:
         return id(self.patch_func)
 
     def set_patch_func(self, new_func, force_patch=False):
-        if new_func.__name__.endswith(('wrapper', 'decorator')):
+        if hasattr(new_func, '__name__') and new_func.__name__.endswith(('wrapper', 'decorator')):
             self.wrappers.append(new_func)
         else:
             if self.patch_func and not force_patch:
                 raise RuntimeError('the patch of {} exist !'.format(self.orig_func_name))
             self.patch_func = new_func
+        self.is_applied = False
 
     def apply_patch(self):
+        if self.is_applied:
+            return
+
         self.orig_module, self.orig_func = Patch.parse_path(self.orig_module_name, self.orig_func_name)
         if self.patch_func is None:
             self.patch_func = self.orig_func
@@ -52,10 +61,13 @@ class Patch:
         for wrapper in self.wrappers:
             self.patch_func = wrapper(self.patch_func)
 
-        setattr(self.orig_module, self.orig_func_name, self.patch_func)
+        if self.orig_func_name is not None:
+            setattr(self.orig_module, self.orig_func_name, self.patch_func)
         for key, value in sys.modules.items():
-            if hasattr(value, self.orig_func_name) and id(getattr(value, self.orig_func_name)) == self.orig_func_id:
+            if self.orig_func_name is not None and hasattr(value, self.orig_func_name) \
+                    and id(getattr(value, self.orig_func_name)) == self.orig_func_id:
                 setattr(value, self.orig_func_name, self.patch_func)
+        self.is_applied = True
 
     @staticmethod
     def parse_path(module_path, function_name):
@@ -78,9 +90,9 @@ class Patch:
                     else:
                         raise RuntimeError('no support this type patch!')
 
-        if not hasattr(sys.modules[module_path], function_name):
+        if function_name is not None and not hasattr(sys.modules[module_path], function_name):
             setattr(sys.modules[module_path], function_name, None)
-        return sys.modules[module_path], getattr(sys.modules[module_path], function_name)
+        return sys.modules[module_path], getattr(sys.modules[module_path], function_name) if function_name is not None else None
 
 
 class AscendSpeedPatchesManager:

@@ -40,8 +40,19 @@ def function_third_wrapper(fn):
     return wrapper
 
 
+class TestClass:
+    test_variable = 1
+
+
 class TestRegisterPatches(DistributedTest):
     world_size = 1
+
+    def test_replace_class_variable(self):
+        from unit_tests.ascendspeed.test_register_patches import TestClass
+        assert TestClass.test_variable == 1
+        aspm.register_patch('unit_tests.ascendspeed.test_register_patches.TestClass.test_variable', 2)
+        aspm.apply_patches()
+        assert TestClass.test_variable == 2
 
     def test_import_no_exist_function(self):
         aspm.register_patch('no_exist_module.module.no_exist_function')
@@ -50,6 +61,11 @@ class TestRegisterPatches(DistributedTest):
         from no_exist_module.module import no_exist_function
         with pytest.raises(RuntimeError, match='function no_exist_module.module.no_exist_function no exist'):
             no_exist_function()
+
+    def test_import_no_exist_module(self):
+        aspm.register_patch('no_exist_module')
+        aspm.apply_patches()
+        import no_exist_module
 
     def test_replace_function(self):
         aspm.register_patch('unit_tests.ascendspeed.test_register_patches.function1', function2)
