@@ -46,4 +46,7 @@ def forward_fused_softmax(self, input_, mask):
         # if use upper triangular mask
         return torch_npu.npu_scaled_masked_softmax(input_, mask, scale, True)
     else:
-        return torch_npu.npu_scaled_masked_softmax(input_, mask, scale, False)
+        if mask is not None:
+            return torch_npu.npu_scaled_masked_softmax(input_, mask, scale, False)
+        else:
+            return ScaledSoftmax.apply(input_, scale)
