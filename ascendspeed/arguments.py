@@ -186,10 +186,10 @@ def validate_args_decorator(validate_args):
                     '--use-fused-swiglu must enable with --swiglu, '
                     'but --swiglu={}.'.format(args.swiglu))
         if args.use_fused_rotary_pos_emb:
-            if not args.use_rotary_position_embeddings:
+            if args.position_embedding_type != 'rope':
                 raise AssertionError(
-                    '--use-fused-rotary-pos-emb must enable with --use-rotary-position-embeddings, '
-                    'but --use-rotary-position-embeddings={}.'.format(args.use_rotary_position_embeddings))
+                    '--use-fused-rotary-pos-emb must enable with'
+                    '--position-embedding-type=rope')
         if args.reuse_fp32_param and not args.bf16:
             raise AssertionError('--reuse-fp32-param only support for `bf16`')
         if args.reuse_fp32_param and args.use_distributed_optimizer:
