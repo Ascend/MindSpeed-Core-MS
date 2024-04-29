@@ -110,8 +110,8 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 # 特性介绍
 | 特性 | 介绍 |
 | ----- | ----- |
-| Megatron 数据并行 | [link](https://github.com/NVIDIA/Megatron-LM) |
-| Megatron 张量并行 | [link](https://github.com/NVIDIA/Megatron-LM) |
+| Megatron 数据并行 | [link](docs/features/data-parallel.md) |
+| Megatron 张量并行 | [link](docs/features/tensor-parallel.md) |
 | Megatron 流水并行  | [link](https://github.com/NVIDIA/Megatron-LM) |
 | Megatron 虚拟流水并行  | [link](https://github.com/NVIDIA/Megatron-LM) |
 | Megatron 序列并行  | [link](https://github.com/NVIDIA/Megatron-LM) |
