@@ -174,11 +174,10 @@ def megatron_core_adaptation(aspm):
                         set_expert_model_parallel_world_size)
     aspm.register_patch('megatron.core.mpu', megatron.core.parallel_state)
 
-    from .optimizer.optimizer import (mixed_precision_optimizer_step, fp32_optimizer_step, \
+    from .optimizer.optimizer import (mixed_precision_optimizer_step, \
                                       reuse_fp32_param_init_wrapper, optimizer_config_init_wrapper)
     aspm.register_patch('megatron.core.optimizer.optimizer.MixedPrecisionOptimizer.step',
                         mixed_precision_optimizer_step)
-    aspm.register_patch('megatron.core.optimizer.optimizer.FP32Optimizer.step', fp32_optimizer_step)
     aspm.register_patch('megatron.core.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__',
                         reuse_fp32_param_init_wrapper)
     aspm.register_patch('megatron.core.optimizer.optimizer_config.OptimizerConfig.__init__',
