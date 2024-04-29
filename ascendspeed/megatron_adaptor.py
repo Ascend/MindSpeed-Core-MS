@@ -302,6 +302,8 @@ def megatron_training_adaptation(aspm):
                         parse_args_decorator)
     aspm.register_patch('megatron.training.initialize.validate_args',
                         validate_args_decorator)
+    aspm.register_patch('megatron.training.yaml_arguments.validate_yaml',
+                        validate_args_decorator)
     aspm.register_patch('megatron.training.arguments.core_transformer_config_from_args',
                         core_transformer_config_from_args_wrapper)
     aspm.register_patch('megatron.training.initialize.set_jit_fusion_options', set_jit_fusion_options)

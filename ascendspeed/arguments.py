@@ -167,7 +167,7 @@ def validate_args_decorator(validate_args):
             args.use_mcore_models = True
             overlap_param_gather_without_mcore_models = True
 
-        validate_args(args, defaults)
+        args = validate_args(args, defaults)
         if args.use_fused_rmsnorm:
             if args.normalization != "RMSNorm":
                 raise AssertionError(
@@ -204,6 +204,8 @@ def validate_args_decorator(validate_args):
             args.use_mcore_models = False
         if args.transformer_impl == 'transformer_engine':
             args.transformer_impl = 'local'
+        if args.fp8:
+            raise AssertionError('NPU not supported FP8.')
 
     return wrapper
 
