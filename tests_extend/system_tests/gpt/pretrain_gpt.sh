@@ -37,8 +37,8 @@ GPT_ARGS="
     --optimizer adam \
     --loss-scale 1 \
     --lr 0.00015 \
-    --train-iters 10 \
-    --lr-decay-iters 100 \
+    --train-iters 1000 \
+    --lr-decay-iters 1000 \
     --lr-decay-style cosine \
     --min-lr 1.0e-5 \
     --weight-decay 1e-2 \
@@ -80,25 +80,13 @@ DATA_ARGS="
 
 OUTPUT_ARGS="
     --log-interval 1 \
-    --save-interval 10 \
-    --eval-interval 10 \
+    --save-interval 10000 \
+    --eval-interval 10000 \
     --eval-iters 10 \
-    --log-num-zeros-in-grad \
-    --log-params-norm \
     --log-throughput \
     --timing-log-option max \
     --no-barrier-with-level-1-timing \
     --timing-log-level 0 \
-    --tensorboard-dir ./tensorboard \
-    --tensorboard-log-interval 1 \
-    --tensorboard-queue-size 1000 \
-    --log-timers-to-tensorboard \
-    --log-batch-size-to-tensorboard \
-    --no-log-learnig-rate-to-tensorboard \
-    --no-log-loss-scale-to-tensorboard \
-    --log-validation-ppl-to-tensorboard \
-    --log-memory-to-tensorboard \
-    --log-world-size-to-tensorboard
 "
 
 torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \

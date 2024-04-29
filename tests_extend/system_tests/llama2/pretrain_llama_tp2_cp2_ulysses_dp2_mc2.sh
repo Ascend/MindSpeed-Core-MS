@@ -2,11 +2,12 @@
 
 source "tests_extend/system_tests/env_npu.sh"
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export ASCEND_MC2=1
 
 GPUS_PER_NODE=8
 # Change for multinode config
 MASTER_ADDR=localhost
-MASTER_PORT=6000
+MASTER_PORT=6001
 NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
@@ -15,7 +16,7 @@ CKPT_DIR=./ckpt_llama
 DATA_PATH="/home/dataset/llama2/alpaca_text_document"
 TOKENIZER_MODEL="/home/dataset/model/llama-2-7b-hf/tokenizer.model"
 TP=2
-PP=4
+PP=1
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $GPUS_PER_NODE \
@@ -28,11 +29,12 @@ DISTRIBUTED_ARGS="
 GPT_ARGS="
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
-    --num-layers-per-virtual-pipeline-stage 2 \
-    --no-delay-grad-reduce \
-    --delay-param-gather \
-    --no-scatter-gather-tensors-in-pipeline \
     --sequence-parallel \
+    --context-parallel-size 2 \
+    --context-parallel-algo ulysses_cp_algo \
+    --use-distributed-optimizer \
+    --overlap-grad-reduce \
+    --overlap-param-gather \
     --num-layers 16 \
     --hidden-size 4096 \
     --ffn-hidden-size 11008 \
@@ -72,7 +74,7 @@ GPT_ARGS="
     --rotary-percent 1 \
     --hysteresis 2 \
     --initial-loss-scale 65536 \
-    --min-loss-scale 1
+    --min-loss-scale 1 \
     --loss-scale-window 1000 \
     --use-flash-attn \
     --no-gradient-accumulation-fusion \
@@ -95,8 +97,4 @@ torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \
     $GPT_ARGS \
     $DATA_ARGS \
     $OUTPUT_ARGS \
-    --distributed-backend nccl \
-    --load $CKPT_DIR \
-    --finetune \
-    --exit-on-missing-checkpoint \
-    --use-checkpoint-args \
+    --distributed-backend nccl

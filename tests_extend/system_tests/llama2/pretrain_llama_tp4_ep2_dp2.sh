@@ -31,9 +31,6 @@ GPT_ARGS="
     --sequence-parallel \
     --expert-model-parallel-size 2 \
     --num-experts 2 \
-    --no-delay-grad-reduce \
-    --delay-param-gather \
-    --no-scatter-gather-tensors-in-pipeline \
     --num-layers 16 \
     --hidden-size 4096 \
     --ffn-hidden-size 11008 \
@@ -48,7 +45,7 @@ GPT_ARGS="
     --global-batch-size 32 \
     --make-vocab-size-divisible-by 1 \
     --lr 1.25e-6 \
-    --train-iters 3000 \
+    --train-iters 1000 \
     --lr-decay-style cosine \
     --untie-embeddings-and-output-weights \
     --disable-bias-linear \
@@ -78,7 +75,6 @@ GPT_ARGS="
     --loss-scale-window 1000 \
     --use-flash-attn \
     --no-gradient-accumulation-fusion \
-    --use-gpu-initialization \
     --bf16
 "
 
@@ -98,8 +94,4 @@ torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \
     $GPT_ARGS \
     $DATA_ARGS \
     $OUTPUT_ARGS \
-    --distributed-backend nccl \
-    --load $CKPT_DIR \
-    --finetune \
-    --exit-on-missing-checkpoint \
-    --use-checkpoint-args \
+    --distributed-backend nccl
