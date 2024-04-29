@@ -140,6 +140,8 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 | 【Prototype】rms_norm                   | [link](docs/ops/rms_norm.md)                   |
 | 【Prototype】swiglu                     | [link](docs/ops/swiglu.md)                     |
 | 【Prototype】lcal_coc                   | [link](docs/ops/lcal_coc.md)                   |
+| 【Prototype】npu_mm_all_reduce_add_rms_norm | [link](docs/ops/npu_mm_all_reduce_add_rms_norm.md)                   |
+| 【Prototype】npu_mm_all_reduce_add_rms_norm_ | [link](docs/ops/npu_mm_all_reduce_add_rms_norm_.md)   
 
 # 版本配套表
 

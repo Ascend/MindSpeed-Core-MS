@@ -79,7 +79,7 @@ $$
 - x1支持两维或者三维，其维度为(b, s, k)或者(s, k)。
 - x2仅支持两维，其维度为(k, n)，x1和x2的轴满足mm算子入参要求，k轴相等。
 - bias若非空，bias为1维，其维度为(n)。
-- residual仅支持三维，其维度为(b, s, n)，当x1为两维时，residual的(b*s)等于x1的s，当x1为三维时，residual的(b*s)等于x1的(b*s);residual的最后一维与x2的最后一维相等。
+- residual仅支持三维，其维度为(b, s, n)，当x1为两维时，residual的(b * s)等于x1的s，当x1为三维时，residual的(b * s)等于x1的(b * s);residual的最后一维与x2的最后一维相等。
 - gamma仅支持一维，其维度为（n），gamma的最后一维与residual的最后一维相等。
 - reduce_op仅支持“sum”
 - 昇腾910B AI处理器支持2、4、8卡。

@@ -21,6 +21,14 @@ def npu_mm_all_reduce_add_rms_norm_single(x1,
                                           dequant_scale=None,
                                           antiquant_group_size=0,
                                           comm_turn=0):
+    if x1 is None:
+        raise AssertionError('x1 must not be None.')
+    if x2 is None:
+        raise AssertionError('x2 must not be None.')
+    if residual is None:
+        raise AssertionError('residual must not be None.')
+    if gamma is None:
+        raise AssertionError('gamma must not be None.')
     y, normOut = ascendspeed_ops.npu_mm_all_reduce_add_rms_norm(x1,
                                                                 x2,
                                                                 residual,
