@@ -37,10 +37,6 @@ def _one_hot_to_float(x, num_classes):
     return F.one_hot(x, num_classes=num_classes).float()
 
 
-def _top_idx(source, k):
-    return torch.topk(source, k=k, dim=0)[1]
-
-
 def _capacity(gates: Tensor, capacity_factor: Tensor, min_capacity: Tensor) -> Tensor:
     # gates has shape of S,E
     num_tokens = gates.shape[0]

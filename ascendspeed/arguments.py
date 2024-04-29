@@ -46,6 +46,12 @@ def _add_moe_args(parser):
                        help='The capacity of the MoE expert at training time')
     group.add_argument('--noisy-gate-policy', type=str, default=None,
                        help="noisy gate policy, valid options are 'Jitter', 'RSample' or 'None'.")
+    group.add_argument('--enable-token-rearrange-opt', action='store_true',
+                       help="Use this flag to enable token rearrange optimize")
+    group.add_argument('--no-use-rts',
+                       action='store_false', default=False,
+                       help='whether to use Random Token Selection.',
+                       dest='use_rts')
     return parser
 
 

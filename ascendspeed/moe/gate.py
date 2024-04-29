@@ -5,15 +5,22 @@
 
 # copied from https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py
 # reworked/refactored some parts to make it run.
-from typing import Optional, Tuple
+from typing import Callable, Dict, Tuple, Union, Any
+from collections import namedtuple
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Module
+from megatron.training import get_args
 
-from .utils import gumbel_rsample, _capacity, einsum, _top_idx, _one_hot_to_float, MoEAuxLossAutoScaler
 from .config import Config
+from .utils import gumbel_rsample, _capacity, einsum, _one_hot_to_float, MoEAuxLossAutoScaler
+
+exp_selection_uniform_map: Dict[torch.device, Callable] = {}
+
+
+GatingTokenRearrangeInfo = namedtuple('GatingTokenRearrangeInfo', ['token_rearranged_ec_idx', 'token_exp_weights', 'expert_select_token_idx'])
 
 
 class TopKGate(Module):
@@ -43,10 +50,10 @@ class TopKGate(Module):
         self.weight = torch.nn.Linear(config.hidden_size, config.num_experts, bias=False).float()
         self.config = config
 
-    def forward(self, input: torch.Tensor) -> Tuple[Tensor, Tensor, Tensor, Tensor]:  # type: ignore
+    def forward(self, gate_input: torch.Tensor) -> Tuple[Tensor, ...]:  # type: ignore
         if self.weight.weight.dtype != torch.float32:
             self.weight = self.weight.float()
-        input_fp32 = input.float()
+        input_fp32 = gate_input.float()
         logits = self.weight(input_fp32)
 
         if self.config.topk == 1:
@@ -57,47 +64,77 @@ class TopKGate(Module):
         return gate_output
 
 
-def top1gating(logits: Tensor, config: Config) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+def top1gating(logits: Tensor, config: Config) -> Tuple[Tensor, ...]:
     """Implements Top1Gating on logits."""
     if config.noisy_gate_policy == 'RSample':
         logits_w_noise = logits + gumbel_rsample(logits.shape, device=logits.device)
     # everything is in fp32 in this function
-    gates = F.softmax(logits, dim=1)
-    capacity = _capacity(gates, torch.tensor(config.capacity_factor), torch.tensor(config.min_capacity))
+    # token_sel_expert_weights: [S, E], 每个token选择每个专家的概率
+    token_sel_expert_weights = F.softmax(logits, dim=1)
+    capacity = _capacity(token_sel_expert_weights,
+                        torch.tensor(config.capacity_factor),
+                        torch.tensor(config.min_capacity))
 
     # Create a mask for 1st's expert per token
     # noisy gating
-    indices1_s = torch.argmax(logits_w_noise if config.noisy_gate_policy == 'RSample' else gates, dim=1)
-    num_experts = int(gates.shape[1])
-    mask1 = F.one_hot(indices1_s, num_classes=num_experts)
+    final_logits = logits_w_noise if config.noisy_gate_policy == "RSample" else \
+        token_sel_expert_weights
+    # [S] 每个token对应的专家（取概率最大的）
+    token_sel_expert_idx = torch.argmax(final_logits, dim=1)
+    num_experts = int(token_sel_expert_weights.shape[1])
+    token_sel_expert_mask = F.one_hot(token_sel_expert_idx, num_classes=num_experts)
 
-    # gating decisions
-    exp_counts = torch.sum(mask1, dim=0).detach().to('cpu')
-
-    # Compute l_aux
-    me = torch.mean(gates, dim=0)
-    ce = torch.mean(mask1.float(), dim=0)
+    # Compute l_aux负载均衡aux_loss
+    me = torch.mean(token_sel_expert_weights, dim=0)
+    ce = torch.mean(token_sel_expert_mask.float(), dim=0)
     l_aux = torch.sum(me * ce) * num_experts
+    all_args = get_args()
+    # Random Token Selection(将token选择专家的掩码0/1矩阵中的1转成0~1之间的权重值)
+    if all_args.use_rts:  # default True.
+        uniform = exp_selection_uniform_map.get(logits.device)
+        if uniform is None:
+            uniform = torch.distributions.uniform.Uniform(
+                low=torch.tensor(0.0, device=logits.device),
+                high=torch.tensor(1.0, device=logits.device)).rsample
+            exp_selection_uniform_map[logits.device] = uniform
+        # [S, E]
+        token_sel_expert_score = token_sel_expert_mask * uniform(token_sel_expert_mask.shape)
+    else:
+        token_sel_expert_score = token_sel_expert_mask
 
-    # capacity
-    top_idx = _top_idx(mask1, capacity)
-    new_mask1 = mask1 * torch.zeros_like(mask1).scatter_(0, top_idx, 1)
-    mask1 = new_mask1
+    # 通过topC每个专家选择至多C个token，然后和原始的mask1（每个专家可能选择超过C个token）矩阵相乘，
+    # 丢掉超过专家容量的权重低的token，更新得到 token_sel_expert_mask
+    expert_sel_top_c_token_idx = torch.topk(token_sel_expert_score, k=capacity, dim=0)[1]
+    token_sel_expert_mask *= torch.zeros_like(token_sel_expert_mask).scatter_(0, expert_sel_top_c_token_idx, 1)
 
     # Normalize gate probabilities
-    mask1_float = mask1.float()
-    gates = gates * mask1_float
+    token_sel_expert_mask_float = token_sel_expert_mask.float()
+    token_sel_expert_weights = token_sel_expert_weights * token_sel_expert_mask_float
 
-    # Compute locations in capacity dim
-    locations1 = torch.cumsum(mask1, dim=0) - 1
-    # Store the capacity location for each token
-    locations1_s = torch.sum(locations1 * mask1, dim=1)
-    locations1_sc = _one_hot_to_float(locations1_s, capacity)
-    combine_weights = einsum("se,sc->sec", gates, locations1_sc)
-
-    dispatch_mask = combine_weights.bool()
-
-    return l_aux, combine_weights, dispatch_mask, exp_counts
+    token_idx_in_expert_with_noise = torch.cumsum(token_sel_expert_mask, dim=0) - 1
+    masked_token_idx_in_expert = token_idx_in_expert_with_noise * token_sel_expert_mask
+    token_offset_for_expert = torch.sum(masked_token_idx_in_expert, dim=1)
+    if all_args.enable_token_rearrange_opt:
+        # 重排过程：计算出每个专家选择的token的索引：expert_select_token_idx，shape为: [E*C]
+        # MoE前向过程中根据此索引通过index_select API实现token的重排
+        # shape变化过程：[S, E]->[C, E]->[E, C]->[E*C]
+        expert_sel_top_c_token_idx = torch.topk(token_sel_expert_mask,
+                                                k=capacity,
+                                                dim=0,
+                                                sorted=True)[1]
+        expert_select_token_idx = expert_sel_top_c_token_idx.t().reshape(config.num_experts * capacity)
+        token_exp_weights, token_exp_idx = torch.max(token_sel_expert_weights, dim=1)
+        token_rearranged_ec_idx = (capacity.to(torch.int32) * token_exp_idx.to(torch.int32) +
+                                   token_offset_for_expert.to(torch.int32))
+        top1_gating_token_infos = GatingTokenRearrangeInfo(token_rearranged_ec_idx=token_rearranged_ec_idx,
+                                                           token_exp_weights=token_exp_weights,
+                                                           expert_select_token_idx=expert_select_token_idx)
+        return l_aux, top1_gating_token_infos
+    else:
+        token_locations_sc = _one_hot_to_float(token_offset_for_expert, capacity)
+        combine_weights = einsum("se,sc->sec", token_sel_expert_weights, token_locations_sc)
+        dispatch_mask = combine_weights.bool()
+        return l_aux, combine_weights, dispatch_mask
 
 
 def apply_aux_loss(config, gates, mask1):
@@ -110,6 +147,7 @@ def apply_aux_loss(config, gates, mask1):
         gates = MoEAuxLossAutoScaler.apply(gates, l_aux)
     return gates, l_aux
 
+
 def apply_z_loss(config, logits):
     """Encourages the router's logits to remain small to enhance stability.
         Please refer to the ST-MoE paper (https://arxiv.org/pdf/2202.08906.pdf) for details.
@@ -120,10 +158,10 @@ def apply_z_loss(config, logits):
         Returns:
             torch.Tensor: The logits after applying the z-loss.
     """
-        if config.z_loss_coef > 0:
-            z_loss = torch.mean(torch.square(torch.logsumexp(logits, dim=-1))) * config.z_loss_coef
-            logits = MoEAuxLossAutoScaler.apply(logits, z_loss)
-        return logits
+    if config.z_loss_coef > 0:
+        z_loss = torch.mean(torch.square(torch.logsumexp(logits, dim=-1))) * config.z_loss_coef
+        logits = MoEAuxLossAutoScaler.apply(logits, z_loss)
+    return logits
 
 
 def top2gating(logits: Tensor, config: Config) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
@@ -132,55 +170,76 @@ def top2gating(logits: Tensor, config: Config) -> Tuple[Tensor, Tensor, Tensor, 
     logits = apply_z_loss(config, logits)
 
     # everything is in fp32 in this function
-    gates = F.softmax(logits, dim=1)
-    num_experts = int(gates.shape[1])
+    token_sel_expert_weights = F.softmax(logits, dim=1)
+    num_experts = int(token_sel_expert_weights.shape[1])
 
-    capacity = _capacity(gates, torch.tensor(config.capacity_factor * 2), torch.tensor(config.min_capacity))
+    capacity = _capacity(token_sel_expert_weights,
+                        torch.tensor(config.capacity_factor * 2),
+                        torch.tensor(config.min_capacity))
 
-    _, selected_experts = torch.topk(gates, config.topk, dim=-1)
+    _, selected_experts = torch.topk(token_sel_expert_weights, config.topk, dim=-1)
     mask = F.one_hot(selected_experts, num_classes=num_experts)
-    mask1 = mask[:, 0, :]
-    mask2 = mask[:, 1, :]
+    first_expert_mask = mask[:, 0, :]
+    second_expert_mask = mask[:, 1, :]
 
     # Compute locations in capacity buffer
-    locations1 = torch.cumsum(mask1, dim=0) - 1
-    locations2 = torch.cumsum(mask2, dim=0) - 1
+    locations_in_first_expert = torch.cumsum(first_expert_mask, dim=0) - 1
+    locations_in_second_expert = torch.cumsum(second_expert_mask, dim=0) - 1
     # Update 2nd's location by accounting for locations of 1st
-    locations2 += torch.sum(mask1, dim=0, keepdim=True)
+    locations_in_second_expert += torch.sum(first_expert_mask, dim=0, keepdim=True)
 
     # gating decisions
-    exp_counts = torch.sum(mask1, dim=0).detach().to('cpu')
-
-    # Compute l_aux
-    gates, l_aux = apply_aux_loss(config, gates, mask1)
+    token_sel_expert_weights, l_aux = apply_aux_loss(config, token_sel_expert_weights, first_expert_mask)
 
     # Remove locations outside capacity from mask
-    mask1 *= torch.lt(locations1, capacity)
-    mask2 *= torch.lt(locations2, capacity)
+    first_expert_mask *= torch.lt(locations_in_first_expert, capacity)
+    second_expert_mask *= torch.lt(locations_in_second_expert, capacity)
 
     # Store the capacity location for each token
-    locations1_s = torch.sum(locations1 * mask1, dim=1)
-    locations2_s = torch.sum(locations2 * mask2, dim=1)
+    token_idx_in_first_expert = torch.sum(locations_in_first_expert * first_expert_mask, dim=1)
+    token_idx_in_second_expert = torch.sum(locations_in_second_expert * second_expert_mask, dim=1)
 
     # Normalize gate probabilities
-    mask1_float = mask1.float()
-    mask2_float = mask2.float()
-    gates1_s = einsum("se,se->s", gates, mask1_float)
-    gates2_s = einsum("se,se->s", gates, mask2_float)
-    denom_s = gates1_s + gates2_s
+    first_expert_mask_float = first_expert_mask.float()
+    second_expert_mask_float = second_expert_mask.float()
+    token_first_exp_weights, token_first_exp_idx = torch.max(token_sel_expert_weights * first_expert_mask_float, dim=1)
+    token_second_exp_weights, token_second_exp_idx = torch.max(token_sel_expert_weights * second_expert_mask_float,
+                                                               dim=1)
+    denom_s = token_first_exp_weights + token_second_exp_weights
     # Avoid divide-by-zero
     denom_s = torch.clamp(denom_s, min=torch.finfo(denom_s.dtype).eps)
-    gates1_s /= denom_s
-    gates2_s /= denom_s
+    token_first_exp_weights /= denom_s
+    token_second_exp_weights /= denom_s
+    all_args = get_args()
+    if all_args.enable_token_rearrange_opt:
+        token_rearranged_first_ec_idx = token_first_exp_idx.int() * capacity + token_idx_in_first_expert.int()
+        token_rearranged_second_ec_idx = token_second_exp_idx.int() * capacity + token_idx_in_second_expert.int()
+        # 重排过程：计算出每个专家选择的token的索引：expert_select_token_idx，shape为: [E*C]
+        # MoE前向过程中根据此索引通过index_select API实现token的重排
+        # shape变化过程：[S, E]->[C, E]->[E, C]->[E*C]
+        token_sel_first_exp_int_mask = first_expert_mask * 2
+        token_sel_second_exp_int_mask = second_expert_mask
+        expert_sel_top_c_token_idx = torch.topk(token_sel_first_exp_int_mask + token_sel_second_exp_int_mask,
+                                                k=capacity,
+                                                dim=0,
+                                                sorted=True)[1]
+        expert_select_token_idx = expert_sel_top_c_token_idx.t().reshape(num_experts * capacity)
+        token_rearranged_ec_idx = torch.cat([token_rearranged_first_ec_idx, token_rearranged_second_ec_idx], dim=0)
+        token_exp_weights = torch.cat([token_first_exp_weights, token_second_exp_weights], dim=0)
 
-    # Calculate combine_weights and dispatch_mask
-    gates1 = einsum("s,se->se", gates1_s, mask1_float)
-    gates2 = einsum("s,se->se", gates2_s, mask2_float)
-    locations1_sc = _one_hot_to_float(locations1_s, capacity)
-    locations2_sc = _one_hot_to_float(locations2_s, capacity)
-    combine1_sec = einsum("se,sc->sec", gates1, locations1_sc)
-    combine2_sec = einsum("se,sc->sec", gates2, locations2_sc)
-    combine_weights = combine1_sec + combine2_sec
-    dispatch_mask = combine_weights.bool()
+        top2_gating_token_infos = GatingTokenRearrangeInfo(token_rearranged_ec_idx=token_rearranged_ec_idx,
+                                                           token_exp_weights=token_exp_weights,
+                                                           expert_select_token_idx=expert_select_token_idx)
+        return l_aux, top2_gating_token_infos
+    else:
+        # Calculate combine_weights and dispatch_mask
+        gates1 = einsum("s,se->se", token_first_exp_weights, first_expert_mask_float)
+        gates2 = einsum("s,se->se", token_second_exp_weights, second_expert_mask_float)
+        locations1_sc = _one_hot_to_float(token_idx_in_first_expert, capacity)
+        locations2_sc = _one_hot_to_float(token_idx_in_second_expert, capacity)
+        combine1_sec = einsum("se,sc->sec", gates1, locations1_sc)
+        combine2_sec = einsum("se,sc->sec", gates2, locations2_sc)
+        combine_weights = combine1_sec + combine2_sec
+        dispatch_mask = combine_weights.bool()
 
-    return l_aux, combine_weights, dispatch_mask, exp_counts
+        return l_aux, combine_weights, dispatch_mask

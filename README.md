@@ -124,6 +124,7 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 | Ascend 计算通信并行优化 | [link](docs/features/communication-over-computation.md) |
 | Ascend BF16 参数副本复用 | [link](docs/features/reuse-fp32-param.md) |
 | Ascend rms_norm 融合算子 | [link](docs/features/rms_norm.md) |
+| Ascend MoE token重排性能优化   | [link](docs/features/token-rearrange.md)                |
 | 【Prototype】Ulysses 长序列并行 | [link](docs/features/ulysses-context-parallel.md) |
 | 【Prototype】Ascend MC2 | 暂无 |
 | 【Prototype】alibi | 暂无 |

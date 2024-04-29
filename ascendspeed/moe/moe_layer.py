@@ -48,6 +48,9 @@ class MOELayer(Base):
         self.ep_group = None
         self.ep_size = ep_size
         self.num_local_experts = num_local_experts
+        self.num_experts = ep_size * num_local_experts
+        self.exp_counts = None
+        self.l_aux = None
 
     def set_ep_group(self, ep_group):
         self.ep_group = ep_group
@@ -55,11 +58,26 @@ class MOELayer(Base):
     def forward(self, *input: Tensor, **kwargs: Any) -> Tensor:
         d_model = input[0].shape[-1]
         reshaped_input = input[0].reshape(-1, d_model)
-
+        from megatron.training import get_args
+        all_args = get_args()
         # gate
-        self.l_aux, combine_weights, dispatch_mask, self.exp_counts = self.gate(reshaped_input)
-        dispatched_input = einsum("sec,sm->ecm", dispatch_mask.type_as(input[0]), reshaped_input)
-
+        if not all_args.enable_token_rearrange_opt:
+            self.l_aux, combine_weights, dispatch_mask = self.gate(reshaped_input)
+            dispatched_input = einsum("sec,sm->ecm", dispatch_mask.type_as(input[0]), reshaped_input)
+        else:
+            self.l_aux, token_rearrange_infos = self.gate(reshaped_input)
+            org_dtype = reshaped_input.dtype
+            if org_dtype == torch.bfloat16:  # 规避算子性能劣化问题, 解决后可删除
+                rearranged_input = torch.index_select(
+                    reshaped_input.to(torch.float32), dim=0, index=token_rearrange_infos.expert_select_token_idx
+                ).to(org_dtype)
+            else:
+                rearranged_input = torch.index_select(
+                    reshaped_input, dim=0, index=token_rearrange_infos.expert_select_token_idx
+                )
+            capacity = token_rearrange_infos.expert_select_token_idx.size(0) // self.num_experts
+            dispatched_input = rearranged_input.reshape(self.num_experts, capacity, d_model).contiguous()
+            
         # dispatch all2all
         dispatched_input = _AllToAll.apply(self.ep_group, dispatched_input)
 
@@ -73,5 +91,18 @@ class MOELayer(Base):
         # Re-shape back: gecm -> ecm
         expert_output = expert_output.reshape(self.ep_size * self.num_local_experts, -1, d_model)
 
-        combined_output = einsum("sec,ecm->sm", combine_weights.type_as(input[0]), expert_output)
+        if not all_args.enable_token_rearrange_opt:
+            combined_output = einsum("sec,ecm->sm", combine_weights.type_as(input[0]), expert_output)
+        else:
+            E, C, M = expert_output.shape
+            org_dtype = expert_output.dtype
+            if org_dtype == torch.bfloat16:
+                valid_expert_out = torch.index_select(
+                    expert_output.view(E * C, M).to(torch.float32), dim=0, index=token_rearrange_infos.token_rearranged_ec_idx
+                ).to(org_dtype)
+            else:
+                valid_expert_out = torch.index_select(expert_output.view(E * C, M), dim=0, index=token_rearrange_infos.token_rearranged_ec_idx)
+            combined_output = valid_expert_out * token_rearrange_infos.token_exp_weights.unsqueeze(1).type_as(input[0])
+            if all_args.moe_router_topk == 2:
+                combined_output = torch.add(*torch.chunk(combined_output, all_args.moe_router_topk, dim=0))
         return combined_output.reshape(input[0].shape)
