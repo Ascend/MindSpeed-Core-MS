@@ -51,6 +51,8 @@ class TestMOELayer(DistributedTest):
         (tp, pp, ep) = tp_pp_ep
         topk = topk
         destroy_model_parallel()
+        args = parse_args(None, True)
+        set_args(args)
         initialize_model_parallel(tensor_model_parallel_size=tp,
                                   pipeline_model_parallel_size=pp,
                                   virtual_pipeline_model_parallel_size=None,

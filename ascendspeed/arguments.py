@@ -29,6 +29,7 @@ def process_args(parser):
     parser = _add_training_args(parser)
     parser = _add_data_args(parser)
     parser = _add_moe_args(parser)
+    parser = _add_cp_args(parser)
     parser = _add_network_args(parser)
     parser = _add_algorithm_args(parser)
     parser = _add_alibi_args(parser)
@@ -52,6 +53,17 @@ def _add_moe_args(parser):
                        action='store_false', default=False,
                        help='whether to use Random Token Selection.',
                        dest='use_rts')
+    return parser
+
+
+def _add_cp_args(parser):
+    group = parser.add_argument_group(title='cp parallel')
+    group.add_argument('--context-parallel-algo', type=str, default='ulysses_cp_algo',
+                       choices=['ulysses_cp_algo', 'megatron_cp_algo'], help='context parallel algorithm')
+    group.add_argument('--cp-attention-mask-type', type=str, default='causal',
+                       choices=['causal', 'full'], help='context parallel attention mask type')
+    group.add_argument('--use-cp-send-recv-overlap', action='store_true',
+                       help='use this flag to enable cp send-recv-overlap.')
     return parser
 
 
@@ -123,8 +135,6 @@ def _add_training_args(parser):
                        action='store_true', default=False,
                        help='switch to open adaptive recompute feature. '
                             'The default is False.')
-    group.add_argument('--context-parallel-algo', type=str, default='ulysses_cp_algo',
-                       choices=['ulysses_cp_algo', 'megatron_cp_algo'], help='context parallel algorithm')
     group.add_argument('--jit-compile', action='store_true', default=False,
                        help='Setting jit compile mode to True')
     return parser
@@ -202,6 +212,7 @@ def validate_args_decorator(validate_args):
             assert head >= 1 and remainder == 0, f"num_attention_heads must be divisible by context_parallel_size"
             args.use_flash_attn = True
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
+            assert args.seq_length % (2 * args.context_parallel_size) == 0, f"sequence length must be divisible by 2 * context_parallel_size"
             args.use_flash_attn = True
         # Mandatory modification to SBH, subsequent abandonment of other formats such as BSH,BSND
         if args.shape_order != 'SBH':

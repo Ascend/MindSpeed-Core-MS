@@ -3,6 +3,8 @@ import torch
 import torch.nn.functional as F
 import torch_npu
 from ascendspeed import megatron_adaptor
+from megatron.training.global_vars import set_args
+from megatron.training.arguments import parse_args
 
 from commons import set_random_seed, initialize_model_parallel
 from unit_tests.common import DistributedTest
@@ -22,6 +24,8 @@ class IdentityLayer(torch.nn.Module):
 
 class TestTensorParallelCrossEntropy(DistributedTest):
     world_size = 8
+    args = parse_args(None, True)
+    set_args(args)
 
     @pytest.mark.parametrize("tp_pp", [(1, 1), (2, 4)])
     def test_cross_entropy(self, tp_pp):

@@ -1,3 +1,5 @@
+# Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024, HUAWEI CORPORATION.  All rights reserved.
 import torch
 import torch_npu
 from einops import rearrange
@@ -10,29 +12,44 @@ def flash_attn_p2p_communicate(rank, send_tensor, send_dst,
     """Point-to-point communications of KV and dKV in Attention with context parallelism"""
     send_recv_ops = []
 
-    if rank % 2 == 0:
-        send_op = torch.distributed.P2POp(torch.distributed.isend,
-                                          send_tensor,
-                                          send_dst,
-                                          cp_group)
-        recv_op = torch.distributed.P2POp(torch.distributed.irecv,
-                                          recv_tensor,
-                                          recv_src,
-                                          cp_group)
-        send_recv_ops.append(send_op)
-        send_recv_ops.append(recv_op)
+    from megatron.training import get_args
+    if get_args().use_cp_send_recv_overlap:
+        cp_group_for_send_recv_overlap = mpu.get_context_parallel_group_for_send_recv_overlap()
+        if rank % 2 == 0:
+            send_op = torch.distributed.isend(send_tensor, send_dst, cp_group)
+            recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group_for_send_recv_overlap)
+            send_recv_ops.append(send_op)
+            send_recv_ops.append(recv_op)
+        else:
+            recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group)
+            send_op = torch.distributed.isend(send_tensor, send_dst, cp_group_for_send_recv_overlap)
+            send_recv_ops.append(recv_op)
+            send_recv_ops.append(send_op)
+        send_recv_reqs = send_recv_ops
     else:
-        recv_op = torch.distributed.P2POp(torch.distributed.irecv,
-                                          recv_tensor,
-                                          recv_src,
-                                          cp_group)
-        send_op = torch.distributed.P2POp(torch.distributed.isend,
-                                          send_tensor,
-                                          send_dst,
-                                          cp_group)
-        send_recv_ops.append(recv_op)
-        send_recv_ops.append(send_op)
-    send_recv_reqs = torch.distributed.batch_isend_irecv(send_recv_ops)
+        if rank % 2 == 0:
+            send_op = torch.distributed.P2POp(torch.distributed.isend,
+                                              send_tensor,
+                                              send_dst,
+                                              cp_group)
+            recv_op = torch.distributed.P2POp(torch.distributed.irecv,
+                                              recv_tensor,
+                                              recv_src,
+                                              cp_group)
+            send_recv_ops.append(send_op)
+            send_recv_ops.append(recv_op)
+        else:
+            recv_op = torch.distributed.P2POp(torch.distributed.irecv,
+                                              recv_tensor,
+                                              recv_src,
+                                              cp_group)
+            send_op = torch.distributed.P2POp(torch.distributed.isend,
+                                              send_tensor,
+                                              send_dst,
+                                              cp_group)
+            send_recv_ops.append(recv_op)
+            send_recv_ops.append(send_op)
+        send_recv_reqs = torch.distributed.batch_isend_irecv(send_recv_ops)
 
     return send_recv_reqs
 
@@ -73,17 +90,20 @@ class AttentionWithCp(torch.autograd.Function):
     """Attention implementation with context parallelism"""
 
     @staticmethod
-    def forward(ctx, q, k, v, n, softmax_scale=None, attn_mask=None, causal=True):
+    def forward(ctx, q, k, v, n, cp_para, softmax_scale=None, attn_mask=None):
+        causal = cp_para['causal']
         cp_group = mpu.get_context_parallel_group()
         cp_size = mpu.get_context_parallel_world_size()
         rank = mpu.get_context_parallel_rank()
         cp_global_ranks = mpu.get_context_parallel_global_ranks()
         send_dst = cp_global_ranks[(rank + 1) % cp_size]
         recv_src = cp_global_ranks[(rank + cp_size - 1) % cp_size]
-        rng_states = [[None, None] for _ in range(cp_size)]
-        assert causal == True, 'causal must be true, causal false will be support later.'
+
+        if softmax_scale is None:
+            head_dim = q.shape[-1] // n
+            softmax_scale = head_dim ** (-0.5)
         if causal and attn_mask is None:
-            attn_mask = torch.ones((q.shape[0], k.shape[0]), dtype=torch.bool, device=q.device)
+            attn_mask = torch.ones((2048, 2048), dtype=torch.bool, device=q.device)
             attn_mask = torch.triu(attn_mask, diagonal=1)
         if causal:
             # split chunk[i]~chunk[cp_size-i-1] into chunk[i] and chunk[cp_size-i-1],, [2s, b, h] -> [2, s, b, h]
@@ -134,6 +154,7 @@ class AttentionWithCp(torch.autograd.Function):
                     pre_tockens=cur_k.shape[0],
                     next_tockens=0 if cur_attn_mask is not None else cur_k.shape[0],
                     keep_prob=1.,
+                    sparse_mode=3 if cur_attn_mask is not None else 0
                 )
 
                 # if i <= rank: [2s, b, h], [b, n, 2s, 8], [b, n, 2s, 8]
@@ -141,8 +162,7 @@ class AttentionWithCp(torch.autograd.Function):
                 cur_attn_out = attn_outs[0] 
                 cur_softmax_max = attn_outs[1]
                 cur_softmax_sum = attn_outs[2]
-                rng_states[i][0] = attn_outs[4]
-                rng_states[i][1] = attn_outs[5]
+
                 if i == 0:
                     attn_out = cur_attn_out
                     softmax_max = cur_softmax_max
@@ -175,8 +195,35 @@ class AttentionWithCp(torch.autograd.Function):
                                                    softmax_max.shape[-1])
                     softmax_sum = softmax_sum.view(softmax_sum.shape[0], softmax_sum.shape[1], -1,
                                                    softmax_sum.shape[-1])
+            else:
+                # [2s, b, h], [b, n, 2s, 8], [b, n, 2s, 8]
+                attn_outs = torch_npu.npu_fusion_attention(
+                    q, cur_k, cur_v, n, "SBH",
+                    pse=None,
+                    padding_mask=None,
+                    atten_mask=None,
+                    scale=softmax_scale,
+                    pre_tockens=cur_k.shape[0],
+                    next_tockens=cur_k.shape[0],
+                    keep_prob=1.,
+                    sparse_mode=0
+                )
+
+                cur_attn_out, cur_softmax_max, cur_softmax_sum = attn_outs[0], attn_outs[1], attn_outs[2]
+                if i == 0:
+                    attn_out = cur_attn_out
+                    softmax_max = cur_softmax_max
+                    softmax_sum = cur_softmax_sum
+                else:
+                    attn_out_updated, softmax_max_updated, softmax_sum_updated = forward_update(
+                        attn_out, softmax_max, softmax_sum,
+                        cur_attn_out, cur_softmax_max, cur_softmax_sum
+                    )
+                    attn_out, softmax_max, softmax_sum = attn_out_updated, softmax_max_updated, softmax_sum_updated
+
         k, v = send_kv[0], send_kv[1]
-        q, k, v = [x.view(-1, *x.shape[2:]) for x in [q, k, v]]
+        if causal:
+            q, k, v = [x.view(-1, *x.shape[2:]) for x in [q, k, v]]
         ctx.save_for_backward(q, k, v, attn_mask, attn_out, softmax_max, softmax_sum)
         ctx.n = n
         ctx.causal = causal
@@ -185,7 +232,6 @@ class AttentionWithCp(torch.autograd.Function):
         ctx.cp_size = cp_size
         ctx.cp_rank = rank
         ctx.cp_global_ranks = cp_global_ranks
-        ctx.rng_states = rng_states
         return attn_out
 
     @staticmethod
@@ -284,8 +330,7 @@ class AttentionWithCp(torch.autograd.Function):
                     scale_value=softmax_scale,
                     pre_tockens=cur_k.shape[0],
                     next_tockens=0 if cur_attn_mask is not None else cur_k.shape[0],
-                    seed=ctx.rng_states[cp_size - i - 1][0],
-                    offset=ctx.rng_states[cp_size - i - 1][1]
+                    sparse_mode=3 if cur_attn_mask is not None else 0
                 )
 
                 cur_dq, cur_dk, cur_dv = attn_grad_outs[0], attn_grad_outs[1], attn_grad_outs[2]
@@ -330,13 +375,49 @@ class AttentionWithCp(torch.autograd.Function):
                         cur_dv = cur_dv.view(dv.shape)
                         dk.add_(cur_dk)
                         dv.add_(cur_dv)
+            else:
+                attn_grad_outs = torch_npu.npu_fusion_attention_grad(
+                    q, cur_k, cur_v, dout, n,
+                    "SBH",
+                    pse=None,
+                    padding_mask=None,
+                    atten_mask=None,
+                    softmax_max=softmax_max,
+                    softmax_sum=softmax_sum,
+                    attention_in=attn_out,
+                    scale_value=softmax_scale,
+                    pre_tockens=cur_k.shape[0],
+                    next_tockens=cur_k.shape[0],
+                    sparse_mode=0
+                )
+                cur_dq, cur_dk, cur_dv = attn_grad_outs[0], attn_grad_outs[1], attn_grad_outs[2]
+                if i == 0:
+                    dq = cur_dq
+                    dk = cur_dk
+                    dv = cur_dv
+                else:
+                    # wait until dKV is received from recv_src
+                    for send_recv_op in send_recv_ops:
+                        send_recv_op.wait()
+                    # only received dkv in the last loop
+                    if i == cp_size - 1:
+                        dkv = recv_dkv
+                    else:
+                        send_kv_dkv = recv_kv_dkv
+                        dkv = send_kv_dkv[1]
+                    dk, dv = dkv[0], dkv[1]
+                    dq.add_(cur_dq)
+                    dk.add_(cur_dk)
+                    dv.add_(cur_dv)
+
         # [2, s, b, h] -> [2s, b, h]
-        dq, dk, dv = [x.view(-1, *x.shape[2:]) for x in [dq, dk, dv]]
+        if causal:
+            dq, dk, dv = [x.view(-1, *x.shape[2:]) for x in [dq, dk, dv]]
         return dq, dk, dv, None, None, None, None
 
 
-def ringattn_context_parallel(q, k, v, n, softmax_scale=None, attn_mask=None, causal=True):
+def ringattn_context_parallel(q, k, v, n, cp_para, softmax_scale=None, attn_mask=None):
     out = AttentionWithCp.apply(
-        q, k, v, n, softmax_scale, attn_mask, causal
+        q, k, v, n, cp_para, softmax_scale, attn_mask
     )
     return out

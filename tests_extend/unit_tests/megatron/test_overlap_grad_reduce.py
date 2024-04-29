@@ -4,6 +4,8 @@ import torch
 import ascendspeed.megatron_adaptor
 from megatron.core.distributed.param_and_grad_buffer import Bucket
 from megatron.core import parallel_state
+from megatron.training.global_vars import set_args
+from megatron.training.arguments import parse_args
 from unit_tests.common import DistributedTest
 from commons import initialize_model_parallel
 
@@ -12,6 +14,8 @@ from commons import initialize_model_parallel
 @pytest.mark.parametrize('use_distributed_optimizer', [True, False])
 class TestOverlapGradReduce(DistributedTest):
     world_size = 8
+    args = parse_args(None, True)
+    set_args(args)
 
     def test_overlap_grad_reduce(self, dtype, use_distributed_optimizer):
         param_size = [8, 8]

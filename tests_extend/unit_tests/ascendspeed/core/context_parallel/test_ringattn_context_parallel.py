@@ -4,6 +4,9 @@ import pytest
 import torch
 import torch_npu
 import torch.distributed as dist
+from ascendspeed import megatron_adaptor
+from megatron.training.global_vars import set_args
+from megatron.training.arguments import parse_args
 from ascendspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
 
 from commons import set_random_seed, initialize_model_parallel
@@ -38,7 +41,11 @@ def get_data_on_all_cp_ranks(data, cp_size, dim=0):
     return out
 
 
-def run_ringattn_cp(cp_size, bs, seq_len, dtype):
+def run_ringattn_cp(cp_size, bs, seq_len, dtype, cp_args):
+    causal, send_recv_overlap = cp_args
+    args = parse_args(None, True)
+    args.use_cp_send_recv_overlap = send_recv_overlap
+    set_args(args)
     initialize_model_parallel(context_parallel_size=cp_size)
     set_random_seed(1234)
 
@@ -51,7 +58,10 @@ def run_ringattn_cp(cp_size, bs, seq_len, dtype):
     v = torch.randn(s, b, n * d, dtype=dtype, device='npu', requires_grad=True)
     dout = torch.randn(s, b, n * d, dtype=dtype, device='npu', requires_grad=True)
 
-    attn_mask = ~torch.tril(torch.ones((seq_len, seq_len), dtype=torch.bool, device=q.device))
+    if causal:
+        attn_mask = ~torch.tril(torch.ones((2048, 2048), dtype=torch.bool, device=q.device))
+    else:
+        attn_mask = None
     out = torch_npu.npu_fusion_attention( \
         q, k, v, n, 'SBH', \
         pse=None, \
@@ -61,7 +71,8 @@ def run_ringattn_cp(cp_size, bs, seq_len, dtype):
         pre_tockens=seq_len, \
         next_tockens=0, \
         keep_prob=1., \
-        inner_precise=0
+        inner_precise=0, \
+        sparse_mode=3 if attn_mask is not None else 0
     )[0]
     out.backward(dout)
 
@@ -73,7 +84,9 @@ def run_ringattn_cp(cp_size, bs, seq_len, dtype):
     for x in [q_, k_, v_]:
         x.requires_grad = True
 
-    out_ = ringattn_context_parallel(q_, k_, v_, n, softmax_scale=scale, attn_mask=None, causal=True)
+    cp_para = dict()
+    cp_para['causal'] = causal
+    out_ = ringattn_context_parallel(q_, k_, v_, n, cp_para, softmax_scale=scale, attn_mask=None)
     out_.backward(dout_)
 
     output_list = [torch.empty_like(out_) for i in range(cp_size)]
@@ -107,10 +120,12 @@ class TestRingAttnCP(DistributedTest):
 
     # @pytest.mark.skipif(DEVICE_NAME != 'Ascend910B', reason='device type is not supported, skip this UT!')
     @pytest.mark.skip(reason='this UT need update for new megatron version')
-    def test_ringattn_context_parallel_seq8192_bs1_fp16(self):
-        run_ringattn_cp(self.world_size, 1, 8192, torch.half)
+    @pytest.mark.parametrize("cp_args", [(True, False), (False, True)])
+    def test_ringattn_context_parallel_seq8192_bs1_fp16(self, cp_args):
+        run_ringattn_cp(self.world_size, 1, 8192, torch.half, cp_args)
 
     # @pytest.mark.skipif(DEVICE_NAME != 'Ascend910B', reason='device type is not supported, skip this UT!')
     @pytest.mark.skip(reason='this UT need update for new megatron version')
-    def test_ringattn_context_parallel_seq8192_bs2_bf16(self):
-        run_ringattn_cp(self.world_size, 2, 8192, torch.bfloat16)
+    @pytest.mark.parametrize("cp_args", [(True, True), (False, False)])
+    def test_ringattn_context_parallel_seq8192_bs2_bf16(self, cp_args):
+        run_ringattn_cp(self.world_size, 2, 8192, torch.bfloat16, cp_args)

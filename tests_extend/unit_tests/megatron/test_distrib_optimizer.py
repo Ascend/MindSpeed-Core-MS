@@ -9,6 +9,7 @@ from megatron.core import DistributedDataParallel as DDP
 from megatron.core.transformer import TransformerConfig, MegatronModule
 from megatron.core.parallel_state import get_data_parallel_group
 from megatron.training.global_vars import set_args
+from megatron.training.arguments import parse_args
 from megatron.core.timers import DummyTimer
 from megatron.core.optimizer import (
     DistributedOptimizer,
@@ -37,18 +38,7 @@ class Timers:
         return self._dummy_timer
 
 
-class DummyArgs:
-    no_gradient_accumulation_fusion = True
-    use_distributed_optimizer = True
-    overlap_param_gather = False
-    barrier_with_L1_time = False
-    fp16 = True
-    reuse_fp32_param = False
-
-
 def step_optimizer(model, use_distributed: bool, seed: int = None):
-    args = DummyArgs()
-    set_args(args)
     set_random_seed(seed)
 
     model = torch.nn.ModuleList(
@@ -99,6 +89,14 @@ def step_optimizer(model, use_distributed: bool, seed: int = None):
 
 class TestDistributedOptimizer(DistributedTest):
     world_size = 8
+    args = parse_args(None, True)
+    args.no_gradient_accumulation_fusion = True
+    args.use_distributed_optimizer = True
+    args.overlap_param_gather = False
+    args.barrier_with_L1_time = False
+    args.fp16 = True
+    args.reuse_fp32_param = False
+    set_args(args)
 
     @pytest.mark.skip(reason='this UT need update for new megatron version')
     def test_distributed_optimizer(self):

@@ -155,6 +155,7 @@ def megatron_core_adaptation(aspm):
     from .core.parallel_state import get_expert_model_parallel_world_size
     from .core.parallel_state import set_expert_model_parallel_rank
     from .core.parallel_state import set_expert_model_parallel_world_size
+    from .core.parallel_state import get_context_parallel_group_for_send_recv_overlap
 
     aspm.register_patch('megatron.core.parallel_state.initialize_model_parallel',
                         initialize_model_parallel_decorator)
@@ -172,6 +173,8 @@ def megatron_core_adaptation(aspm):
                         set_expert_model_parallel_rank)
     aspm.register_patch('megatron.core.parallel_state.set_expert_model_parallel_world_size',
                         set_expert_model_parallel_world_size)
+    aspm.register_patch('megatron.core.parallel_state.get_context_parallel_group_for_send_recv_overlap',
+                        get_context_parallel_group_for_send_recv_overlap)
     aspm.register_patch('megatron.core.mpu', megatron.core.parallel_state)
 
     from .optimizer.optimizer import (mixed_precision_optimizer_step, \

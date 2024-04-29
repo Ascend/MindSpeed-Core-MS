@@ -272,7 +272,9 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
         raise ValueError('Invalid head_dim: {}'.format(head_dim)) from e
 
     if args.context_parallel_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
-        output = ringattn_context_parallel(q, k, v, head_num, scale, None)
+        cp_para = dict()
+        cp_para['causal'] = args.cp_attention_mask_type == 'causal'
+        output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, None)
     else:
         output = torch_npu.npu_fusion_attention( \
             q, k, v, head_num, args.shape_order, \

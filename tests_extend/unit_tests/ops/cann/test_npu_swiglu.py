@@ -42,6 +42,8 @@ class TestNpuSwiglu(DistributedTest):
     @pytest.mark.skipif(DEVICE_NAME != 'Ascend910B', reason='device type is not supported, skip this UT!')
     @pytest.mark.parametrize('dtype', [torch.float16, torch.bfloat16])
     def test_npu_swiglu(self, dtype):
+        args = parse_args(None, True)
+        set_args(args)
         sequence_length, batch_size, hidden_size = 32, 2, 12
         initialize_model_parallel(1, 1)
         self.transformer_config = TransformerConfig(num_layers=2, hidden_size=hidden_size, num_attention_heads=4,
