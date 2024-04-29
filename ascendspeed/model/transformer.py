@@ -523,11 +523,11 @@ def SwitchMLP_init_wrapper(fn):
         super(SwitchMLP, self).__init__()
         config = args[0]
         layer_number = args[1] if len(args) > 1 else None
-        from megatron.core.parallel_state import get_expert_parallel_group
+        from megatron.core.parallel_state import get_expert_model_parallel_group
         from ascendspeed.moe.moe import MoE
         from ascendspeed.moe.mixtral_parallel_mlpbm import MixtralParallelMLPBM
         try:
-            expert_parallel_group = get_expert_parallel_group()
+            expert_parallel_group = get_expert_model_parallel_group()
         except AttributeError:
             expert_parallel_group = None
 
