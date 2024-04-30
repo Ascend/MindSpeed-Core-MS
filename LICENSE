@@ -1,4 +1,4 @@
-BSD 3-Clause License
+The following applies to all files unless otherwise noted;
 
 Copyright (c) 2023, Huawei Technologies Co., Ltd
 Copyright (c) 2022, NVIDIA CORPORATION. 
@@ -36,7 +36,7 @@ project). Files from these organization(s) have notices at the top of each file.
 Below are licenses used in those files, as indicated.
 
 
------------------------------ LICENSE FOR Microsoft code  -----------------------------
+----------------------------- LICENSE FOR Microsoft code, Facebook, huggingface and Google Research code  -----------------------------
 
 
                                  Apache License

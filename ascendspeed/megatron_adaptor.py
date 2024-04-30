@@ -222,8 +222,6 @@ def megatron_training_adaptation(aspm):
                         core_transformer_config_from_yaml_wrapper)
     aspm.register_patch('megatron.training.initialize._compile_dependencies', _compile_dependencies)
     aspm.register_patch('megatron.training.utils.get_batch_on_this_cp_rank', get_batch_on_this_cp_rank)
-    aspm.register_patch('megatron.training.initialize.parse_args',
-                        parse_args_decorator)
     aspm.register_patch('megatron.training.arguments.parse_args',
                         parse_args_decorator)
     aspm.register_patch('megatron.training.initialize.validate_args',
