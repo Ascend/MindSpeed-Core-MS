@@ -117,19 +117,20 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 | Megatron 序列并行  | [link](https://github.com/NVIDIA/Megatron-LM) |
 | Megatron 重计算  | [link](https://github.com/NVIDIA/Megatron-LM) |
 | Megatron 分布式优化器  | [link](https://github.com/NVIDIA/Megatron-LM) |
-| Megatron 异步DDP  | [link](https://github.com/NVIDIA/Megatron-LM) |
+| Megatron 异步DDP  | [link](docs/features/async-ddp.md) |
 | Ascend TP 重计算通信优化 | [link](docs/features/recomputation-communication.md) |
 | Ascend 内存碎片优化 | [link](docs/features/memory-fragmentation.md) |
 | Ascend 自适应选择重计算 | [link](docs/features/adaptive-recompute.md) |
 | Ascend 计算通信并行优化 | [link](docs/features/communication-over-computation.md) |
 | Ascend BF16 参数副本复用 | [link](docs/features/reuse-fp32-param.md) |
 | Ascend rms_norm 融合算子 | [link](docs/features/rms_norm.md) |
+| Ascend swiglu 融合算子 | [link](docs/features/swiglu.md) |
 | Ascend rotary_embedding 融合算子 | [link](docs/features/rotary-embedding.md) |
 | Ascend MoE token重排性能优化   | [link](docs/features/token-rearrange.md)                |
 | 【Prototype】Ulysses 长序列并行 | [link](docs/features/ulysses-context-parallel.md) |
 | 【Prototype】Ring Attention 长序列并行 | [link](docs/features/ring-attention-context-parallel.md) |
 | 【Prototype】Ascend MC2 | [link](docs/features/mc2.md) |
-| 【Prototype】alibi | 暂无 |
+| 【Prototype】alibi | [link](docs/features/alibi.md) |
 | 【Prototype】其他昇腾亲和优化 | 暂无 |
 
 # 自定义算子
