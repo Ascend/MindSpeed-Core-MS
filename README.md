@@ -130,6 +130,7 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 | 算子                         | 介绍                                             |
 |----------------------------|------------------------------------------------|
 | npu_dropout_add_layer_norm | [link](docs/ops/npu_dropout_add_layer_norm.md) |
+| 【Prototype】fusion_attention        | [link](docs/ops/fusion_attention.md)        |
 | 【Prototype】rms_norm                   | [link](docs/ops/rms_norm.md)                   |
 | 【Prototype】swiglu                     | [link](docs/ops/swiglu.md)                     |
 | 【Prototype】lcal_coc                   | [link](docs/ops/lcal_coc.md)                   |
