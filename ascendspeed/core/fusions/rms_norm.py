@@ -1,15 +1,17 @@
 import os
+
 import torch
+import torch_npu
 from torch import nn
 from megatron.legacy.model.rms_norm import RMSNorm
 from megatron.training import get_args
-import torch_npu
 
 
 def rms_norm_init(self,
                   dim: int,
                   eps: float = 1e-6,
-                  sequence_parallel: bool = False):
+                  sequence_parallel: bool = False,
+                  use_fused_rmsnorm: bool = False):
     """RMS Normaliation module
 
     Arguments:
@@ -20,7 +22,7 @@ def rms_norm_init(self,
     """
     super(RMSNorm, self).__init__()
     args = get_args()
-    self.use_fused_rmsnorm = args.use_fused_rmsnorm
+    self.use_fused_rmsnorm = args.use_fused_rmsnorm or use_fused_rmsnorm
     self.eps = eps
     self.weight = nn.Parameter(torch.ones(dim))
 

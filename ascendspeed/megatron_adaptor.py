@@ -24,6 +24,17 @@ def type_wrapper(fn):
     return wrapper
 
 
+def version_wrapper(fn):
+    @wraps(fn)
+    def wrapper(name, *args, **kwargs):
+        if name == 'transformer-engine':
+            return '0.0'
+        res = fn(name, *args, **kwargs)
+        return res
+
+    return wrapper
+
+
 # Patch view method to ensure tensor is contiguous before performing view
 def ensure_contiguous_wrapper(fn):
     def wrapper(tensor, *args, **kwargs):
@@ -75,6 +86,7 @@ def repeat_interleave(inputs, repeats, dim):
 
 def te_adaptation(aspm):
     # Need replace modules before import megatron
+    aspm.register_patch('importlib.metadata.version', version_wrapper)
     aspm.register_patch('transformer_engine.pytorch.LayerNormLinear', torch.nn.Module, create_dummy=True)
     aspm.register_patch('transformer_engine.pytorch.DotProductAttention', torch.nn.Module, create_dummy=True)
     aspm.register_patch('transformer_engine.pytorch.Linear', torch.nn.Module, create_dummy=True)
@@ -110,9 +122,10 @@ def megatron_core_adaptation(aspm):
     from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb, RotaryEmbedding_wrapper
     from .core.transformer.attention import attention_wrapper
     from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
-    from ascendspeed.core.transformer.transformer_block import DummyTENorm, final_layernorm_wrapper
+    from ascendspeed.core.transformer.custom_layers.transformer_engine import PTNorm
     from ascendspeed.core.transformer.dot_product_attention import dot_product_attention_forward_wrapper
     from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
+    from ascendspeed.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec_wrapper
 
     aspm.register_patch('megatron.core.tensor_parallel.random._set_cuda_rng_state', _set_cuda_rng_state)
     aspm.register_patch('megatron.core.tensor_parallel.random.CheckpointFunction.backward', backward)
@@ -139,9 +152,9 @@ def megatron_core_adaptation(aspm):
 
     aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_with_transformer_engine_spec',
                         get_gpt_layer_local_spec)
-    aspm.register_patch('megatron.core.transformer.custom_layers.transformer_engine.TENorm', DummyTENorm)
-    aspm.register_patch('megatron.core.transformer.transformer_block.TransformerBlock._build_layers',
-                        final_layernorm_wrapper)
+    aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_local_spec',
+                        get_gpt_layer_local_spec_wrapper)
+    aspm.register_patch('megatron.core.transformer.custom_layers.transformer_engine.TENorm', PTNorm)
     aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.forward',
                         dot_product_attention_forward_wrapper)
 
