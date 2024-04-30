@@ -118,6 +118,8 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 | Ascend swiglu 融合算子 | [link](docs/features/swiglu.md) |
 | Ascend rotary_embedding 融合算子 | [link](docs/features/rotary-embedding.md) |
 | Ascend MoE token重排性能优化   | [link](docs/features/token-rearrange.md)                |
+| flash attention 适配              | [link](docs/features/flash-attention.md)                 |
+| 权重更新通信隐藏                        | [link](docs/features/async-ddp-param-gather.md)          |
 | 【Prototype】Ulysses 长序列并行 | [link](docs/features/ulysses-context-parallel.md) |
 | 【Prototype】Ring Attention 长序列并行 | [link](docs/features/ring-attention-context-parallel.md) |
 | 【Prototype】Ascend MC2 | [link](docs/features/mc2.md) |
