@@ -55,7 +55,7 @@ class TestRegisterPatches(DistributedTest):
         assert TestClass.test_variable == 2
 
     def test_import_no_exist_function(self):
-        aspm.register_patch('no_exist_module.module.no_exist_function')
+        aspm.register_patch('no_exist_module.module.no_exist_function', create_dummy=True)
         aspm.apply_patches()
 
         from no_exist_module.module import no_exist_function
@@ -63,7 +63,7 @@ class TestRegisterPatches(DistributedTest):
             no_exist_function()
 
     def test_import_no_exist_module(self):
-        aspm.register_patch('no_exist_module')
+        aspm.register_patch('no_exist_module', create_dummy=True)
         aspm.apply_patches()
         import no_exist_module
 

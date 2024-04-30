@@ -75,27 +75,27 @@ def repeat_interleave(inputs, repeats, dim):
 
 def te_adaptation(aspm):
     # Need replace modules before import megatron
-    aspm.register_patch('transformer_engine.pytorch.LayerNormLinear', torch.nn.Module)
-    aspm.register_patch('transformer_engine.pytorch.DotProductAttention', torch.nn.Module)
-    aspm.register_patch('transformer_engine.pytorch.Linear', torch.nn.Module)
-    aspm.register_patch('flash_attn.flash_attn_interface.flash_attn_unpadded_func')
+    aspm.register_patch('transformer_engine.pytorch.LayerNormLinear', torch.nn.Module, create_dummy=True)
+    aspm.register_patch('transformer_engine.pytorch.DotProductAttention', torch.nn.Module, create_dummy=True)
+    aspm.register_patch('transformer_engine.pytorch.Linear', torch.nn.Module, create_dummy=True)
+    aspm.register_patch('flash_attn.flash_attn_interface.flash_attn_unpadded_func', create_dummy=True)
 
 
 def apex_adaptation(aspm):
     from .optimizer.adamw import AdamW
     from .core.fusions.fused_layer_norm import fused_layer_norm_affine
-    aspm.register_patch('apex.optimizers.FusedAdam', AdamW)
-    aspm.register_patch('amp_C.multi_tensor_l2norm', multi_tensor_l2norm)
-    aspm.register_patch('amp_C.multi_tensor_scale', multi_tensor_scale)
-    aspm.register_patch('fused_layer_norm_cuda')
-    aspm.register_patch('apex.multi_tensor_apply.multi_tensor_applier', multi_tensor_applier)
-    aspm.register_patch('apex.normalization.fused_layer_norm.fused_layer_norm_affine', fused_layer_norm_affine)
+    aspm.register_patch('apex.optimizers.FusedAdam', AdamW, create_dummy=True)
+    aspm.register_patch('amp_C.multi_tensor_l2norm', multi_tensor_l2norm, create_dummy=True)
+    aspm.register_patch('amp_C.multi_tensor_scale', multi_tensor_scale, create_dummy=True)
+    aspm.register_patch('fused_layer_norm_cuda', create_dummy=True)
+    aspm.register_patch('apex.multi_tensor_apply.multi_tensor_applier', multi_tensor_applier, create_dummy=True)
+    aspm.register_patch('apex.normalization.fused_layer_norm.fused_layer_norm_affine', fused_layer_norm_affine, create_dummy=True)
 
 
 def torch_adaptation(aspm):
     aspm.register_patch('torch.nn.parameter.Parameter.type', type_wrapper)
     aspm.register_patch('torch.Tensor.type', type_wrapper)
-    aspm.register_patch('torch.Tensor.type', ensure_contiguous_wrapper)
+    aspm.register_patch('torch.Tensor.view', ensure_contiguous_wrapper)
     aspm.register_patch('torch.Tensor.repeat_interleave', repeat_interleave)
 
 
@@ -274,8 +274,6 @@ def ascend_adaptation(aspm):
         import megatron.training.initialize
         aspm.register_patch('megatron.training.initialize_megatron', megatron.training.initialize.initialize_megatron)
 
-    # accelerate package will check TE on sys.modules，so we need remove this patch
-
 
 def exe_adaptation():
     from ascendspeed.patch_utils import AscendSpeedPatchesManager as aspm
@@ -289,6 +287,7 @@ def exe_adaptation():
     ascend_adaptation(aspm)
     aspm.apply_patches()
 
+    # accelerate package will check TE on sys.modules，so we need remove this patch
     del sys.modules['transformer_engine']
 
 

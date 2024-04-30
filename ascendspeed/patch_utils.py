@@ -17,7 +17,7 @@ def dummy_function_wrapper(func_name):
 
 
 class Patch:
-    def __init__(self, orig_func_name, new_func):
+    def __init__(self, orig_func_name, new_func, create_dummy):
         split_name = orig_func_name.rsplit('.', 1)
         if len(split_name) == 1:
             self.orig_module_name, self.orig_func_name = orig_func_name, None
@@ -32,6 +32,7 @@ class Patch:
             new_func = dummy_function_wrapper(orig_func_name)
         self.set_patch_func(new_func)
         self.is_applied = False
+        self.create_dummy = create_dummy
 
     @property
     def orig_func_id(self):
@@ -54,7 +55,7 @@ class Patch:
         if self.is_applied:
             return
 
-        self.orig_module, self.orig_func = Patch.parse_path(self.orig_module_name, self.orig_func_name)
+        self.orig_module, self.orig_func = Patch.parse_path(self.orig_module_name, self.orig_func_name, self.create_dummy)
         if self.patch_func is None:
             self.patch_func = self.orig_func
 
@@ -70,15 +71,17 @@ class Patch:
         self.is_applied = True
 
     @staticmethod
-    def parse_path(module_path, function_name):
+    def parse_path(module_path, function_name, create_dummy):
         modules = module_path.split('.')
         for i in range(1, len(modules) + 1):
             parent = '.'.join(modules[:i - 1])
             path = '.'.join(modules[:i])
             try:
                 importlib.import_module(path)
-            except ModuleNotFoundError:
+            except ModuleNotFoundError as e:
                 if not parent or not hasattr(importlib.import_module(parent), modules[i - 1]):
+                    if not create_dummy:
+                        raise ModuleNotFoundError(e) from e
                     sys.modules[path] = types.ModuleType(path)
                     sys.modules[path].__file__ = 'ascendspeed.dummy_module.py'
                     if parent:
@@ -99,9 +102,9 @@ class AscendSpeedPatchesManager:
     patches_info = {}
 
     @staticmethod
-    def register_patch(orig_func_name, new_func=None, force_patch=False):
+    def register_patch(orig_func_name, new_func=None, force_patch=False, create_dummy=False):
         if orig_func_name not in AscendSpeedPatchesManager.patches_info:
-            AscendSpeedPatchesManager.patches_info[orig_func_name] = Patch(orig_func_name, new_func)
+            AscendSpeedPatchesManager.patches_info[orig_func_name] = Patch(orig_func_name, new_func, create_dummy)
         else:
             AscendSpeedPatchesManager.patches_info.get(orig_func_name).set_patch_func(new_func, force_patch)
 
