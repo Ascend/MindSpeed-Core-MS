@@ -44,7 +44,7 @@ wget https://huggingface.co/datasets/tatsu-lab/alpaca/resolve/main/data/train-00
 cd ..
 # 处理数据   
 mkdir ./dataset/Mixtral-8x7B/
-python ./tools/preprocess_data.py \
+python ./tests_extend/tools/preprocess_data.py \
     --input ./dataset/train-00000-of-00001-a09b74b3ef9c3b56.parquet \
     --tokenizer-name-or-path ./model_from_hf/Mixtral-8x7B/ \
     --output-prefix ./dataset/Mixtral-8x7B/alpaca \
@@ -57,7 +57,7 @@ python ./tools/preprocess_data.py \
 
 ```
 # 拷贝mixtral训练所用脚本到Megatron-LM目录下
-cp ../AscendSpeed/tests_extend/system_tests/pretrain_mixtral.sh .
+cp ../AscendSpeed/tests_extend/system_tests/mixtral/pretrain_mixtral.sh .
 
 ```
 
@@ -103,4 +103,4 @@ seed_all(mode=True)
 bash pretrain_mixtral.sh
 ```
 
-**注意**：如果使用多机训练，需要设置多机数据共享，非主节点通过数据共享读取主节点数据。或者，直接将主节点生成的数据复制到非主节点。
+**注意**：如果使用多机训练，需要设置多机数据共享，非主节点通过数据共享读取主节点数据。或者，直接将主节点生成的数据复制到非主节点。多机训练时，在每台机器按照如上步骤准备环境，同时启动训练任务。
