@@ -30,7 +30,7 @@
 
 ## 使用方法 —— 在ModelLink中进行整网训练
 
-计算通信并行优化算法通过在ModelLink的训练脚本中配置环境变量来进行使能，需要安装ascendspeed。
+计算通信并行优化算法通过在训练脚本(AscendSpeed/tests_extend/xxx/xxx.sh)中配置环境变量来进行使能，需要安装ascendspeed。
 
 当前计算通信并行有两种实现方法：python脚本使能、融合算子使能，两者选其一即可。两个方式都需要替换原Megatron框架中的ColumnParallelLinear和RowParallelLinear这两个class的forward函数，替换脚本已经根据AscendSpeed指定Megatron版本进行编码和适配，位于ascendspeed/core/tensor_parallel/lcal_coc/目录下。
 

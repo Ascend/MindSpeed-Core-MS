@@ -106,8 +106,8 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 | Megatron 流水并行  | [link](docs/features/pipeline-parallel.md) |
 | Megatron 虚拟流水并行  | [link](docs/features/virtual-pipeline-parallel.md) |
 | Megatron 序列并行  | [link](docs/features/sequence-parallel.md) |
-| Megatron 重计算  | [link](https://github.com/NVIDIA/Megatron-LM) |
-| Megatron 分布式优化器  | [link](https://github.com/NVIDIA/Megatron-LM) |
+| Megatron 重计算  | [link](docs/features/recomputation.md) |
+| Megatron 分布式优化器  | [link](docs/features/distributed-optimizer.md) |
 | Megatron 异步DDP  | [link](docs/features/async-ddp.md) |
 | Ascend TP 重计算通信优化 | [link](docs/features/recomputation-communication.md) |
 | Ascend 内存碎片优化 | [link](docs/features/memory-fragmentation.md) |
@@ -122,6 +122,7 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 | 【Prototype】Ring Attention 长序列并行 | [link](docs/features/ring-attention-context-parallel.md) |
 | 【Prototype】Ascend MC2 | [link](docs/features/mc2.md) |
 | 【Prototype】alibi | [link](docs/features/alibi.md) |
+| 【Prototype】lcal_coc | [link](docs/features/communication-over-computation.md) |
 | 【Prototype】其他昇腾亲和优化 | 暂无 |
 
 # 自定义算子

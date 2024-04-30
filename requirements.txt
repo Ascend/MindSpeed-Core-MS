@@ -13,3 +13,4 @@ einops
 scipy
 sentencepiece
 pytest
+transformers
