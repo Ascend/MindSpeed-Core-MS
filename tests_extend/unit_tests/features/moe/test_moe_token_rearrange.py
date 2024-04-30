@@ -13,7 +13,7 @@ from megatron.legacy.model.transformer import ParallelMLP
 from megatron.core.transformer import TransformerConfig
 from megatron.training.global_vars import set_args
 from megatron.training.arguments import parse_args
-from megatron.core.parallel_state import get_expert_parallel_group, destroy_model_parallel, initialize_model_parallel
+from megatron.core.parallel_state import get_expert_model_parallel_group, destroy_model_parallel, initialize_model_parallel
 
 
 class TestMOELayer(DistributedTest):
@@ -39,7 +39,7 @@ class TestMOELayer(DistributedTest):
             ep_size=self.ep_size,
             num_local_experts=self.num_experts // self.ep_size
         ).npu()
-        expert_parallel_group = get_expert_parallel_group()
+        expert_parallel_group = get_expert_model_parallel_group()
         moe_layer_module.set_ep_group(expert_parallel_group)
 
         return moe_layer_module(input_data)

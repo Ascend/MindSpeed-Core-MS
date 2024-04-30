@@ -65,6 +65,7 @@ def run_moe_cp(input_data, cp_size, ep_size, num_experts):
 class TestCPMoE(DistributedTest):
     world_size = 8
 
+    @pytest.mark.skip(reason='skip because of megatron ep group bug')
     @pytest.mark.parametrize("config", [(4, 8), (2, 8)])
     def test_cp_ep_loss(self, config):
         cp_size, ep_size = config

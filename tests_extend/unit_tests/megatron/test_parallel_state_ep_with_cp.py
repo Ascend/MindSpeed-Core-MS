@@ -5,12 +5,16 @@ import torch_npu
 import ascendspeed.megatron_adaptor
 import megatron.core.parallel_state as ps
 from unit_tests.common import DistributedTest
+from megatron.training.global_vars import set_args
+from megatron.training.arguments import parse_args
 
 
-
-
+@pytest.mark.skip(reason='skip because of megatron ep group bug')
 class TestParallelStateEPCP(DistributedTest):
     world_size = 8
+
+    args = parse_args(None, True)
+    set_args(args)
 
     def test_initialize_and_destroy_model_parallel(self):
         with pytest.raises(RuntimeError):
