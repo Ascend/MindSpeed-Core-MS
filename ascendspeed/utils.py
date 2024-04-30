@@ -41,7 +41,7 @@ def get_batch_on_this_cp_rank(batch):
                 seq_dim = 1
                 old_seq_len = val.shape[seq_dim]
                 new_seq_len = old_seq_len // cp_size
-                val = val[:, new_seq_len * cp_rank:new_seq_len * (cp_rank + 1)]
+                val = val[:, new_seq_len * cp_rank:new_seq_len * (cp_rank + 1)].contiguous()
                 batch[key] = val
 
     return batch

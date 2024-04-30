@@ -145,6 +145,11 @@ def megatron_core_adaptation(aspm):
     aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.forward',
                         dot_product_attention_forward_wrapper)
 
+    # Bugfix for Megatron-LM core 0.6.0, to be removed for next version.
+    from .core.parallel_state import initialize_model_parallel
+
+    aspm.register_patch('megatron.core.parallel_state.initialize_model_parallel', initialize_model_parallel)
+
     # MoE relative.
     from .core.parallel_state import initialize_model_parallel_decorator
     from .core.parallel_state import destroy_model_parallel_decorator
