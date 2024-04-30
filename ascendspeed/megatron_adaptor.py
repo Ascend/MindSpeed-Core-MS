@@ -224,7 +224,7 @@ def megatron_training_adaptation(aspm):
     aspm.register_patch('megatron.training.utils.get_batch_on_this_cp_rank', get_batch_on_this_cp_rank)
     aspm.register_patch('megatron.training.arguments.parse_args',
                         parse_args_decorator)
-    aspm.register_patch('megatron.training.initialize.validate_args',
+    aspm.register_patch('megatron.training.arguments.validate_args',
                         validate_args_decorator)
     aspm.register_patch('megatron.training.yaml_arguments.validate_yaml',
                         validate_args_decorator)
