@@ -13,7 +13,7 @@ def extra_args_provider_decorator(extra_args_provider):
     return wrapper
 
 
-def parse_args_decorator(parse_args):
+def parse_args_wrapper(parse_args):
     @wraps(parse_args)
     def wrapper(extra_args_provider=None, ignore_unknown_args=False):
         decorated_provider = extra_args_provider_decorator(extra_args_provider)
@@ -175,7 +175,7 @@ def core_transformer_config_from_args_wrapper(fn):
     return wrapper
 
 
-def validate_args_decorator(validate_args):
+def validate_args_wrapper(validate_args):
     @wraps(validate_args)
     def wrapper(args, defaults):
         overlap_param_gather_without_mcore_models = False

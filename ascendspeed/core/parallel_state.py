@@ -25,7 +25,7 @@ import megatron
 _CONTEXT_PARALLEL_GROUP_FOR_SEND_RECV_OVERLAP = None
 
 
-def initialize_model_parallel_decorator(initialize_model_parallel):
+def initialize_model_parallel_wrapper(initialize_model_parallel):
     @wraps(initialize_model_parallel)
     def wrapper(
             tensor_model_parallel_size: int = 1,
@@ -197,8 +197,6 @@ def initialize_context_parallel_group_for_send_recv_overlap(
                     _CONTEXT_PARALLEL_GROUP_FOR_SEND_RECV_OVERLAP = group_send_recv_overlap
 
 
-
-
 def get_context_parallel_group_for_send_recv_overlap(check_initialized=True):
     """Get the context parallel group for send-recv overlap the caller rank belongs to."""
     if check_initialized:
@@ -208,7 +206,7 @@ def get_context_parallel_group_for_send_recv_overlap(check_initialized=True):
     return _CONTEXT_PARALLEL_GROUP_FOR_SEND_RECV_OVERLAP
 
 
-def destroy_model_parallel_decorator(destroy_model_parallel):
+def destroy_model_parallel_wrapper(destroy_model_parallel):
     @wraps(destroy_model_parallel)
     def wrapper():
         destroy_model_parallel()

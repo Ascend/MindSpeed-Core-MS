@@ -21,7 +21,8 @@ def apply_fused_rotary_pos_emb(t, freqs, config):
     t = (t * cos_) + (_rotate_half(t, config.rotary_interleaved) * sin_)
     return torch.cat((t, t_pass), dim=-1)
 
-def RotaryEmbedding_wrapper(fn):
+
+def rotary_embedding_init_wrapper(fn):
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         _args = get_args()

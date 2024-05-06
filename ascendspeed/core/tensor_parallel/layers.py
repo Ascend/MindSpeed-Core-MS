@@ -13,7 +13,7 @@ from megatron.core.tensor_parallel.layers import (linear_with_grad_accumulation_
                                                   linear_with_frozen_weight)
 
 
-def VocabParallelEmbeddingForward(self, input_):
+def vocab_parallel_embedding_forward(self, input_):
 
     if torch.any(
         (input_ < 0) | (input_ >= self.num_embeddings)

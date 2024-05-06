@@ -1,5 +1,5 @@
 import os
-
+from functools import wraps
 import torch
 import torch_npu
 from torch import nn
@@ -7,26 +7,13 @@ from megatron.legacy.model.rms_norm import RMSNorm
 from megatron.training import get_args
 
 
-def rms_norm_init(self,
-                  dim: int,
-                  eps: float = 1e-6,
-                  sequence_parallel: bool = False,
-                  use_fused_rmsnorm: bool = False):
-    """RMS Normaliation module
-
-    Arguments:
-        dim (int): The width of input, i.e. hidden size
-        eps (float): epsilon to use for the norm, default to 1e-6
-        sequence_parallel (bool): Set to true if sequence parallelism is being used,
-            this marks the weights as needing to be allreduced.
-    """
-    super(RMSNorm, self).__init__()
-    args = get_args()
-    self.use_fused_rmsnorm = args.use_fused_rmsnorm or use_fused_rmsnorm
-    self.eps = eps
-    self.weight = nn.Parameter(torch.ones(dim))
-
-    setattr(self.weight, 'sequence_parallel', sequence_parallel)
+def rms_norm_init_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        fn(self, *args, **kwargs)
+        args = get_args()
+        self.use_fused_rmsnorm = args.use_fused_rmsnorm
+    return wrapper
 
 
 def rms_norm_forward(self, x):

@@ -4,7 +4,9 @@ from functools import wraps
 from ascendspeed.core.memory.memory_fragmentation.pluggable_allocator_adpator import load_memory_fragmentation_module
 
 is_optimizer_init_end = False
-def optimizer_init_wrap(step):
+
+
+def optimizer_init_wrapper(step):
     @wraps(step)
     def rec_wrap(*args, **kwargs):
         global is_optimizer_init_end            

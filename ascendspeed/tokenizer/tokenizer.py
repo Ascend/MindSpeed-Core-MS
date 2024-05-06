@@ -21,7 +21,7 @@ from megatron.training.tokenizer.tokenizer import _vocab_size_with_padding
 from megatron.core.datasets.megatron_tokenizer import MegatronTokenizer
 
 
-def build_tokenizer_decorator(build_tokenizer):
+def build_tokenizer_wrapper(build_tokenizer):
     """Initialize tokenizer."""
     @wraps(build_tokenizer)
     def wrapper(args, **kargs):

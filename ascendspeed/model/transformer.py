@@ -92,7 +92,7 @@ def _build_alibi_tensor(max_seq_len, num_attention_heads, square_alibi_mask, fil
     return alibi
 
 
-def core_attention_wrapper(fn):
+def core_attention_init_wrapper(fn):
     @wraps(fn)
     def wrapper(self, *arg, **kwargs):
         fn(self, *arg, **kwargs)
@@ -241,7 +241,7 @@ def core_attention_forward(self, query_layer, key_layer, value_layer, attention_
     return context_layer
 
 
-def parallel_mlp_wrapper(fn):
+def parallel_mlp_init_wrapper(fn):
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         fn(self, *args, **kwargs)
@@ -291,7 +291,7 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
     return output
 
 
-def ParallelAttention_wrapper(fn):
+def parallel_attention_init_wrapper(fn):
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         fn(self, *args, **kwargs)
@@ -512,7 +512,7 @@ def parallel_attention_forward(self, hidden_states, attention_mask,
     return output, bias
 
 
-def SwitchMLP_init_wrapper(fn):
+def switch_mlp_init_wrapper(fn):
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         global_args = get_args()
@@ -564,7 +564,7 @@ def SwitchMLP_init_wrapper(fn):
     return wrapper
 
 
-def SwitchMLP_forward_wrapper(fn):
+def switch_mlp_forward_wrapper(fn):
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         global_args = get_args()

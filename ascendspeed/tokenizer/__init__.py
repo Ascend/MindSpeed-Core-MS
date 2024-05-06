@@ -14,4 +14,4 @@
 # limitations under the License.
 
 
-from .tokenizer import build_tokenizer_decorator
+from .tokenizer import build_tokenizer_wrapper

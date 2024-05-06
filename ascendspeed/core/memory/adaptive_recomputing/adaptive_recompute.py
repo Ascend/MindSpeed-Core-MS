@@ -667,7 +667,7 @@ def is_activate_adaptive_recompute():
     return True, profiling_step
 
 
-def setup_model_and_optimizer_decorator(setup_model_and_optimizer):
+def setup_model_and_optimizer_wrapper(setup_model_and_optimizer):
     @wraps(setup_model_and_optimizer)
     def wrapper(*args, **kargs):
         models, optimizer, opt_param_scheduler = setup_model_and_optimizer(*args, **kargs)

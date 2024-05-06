@@ -4,7 +4,7 @@ from megatron.core import mpu
 from ascendspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 
 
-def attention_wrapper(fn):
+def attention_init_wrapper(fn):
     @wraps(fn)
     def wrapper(self, *arg, **kwargs):
         fn(self, *arg, **kwargs)

@@ -19,7 +19,8 @@ class MemoryRecorder(object):
             next_name = prefix_name + "." + name if prefix_name != "" else name
             self.register_recursive_hook(next_name, module)
 
-def memory_recorder_wrap(setup_model_and_optimizer):
+
+def memory_recorder_wrapper(setup_model_and_optimizer):
     @wraps(setup_model_and_optimizer)
     def get_model_hook_func(*args, **kwargs):
         load_memory_fragmentation_module().precise_match_start()
@@ -34,6 +35,7 @@ def memory_recorder_wrap(setup_model_and_optimizer):
         return models, optimizer, lr_scheduler
 
     return get_model_hook_func
+
 
 def wrapper(f):
     def rec_wrap(*args, **kwargs):

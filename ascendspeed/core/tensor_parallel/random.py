@@ -39,7 +39,7 @@ def _set_cuda_rng_state(new_state, device=-1):
     _lazy_call(cb)
 
 
-def backward(ctx, *args):
+def checkpoint_function_backward(ctx, *args):
     global_args = get_args()
     if not torch.autograd._is_checkpoint_valid():
         raise RuntimeError(
