@@ -34,10 +34,11 @@ def npu_gmm(x, weight, *, bias=None, group_list=None, group_type=0):
         raise TypeError("arg0 must be a torch.Tensor, got {}".format(type(x)))
     if not isinstance(weight, torch.Tensor):
         raise TypeError("arg1 must be a torch.Tensor, got {}".format(type(weight)))
-    if not isinstance(bias, (torch.Tensor, None)):
+    if not isinstance(bias, (torch.Tensor, type(None))):
         raise TypeError("bias must be a torch.Tensor or None, got {}".format(type(bias)))
-    if not isinstance(group_list, (List[int], None)):
+    if not (isinstance(group_list, type(None)) \
+        or (isinstance(group_list, list) and all(isinstance(x, int) for x in group_list))):
         raise TypeError("group_list must be a List of int or None, got {}".format(type(group_list)))
-    if not isinstance(group_type, (int, None)):
+    if not isinstance(group_type, (int, type(None))):
         raise TypeError("group_type must be an int or None, got {}".format(type(group_type)))
     return GMMFunction.apply(x, weight, bias, group_list, group_type)
