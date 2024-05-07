@@ -542,7 +542,10 @@ def switch_mlp_init_wrapper(fn):
                 eval_capacity_factor=global_args.moe_train_capacity_factor,
                 aux_loss_coef=global_args.moe_aux_loss_coeff,
                 ep_group=expert_parallel_group,
-                noisy_gate_policy=global_args.noisy_gate_policy
+                noisy_gate_policy=global_args.noisy_gate_policy,
+                no_drop=global_args.moe_no_drop,
+                dynamic_padding=global_args.moe_dynamic_padding,
+                use_sinkhorn=global_args.moe_use_sinkhorn
             )
         else:
             if layer_number % global_args.expert_interval == 0:
@@ -556,7 +559,10 @@ def switch_mlp_init_wrapper(fn):
                     eval_capacity_factor=global_args.moe_train_capacity_factor,
                     aux_loss_coef=global_args.moe_aux_loss_coeff,
                     ep_group=expert_parallel_group,
-                    noisy_gate_policy=global_args.noisy_gate_policy
+                    noisy_gate_policy=global_args.noisy_gate_policy,
+                    no_drop=global_args.moe_no_drop,
+                    dynamic_padding=global_args.moe_dynamic_padding,
+                    use_sinkhorn=global_args.moe_use_sinkhorn
                 )
             else:
                 self.block = ParallelMLP(config)

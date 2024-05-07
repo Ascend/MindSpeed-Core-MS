@@ -10,6 +10,9 @@ class Config:
                  aux_loss_coef=0.0,
                  z_loss_coef=0.0,
                  noisy_gate_policy=None,
+                 no_drop=False,
+                 dynamic_padding=False,
+                 use_sinkhorn=False,
                  ):
         self.hidden_size = hidden_size
         self.num_experts = num_experts
@@ -21,3 +24,7 @@ class Config:
         self.aux_loss_coef = aux_loss_coef
         self.z_loss_coef = z_loss_coef
         self.noisy_gate_policy = noisy_gate_policy
+        self.no_drop = no_drop
+        self.dynamic_padding = dynamic_padding
+        self.use_sinkhorn = use_sinkhorn
+        self.dynamic_capacity = None

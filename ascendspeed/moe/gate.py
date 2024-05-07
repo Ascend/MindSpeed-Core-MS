@@ -12,7 +12,9 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Module
+import torch.distributed as dist
 from megatron.training import get_args
+from megatron.core.transformer.moe.moe_utils import sinkhorn
 
 from .config import Config
 from .utils import gumbel_rsample, _capacity, einsum, _one_hot_to_float, MoEAuxLossAutoScaler
@@ -56,6 +58,8 @@ class TopKGate(Module):
         input_fp32 = gate_input.float()
         logits = self.weight(input_fp32)
 
+        if self.config.use_sinkhorn:
+            logits = sinkhorn(logits)
         if self.config.topk == 1:
             gate_output = top1gating(logits, self.config)
         else:
@@ -83,6 +87,29 @@ def top1gating(logits: Tensor, config: Config) -> Tuple[Tensor, ...]:
     token_sel_expert_idx = torch.argmax(final_logits, dim=1)
     num_experts = int(token_sel_expert_weights.shape[1])
     token_sel_expert_mask = F.one_hot(token_sel_expert_idx, num_classes=num_experts)
+
+    # if we don't want to drop any tokens
+    if config.no_drop:
+        # gating decisions
+        exp_counts = torch.sum(token_sel_expert_mask, dim=0).detach()
+        if config.dynamic_padding:
+            new_capacity = torch.max(exp_counts)
+            cur_capacity = new_capacity.item()
+            capacity = config.dynamic_capacity.to(logits.device)
+
+            flag = cur_capacity > capacity
+            dist.reduce(flag, dst=0, op=torch.distributed.ReduceOp.SUM, group=dist.group.WORLD)
+            dist.broadcast(flag, src=0, group=dist.group.WORLD)
+            if flag:
+                dist.all_reduce(new_capacity, op=dist.ReduceOp.MAX, group=dist.group.WORLD)
+                capacity = new_capacity
+
+            if cur_capacity > logits.shape[0]:
+                capacity = torch.ceil(torch.tensor(logits.shape[0])).to(torch.int64)
+        else:
+            new_capacity = torch.max(exp_counts).to(logits.device)
+            dist.all_reduce(new_capacity, op=dist.ReduceOp.MAX, group=dist.group.WORLD)
+            capacity = new_capacity
 
     # Compute l_aux¸ºÔØ¾ùºâaux_loss
     me = torch.mean(token_sel_expert_weights, dim=0)
@@ -134,7 +161,10 @@ def top1gating(logits: Tensor, config: Config) -> Tuple[Tensor, ...]:
         token_locations_sc = _one_hot_to_float(token_offset_for_expert, capacity)
         combine_weights = einsum("se,sc->sec", token_sel_expert_weights, token_locations_sc)
         dispatch_mask = combine_weights.bool()
-        return l_aux, combine_weights, dispatch_mask
+        if config.dynamic_padding:
+            return l_aux, combine_weights, dispatch_mask, cur_capacity
+        else:
+            return l_aux, combine_weights, dispatch_mask
 
 
 def apply_aux_loss(config, gates, mask1):
@@ -190,6 +220,24 @@ def top2gating(logits: Tensor, config: Config) -> Tuple[Tensor, Tensor, Tensor, 
 
     # gating decisions
     token_sel_expert_weights, l_aux = apply_aux_loss(config, token_sel_expert_weights, first_expert_mask)
+    if config.no_drop:
+        if config.dynamic_padding:
+            new_capacity = torch.max(locations_in_second_expert) + 2
+            cur_capacity = new_capacity.item()
+            capacity = config.dynamic_capacity.to(logits.device)
+
+            flag = cur_capacity > capacity
+            dist.reduce(flag, dst=0, op=torch.distributed.ReduceOp.SUM, group=dist.group.WORLD)
+            dist.broadcast(flag, src=0, group=dist.group.WORLD)
+            if flag:
+                dist.all_reduce(new_capacity, op=dist.ReduceOp.MAX, group=dist.group.WORLD)
+                capacity = new_capacity
+            if cur_capacity > logits.shape[0]:
+                capacity = torch.ceil(torch.tensor(logits.shape[0])).to(torch.int64)
+        else:
+            new_capacity = torch.max(locations_in_second_expert) + 2
+            dist.all_reduce(new_capacity, op=dist.ReduceOp.MAX, group=dist.group.WORLD)
+            capacity = new_capacity
 
     # Remove locations outside capacity from mask
     first_expert_mask *= torch.lt(locations_in_first_expert, capacity)
@@ -242,4 +290,7 @@ def top2gating(logits: Tensor, config: Config) -> Tuple[Tensor, Tensor, Tensor, 
         combine_weights = combine1_sec + combine2_sec
         dispatch_mask = combine_weights.bool()
 
-        return l_aux, combine_weights, dispatch_mask
+        if config.dynamic_padding:
+            return l_aux, combine_weights, dispatch_mask, cur_capacity
+        else:
+            return l_aux, combine_weights, dispatch_mask

@@ -53,6 +53,12 @@ def _add_moe_args(parser):
                        action='store_false', default=False,
                        help='whether to use Random Token Selection.',
                        dest='use_rts')
+    group.add_argument("--moe-no-drop", action='store_true',
+                       help="Use no drop policy in moe layer, no tokens will be discarded.")
+    group.add_argument("--moe-dynamic-padding", action='store_true',
+                       help="Reducing AllReduce communication under the no drop policy through the sliding window mechanism.")
+    group.add_argument("--moe-use-sinkhorn", action='store_true',
+                       help="Use sinkhorn load balancing in the gate.")
     return parser
 
 
@@ -207,6 +213,8 @@ def validate_args_wrapper(validate_args):
         if args.optimize_recomp_communication_level > 0:
             if not hasattr(args, "optimize_recomp_communication_status"):
                 args.optimize_recomp_communication_status = 0
+        if args.moe_dynamic_padding and not args.moe_no_drop:
+            raise AssertionError('`--moe-dynamic-padding` only support for `--moe-no-drop`.') 
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'ulysses_cp_algo':
             head, remainder = divmod(args.num_attention_heads, args.context_parallel_size)
             assert head >= 1 and remainder == 0, f"num_attention_heads must be divisible by context_parallel_size"

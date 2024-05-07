@@ -44,7 +44,10 @@ class MoE(torch.nn.Module):
                  aux_loss_coef=0.0,
                  z_loss_coef=0.0,
                  ep_group=None,
-                 noisy_gate_policy: typing.Optional[str] = None):
+                 noisy_gate_policy: typing.Optional[str] = None,
+                 no_drop=False,
+                 dynamic_padding=False,
+                 use_sinkhorn=False):
         super(MoE, self).__init__()
 
         assert num_experts % ep_size == 0, f"Number of experts ({num_experts}) should be divisible by expert parallel size ({ep_size})"
@@ -58,7 +61,10 @@ class MoE(torch.nn.Module):
                         min_capacity=min_capacity,
                         aux_loss_coef=aux_loss_coef,
                         z_loss_coef=z_loss_coef,
-                        noisy_gate_policy=noisy_gate_policy
+                        noisy_gate_policy=noisy_gate_policy,
+                        no_drop=no_drop,
+                        dynamic_padding=dynamic_padding,
+                        use_sinkhorn=use_sinkhorn
                         )
         self.moe_layer = MOELayer(TopKGate(config),
                                   Experts(expert, num_local_experts),

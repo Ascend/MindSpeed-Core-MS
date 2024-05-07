@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torch import Tensor
 from torch.nn import Module
-
+import torch.distributed as dist
 from .utils import _AllToAll, einsum
 
 if TYPE_CHECKING:
@@ -52,6 +52,11 @@ class MOELayer(Base):
         self.exp_counts = None
         self.l_aux = None
 
+        self.cur_index_window = 0
+        self.capacity_window_size = 20
+        self.capacity_history_window = []
+        self.gate.config.dynamic_capacity = torch.ceil(torch.tensor(256)).to(torch.int64)
+
     def set_ep_group(self, ep_group):
         self.ep_group = ep_group
 
@@ -62,7 +67,26 @@ class MOELayer(Base):
         all_args = get_args()
         # gate
         if not all_args.enable_token_rearrange_opt:
-            self.l_aux, combine_weights, dispatch_mask = self.gate(reshaped_input)
+            if self.gate.config.dynamic_padding:
+                self.l_aux, combine_weights, dispatch_mask, cur_capacity_cur_rank = self.gate(reshaped_input)
+                self.capacity_history_window.append(cur_capacity_cur_rank)
+                self.cur_index_window += 1
+                if len(self.capacity_history_window) > self.capacity_window_size:
+                    self.capacity_history_window.pop(0)
+                if self.cur_index_window == self.capacity_window_size - 1:
+                    self.cur_index_window = 0
+                    capacity_history_window_tensor = torch.Tensor(self.capacity_history_window[-5:]).to(combine_weights.device)
+                    dist.all_reduce(capacity_history_window_tensor, op=torch.distributed.ReduceOp.MAX,
+                                    group=dist.group.WORLD)
+                    self.capacity_history_window = capacity_history_window_tensor.cpu().numpy().tolist()
+
+                    if len(self.capacity_history_window) > 0:
+                        capacity_next_window = sum(self.capacity_history_window) / len(self.capacity_history_window) + 20
+                    else:
+                        capacity_next_window = 256
+                    self.gate.config.dynamic_capacity = torch.ceil(torch.tensor(capacity_next_window)).to(torch.int64)
+            else:
+                self.l_aux, combine_weights, dispatch_mask = self.gate(reshaped_input)
             dispatched_input = einsum("sec,sm->ecm", dispatch_mask.type_as(input[0]), reshaped_input)
         else:
             self.l_aux, token_rearrange_infos = self.gate(reshaped_input)
