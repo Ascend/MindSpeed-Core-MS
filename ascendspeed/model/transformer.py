@@ -8,9 +8,11 @@ import torch.nn.functional as F
 from megatron.training import get_args, get_tokenizer
 from megatron.core import parallel_state, mpu, tensor_parallel
 from megatron.core.models.common.embeddings.rotary_pos_embedding import apply_rotary_pos_emb
-from megatron.legacy.model.utils import openai_gelu, erf_gelu
-from megatron.legacy.model.transformer import ParallelMLP
-from megatron.legacy.model.enums import AttnType
+from megatron.legacy.model.utils import openai_gelu, erf_gelu, get_norm
+from megatron.legacy.model.transformer import ParallelMLP, ParallelTransformer, ParallelTransformerLayer
+from megatron.core.enums import ModelType
+from megatron.legacy.model.enums import AttnType, AttnMaskType, LayerType
+from megatron.legacy.model.transformer import _get_num_layers, _get_layer_type
 
 from ascendspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 from ascendspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
@@ -239,6 +241,45 @@ def core_attention_forward(self, query_layer, key_layer, value_layer, attention_
     context_layer = context_layer.view(*new_context_layer_shape)
 
     return context_layer
+
+
+def parallel_transformer_init_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        def build_layer(model_type, config, layer_number, layer_type=LayerType.encoder, self_attn_mask_type=AttnMaskType.padding):
+            current_layer_type = _get_layer_type(
+                model_type, layer_type, self.retro_layer_numbers,
+                layer_number)
+            return ParallelTransformerLayer(
+                config,
+                layer_number,
+                layer_type=current_layer_type,
+                self_attn_mask_type=self_attn_mask_type,
+                drop_path_rate=self.drop_path_rates[layer_number - 1])
+        fn(self, *args, **kwargs)
+
+        argument = get_args()
+        if argument.automated_pipeline and argument.num_layer_list:
+            start_layer_num = 1
+            for idx, value in enumerate(argument.num_layer_list):
+                if parallel_state.get_pipeline_model_parallel_rank() == idx:
+                    self.num_layers = value
+                    for layer_num in range(start_layer_num, start_layer_num + value):
+                        self.layers.append(build_layer(kwargs['model_type'], args[0], layer_num))
+                start_layer_num += value
+            self.layers = torch.nn.ModuleList(self.layers)
+
+            # Update dropout rate for Retro encoder.
+            if kwargs['model_type'] == ModelType.retro_encoder:
+                for layer in self.layers:
+                    if layer.self_attention.use_flash_attn:
+                        layer.self_attention.core_attention_flash.dropout_p = \
+                            torch.nn.Dropout(argument.retro_encoder_attention_dropout)
+                    else:
+                        layer.self_attention.core_attention.attention_dropout.p = \
+                            argument.retro_encoder_attention_dropout
+                    layer.hidden_dropout = argument.retro_encoder_hidden_dropout
+    return wrapper
 
 
 def parallel_mlp_init_wrapper(fn):

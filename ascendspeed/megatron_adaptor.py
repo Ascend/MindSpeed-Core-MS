@@ -191,12 +191,13 @@ def megatron_legacy_adaptation(aspm):
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
     from .core.fusions.rms_norm import rms_norm_init_wrapper, rms_norm_forward
-    from .model.transformer import parallel_mlp_init_wrapper, flash_self_attention_forward
+    from .model.transformer import parallel_mlp_init_wrapper, flash_self_attention_forward, parallel_transformer_init_wrapper
     from .model.transformer import core_attention_init_wrapper, core_attention_forward, parallel_attention_init_wrapper, \
         parallel_attention_forward
     from .core.transformer.transformer import parallel_transformer_layer_forward_wrapper, \
         parallel_transformer_checkpointed_forward_wrapper
     from .model.transformer import switch_mlp_init_wrapper, switch_mlp_forward_wrapper
+    aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.__init__', parallel_transformer_init_wrapper)
     aspm.register_patch('megatron.legacy.model.fused_layer_norm.FusedLayerNormAffineFunction',
                         FusedLayerNormAffineFunction)
     aspm.register_patch('megatron.legacy.model.fused_layer_norm.FastLayerNormFN', FastLayerNormFN)
@@ -230,12 +231,16 @@ def megatron_legacy_adaptation(aspm):
 
 
 def megatron_training_adaptation(aspm):
+    import megatron.training.global_vars
     from .initialize import _compile_dependencies, set_jit_fusion_options
     from .utils import get_batch_on_this_cp_rank
     from .training import pretrain
     from .arguments import parse_args_wrapper, validate_args_wrapper, core_transformer_config_from_args_wrapper
     from .tokenizer import build_tokenizer_wrapper
     from .yaml_arguments import core_transformer_config_from_yaml_wrapper
+    from .core.training import pretrain_decorator, setup_model_and_optimizer_decorator
+    aspm.register_patch('megatron.training.training.pretrain', pretrain_decorator)
+    aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_decorator)
     aspm.register_patch('megatron.training.yaml_arguments.core_transformer_config_from_yaml',
                         core_transformer_config_from_yaml_wrapper)
     aspm.register_patch('megatron.training.initialize._compile_dependencies', _compile_dependencies)

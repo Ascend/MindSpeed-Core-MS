@@ -32,6 +32,7 @@ def process_args(parser):
     parser = _add_cp_args(parser)
     parser = _add_network_args(parser)
     parser = _add_algorithm_args(parser)
+    parser = _add_automated_pipeline_args(parser)
     parser = _add_alibi_args(parser)
 
     return parser
@@ -155,6 +156,30 @@ def _add_network_args(parser):
                        help='Configuration for the dense bias.')
     group.add_argument("--skip-bias-add", action="store_false", default=True,
                        help='Configuration for the skip bias.')
+    return parser
+
+
+def _add_automated_pipeline_args(parser):
+    group = parser.add_argument_group(title='automated_pipeline_allocation')
+    group.add_argument('--automated-pipeline',
+                       action='store_true',
+                       help='To enable automated pipeline process'
+                      )
+    group.add_argument('--save-memory-ratio',
+                       type=float, default=0.20,
+                       help='To set memory saving rate in automated pipeline'
+                       )
+    group.add_argument('--num-layer-list',
+                       type=str, help='To store the layer policy of automated pipeline'
+                       )
+    group.add_argument('--recompute-module-list',
+                       type=str, help='To store the recompute policy of automated pipeline'
+                       )
+    group.add_argument('--recompute-type',
+                       type=int, default=2,
+                       help='To store the recompute type of automated pipeline, 0 for mlp block '
+                       '1 for attention block and 2 for transformer layer'
+                       )
     return parser
 
 
