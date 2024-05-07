@@ -119,7 +119,7 @@ def megatron_core_adaptation(aspm):
     from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
-    from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb, rotary_embedding_init_wrapper
+    from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb_wrapper, rotary_embedding_init_wrapper
     from .core.transformer.attention import attention_init_wrapper
     from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
     from ascendspeed.core.transformer.custom_layers.transformer_engine import PTNorm
@@ -150,7 +150,7 @@ def megatron_core_adaptation(aspm):
     aspm.register_patch('megatron.core.fusions.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax',
                         forward_fused_softmax)
     aspm.register_patch('megatron.core.models.common.embeddings.apply_rotary_pos_emb_bshd',
-                        apply_fused_rotary_pos_emb)
+                        apply_fused_rotary_pos_emb_wrapper)
     aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.__init__',
                         rotary_embedding_init_wrapper)
     aspm.register_patch('megatron.core.transformer.attention.Attention.__init__', attention_init_wrapper)
