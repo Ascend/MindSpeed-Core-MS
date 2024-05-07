@@ -65,7 +65,7 @@ $$
   1. x中元素类型为float16，weight中元素类型为float16，bias中元素类型为float16，输出y中元素类型为float16；
 
   2. x中元素类型为bfloat16，weight中元素类型为bfloat16，bias中元素类型为float32，输出y中元素类型为bfloat16；
-- 对于实际无bias的场景，在Pytorch1.11与2.0版本中，须手动指定“bias=[]”；在Pytorch2.1与2.2版本中，可以直接不指定bias参数或设置为None。
+- 当前只支持Pytorch2.1版本。对于实际无bias的场景，可以直接不指定bias参数或设置为None。
 - 输入中须包含通信域hcomm字符串，它需要从torch.distributed包中的接口获取。
 
 ## grouped_mat_mul_all_reduce 类的调用方式
