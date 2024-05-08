@@ -1,5 +1,3 @@
-<p align="center"> <img src="sources/images/logo.png" height="90px" width="400px"></p>
-
 # 简介
 
 MindSpeed 是针对华为昇腾设备的大模型加速库。
