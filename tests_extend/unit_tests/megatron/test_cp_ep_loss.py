@@ -2,9 +2,9 @@ import pytest
 import torch
 import torch_npu
 import torch.distributed as dist
-import ascendspeed.megatron_adaptor
-from ascendspeed.moe.moe import MoE
-from ascendspeed.moe.mixtral_parallel_mlpbm import MixtralParallelMLPBM
+import mindspeed.megatron_adaptor
+from mindspeed.moe.moe import MoE
+from mindspeed.moe.mixtral_parallel_mlpbm import MixtralParallelMLPBM
 from commons import set_random_seed
 from unit_tests.common import DistributedTest
 import megatron.core.parallel_state as ps

@@ -1,7 +1,7 @@
 import os
 import pytest
 import torch
-import ascendspeed.megatron_adaptor
+import mindspeed.megatron_adaptor
 from megatron.core.distributed.param_and_grad_buffer import Bucket
 from megatron.core import parallel_state
 from megatron.training.global_vars import set_args

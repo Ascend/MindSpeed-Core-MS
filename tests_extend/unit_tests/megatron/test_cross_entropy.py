@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 import torch_npu
-from ascendspeed import megatron_adaptor
+from mindspeed import megatron_adaptor
 from megatron.training.global_vars import set_args
 from megatron.training.arguments import parse_args
 

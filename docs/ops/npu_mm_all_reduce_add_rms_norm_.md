@@ -98,16 +98,19 @@ $$
 - 伪量化场景下，``antiquant_group_size`` 取值满足取值范围``[32, min(k-1, INT_MAX)]``且为32倍数。
 
 ## npu_mm_all_redcue_add_rms_norm 接口的调用方式
+
 ```python
 import torch
 import torch_npu
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from ascendspeed.ops.npu_mm_all_reduce_add_rms_norm_ import npu_mm_all_reduce_add_rms_norm_
+from mindspeed.ops.npu_mm_all_reduce_add_rms_norm_ import npu_mm_all_reduce_add_rms_norm_
 
-def run_mm_all_reduce_add_rms_norm(rank, world_size, master_ip, master_port, x1_shape, x2_shape, residual_shape, gamma_shape, dtype):
+
+def run_mm_all_reduce_add_rms_norm(rank, world_size, master_ip, master_port, x1_shape, x2_shape, residual_shape,
+                                   gamma_shape, dtype):
     torch_npu.npu.set_device(rank)
-    init_method = 'tcp://' + master_ip +':' + master_port
+    init_method = 'tcp://' + master_ip + ':' + master_port
     dist.init_process_group(backend='hccl', rank=rank, world_size=world_size, init_method=init_method)
     from torch.distributed.distributed_c10d import _get_default_group
     default_pg = _get_default_group()
@@ -121,9 +124,11 @@ def run_mm_all_reduce_add_rms_norm(rank, world_size, master_ip, master_port, x1_
     residual = torch.randn(residual_shape, dtype=dtype).npu()
     gamma = torch.randn(gamma_shape, dtype=dtype).npu()
     epsilon = 0.000001
-    y, norm_out = npu_mm_all_reduce_add_rms_norm_(x1=x1, x2=x2, residual=residual, gamma=gamma, hcom=hcom_info, reduce_op='sum', epsilon=epsilon)
+    y, norm_out = npu_mm_all_reduce_add_rms_norm_(x1=x1, x2=x2, residual=residual, gamma=gamma, hcom=hcom_info,
+                                                  reduce_op='sum', epsilon=epsilon)
     print("y:", y)
     print("norm_out:", norm_out)
+
 
 if __name__ == "__main__":
     worksize = 8
@@ -136,5 +141,7 @@ if __name__ == "__main__":
     gamma_shape = (n)
     dtype = torch.float16
 
-    mp.spawn(run_mm_all_reduce_add_rms_norm, args=(worksize, master_ip, master_port, x1_shape, x2_shape, residual_shape, gamma_shape, dtype), nprocs=worksize)
+    mp.spawn(run_mm_all_reduce_add_rms_norm,
+             args=(worksize, master_ip, master_port, x1_shape, x2_shape, residual_shape, gamma_shape, dtype),
+             nprocs=worksize)
 ```

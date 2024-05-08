@@ -2,7 +2,7 @@ import os
 import pytest
 import torch
 import torch_npu
-import ascendspeed.megatron_adaptor
+import mindspeed.megatron_adaptor
 import megatron.core.parallel_state as ps
 from unit_tests.common import DistributedTest
 from megatron.training.global_vars import set_args

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright (c) 2023, HUAWEI CORPORATION.  All rights reserved.
+# Copyright (c) 2023, Huawei Technologies Co., Ltd.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import logging
 from typing import List
 
 import torch
-import ascendspeed.megatron_adaptor
+import mindspeed.megatron_adaptor
 from megatron.training.tokenizer.tokenizer import build_tokenizer
 from data_handler import build_dataset, get_dataset_handler
 

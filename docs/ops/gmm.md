@@ -27,30 +27,30 @@ npu_gmm(x, weight, bias=None, group_list=None, group_type=-1)
 - grad_bias：当前不支持，默认为none
 
 ## gmm 类的调用方式
+
 ```python
     import os
-    import torch
-    import torch_npu
-    import numpy as np
-    import math
-    from ascendspeed.ops import gmm
-    
-    num_expert, seq_len, hidden_dim = 8, 32, 256
-    group_list = [1, 3, 6, 10, 15, 21, 28, 32]
-    group_type = 0
+import torch
+import torch_npu
+import numpy as np
+import math
+from mindspeed.ops import gmm
 
-    x_shape = (seq_len, hidden_dim)
-    weight_shape = (num_expert, hidden_dim, seq_len)
-    dtype = torch.float16
-    x = (torch.rand(x_shape).to(dtype) - 0.5)
-    weight = (torch.rand(weight_shape).to(dtype) - 0.5)
+num_expert, seq_len, hidden_dim = 8, 32, 256
+group_list = [1, 3, 6, 10, 15, 21, 28, 32]
+group_type = 0
 
-    // 正向接口案例
-    x.requires_grad = True
-    weight.requires_grad = True
-    result = gmm.npu_gmm(x.npu(), weight.npu(), bias=None, group_list=group_list, group_type=group_type)
-    
+x_shape = (seq_len, hidden_dim)
+weight_shape = (num_expert, hidden_dim, seq_len)
+dtype = torch.float16
+x = (torch.rand(x_shape).to(dtype) - 0.5)
+weight = (torch.rand(weight_shape).to(dtype) - 0.5)
 
-    // 反向接口案例
-    result.backward(torch.ones(result.shape).npu())
+// 正向接口案例
+x.requires_grad = True
+weight.requires_grad = True
+result = gmm.npu_gmm(x.npu(), weight.npu(), bias=None, group_list=group_list, group_type=group_type)
+
+// 反向接口案例
+result.backward(torch.ones(result.shape).npu())
 ```

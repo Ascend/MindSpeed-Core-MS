@@ -84,37 +84,40 @@ npu_fusion_attention(
 -sparse_mode=7或者8时，不支持可选输入pse。
 
 ## flash_attention_v2 类的调用方式
+
 ```python
     import os
-    import torch
-    import torch_npu
-    import numpy as np
-    import math
-	import ascendspeed.ops.fusion_attention_v2 import npu_fusion_attention
-    
-    batch_size, head_num, seq_size, head_dim = 1, 32, 2048, 128
-    input_layout = "BNSD"
-    keep_prob = 1.0
-    pre_tokens = 65536
-    next_tokens = 1
-    scale_value = 0.088
-    q_scale = 1.0
+import torch
+import torch_npu
+import numpy as np
+import math
+import mindspeed.ops.fusion_attention_v2
+import npu_fusion_attention
 
-    input_shape = (batch_size, head_num, seq_size, head_dim)
-    softmax_shape = (batch_size, head_num, seq_size)
-    mask_shape = (1, 1, seq_size, seq_size)
-    dtype = torch.float16
-    attention_score_grad = (torch.rand(input_shape).to(dtype) - 0.5)
-    query = (torch.rand(input_shape).to(dtype) - 0.5) * 5
-    key = (torch.rand(input_shape).to(dtype) - 0.5) * 5
-    value = (torch.rand(input_shape).to(dtype) - 0.5) * 5
-    atten_mask = np.tri(seq_size, k=-next_tokens) + np.tri(seq_size, k=-pre_tokens).transpose()
-    alibi_mask = torch.zeros((batch_size, head_num, seq_size, seq_size)).to(dtype)
-    atten_mask = torch.from_numpy(atten_mask).to(torch.bool)
+batch_size, head_num, seq_size, head_dim = 1, 32, 2048, 128
+input_layout = "BNSD"
+keep_prob = 1.0
+pre_tokens = 65536
+next_tokens = 1
+scale_value = 0.088
+q_scale = 1.0
 
-    // 正向接口案例
-    result = npu_fusion_attention(query.npu(), key.npu(), value.npu(), atten_mask.npu(), None, scale_value, q_scale, head_num, input_layout, keep_prob, pre_tokens, next_tokens)
+input_shape = (batch_size, head_num, seq_size, head_dim)
+softmax_shape = (batch_size, head_num, seq_size)
+mask_shape = (1, 1, seq_size, seq_size)
+dtype = torch.float16
+attention_score_grad = (torch.rand(input_shape).to(dtype) - 0.5)
+query = (torch.rand(input_shape).to(dtype) - 0.5) * 5
+key = (torch.rand(input_shape).to(dtype) - 0.5) * 5
+value = (torch.rand(input_shape).to(dtype) - 0.5) * 5
+atten_mask = np.tri(seq_size, k=-next_tokens) + np.tri(seq_size, k=-pre_tokens).transpose()
+alibi_mask = torch.zeros((batch_size, head_num, seq_size, seq_size)).to(dtype)
+atten_mask = torch.from_numpy(atten_mask).to(torch.bool)
 
-    // 反向接口案例
-	result.backward(dx)
+// 正向接口案例
+result = npu_fusion_attention(query.npu(), key.npu(), value.npu(), atten_mask.npu(), None, scale_value, q_scale,
+                              head_num, input_layout, keep_prob, pre_tokens, next_tokens)
+
+// 反向接口案例
+result.backward(dx)
 ```

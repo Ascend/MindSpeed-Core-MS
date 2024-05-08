@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright (c) 2023, HUAWEI CORPORATION.  All rights reserved.
+# Copyright (c) 2023, Huawei Technologies Co., Ltd.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
 
 import json
 import unittest
-from ascendspeed import megatron_adaptor
-from ascendspeed.core.memory.adaptive_recomputing.adaptive_recompute_solver import GraphSolver
+from mindspeed import megatron_adaptor
+from mindspeed.core.memory.adaptive_recomputing.adaptive_recompute_solver import GraphSolver
 
 from unit_tests.common import DistributedTest
 
