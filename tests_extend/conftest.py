@@ -5,6 +5,7 @@
 
 # copied from https://github.com/microsoft/DeepSpeed/blob/master/tests/conftest.py
 # reworked/refactored some parts to make it run.
+from multiprocessing.pool import RUN
 import pytest
 
 
@@ -29,10 +30,13 @@ def pytest_runtest_call(item):
 # test for a class is run, we want to make sure those distributed environments
 # are destroyed.
 def pytest_runtest_teardown(item, nextitem):
-    if getattr(item.cls, "reuse_dist_env", False) and not nextitem:
+    if getattr(item.cls, "reuse_dist_env", True) and (not nextitem or item.cls != nextitem.cls):
         dist_test_class = item.cls()
-        for num_procs, pool in dist_test_class._pool_cache.items():
-            dist_test_class._close_pool(pool, num_procs, force=True)
+        if hasattr(dist_test_class, '_pool_cache'):
+            for num_procs, pool in dist_test_class._pool_cache.items():
+                if pool._state == RUN:  # pool not run when skip UT
+                    dist_test_class._close_pool(pool, num_procs, force=True)
+            dist_test_class._pool_cache.clear()
 
 
 @pytest.hookimpl(tryfirst=True)

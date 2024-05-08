@@ -6,7 +6,6 @@ import torch_npu
 from ascendspeed import megatron_adaptor
 from megatron.legacy.model.rms_norm import RMSNorm
 from megatron.training.global_vars import set_args
-from unit_tests.common import DistributedTest
 
 DEVICE_NAME = torch_npu.npu.get_device_name(0)[:10]
 
@@ -18,8 +17,7 @@ def create_test_args(use_fused_rmsnorm=False):
     return args
 
 
-class TestNpuRmsNorm(DistributedTest):
-    world_size = 1
+class TestNpuRmsNorm:
 
     def supported_op_exec(self, x, dim, eps=1e-6):
         ori_dtype = x.dtype

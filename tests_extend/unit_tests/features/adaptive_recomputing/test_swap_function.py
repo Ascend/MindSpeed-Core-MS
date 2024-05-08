@@ -9,6 +9,7 @@ from unit_tests.common import DistributedTest
 
 class TestSwapTensor(DistributedTest):
     world_size = 1
+    reuse_dist_env = False
 
     def test_trans_to_cpu(self):
         tensor_npu = torch.rand((2, 1, 5), dtype=torch.float16, requires_grad=True, device="npu")

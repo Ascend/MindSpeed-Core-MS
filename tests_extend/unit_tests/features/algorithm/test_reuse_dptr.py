@@ -3,11 +3,9 @@ import torch
 import torch_npu
 
 from ascendspeed.op_builder import AlgorithmOpBuilder
-from unit_tests.common import DistributedTest
 
 
-class TestReuseDataPtr(DistributedTest):
-    world_size = 1
+class TestReuseDataPtr:
 
     def test_reuse_dptr(self):
         ascendspeed_ops = AlgorithmOpBuilder().load()

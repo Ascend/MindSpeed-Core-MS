@@ -62,7 +62,7 @@ class DistributedExec(ABC):
     backend = "nccl"
     init_distributed = True
     set_dist_env = True
-    reuse_dist_env = False
+    reuse_dist_env = True
     _pool_cache = {}
     exec_timeout = TEST_TIMEOUT
 

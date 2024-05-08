@@ -2,14 +2,12 @@ import pytest
 import torch
 import torch_npu
 
-from unit_tests.common import DistributedTest
 from ascendspeed.op_builder import GMMOpBuilder
 
 DEVICE_NAME = torch_npu.npu.get_device_name(0)[:10]
 
 
-class TestNPUGMM(DistributedTest):
-    world_size = 1
+class TestNPUGMM:
 
     def supported_op_exec(self, x, weight, group_list, group_type):
         final_out = []

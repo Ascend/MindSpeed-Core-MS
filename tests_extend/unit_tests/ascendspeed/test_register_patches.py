@@ -67,6 +67,11 @@ class TestRegisterPatches(DistributedTest):
         aspm.apply_patches()
         import no_exist_module
 
+
+class TestRegisterPatchesResetEnv(DistributedTest):
+    world_size = 1
+    reuse_dist_env = False
+
     def test_replace_function(self):
         aspm.register_patch('unit_tests.ascendspeed.test_register_patches.function1', function2)
         aspm.apply_patches()

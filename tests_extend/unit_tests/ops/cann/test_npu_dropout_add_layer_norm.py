@@ -3,13 +3,11 @@ import torch
 import torch_npu
 
 from ascendspeed.ops import npu_dropout_add_layer_norm, npu_dropout_add_rms_norm
-from unit_tests.common import DistributedTest
 
 DEVICE_NAME = torch_npu.npu.get_device_name(0)[:10]
 
 
-class TestNpuDropoutAddLayerNorm(DistributedTest):
-    world_size = 1
+class TestNpuDropoutAddLayerNorm:
 
     def supported_op_exec(self, x0,
                           weight,
