@@ -8,7 +8,7 @@ from .atb_builder import AtbOpBuilder
 from .swiglu_builder import SwigluOpBuilder
 from .lcal_builder import LcalOpBuilder
 from .rms_norm_builder import RmsNormOpBuilder
-from .grouped_mat_mul_all_reduce_builder import GroupedMatMulAllReduceOpBuilder
+from .npu_grouped_mat_mul_all_reduce_builder import GroupedMatMulAllReduceOpBuilder
 from .gmm_builder import GMMOpBuilder
 from .npu_mm_all_reduce_add_rms_norm_builder import MatmulAllReduceAddRmsNormOpBuilder
 from .npu_inplace_mm_all_reduce_add_rms_norm_builder import InplaceMatmulAllReduceAddRmsNormOpBuilder

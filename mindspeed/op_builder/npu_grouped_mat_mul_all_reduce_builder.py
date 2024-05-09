@@ -3,14 +3,14 @@ from mindspeed.op_builder.builder import MindSpeedOpBuilder
 
 
 class GroupedMatMulAllReduceOpBuilder(MindSpeedOpBuilder):
-    OP_NAME = "grouped_mat_mul_all_reduce"
+    OP_NAME = "npu_grouped_mat_mul_all_reduce"
     TORCH_MAJOR, TORCH_MINOR = map(int, torch.__version__.split('.')[:2])
 
     def __init__(self):
         super(GroupedMatMulAllReduceOpBuilder, self).__init__(self.OP_NAME)
 
     def sources(self):
-        return ['ops/csrc/cann/grouped_mat_mul_all_reduce.cpp']
+        return ['ops/csrc/cann/npu_grouped_mat_mul_all_reduce.cpp']
 
     def include_paths(self):
         paths = super().include_paths()

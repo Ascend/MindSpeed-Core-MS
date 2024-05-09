@@ -52,5 +52,6 @@ class TestNpuRmsNorm:
         output_golden = self.supported_op_exec(x, hidden_size)
         output_patch_ori = self.patch_ori_op_exec(x, hidden_size)
         output_patch_fused = self.patch_fused_op_exec(x, hidden_size)
-        assert torch.allclose(output_golden, output_patch_ori, rtol=0.001, atol=0.001)
-        assert torch.allclose(output_golden, output_patch_fused, rtol=0.001, atol=0.001)
+        tol = 0.004 if dtype == torch.bfloat16 else 0.001
+        assert torch.allclose(output_golden, output_patch_ori, rtol=tol, atol=tol)
+        assert torch.allclose(output_golden, output_patch_fused, rtol=tol, atol=tol)

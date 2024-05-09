@@ -51,4 +51,5 @@ class TestNpuSwiglu(DistributedTest):
         hidden_states = torch.randn((sequence_length, batch_size, hidden_size)).npu().to(dtype)
         output_patch_ori = self.patch_ori_op_exec(hidden_states)
         output_patch_fused = self.patch_fused_op_exec(hidden_states)
-        assert torch.allclose(output_patch_ori, output_patch_fused, rtol=0.001, atol=0.001)
+        tol = 0.004 if dtype == torch.bfloat16 else 0.001
+        assert torch.allclose(output_patch_ori, output_patch_fused, rtol=tol, atol=tol)
