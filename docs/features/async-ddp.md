@@ -15,7 +15,7 @@
 
 ## 使用场景
 
-使用该特性的前提是模型开启数据并行和虚拟流水并行，脚本中设置了`----num-layers-per-virtual-pipeline-stage N`。
+使用该特性的前提是模型开启数据并行和虚拟流水并行，脚本中设置了`--num-layers-per-virtual-pipeline-stage N`。
 
 ## 使用方法
 

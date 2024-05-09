@@ -34,13 +34,20 @@
 ## 公网地址声明
 - MindSpeed代码中包含公网地址声明如下表所示：
 
-|      类型      |                                     开源代码地址                                      |                 文件名                  |             公网IP地址/公网URL地址/域名/邮箱地址             |          用途说明           |
-| :------------: |:-------------------------------------------------------------------------------:|:------------------------------------:| :----------------------------------------------------------: | :-------------------------: |
-|  开源引入  | https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py |   MindSpeed/mindspeed/moe/gate.py    |          https://arxiv.org/pdf/2006.16668.pdf       | 开源引入TopKGate类实现 |
-|  开源引入  | https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/moe.py |   MindSpeed/mindspeed/moe/gate.py    |          https://arxiv.org/pdf/2202.08906.pdf       | 开源引入apply_z_loss实现 |
-|  开源引入  | https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py | MindSpeed/mindspeed/moe/moe_layer.py |          https://arxiv.org/pdf/2006.16668.pdf       | 开源引入MOELayer类实现 |
-|  开源引入  | https://github.com/pytorch/pytorch/pull/40762/files |   MindSpeed/mindspeed/moe/utils.py   |    https://github.com/pytorch/pytorch/pull/40762/files    | 开源引入_AllToAll类实现 |
-
+|      类型      |                                           开源代码地址                                           |                    文件名                    |             公网IP地址/公网URL地址/域名/邮箱地址             |        用途说明        |
+| :------------: |:------------------------------------------------------------------------------------------:|:-----------------------------------------:| :----------------------------------------------------------: |:------------------:|
+|  开源引入  |      https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py       |           mindspeed/moe/gate.py           |          https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py       | deepspeed moe源码地址  |
+|  开源引入  |      https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py       |          mindspeed/moe/gate.py          |          https://arxiv.org/pdf/2006.16668.pdf       |  开源引入TopKGate类实现   |
+|  开源引入  |     https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/moe.py      |          mindspeed/moe/gate.py          |          https://arxiv.org/pdf/2202.08906.pdf       | 开源引入apply_z_loss实现 |
+|  开源引入  |      https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py       |       mindspeed/moe/moe_layer.py        |          https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py       | deepspeed moe源码地址  |
+|  开源引入  |      https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py       |       mindspeed/moe/moe_layer.py        |          https://arxiv.org/pdf/2006.16668.pdf       |  开源引入MOELayer类实现   |
+|  开源引入  |         https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/layer.py          | mindspeed/moe/mixtral_parallel_mlpbm.py |    https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/layer.py    | deepspeed moe源码地址  |
+|  开源引入  |         https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/layer.py          |          mindspeed/moe/moe.py           |    https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/layer.py    | deepspeed moe源码地址  |
+|  开源引入  |      https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py       |         mindspeed/moe/utils.py          |    https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py    | deepspeed moe源码地址  |
+|  开源引入  | https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/transformer/moe/moe_utils.py |         mindspeed/moe/utils.py          |   https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/transformer/moe/moe_utils.py     |  megatron moe源码地址  |
+|  开源引入  |                       https://github.com/pytorch/pytorch/pull/40762                        |         mindspeed/moe/utils.py          |    https://github.com/pytorch/pytorch/pull/40762    |    alltoall实现源码    |
+|  开源引入  |      https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/sharded_moe.py       |         mindspeed/moe/utils.py          |    https://arxiv.org/pdf/2006.16668.pdf    |     einsum论文地址     |
+|  开源引入  |        https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/experts.py         |        mindspeed/moe/experts.py         |     https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/moe/experts.py   | deepspeed moe源码地址  |
 
 
 ## 公开接口声明
