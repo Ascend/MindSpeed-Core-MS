@@ -14,13 +14,13 @@ Flash Attention 是一种优化IO访存开销的精确注意力方法，原理�
 
 a. Tiling切片：利用更高速的SRAM代替HBM，但SRAM的内存容量较少，无法一次性完成所有数据的完整注意力计算，因此需要进行分块计算。
 
-b. 重计算：放弃中间结果写回，需要使用时重新计算，用计算换访存
+b. 重计算：放弃中间结果写回，需要使用时重新计算，用计算换访存。
 
 c. Kernel Fusion：将多个操作融合为一个操作，基于Tiling利用一个kernel完成整个计算。
 
 <p align="center"> <img src="../../sources/images/flash_attention.png" height="400px" width="880px"></p>
 
-
+[原文链接](https://arxiv.org/pdf/2205.14135)
 
 ## 使用场景
 
@@ -32,9 +32,4 @@ c. Kernel Fusion：将多个操作融合为一个操作，基于Tiling利用一�
 
 ## 使用效果
 
-在模型训练时间、模型质量等方面可以提升性能
-
-
----------------------
-
-[1] Tri Dao, Daniel Y.Fu, Stefano Ermon, Atri Rudra, and Christopher Re. FLASHATTENTION: Fast and Memory-Efficient Exact Attention with IO-Awareness. arXiv:2205.14135v1, 2022
+在模型训练时间、模型质量等方面可以提升性能。

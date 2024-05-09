@@ -9,8 +9,6 @@ Rotary Position Embedding（RoPE）是一种大模型文本位置信息编码（
 ## 解决方案
 `torch_npu`侧将Rotary Embedding操作合并成一个算子，减少数据传输和临时储存，优化模型训练性能。MindSpeed调用`torch_npu`侧接口实现算子融合。
 
-具体算子接口参见`torch_npu`文档[link](https://www.hiascend.com/document/detail/zh/Pytorch/60RC1/apiref/apilist/ptaoplist_000463.html)。
-
 ## 使用场景
 
 模型侧使用了Rotary Embedding作为Position Embedding解决方案。

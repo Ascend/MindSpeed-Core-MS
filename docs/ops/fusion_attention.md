@@ -86,7 +86,7 @@ npu_fusion_attention(
 ## flash_attention_v2 类的调用方式
 
 ```python
-    import os
+import os
 import torch
 import torch_npu
 import numpy as np
@@ -114,10 +114,10 @@ atten_mask = np.tri(seq_size, k=-next_tokens) + np.tri(seq_size, k=-pre_tokens).
 alibi_mask = torch.zeros((batch_size, head_num, seq_size, seq_size)).to(dtype)
 atten_mask = torch.from_numpy(atten_mask).to(torch.bool)
 
-// 正向接口案例
+# 正向接口案例
 result = npu_fusion_attention(query.npu(), key.npu(), value.npu(), atten_mask.npu(), None, scale_value, q_scale,
                               head_num, input_layout, keep_prob, pre_tokens, next_tokens)
 
-// 反向接口案例
+# 反向接口案例
 result.backward(dx)
 ```

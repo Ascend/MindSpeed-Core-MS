@@ -14,7 +14,7 @@
 - dy：必选输入，数据类型float16, bfloat16, float32
 - x：必选输入，数据类型float16, bfloat16, float32
 
-输出
+输出：
 - dx：必选输出，数据类型float16, bfloat16, float32
 
 属性：
@@ -35,8 +35,8 @@
     y_grad = torch.from_numpy(y_grad).float().npu()
 
     x.requires_grad = True
-    // 正向接口案例
-    mindspeed_ops = SwigluOpBuilder.load()
+    # 正向接口案例
+    mindspeed_ops = SwigluOpBuilder().load()
     result = mindspeed_ops.swiglu(x, dim=-1)
-    // 反向接口案例
+    # 反向接口案例
     result.backward(y_grad)

@@ -85,12 +85,12 @@ def get_hcomm_info(world_size, rank):
     dist.init_process_group(backend='hccl', rank=rank, world_size=world_size, init_method='tcp://127.0.0.1:5001')
     print(f'device_{rank} init_process_group success.')
     if dist.is_available():
-      from torch.distributed.distributed_c10d import _get_default_group
-      default_pg = _get_default_group()
+        from torch.distributed.distributed_c10d import _get_default_group
+        default_pg = _get_default_group()
     if torch.__version__ > '2.0.1':
-      hcomm_info = default_pg._get_backend(torch.device('npu')).get_hccl_comm_name(rank)
+        hcomm_info = default_pg._get_backend(torch.device('npu')).get_hccl_comm_name(rank)
     else:
-      hcomm_info = default_pg.get_hccl_comm_name(rank)
+        hcomm_info = default_pg.get_hccl_comm_name(rank)
     print(f'device_{rank} get_hccl_comm_name success.')
     return dist, hcomm_info
 
@@ -124,8 +124,8 @@ def run(rank, n_device):
                                            group_list=group_list, split_item=split_item, reduce_op=reduce_op,
                                            comm_turn=comm_turn)
     if rank == 0:
-      for i, y in enumerate(y_npu):
-        y.cpu().numpy().tofile(f"./y_{i}.bin")
+        for i, y in enumerate(y_npu):
+            y.cpu().numpy().tofile(f"./y_{i}.bin")
 
 
 if __name__ == '__main__':

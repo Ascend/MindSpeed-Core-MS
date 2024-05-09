@@ -26,11 +26,17 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 
 ### 2. 安装 MindSpeed
 
-下载源码安装
+下载源码安装：
 
  ```shell
  git clone https://gitee.com/ascend/MindSpeed.git
  pip install -e MindSpeed
+ ```
+
+如需使用ATB算子，请在安装前添加环境变量`ENABLE_ATB=1`，例如：
+ ```shell
+ git clone https://gitee.com/ascend/MindSpeed.git
+ ENABLE_ATB=1 pip install -e MindSpeed
  ```
 
 ### 3. 获取 Megatron-LM 并指定 commit id

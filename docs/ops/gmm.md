@@ -1,6 +1,6 @@
 # gmm对外接口
 
-npu_gmm(x, weight, bias=None, group_list=None, group_type=-1)
+npu_gmm(x, weight, bias=None, group_list=None, group_type=0)
 
 ## 前向接口：
 输入：
@@ -29,7 +29,7 @@ npu_gmm(x, weight, bias=None, group_list=None, group_type=-1)
 ## gmm 类的调用方式
 
 ```python
-    import os
+import os
 import torch
 import torch_npu
 import numpy as np
@@ -46,11 +46,11 @@ dtype = torch.float16
 x = (torch.rand(x_shape).to(dtype) - 0.5)
 weight = (torch.rand(weight_shape).to(dtype) - 0.5)
 
-// 正向接口案例
+# 正向接口案例
 x.requires_grad = True
 weight.requires_grad = True
 result = gmm.npu_gmm(x.npu(), weight.npu(), bias=None, group_list=group_list, group_type=group_type)
 
-// 反向接口案例
+# 反向接口案例
 result.backward(torch.ones(result.shape).npu())
 ```

@@ -2,7 +2,7 @@
 
 ## 问题分析
 
-大模型训练过程中，其ColumnParallelLinear和RowParallelLinear部分的前方向均存在相互毗邻、顺序依赖的计算通信组合，计算为Matmul，而通信则为AllReduce（不开启序列并行）或AllGather和ReduceScatter（开启序列并行）。这些计算通信的组合因为存在顺序依赖（即后一个的输入是前一个输出），常常被串行执行，但这时候计算和通信流都存在一定的空闲等待时间，该过程的执行效率没有被最大化。
+大模型训练过程中，其ColumnParallelLinear和RowParallelLinear部分的前反向均存在相互毗邻、顺序依赖的计算通信组合，计算为Matmul，而通信则为AllReduce（不开启序列并行）或AllGather和ReduceScatter（开启序列并行）。这些计算通信的组合因为存在顺序依赖（即后一个的输入是前一个输出），常常被串行执行，但这时候计算和通信流都存在一定的空闲等待时间，该过程的执行效率没有被最大化。
 
 ## 解决方案
 
@@ -20,7 +20,7 @@
 ## 使用场景
 该特性目前主要用于训练场景，当Attention模块和MLP模块串行执行且计算通信存在顺序依赖与位置毗邻关系时适用。
 
-使用Python脚本侧实现时，对Matmul左矩阵的m轴有一定要求，必须是切分数（2/4/8）的倍数，且不适用于计算与通信片段耗时相差较大的情况。需要注意的是，脚本测实现在切分矩阵、切分数量较大时，容易出现host bound问题，从而不能得到预期的收益。支持ALL_REDUCE, ALL_GATHER, REDUCE_SCATTER三个通信场景，支持灵活设置先通信或先计算。
+使用Python脚本侧实现时，对Matmul左矩阵的m轴有一定要求，必须是切分数（2/4/8）的倍数，且不适用于计算与通信片段耗时相差较大的情况。需要注意的是，脚本侧实现在切分矩阵、切分数量较大时，容易出现host bound问题，从而不能得到预期的收益。支持ALL_REDUCE, ALL_GATHER, REDUCE_SCATTER三个通信场景，支持灵活设置先通信或先计算。
 
 对于计算通信融合算子，目前已支持：
 1. MATMUL_ALL_REDUCE融合算子（先计算后通信）及其确定性计算；
@@ -71,7 +71,7 @@ export USE_COC_FUSED_KERNEL=1
 'customized_coc': {"[16384, 5120, 1920]": 8, "[16384, 1920, 5120]": 1}
 
 【只对通过融合算子使能的计算通信并行实现适用】
-'enable_coc_in_column_backward': 是否在ColumnParllelLinear的反向中使用COC（ColumnParallelLinear的反向中本来就有非互相依依赖的计算通信并行），默认为False；
+'enable_coc_in_column_backward': 是否在ColumnParllelLinear的反向中使用COC（ColumnParallelLinear的反向中本来就有非互相依赖的计算通信并行），默认为False；
 
 【对脚本实现和融合算子实现都适用】
 'recompute_all_gather': 是否在ColumnParallelLinear的反向中重新计算all gather，默认为True。若为False，则将从前向保存all gather结果到反向，会减少反向计算时间但是会增加训练过程中的峰值内存占用；

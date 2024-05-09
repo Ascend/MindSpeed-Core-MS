@@ -122,10 +122,10 @@ def megatron_core_adaptation(aspm):
     from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb_wrapper, rotary_embedding_init_wrapper
     from .core.transformer.attention import attention_init_wrapper
     from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
-    from mindspeed.core.transformer.custom_layers.transformer_engine import PTNorm
-    from mindspeed.core.transformer.dot_product_attention import dot_product_attention_forward_wrapper, dot_product_attention_init_wrapper
+    from .core.transformer.custom_layers.transformer_engine import PTNorm
+    from .core.transformer.dot_product_attention import dot_product_attention_forward_wrapper, dot_product_attention_init_wrapper
     from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
-    from mindspeed.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec_wrapper
+    from .core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec_wrapper
     from .core.parallel_state import initialize_model_parallel
     from .core.parallel_state import initialize_model_parallel_wrapper
     from .core.parallel_state import destroy_model_parallel_wrapper
@@ -150,7 +150,7 @@ def megatron_core_adaptation(aspm):
                         is_kernel_available)
     aspm.register_patch('megatron.core.fusions.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax',
                         forward_fused_softmax)
-    aspm.register_patch('megatron.core.models.common.embeddings.apply_rotary_pos_emb_bshd',
+    aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.apply_rotary_pos_emb_bshd',
                         apply_fused_rotary_pos_emb_wrapper)
     aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.__init__',
                         rotary_embedding_init_wrapper)
@@ -271,28 +271,27 @@ def ascend_adaptation(aspm):
 
         import megatron.training
         from .core.memory.memory_fragmentation.memory_recorder import memory_recorder_wrapper
-        aspm.register_patch('megatron.training.setup_model_and_optimizer', memory_recorder_wrapper)
+        aspm.register_patch('megatron.training.training.setup_model_and_optimizer', memory_recorder_wrapper)
 
         from .core.memory.memory_fragmentation.malloc_recorder import malloc_recorder_wrapper
-        aspm.register_patch('megatron.training.train_step', malloc_recorder_wrapper)
+        aspm.register_patch('megatron.training.training.train_step', malloc_recorder_wrapper)
 
         from .core.memory.memory_fragmentation.optimizer_init_precise import optimizer_init_wrapper
         aspm.register_patch('megatron.core.optimizer.optimizer.MixedPrecisionOptimizer.step', optimizer_init_wrapper)
 
-        import megatron.training
         from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
-        allowed_recomputing_module_wrapper(megatron.model.transformer.ParallelTransformerLayer)
+        allowed_recomputing_module_wrapper(megatron.legacy.model.transformer.ParallelTransformerLayer)
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
-        aspm.register_patch('megatron.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
+        aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
 
     if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) and not int(os.getenv('MEMORY_FRAGMENTATION', '0')):
         from .core.memory.adaptive_recomputing.pluggable_allocator_adpator import change_allocator
         change_allocator()
         import megatron.training
         from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
-        allowed_recomputing_module_wrapper(megatron.model.transformer.ParallelTransformerLayer)
+        allowed_recomputing_module_wrapper(megatron.legacy.model.transformer.ParallelTransformerLayer)
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
-        aspm.register_patch('megatron.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
+        aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
 
     if int(os.getenv('ASCEND_MC2', '0')):
         aspm.register_patch('megatron.training.initialize.initialize_megatron', mc2_wrapper)
@@ -304,7 +303,7 @@ def ascend_adaptation(aspm):
 
 
 def exe_adaptation():
-    from mindspeed.patch_utils import MindSpeedPatchesManager as aspm
+    from .patch_utils import MindSpeedPatchesManager as aspm
     te_adaptation(aspm)
     apex_adaptation(aspm)
     torch_adaptation(aspm)
