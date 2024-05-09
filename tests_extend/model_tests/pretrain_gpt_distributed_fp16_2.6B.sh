@@ -3,8 +3,8 @@
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 source "tests_extend/system_tests/env_npu.sh"
 
-GPUS_PER_NODE=8
 # Change for multinode config
+GPUS_PER_NODE=8
 MASTER_ADDR=localhost
 MASTER_PORT=6000
 NNODES=1
@@ -78,3 +78,5 @@ torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \
     --distributed-backend nccl \
     --save $CHECKPOINT_PATH \
     --load $CHECKPOINT_PATH
+
+set +x

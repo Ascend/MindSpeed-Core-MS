@@ -3,8 +3,8 @@
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 source "tests_extend/system_tests/env_npu.sh"
 
-GPUS_PER_NODE=8
 # Change for multinode config
+GPUS_PER_NODE=8
 MASTER_ADDR=localhost
 MASTER_PORT=6000
 NNODES=1
@@ -25,48 +25,35 @@ DISTRIBUTED_ARGS="
 "
 
 GPT_ARGS="
-    --num-layers 4 \
-    --hidden-size 1024 \
-    --ffn-hidden-size 4096 \
-    --num-attention-heads 16 \
-    --kv-channels 64 \
-    --seq-length 1024 \
-    --max-position-embeddings 1024 \
-    --micro-batch-size 8 \
-    --global-batch-size 64 \
-    --optimizer adam \
-    --loss-scale 1 \
-    --lr 0.00015 \
+    --tensor-model-parallel-size 2 \
+    --pipeline-model-parallel-size 2 \
+    --sequence-parallel \
+    --num-layers 2 \
+    --hidden-size 12288 \
+    --num-attention-heads 96 \
+    --seq-length 2048 \
+    --max-position-embeddings 2048 \
+    --micro-batch-size 1 \
+    --global-batch-size 16 \
     --train-iters 1000 \
-    --lr-decay-iters 1000 \
+    --lr-decay-iters 320000 \
+    --lr 5.0e-7 \
+    --min-lr 5.0e-8 \
     --lr-decay-style cosine \
-    --min-lr 1.0e-5 \
-    --weight-decay 1e-2 \
-    --lr-warmup-fraction .01 \
     --clip-grad 1.0 \
+    --weight-decay 0.1 \
+    --adam-beta1 0.9 \
+    --adam-beta2 0.95 \
+    --init-method-std 0.006 \
     --no-gradient-accumulation-fusion \
-    --sgd-momentum 0.9 \
-    --fp16-lm-cross-entropy \
-    --apply-query-key-layer-scaling \
-    --accumulate-allreduce-grads-in-fp32 \
-    --empty-unused-memory-level 1 \
-    --openai-gelu \
     --use-flash-attn \
-    --apply-layernorm-1p \
-    --apply-residual-connection-post-layernorm \
     --position-embedding-type rope \
-    --rotary-seq-len-interpolation-factor 1 \
-    --group-query-attention \
-    --num-query-groups 1 \
-    --dataloader-type cyclic \
-    --standalone-embedding-stage \
-    --use-cpu-initialization \
+    --use-distributed-optimizer \
     --overlap-param-gather \
     --overlap-grad-reduce \
-    --use-distributed-optimizer \
     --no-bias-gelu-fusion \
     --no-bias-dropout-fusion \
-    --fp16
+    --fp16 \
 "
 
 DATA_ARGS="
@@ -99,3 +86,5 @@ torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \
     --save $CHECKPOINT_PATH \
     --no-save-optim \
     --no-save-rng \
+
+set +x

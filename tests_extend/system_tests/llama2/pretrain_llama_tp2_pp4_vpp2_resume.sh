@@ -4,7 +4,6 @@ source "tests_extend/system_tests/env_npu.sh"
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 GPUS_PER_NODE=8
-# Change for multinode config
 MASTER_ADDR=localhost
 MASTER_PORT=6000
 NNODES=1
@@ -39,14 +38,13 @@ GPT_ARGS="
     --num-attention-heads 32 \
     --tokenizer-type Llama2Tokenizer \
     --tokenizer-model ${TOKENIZER_MODEL} \
-    --no-load-optim \
-    --no-load-rng \
     --seq-length 4096 \
     --max-position-embeddings 4096 \
     --micro-batch-size 4 \
     --global-batch-size 32 \
     --make-vocab-size-divisible-by 1 \
     --lr 1.25e-6 \
+    --train-iters 1000 \
     --lr-decay-style cosine \
     --untie-embeddings-and-output-weights \
     --disable-bias-linear \
@@ -57,6 +55,8 @@ GPT_ARGS="
     --normalization RMSNorm \
     --use-fused-rmsnorm \
     --swiglu \
+    --use-fused-swiglu \
+    --use-flash-attn \
     --no-position-embedding \
     --no-masked-softmax-fusion \
     --attention-softmax-in-fp32 \
@@ -66,14 +66,8 @@ GPT_ARGS="
     --clip-grad 1.0 \
     --adam-beta1 0.9 \
     --adam-beta2 0.95 \
-    --adam-eps 1e-8 \
-    --norm-epsilon 1e-5 \
-    --rotary-percent 1 \
-    --hysteresis 2 \
-    --initial-loss-scale 65536 \
-    --min-loss-scale 1
-    --loss-scale-window 1000 \
-    --use-flash-attn \
+    --no-load-optim \
+    --no-load-rng \
     --no-gradient-accumulation-fusion \
     --bf16
 "
@@ -106,3 +100,5 @@ torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \
     --train-iters 1000 \
     --save-interval 10000 \
     --load $CKPT_DIR \
+
+set +x
