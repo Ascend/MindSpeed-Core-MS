@@ -1,3 +1,5 @@
+# Copyright (c) 2024, Huawei Technologies Co., Ltd.  All rights reserved.
+
 from functools import wraps
 import argparse
 
@@ -256,6 +258,8 @@ def validate_args_wrapper(validate_args):
             args.transformer_impl = 'local'
         if args.fp8:
             raise AssertionError('NPU not supported FP8.')
+        if args.tp_comm_overlap:
+            args.tp_comm_overlap = False
 
     return wrapper
 
