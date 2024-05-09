@@ -1,4 +1,3 @@
-from .fusion_attention_builder import FusionAttentionOpBuilder
 from .fusion_attention_v2_builder import FusionAttentionV2OpBuilder
 from .algorithm_builder import AlgorithmOpBuilder
 from .memory_fragmentation_builder import MemoryFragmentationBuilder
