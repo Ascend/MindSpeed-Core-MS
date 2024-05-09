@@ -26,8 +26,8 @@ class PTNorm:
                 dim=hidden_size,
                 eps=eps,
                 sequence_parallel=config.sequence_parallel,
-                use_fused_rmsnorm=True,
             )
+            instance.use_fused_rmsnorm = True
         else:
             raise Exception('Only LayerNorm and RMSNorm are curently supported')
 
