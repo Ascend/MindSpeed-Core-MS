@@ -23,6 +23,7 @@ import torch
 import megatron
 
 _CONTEXT_PARALLEL_GROUP_FOR_SEND_RECV_OVERLAP = None
+_PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM = None
 
 
 def initialize_model_parallel_wrapper(initialize_model_parallel):
@@ -158,6 +159,18 @@ def initialize_model_parallel_wrapper(initialize_model_parallel):
         print_rank_0(f"all_tensor_and_expert_group_ranks {all_tensor_and_expert_group_ranks}")
         print_rank_0(f"all_data_parallel_group_ranks_with_cp {all_data_parallel_group_ranks_with_cp}")
 
+        global _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM
+        if _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM is not None:
+            raise AttributeError('Pipeline parallel group for new stream is already initialized')      
+        num_pipeline_model_parallel_groups: int = world_size // pipeline_model_parallel_size
+        for i in range(num_pipeline_model_parallel_groups):
+            ranks = range(i, world_size, num_pipeline_model_parallel_groups)
+            group = torch.distributed.new_group(
+                ranks, pg_options=megatron.core.parallel_state.get_nccl_options('pp', nccl_comm_cfgs)
+            )
+            if rank in ranks:
+                _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM = group
+
     return wrapper
 
 
@@ -206,13 +219,21 @@ def get_context_parallel_group_for_send_recv_overlap(check_initialized=True):
     return _CONTEXT_PARALLEL_GROUP_FOR_SEND_RECV_OVERLAP
 
 
+def get_pipeline_parallel_group_for_new_stream():
+    if _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM is None:
+        raise AttributeError('Pipeline parallel group of backward is not initialized')
+    return _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM
+
+
 def destroy_model_parallel_wrapper(destroy_model_parallel):
     @wraps(destroy_model_parallel)
     def wrapper():
         destroy_model_parallel()
 
         global _CONTEXT_PARALLEL_GROUP_FOR_SEND_RECV_OVERLAP
+        global _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM
         _CONTEXT_PARALLEL_GROUP_FOR_SEND_RECV_OVERLAP = None
+        _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM = None
 
     return wrapper
 

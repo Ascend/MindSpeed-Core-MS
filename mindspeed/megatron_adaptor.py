@@ -132,6 +132,7 @@ def megatron_core_adaptation(aspm):
     from .core.parallel_state import get_context_parallel_group_for_send_recv_overlap
     from .optimizer.optimizer import (mixed_precision_optimizer_step, \
                                       reuse_fp32_param_init_wrapper, optimizer_config_init_wrapper)
+    from .core.pipeline_parallel.schedules import get_forward_backward_func_wrapper
 
     aspm.register_patch('megatron.core.tensor_parallel.random._set_cuda_rng_state', _set_cuda_rng_state)
     aspm.register_patch('megatron.core.tensor_parallel.random.CheckpointFunction.backward',
@@ -164,6 +165,8 @@ def megatron_core_adaptation(aspm):
     aspm.register_patch('megatron.core.transformer.custom_layers.transformer_engine.TENorm', PTNorm)
     aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.forward',
                         dot_product_attention_forward_wrapper)
+    aspm.register_patch('megatron.core.pipeline_parallel.schedules.get_forward_backward_func',
+                        get_forward_backward_func_wrapper)
 
     # Bugfix for Megatron-LM core 0.6.0, to be removed for next version.
     aspm.register_patch('megatron.core.parallel_state.initialize_model_parallel', initialize_model_parallel)
