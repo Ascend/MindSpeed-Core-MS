@@ -123,7 +123,7 @@ def megatron_core_adaptation(aspm):
     from .core.transformer.attention import attention_init_wrapper
     from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
     from mindspeed.core.transformer.custom_layers.transformer_engine import PTNorm
-    from mindspeed.core.transformer.dot_product_attention import dot_product_attention_forward_wrapper
+    from mindspeed.core.transformer.dot_product_attention import dot_product_attention_forward_wrapper, dot_product_attention_init_wrapper
     from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
     from mindspeed.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec_wrapper
     from .core.parallel_state import initialize_model_parallel
@@ -163,6 +163,8 @@ def megatron_core_adaptation(aspm):
     aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_local_spec',
                         get_gpt_layer_local_spec_wrapper)
     aspm.register_patch('megatron.core.transformer.custom_layers.transformer_engine.TENorm', PTNorm)
+    aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.__init__',
+                        dot_product_attention_init_wrapper)
     aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.forward',
                         dot_product_attention_forward_wrapper)
     aspm.register_patch('megatron.core.pipeline_parallel.schedules.get_forward_backward_func',
