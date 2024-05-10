@@ -237,8 +237,6 @@ def validate_args_wrapper(validate_args):
                     '--position-embedding-type=rope')
         if args.reuse_fp32_param and not args.bf16:
             raise AssertionError('--reuse-fp32-param only support for `bf16`')
-        if args.reuse_fp32_param and args.use_distributed_optimizer:
-            raise AssertionError('--reuse-fp32-param not support for distributed optimizer now.')
         if args.optimize_recomp_communication_level > 0:
             if not hasattr(args, "optimize_recomp_communication_status"):
                 args.optimize_recomp_communication_status = 0

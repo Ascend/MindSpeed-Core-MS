@@ -1,4 +1,5 @@
 import os
+import types
 from functools import wraps
 
 import torch
@@ -17,9 +18,7 @@ def mixed_precision_optimizer_step(self):
     timers('optimizer-copy-to-main-grad').stop()
     if self.config.reuse_fp32_param:
         # bf16 -> fp32
-        for int32_float32_group, float16_param_group in zip(
-            self.int32_float32_groups, self.float16_float32_groups):
-            bf16_tensors_to_fp32_tensors(int32_float32_group, float16_param_group)
+        self.fp16_tensor_convert_to_fp32_tensor()
 
     # Do unscale, check for inf, and update grad scaler only for
     # the case that grad scaler is provided.
@@ -66,9 +65,7 @@ def mixed_precision_optimizer_step(self):
         barrier=self.config.barrier_with_L1_time)
     if self.config.reuse_fp32_param:
         # fp32 -> bf16 + res
-        for int32_float32_param_group, float16_param_group in zip(
-            self.int32_float32_groups, self.float16_float32_groups):
-            fp32_tensors_to_bf16_tensors(int32_float32_param_group, float16_param_group)
+        self.fp32_tensor_convert_to_fp16_tensor()
     else:
         self._copy_main_params_to_model_params()
     timers('optimizer-copy-main-to-model-params').stop()
@@ -119,6 +116,8 @@ def reuse_fp32_param_init_wrapper(init_func):
                 self.res_float16_groups.append(res_float16_params_this_group)
                 self.float16_float32_groups.append(float16_float32_params_this_group)
                 self.int32_float32_groups.append(int32_float32_params_this_group)
+            self.fp16_tensor_convert_to_fp32_tensor = types.MethodType(fp16_tensor_convert_to_fp32_tensor, self)
+            self.fp32_tensor_convert_to_fp16_tensor = types.MethodType(fp32_tensor_convert_to_fp16_tensor, self)    
     return reuse_fp32_param_init
 
 
@@ -147,6 +146,18 @@ def init_and_reuse_storage_of_tensors(
     fp32_tensors_to_bf16_tensors([int32_tensor], [bf16_fp32_tensor])
     reuse_data_ptr(res_tensor, bf16_fp32_tensor, 0)
     reuse_data_ptr(bf16_tensor, bf16_fp32_tensor, res_tensor.numel())
+
+
+def fp16_tensor_convert_to_fp32_tensor(self):
+    for int32_float32_group, float16_param_group in zip(
+            self.int32_float32_groups, self.float16_float32_groups):
+        bf16_tensors_to_fp32_tensors(int32_float32_group, float16_param_group)
+
+
+def fp32_tensor_convert_to_fp16_tensor(self):
+    for int32_float32_param_group, float16_param_group in zip(
+        self.int32_float32_groups, self.float16_float32_groups):
+        fp32_tensors_to_bf16_tensors(int32_float32_param_group, float16_param_group)
 
 
 def fp32_tensors_to_bf16_tensors(int32_tensors, bf16_fp32_tensors):
