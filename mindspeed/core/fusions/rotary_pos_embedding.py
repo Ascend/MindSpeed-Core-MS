@@ -7,13 +7,13 @@ from megatron.core.models.common.embeddings.rotary_pos_embedding import _rotate_
 
 def apply_fused_rotary_pos_emb_wrapper(fn):
     @wraps(fn)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(t, freqs, rotary_interleaved):
         _args = get_args()
         if _args.use_fused_rotary_pos_emb:
             cos = torch.cos(freqs)
             sin = torch.sin(freqs)
             return torch_npu.npu_rotary_mul(t, cos, sin).to(t.dtype)
-        fn(self, *args, **kwargs)
+        return fn(t, freqs, rotary_interleaved)
 
     return wrapper
 
