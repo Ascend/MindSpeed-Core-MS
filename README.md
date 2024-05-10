@@ -98,6 +98,7 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 | Ascend TP 重计算通信优化               | [link](docs/features/recomputation-communication.md) |
 | Ascend 内存碎片优化                   | [link](docs/features/memory-fragmentation.md) |
 | Ascend 自适应选择重计算                 | [link](docs/features/adaptive-recompute.md) |
+| Ascend 激活函数重计算                  | [link](docs/features/activation-function-recompute.md)   |
 | Ascend 计算通信并行优化                 | [link](docs/features/communication-over-computation.md) |
 | Ascend BF16 参数副本复用              | [link](docs/features/reuse-fp32-param.md) |
 | Ascend rms_norm 融合算子            | [link](docs/features/rms_norm.md) |

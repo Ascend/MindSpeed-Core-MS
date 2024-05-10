@@ -13,10 +13,12 @@ from megatron.legacy.model.transformer import ParallelMLP, ParallelTransformer, 
 from megatron.core.enums import ModelType
 from megatron.legacy.model.enums import AttnType, AttnMaskType, LayerType
 from megatron.legacy.model.transformer import _get_num_layers, _get_layer_type
+from megatron.legacy.model.fused_bias_gelu import bias_gelu_impl
 
 from mindspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
 from mindspeed.core.fusions.fused_swiglu import fused_swiglu
+from mindspeed.core.tensor_parallel.random import CheckpointWithoutOutput
 
 
 try:
@@ -286,9 +288,97 @@ def parallel_mlp_init_wrapper(fn):
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
         fn(self, *args, **kwargs)
+        self.layer_number = None
         args = get_args()
         if args.swiglu and args.use_fused_swiglu:
             self.activation_func = fused_swiglu
+    return wrapper
+
+
+def should_recompute_activation(self):
+    args = get_args()
+    if not args.recompute_activation_function or self.layer_number is None:
+        return False
+
+    activation_recompute_layers = args.recompute_activation_function_num_layers
+    vpp_size = args.virtual_pipeline_model_parallel_size
+    pp_size = args.transformer_pipeline_model_parallel_size
+    if vpp_size is not None:
+        layer_per_chunk = args.num_layers_per_virtual_pipeline_stage
+    elif pp_size is not None:
+        layer_per_chunk = args.num_layers // pp_size
+    else:
+        layer_per_chunk = args.num_layers
+
+    recompute_priority = (self.layer_number - 1) % layer_per_chunk
+    full_recompute_layers = args.recompute_num_layers
+
+    if args.recompute_method == "block":
+        if recompute_priority < full_recompute_layers:
+            # Do full recomputation
+            return False
+        elif activation_recompute_layers is None:
+            # Do activation function recomputation
+            return True
+        elif recompute_priority < full_recompute_layers + activation_recompute_layers:
+            # Do activation function recomputation
+            return True
+        else:
+            # No recomputation
+            return False
+
+    if activation_recompute_layers is None:
+        # Do activation function recomputation
+        return True
+    elif full_recompute_layers is None:
+        return recompute_priority < activation_recompute_layers
+    elif recompute_priority < full_recompute_layers + activation_recompute_layers:
+        # Do activation function recomputation
+        return True
+    else:
+        # No recomputation
+        return False
+
+
+def parallel_mlp_forward_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        is_recompute_activation = should_recompute_activation(self)
+
+        def activation_function(*function_args):
+            intermediate, bias = function_args
+
+            if self.bias_gelu_fusion:
+                assert self.add_bias is True
+                assert self.activation_func == F.gelu
+                intermediate = bias_gelu_impl(intermediate, bias)
+            else:
+                if bias_parallel is not None:
+                    intermediate = intermediate + bias
+                intermediate = self.activation_func(intermediate)
+            return intermediate
+
+        if not is_recompute_activation:
+            output, output_bias = fn(self, *args, **kwargs)
+        else:
+            hidden_states = args[0]
+            intermediate_parallel, bias_parallel = self.dense_h_to_4h(hidden_states)
+            self.activation_checkpoint_manager = CheckpointWithoutOutput()
+            intermediate_parallel = self.activation_checkpoint_manager.checkpoint(activation_function,
+                                                                                  False,
+                                                                                  intermediate_parallel,
+                                                                                  bias_parallel)
+            # [s, b, h]
+            output, output_bias = self.dense_4h_to_h(intermediate_parallel)
+
+            # discard the output of the activation function,
+            # which will be restored by recomputation during backward.
+            self.activation_checkpoint_manager.discard_output()
+
+            # when backward to output of dense_4h_to_h,
+            # recompute and restore the output of activation function.
+            output.register_hook(self.activation_checkpoint_manager.recompute)
+        return output, output_bias
     return wrapper
 
 
@@ -621,4 +711,20 @@ def switch_mlp_forward_wrapper(fn):
         used_token = args[1] if len(args) > 1 else None
         output = self.block(hidden_states, used_token)
         return output[0], None
+    return wrapper
+
+
+def parallel_transformer_layer_init_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        from megatron.legacy.model.transformer import SwitchMLP
+        super(ParallelTransformerLayer, self).__init__()
+        fn(self, *args, **kwargs)
+        if self.mlp.__class__ is SwitchMLP:
+            experts_modules = self.mlp.block.moe_layer.experts.experts
+            for expert in experts_modules:
+                expert.layer_number = self.layer_number
+        else:
+            self.mlp.layer_number = self.layer_number
+
     return wrapper

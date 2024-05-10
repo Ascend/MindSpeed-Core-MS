@@ -144,6 +144,11 @@ def _add_training_args(parser):
                        action='store_true', default=False,
                        help='switch to open adaptive recompute feature. '
                             'The default is False.')
+    group.add_argument('--recompute-activation-function', action='store_true',
+                       help='Recompute the activation function in MLP layers.')
+    group.add_argument('--recompute-activation-function-num-layers', type=int, default=None,
+                       help='Can be used together with "--recompute-method block." '
+                       'and "--recompute-num-layers". ')
     group.add_argument('--jit-compile', action='store_true', default=False,
                        help='Setting jit compile mode to True')
     return parser
@@ -260,6 +265,12 @@ def validate_args_wrapper(validate_args):
             raise AssertionError('NPU not supported FP8.')
         if args.tp_comm_overlap:
             args.tp_comm_overlap = False
+        if args.recompute_method == "uniform":
+            assert not args.recompute_activation_function, \
+                'uniform recomputation is not compatible ' \
+                'with activation function recomputation '
+        if args.recompute_activation_function and args.recompute_granularity == "selective":
+            raise AssertionError('--recompute-activation-function is not compatible with selective recomputation')
 
     return wrapper
 
