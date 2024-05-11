@@ -1,18 +1,21 @@
 import torch
 import torch_npu
+from torch import Tensor
 from functools import wraps
 from megatron.training import get_args
-from megatron.core.models.common.embeddings.rotary_pos_embedding import _rotate_half
 
 
-def apply_fused_rotary_pos_emb_wrapper(fn):
+def apply_fused_rotary_pos_emb_bshd_wrapper(fn):
     @wraps(fn)
-    def wrapper(t, freqs, rotary_interleaved):
+    def wrapper(t: Tensor, freqs: Tensor, rotary_interleaved: bool = False) -> Tensor:
         _args = get_args()
         if _args.use_fused_rotary_pos_emb:
-            cos = torch.cos(freqs)
-            sin = torch.sin(freqs)
-            return torch_npu.npu_rotary_mul(t, cos, sin).to(t.dtype)
+            rot_dim = freqs.shape[-1]
+            t, t_pass = t[..., :rot_dim], t[..., rot_dim:]
+            cos_ = torch.cos(freqs).to(t.dtype)
+            sin_ = torch.sin(freqs).to(t.dtype)
+            t = torch_npu.npu_rotary_mul(t, cos_, sin_).to(t.dtype)
+            return torch.cat((t, t_pass), dim=-1)
         return fn(t, freqs, rotary_interleaved)
 
     return wrapper
