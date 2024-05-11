@@ -4,7 +4,7 @@ source "tests_extend/system_tests/env_npu.sh"
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 IPs=('$master_ip' '$other_ips')
-LOCAL_HOST=`hostname -I|awk -F "" '{print$1}'`
+LOCAL_HOST=`hostname -I|awk -F " " '{print$1}'`
 GPUS_PER_NODE=8
 MASTER_ADDR=${IPs[0]}
 MASTER_PORT=6000

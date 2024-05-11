@@ -719,9 +719,11 @@ def parallel_transformer_layer_init_wrapper(fn):
     def wrapper(self, *args, **kwargs):
         from megatron.legacy.model.transformer import SwitchMLP
         super(ParallelTransformerLayer, self).__init__()
+        global_args = get_args()
         fn(self, *args, **kwargs)
         if self.mlp.__class__ is SwitchMLP:
-            experts_modules = self.mlp.block.moe_layer.experts.experts
+            experts_modules = self.mlp.block.moe_layer.experts.experts if global_args.moe_model_type == 'deepspeed_moe' \
+                else self.mlp.local_experts
             for expert in experts_modules:
                 expert.layer_number = self.layer_number
         else:
