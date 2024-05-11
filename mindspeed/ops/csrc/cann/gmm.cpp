@@ -35,20 +35,6 @@ c10::SmallVector<int64_t, SIZE> array_to_small_vector(c10::IntArrayRef shape)
 }
 }
 
-bool _check_w_dim(size_t num_w, size_t dim_num_w, size_t dim_0_w, size_t num_group_list,
-                  size_t sum_group_list)
-{
-    bool result = false;
-    if (2 == dim_num_w && num_w == num_group_list) {
-        result = true;
-    } else if (3 == dim_num_w && 1 == num_w && dim_0_w == num_group_list) {
-        result = true;
-    } else if (2 == dim_num_w && 1 == num_w && dim_0_w == sum_group_list) {
-        result = true;
-    }
-    return result;
-}
-
 void _check_dims(size_t num_x, const at::TensorList &weight, size_t num_group_list,
                  size_t sum_group_list)
 {
@@ -57,12 +43,6 @@ void _check_dims(size_t num_x, const at::TensorList &weight, size_t num_group_li
         "Neither x nor weight could be empty.");
     size_t dim_num_w = weight[0].sizes().size();
     size_t dim_0_w = weight[0].sizes()[0];
-    TORCH_CHECK(_check_w_dim(num_w, dim_num_w, dim_0_w, num_group_list, sum_group_list),
-        "Invalid dim of weight. Only the following three situations are allowed:"
-        "(1) The tensor nums of weight equals the length of group_list; the dim num of each tensor equals 2. "
-        "(2) There is one tensor in weight with a dim num of 3; its first dim equals the length of group_list. "
-        "(3) There is one tensor in weight with a dim num of 2; its first dim equals the sum of group_list. "
-        );
 }
 
 void _create_new_tensor_multi_dim(std::vector<at::Tensor> &y, const at::Tensor &x_i, const at::Tensor &w_i,
