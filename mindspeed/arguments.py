@@ -271,6 +271,12 @@ def validate_args_wrapper(validate_args):
                 'with activation function recomputation '
         if args.recompute_activation_function and args.recompute_granularity == "selective":
             raise AssertionError('--recompute-activation-function is not compatible with selective recomputation')
+        adaptive_recompute_enable = args.adaptive_recompute_device_size > 0 or args.adaptive_recompute_device_swap
+        if adaptive_recompute_enable and (args.recompute_granularity is not None or args.recompute_method is not None):
+            print("[WARNING] if activate adaptive selective recompute, recomputing args switch "
+                        "\"recompute_granularity\" and \"recompute_method\" will be turned off.")
+            args.recompute_granularity = None
+            args.recompute_method = None
 
     return wrapper
 
