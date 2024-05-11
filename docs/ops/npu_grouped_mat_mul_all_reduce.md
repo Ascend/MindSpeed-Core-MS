@@ -36,7 +36,7 @@ $$
 输入：
 - x：必选输入，List[Tensor]，数据类型float16，bfloat16。支持的最大长度为64个。
 - weight：必选输入，List[Tensor]，数据类型float16, bfloat16。支持的最大长度为64个。
-- bias：可选输入，List[Tensor]，数据类型float16, float32。torch1.11版本缺省值为[], 2.1版本后缺省值为none。支持的最大长度为64个。
+- bias：可选输入，List[Tensor]，数据类型float16, float32。支持的最大长度为64个。对于实际无bias的场景，可以直接不指定bias参数或设置为None。
 - group_list：可选输入，Optional[List[int64]]，缺省none。代表输入和输出M方向的matmul大小分布，支持的最大长度为64个。
 
 输出：
@@ -65,8 +65,8 @@ $$
   1. x中元素类型为float16，weight中元素类型为float16，bias中元素类型为float16，输出y中元素类型为float16；
 
   2. x中元素类型为bfloat16，weight中元素类型为bfloat16，bias中元素类型为float32，输出y中元素类型为bfloat16；
-- 当前只支持Pytorch2.1版本。对于实际无bias的场景，可以直接不指定bias参数或设置为None。
 - 输入中须包含通信域hcomm字符串，它需要从torch.distributed包中的接口获取。
+- 当前只支持Pytorch2.1版本。
 
 ## npu_grouped_mat_mul_all_reduce 类的调用方式
 
