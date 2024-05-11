@@ -130,6 +130,8 @@ def _add_training_args(parser):
     group.add_argument('--shape-order', type=str, default='SBH',
                        choices=['SBH', 'BSH', 'BSND'],
                        help='input shape order used by Flash attention')
+    group.add_argument('--sparse-mode', type=int, default=0,
+                       help='To improve performance in different modes of attention mask')
     group.add_argument('--adaptive-recompute-device-size',
                        type=int, default=-1,
                        help='The memory size for adaptive selective recompute strategy. '
@@ -277,6 +279,8 @@ def validate_args_wrapper(validate_args):
                         "\"recompute_granularity\" and \"recompute_method\" will be turned off.")
             args.recompute_granularity = None
             args.recompute_method = None
+        if args.use_flash_attn:
+            assert args.sparse_mode == 0 or args.sparse_mode == 2, f"Only supports sparse modes 0 and 2"
 
     return wrapper
 

@@ -199,7 +199,8 @@ def megatron_legacy_adaptation(aspm):
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
     from .core.fusions.rms_norm import rms_norm_init_wrapper, rms_norm_forward
-    from .model.transformer import parallel_mlp_init_wrapper, flash_self_attention_forward, parallel_mlp_forward_wrapper, parallel_transformer_init_wrapper
+    from .model.transformer import parallel_mlp_init_wrapper, flash_self_attention_forward, parallel_mlp_forward_wrapper, parallel_transformer_init_wrapper, \
+        parallel_transformer_forward_wrapper
     from .model.transformer import core_attention_init_wrapper, core_attention_forward, parallel_attention_init_wrapper, \
         parallel_attention_forward
     from .core.transformer.transformer import parallel_transformer_layer_forward_wrapper, \
@@ -207,6 +208,7 @@ def megatron_legacy_adaptation(aspm):
     from .model.transformer import switch_mlp_init_wrapper, switch_mlp_forward_wrapper, \
                                     parallel_transformer_layer_init_wrapper
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.__init__', parallel_transformer_init_wrapper)
+    aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.forward', parallel_transformer_forward_wrapper)
     aspm.register_patch('megatron.legacy.model.fused_layer_norm.FusedLayerNormAffineFunction',
                         FusedLayerNormAffineFunction)
     aspm.register_patch('megatron.legacy.model.fused_layer_norm.FastLayerNormFN', FastLayerNormFN)
@@ -245,7 +247,7 @@ def megatron_legacy_adaptation(aspm):
 def megatron_training_adaptation(aspm):
     import megatron.training.global_vars
     from .initialize import _compile_dependencies, set_jit_fusion_options
-    from .utils import get_batch_on_this_cp_rank
+    from .utils import get_batch_on_this_cp_rank, get_batch_on_this_tp_rank
     from .training import pretrain
     from .arguments import parse_args_wrapper, validate_args_wrapper, core_transformer_config_from_args_wrapper
     from .tokenizer import build_tokenizer_wrapper
@@ -257,6 +259,7 @@ def megatron_training_adaptation(aspm):
                         core_transformer_config_from_yaml_wrapper)
     aspm.register_patch('megatron.training.initialize._compile_dependencies', _compile_dependencies)
     aspm.register_patch('megatron.training.utils.get_batch_on_this_cp_rank', get_batch_on_this_cp_rank)
+    aspm.register_patch('megatron.training.utils.get_batch_on_this_tp_rank', get_batch_on_this_tp_rank)
     aspm.register_patch('megatron.training.arguments.parse_args',
                         parse_args_wrapper)
     aspm.register_patch('megatron.training.arguments.validate_args',

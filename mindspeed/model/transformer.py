@@ -26,6 +26,9 @@ try:
 except ImportError:
     rearrange = None
 
+global global_attention_mask
+global_attention_mask = None
+
 
 class Alibi:
     _instance = None
@@ -284,6 +287,29 @@ def parallel_transformer_init_wrapper(fn):
     return wrapper
 
 
+def parallel_transformer_forward_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, hidden_states, attention_mask, **kwargs):
+        args = get_args()
+        global global_attention_mask
+        if global_attention_mask is None:
+            # ring attn
+            if args.context_parallel_algo == 'megatron_cp_algo':
+                global_attention_mask = torch.zeros([2048, 2048]).tril().bool().npu()
+            # ulysses attn and self attn
+            elif (args.sparse_mode == 0 or args.sparse_mode == 2):
+                if args.seq_length > 2048:
+                    global_attention_mask = torch.zeros([2048, 2048]).tril().bool().npu()
+                    args.sparse_mode = 2
+                else:
+                    global_attention_mask = (torch.tril(torch.ones([args.seq_length, args.seq_length]), diagonal=-(args.pre_tockens + 1)) \
+                        + torch.triu(torch.ones([args.seq_length, args.seq_length]), diagonal=args.next_tockens + 1)).bool().npu()
+                    args.sparse_mode = 0
+        attention_mask = global_attention_mask
+        return fn(self, hidden_states, attention_mask, **kwargs)
+    return wrapper
+
+
 def parallel_mlp_init_wrapper(fn):
     @wraps(fn)
     def wrapper(self, *args, **kwargs):
@@ -391,10 +417,6 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
     args = get_args()
     seq_length, _, head_num, head_dim = q.shape[0], q.shape[1], q.shape[2], q.shape[3]
 
-    if not hasattr(self, 'attention_mask'):
-        self.attention_mask = (torch.tril(torch.ones([seq_length, seq_length]), diagonal=-(args.pre_tockens + 1)) \
-                + torch.triu(torch.ones([seq_length, seq_length]), diagonal=args.next_tockens + 1)).bool().npu()
-
     q, k, v = [rearrange(x, 's b h d -> s b (h d)') for x in [q, k, v]]
 
     try:
@@ -405,18 +427,19 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
     if args.context_parallel_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
         cp_para = dict()
         cp_para['causal'] = args.cp_attention_mask_type == 'causal'
-        output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, None)
+        output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask)
     else:
-        output = torch_npu.npu_fusion_attention( \
-            q, k, v, head_num, args.shape_order, \
-            pse=None, \
-            padding_mask=None, \
-            atten_mask=self.attention_mask, \
-            scale=scale, \
-            pre_tockens=args.pre_tockens, \
-            next_tockens=args.next_tockens, \
-            keep_prob=1 - self.dropout_p, \
-            inner_precise=0
+        output = torch_npu.npu_fusion_attention(
+            q, k, v, head_num, args.shape_order,
+            pse=None,
+            padding_mask=None,
+            atten_mask=attention_mask,
+            scale=scale,
+            pre_tockens=args.pre_tockens,
+            next_tockens=args.next_tockens,
+            keep_prob=1 - self.dropout_p,
+            inner_precise=0,
+            sparse_mode=args.sparse_mode
         )[0]
 
     return output
