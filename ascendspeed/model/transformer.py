@@ -290,21 +290,16 @@ def parallel_transformer_init_wrapper(fn):
 def parallel_transformer_forward_wrapper(fn):
     @wraps(fn)
     def wrapper(self, hidden_states, attention_mask, **kwargs):
-        args = get_args()
         global global_attention_mask
         if global_attention_mask is None:
-            # ring attn
-            if args.context_parallel_algo == 'megatron_cp_algo':
-                global_attention_mask = torch.triu(torch.ones([2048, 2048]), diagonal=1).bool().npu()
-            # ulysses attn and self attn
-            elif (args.sparse_mode == 0 or args.sparse_mode == 2):
-                if args.seq_length > 2048:
-                    global_attention_mask = torch.triu(torch.ones([2048, 2048]), diagonal=1).bool().npu()
-                    args.sparse_mode = 2
-                else:
-                    global_attention_mask = (torch.tril(torch.ones([args.seq_length, args.seq_length]), diagonal=-(args.pre_tockens + 1)) \
-                        + torch.triu(torch.ones([args.seq_length, args.seq_length]), diagonal=args.next_tockens + 1)).bool().npu()
-                    args.sparse_mode = 0
+            args = get_args()
+            if args.use_flash_attn and (args.seq_length > 2048 or args.context_parallel_algo == 'megatron_cp_algo'):
+                args.sparse_mode = 2
+                global_attention_mask = torch.triu(torch.ones([2048, 2048], dtype=bool, device=torch.cuda.current_device()), diagonal=1)
+            else:
+                args.sparse_mode = 0
+                global_attention_mask = (torch.tril(torch.ones([args.seq_length, args.seq_length], dtype=bool, device=torch.cuda.current_device()), diagonal=-(args.pre_tockens + 1)) \
+                    + torch.triu(torch.ones([args.seq_length, args.seq_length], dtype=bool, device=torch.cuda.current_device()), diagonal=args.next_tockens + 1))
         attention_mask = global_attention_mask
         return fn(self, hidden_states, attention_mask, **kwargs)
     return wrapper
