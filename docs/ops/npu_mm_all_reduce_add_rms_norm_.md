@@ -104,7 +104,7 @@ import torch
 import torch_npu
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from mindspeed.ops.npu_mm_all_reduce_add_rms_norm_ import npu_mm_all_reduce_add_rms_norm_
+from ascendspeed.ops.npu_mm_all_reduce_add_rms_norm_ import npu_mm_all_reduce_add_rms_norm_
 
 
 def run_mm_all_reduce_add_rms_norm(rank, world_size, master_ip, master_port, x1_shape, x2_shape, residual_shape,

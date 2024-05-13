@@ -12,7 +12,7 @@
 
 ### 准备工作
 
-1. 按照MindSpeed根目录下README完成MindSpeed、Megatron-LM源码准备和上手准备
+1. 按照AscendSpeed根目录下README完成AscendSpeed、Megatron-LM源码准备和上手准备
 
 2. 下载 Mixtral-8x7B 的 [词表和tokenizer](https://huggingface.co/mistralai/Mixtral-8x7B-v0.1/tree/main)
 
@@ -57,7 +57,7 @@ python ./tests_extend/tools/preprocess_data.py \
 
 ```
 # 拷贝mixtral训练所用脚本到Megatron-LM目录下
-cp ../MindSpeed/tests_extend/system_tests/mixtral/pretrain_mixtral.sh .
+cp ../AscendSpeed/tests_extend/system_tests/mixtral/pretrain_mixtral.sh .
 
 ```
 

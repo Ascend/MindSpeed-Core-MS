@@ -3,7 +3,7 @@
 ## MATMUL_ALL_REDUCE接口
 
 ```python
-from mindspeed.ops.lcal_functional import coc_ops
+from ascendspeed.ops.lcal_functional import coc_ops
 
 coc_ops.matmul_all_reduce(input1, input2, output, bias)
 ```
@@ -30,7 +30,7 @@ coc_ops.matmul_all_reduce(input1, input2, output, bias)
 ```python
 import torch
 import torch_npu
-from mindspeed.ops.lcal_functional import coc_ops
+from ascendspeed.ops.lcal_functional import coc_ops
 
 m, k, n = 2048, 4096, 8192
 dtype = torch.float16
@@ -45,7 +45,7 @@ coc_ops.matmul_all_reduce(input1, input2, output, bias)
 ## ALL_GATHER_MATMUL接口
 
 ```python
-from mindspeed.ops.lcal_functional import coc_ops
+from ascendspeed.ops.lcal_functional import coc_ops
 
 coc_ops.all_gather_matmul(input1, input2, output, bias)
 ````
@@ -72,7 +72,7 @@ coc_ops.all_gather_matmul(input1, input2, output, bias)
 ```python
 import torch
 import torch_npu
-from mindspeed.ops.lcal_functional import coc_ops
+from ascendspeed.ops.lcal_functional import coc_ops
 
 m, k, n = 2048, 4096, 8192
 world_size = 8
@@ -88,7 +88,7 @@ coc_ops.all_gather_matmul(input1, input2, output, bias)
 ## ALL_GATHER_MATMUL_V2接口
 
 ```python
-from mindspeed.ops.lcal_functional import coc_ops
+from ascendspeed.ops.lcal_functional import coc_ops
 
 coc_ops.all_gather_matmul_v2(input1, input2, output, comm_output, bias)
 ```
@@ -116,7 +116,7 @@ coc_ops.all_gather_matmul_v2(input1, input2, output, comm_output, bias)
 ```python
 import torch
 import torch_npu
-from mindspeed.ops.lcal_functional import coc_ops
+from ascendspeed.ops.lcal_functional import coc_ops
 
 m, k, n = 2048, 4096, 8192
 world_size = 8
@@ -132,7 +132,7 @@ coc_ops.all_gather_matmul_v2(input1, input2, output, comm_output, bias)
 ## MATMUL_REDUCE_SCATTER接口
 
 ```python
-from mindspeed.ops.lcal_functional import coc_ops
+from ascendspeed.ops.lcal_functional import coc_ops
 
 coc_ops.matmul_reduce_scatter(input1, input2, output, bias)
 ````
@@ -159,7 +159,7 @@ coc_ops.matmul_reduce_scatter(input1, input2, output, bias)
 ```python
 import torch
 import torch_npu
-from mindspeed.ops.lcal_functional import coc_ops
+from ascendspeed.ops.lcal_functional import coc_ops
 
 m, k, n = 2048, 4096, 8192
 world_size = 8
@@ -175,7 +175,7 @@ coc_ops.matmul_reduce_scatter(input1, input2, output, bias)
 ## PURE_MATMUL接口
 
 ```python
-from mindspeed.ops.lcal_functional import coc_ops
+from ascendspeed.ops.lcal_functional import coc_ops
 
 coc_ops.pure_matmul(input1, input2, output, bias)
 ````
@@ -202,7 +202,7 @@ coc_ops.pure_matmul(input1, input2, output, bias)
 ```python
 import torch
 import torch_npu
-from mindspeed.ops.lcal_functional import coc_ops
+from ascendspeed.ops.lcal_functional import coc_ops
 
 m, k, n = 2048, 4096, 8192
 world_size = 8

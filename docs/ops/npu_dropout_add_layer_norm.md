@@ -66,7 +66,7 @@ def npu_dropout_add_rms_norm(x0,
 import torch
 import torch_npu
 
-from mindspeed.ops import npu_dropout_add_layer_norm
+from ascendspeed.ops import npu_dropout_add_layer_norm
 
 
 batch, seq, hidden_size = 6, 60, 1024
@@ -96,7 +96,7 @@ weight_grad = weight.grad
 import torch
 import torch_npu
 
-from mindspeed.ops import npu_dropout_add_layer_norm
+from ascendspeed.ops import npu_dropout_add_layer_norm
 
 
 batch, seq, hidden_size = 6, 60, 1024

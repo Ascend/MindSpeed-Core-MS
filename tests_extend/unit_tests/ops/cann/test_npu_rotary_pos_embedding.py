@@ -2,7 +2,7 @@ from copy import deepcopy
 import pytest
 import torch
 import torch_npu
-from mindspeed import megatron_adaptor
+from ascendspeed import megatron_adaptor
 from unit_tests.common import DistributedTest
 from megatron.training.arguments import parse_args
 from megatron.training.global_vars import set_args

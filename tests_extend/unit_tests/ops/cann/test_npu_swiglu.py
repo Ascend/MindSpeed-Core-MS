@@ -1,7 +1,7 @@
 import pytest
 import torch
 import torch_npu
-from mindspeed import megatron_adaptor
+from ascendspeed import megatron_adaptor
 from megatron.legacy.model.transformer import ParallelMLP
 from unit_tests.common import DistributedTest
 from commons import initialize_model_parallel

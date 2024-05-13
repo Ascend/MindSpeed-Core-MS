@@ -1,7 +1,7 @@
 import copy
 import pytest
 import torch
-import mindspeed.megatron_adaptor
+import ascendspeed.megatron_adaptor
 from apex.optimizers import FusedAdam as Adam
 
 from types import SimpleNamespace

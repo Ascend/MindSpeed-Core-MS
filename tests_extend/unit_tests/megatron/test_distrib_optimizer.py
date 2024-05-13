@@ -2,7 +2,7 @@ import copy
 import pytest
 import torch
 import torch_npu  # noqa
-import mindspeed.megatron_adaptor  # noqa
+import ascendspeed.megatron_adaptor  # noqa
 from apex.optimizers import FusedAdam as Adam
 
 from megatron.core import DistributedDataParallel as DDP

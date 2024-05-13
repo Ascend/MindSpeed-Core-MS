@@ -78,7 +78,7 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 import numpy as np
 import math
-from mindspeed.ops.npu_grouped_mat_mul_all_reduce import npu_grouped_mat_mul_all_reduce
+from ascendspeed.ops.npu_grouped_mat_mul_all_reduce import npu_grouped_mat_mul_all_reduce
 
 
 def get_hcomm_info(world_size, rank):

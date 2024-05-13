@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch_npu
 
-from mindspeed.op_builder import GMMOpBuilder
+from ascendspeed.op_builder import GMMOpBuilder
 
 DEVICE_NAME = torch_npu.npu.get_device_name(0)[:10]
 
@@ -25,8 +25,8 @@ class TestNPUGMM:
         return torch.cat([x for x in final_out], dim=0)
 
     def custom_op_exec(self, x, weight, bias, group_list, group_type):
-        mindspeed_ops = GMMOpBuilder().load()
-        return mindspeed_ops.npu_gmm(x, weight, bias, group_list, group_type)
+        ascendspeed_ops = GMMOpBuilder().load()
+        return ascendspeed_ops.npu_gmm(x, weight, bias, group_list, group_type)
 
     @pytest.mark.skipif(DEVICE_NAME != 'Ascend910B', reason='device type is not supported, skip this UT!')
     def test_npu_gmm(self):
