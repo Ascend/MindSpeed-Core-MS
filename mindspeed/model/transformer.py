@@ -295,11 +295,11 @@ def parallel_transformer_forward_wrapper(fn):
         if global_attention_mask is None:
             # ring attn
             if args.context_parallel_algo == 'megatron_cp_algo':
-                global_attention_mask = torch.zeros([2048, 2048]).tril().bool().npu()
+                global_attention_mask = torch.triu(torch.ones([2048, 2048]), diagonal=1).bool().npu()
             # ulysses attn and self attn
             elif (args.sparse_mode == 0 or args.sparse_mode == 2):
                 if args.seq_length > 2048:
-                    global_attention_mask = torch.zeros([2048, 2048]).tril().bool().npu()
+                    global_attention_mask = torch.triu(torch.ones([2048, 2048]), diagonal=1).bool().npu()
                     args.sparse_mode = 2
                 else:
                     global_attention_mask = (torch.tril(torch.ones([args.seq_length, args.seq_length]), diagonal=-(args.pre_tockens + 1)) \
