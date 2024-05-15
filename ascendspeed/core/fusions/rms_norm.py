@@ -16,11 +16,13 @@ def rms_norm_init_wrapper(fn):
     return wrapper
 
 
-def rms_norm_forward(self, x):
-    if int(os.getenv('NPU_ASD_ENABLE', '0')):
-        from torch_npu.utils import register_asd_hook
-        register_asd_hook(x, self.weight)
-    if self.use_fused_rmsnorm:
-        return torch_npu.npu_rms_norm(x, self.weight, epsilon=self.eps)[0]
-    output = self._norm(x.float()).type_as(x)
-    return output * self.weight
+def rms_norm_forward_wrapper(fn):
+    @wraps(fn)
+    def wrapper(self, x):
+        if int(os.getenv('NPU_ASD_ENABLE', '0')):
+            from torch_npu.utils import register_asd_hook
+            register_asd_hook(x, self.weight)
+        if self.use_fused_rmsnorm:
+            return torch_npu.npu_rms_norm(x, self.weight, epsilon=self.eps)[0]
+        return fn(self, x)
+    return wrapper

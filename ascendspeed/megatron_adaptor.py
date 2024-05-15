@@ -198,7 +198,7 @@ def megatron_legacy_adaptation(aspm):
     from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN, fused_layer_norm_affine
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
-    from .core.fusions.rms_norm import rms_norm_init_wrapper, rms_norm_forward
+    from .core.fusions.rms_norm import rms_norm_init_wrapper, rms_norm_forward_wrapper
     from .model.transformer import parallel_mlp_init_wrapper, flash_self_attention_forward, parallel_mlp_forward_wrapper, parallel_transformer_init_wrapper, \
         parallel_transformer_forward_wrapper
     from .model.transformer import core_attention_init_wrapper, core_attention_forward, parallel_attention_init_wrapper, \
@@ -222,7 +222,7 @@ def megatron_legacy_adaptation(aspm):
     aspm.register_patch('megatron.legacy.model.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax',
                         forward_fused_softmax)
     aspm.register_patch('megatron.legacy.model.rms_norm.RMSNorm.__init__', rms_norm_init_wrapper)
-    aspm.register_patch('megatron.legacy.model.rms_norm.RMSNorm.forward', rms_norm_forward)
+    aspm.register_patch('megatron.legacy.model.rms_norm.RMSNorm.forward', rms_norm_forward_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.__init__', parallel_mlp_init_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.forward', parallel_mlp_forward_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.FlashSelfAttention.forward', flash_self_attention_forward)
@@ -245,7 +245,6 @@ def megatron_legacy_adaptation(aspm):
 
 
 def megatron_training_adaptation(aspm):
-    import megatron.training.global_vars
     from .initialize import _compile_dependencies, set_jit_fusion_options
     from .utils import get_batch_on_this_cp_rank, get_batch_on_this_tp_rank
     from .training import pretrain
@@ -279,7 +278,6 @@ def ascend_adaptation(aspm):
         from .core.memory.memory_fragmentation.pluggable_allocator_adpator import change_allocator
         change_allocator()
 
-        import megatron.training
         from .core.memory.memory_fragmentation.memory_recorder import memory_recorder_wrapper
         aspm.register_patch('megatron.training.training.setup_model_and_optimizer', memory_recorder_wrapper)
 
@@ -297,7 +295,6 @@ def ascend_adaptation(aspm):
     if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) and not int(os.getenv('MEMORY_FRAGMENTATION', '0')):
         from .core.memory.adaptive_recomputing.pluggable_allocator_adpator import change_allocator
         change_allocator()
-        import megatron.training
         from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
         allowed_recomputing_module_wrapper(megatron.legacy.model.transformer.ParallelTransformerLayer)
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
