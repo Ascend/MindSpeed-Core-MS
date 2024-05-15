@@ -24,7 +24,7 @@ from torchair.ge_concrete_graph.ge_graph import get_default_ge_graph, next_uniqu
 from torchair.ge_concrete_graph.ge_graph import compat_as_bytes
 from torchair.ge_concrete_graph.ge_graph import get_invalid_desc
 from ascendspeed.op_builder.builder import AscendSpeedOpBuilder, AS_LIBRARY
-from ascendspeed.op_builder.npu_mm_all_reduce_add_rms_norm_builder import MatmulAllReduceAddRmsNorm
+from ascendspeed.op_builder.npu_mm_all_reduce_add_rms_norm_builder import MatmulAllReduceAddRmsNorm, CheckDtype
 
 
 class InplaceMatmulAllReduceAddRmsNormOpBuilder(AscendSpeedOpBuilder):
@@ -91,6 +91,8 @@ class InplaceMatmulAllReduceAddRmsNormOpBuilder(AscendSpeedOpBuilder):
                 str hcom, *, str reduce_op='sum', float epsilon=1e-06, Tensor? bias=None,
                 Tensor? antiquant_scale=None, Tensor? antiquant_offset=None, Tensor? dequant_scale=None,
                 int antiquant_group_size=0, int comm_turn=0) -> (Tensor(a!), Tensor)'''
+            CheckDtype(x1, x2, bias=bias, residual=residual, gamma=gamma, antiquant_scale=antiquant_scale,
+                       antiquant_offset=antiquant_offset, dequant_scale=dequant_scale)
             return MatmulAllReduceAddRmsNorm(x1,
                                              x2,
                                              bias=bias,

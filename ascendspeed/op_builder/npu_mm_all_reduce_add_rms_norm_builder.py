@@ -24,6 +24,15 @@ from torchair.ge_concrete_graph.ge_graph import compat_as_bytes
 from torchair.ge_concrete_graph.ge_graph import get_invalid_desc
 from ascendspeed.op_builder.builder import AscendSpeedOpBuilder, AS_LIBRARY
 
+DataType = dict(
+    DT_FLOAT16=1,
+    DT_INT8=2,
+    DT_INT32=3,
+    DT_INT64=9,
+    DT_UINT64=10,
+    DT_BF16=27,
+)
+
 
 class MatmulAllReduceAddRmsNormOpBuilder(AscendSpeedOpBuilder):
     OP_NAME = "npu_mm_all_reduce_add_rms_norm"
@@ -88,6 +97,8 @@ class MatmulAllReduceAddRmsNormOpBuilder(AscendSpeedOpBuilder):
                     *, str reduce_op='sum', float epsilon=1e-06, Tensor? bias=None, Tensor? antiquant_scale=None,
                     Tensor? antiquant_offset=None, Tensor? dequant_scale=None, int antiquant_group_size=0,
                     int comm_turn=0) -> (Tensor, Tensor)"'''
+            CheckDtype(x1, x2, bias=bias, residual=residual, gamma=gamma, antiquant_scale=antiquant_scale,
+                       antiquant_offset=antiquant_offset, dequant_scale=dequant_scale)
             return MatmulAllReduceAddRmsNorm(x1,
                                              x2,
                                              bias=bias,
@@ -103,6 +114,49 @@ class MatmulAllReduceAddRmsNormOpBuilder(AscendSpeedOpBuilder):
                                              comm_turn=comm_turn,
                                              antiquant_group_size=antiquant_group_size,
                                              epsilon=epsilon)
+
+
+def CheckDtype(x1: Tensor, x2: Tensor, bias: Optional[Tensor], residual: Tensor, gamma: Tensor,
+               antiquant_scale: Optional[Tensor], antiquant_offset: Optional[Tensor],
+               dequant_scale: Optional[Tensor]):
+    if residual.dtype != gamma.dtype:
+        raise AssertionError('type of residual and gamma must be same.')
+    if x1.dtype in (DataType["DT_FLOAT16"], DataType["DT_BF16"]) and \
+          x2.dtype in (DataType["DT_FLOAT16"], DataType["DT_BF16"]):
+        if x2.dtype != x1.dtype:
+            raise AssertionError('type of x1 and x2 must be same.')
+        if bias is not None and bias.dtype != x1.dtype:
+            raise AssertionError('type of x1 and bias must be same.')
+        if residual.dtype != x1.dtype:
+            raise AssertionError('type of x1 and residual must be same.')
+    elif x1.dtype is DataType["DT_INT8"] and x2.dtype is DataType["DT_INT8"]:
+        if bias is not None and bias.dtype != DataType["DT_INT32"]:
+            raise AssertionError('type of bias must be int32.')
+        if dequant_scale is None:
+            raise AssertionError('dequant_scale must not be None.')
+        if dequant_scale.dtype in (DataType["DT_INT64"], DataType["DT_UINT64"]):
+            if residual.dtype != DataType["DT_FLOAT16"]:
+                raise AssertionError('when dequant_scale is int64(uint64), residual type must be fp16.')
+        elif dequant_scale.dtype is DataType["DT_BF16"]:
+            if residual.dtype != DataType["DT_BF16"]:
+                raise AssertionError('type of dequant_scale and residual should be bf16.')
+        else:
+            raise AssertionError('dequant_scale type must be int64, uint64 or bf16')
+    elif x1.dtype in (DataType["DT_FLOAT16"], DataType["DT_BF16"]) and \
+        x2.dtype is DataType["DT_INT8"]:
+        if bias is not None and bias.dtype != x1.dtype:
+            raise AssertionError('type of x1 and bias must be same.')
+        if antiquant_scale is None:
+            raise AssertionError('antiquant_scale must not be None.')
+        if antiquant_scale.dtype != x1.dtype:
+            raise AssertionError('type of x1 and antiquant_scale must be same.')
+        if antiquant_offset is not None and antiquant_offset.dtype != antiquant_scale.dtype:
+            raise AssertionError('type of antiquant_scale and antiquant_offset must be same.')
+        if residual.dtype != x1.dtype:
+            raise AssertionError('type of x1 and residual must be same.')
+    else:
+        raise AssertionError("the type of x1 and x2 should be suit the not quant scenario, "\
+                    "dequant scenario, antiquant scenario.")
 
 
 def MatmulAllReduceAddRmsNorm(x1: Tensor,
