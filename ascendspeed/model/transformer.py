@@ -422,7 +422,7 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
     if args.context_parallel_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
         cp_para = dict()
         cp_para['causal'] = args.cp_attention_mask_type == 'causal'
-        output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask)
+        output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask, self.dropout_p)
     else:
         output = torch_npu.npu_fusion_attention(
             q, k, v, head_num, args.shape_order,

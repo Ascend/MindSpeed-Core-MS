@@ -90,7 +90,8 @@ class AttentionWithCp(torch.autograd.Function):
     """Attention implementation with context parallelism"""
 
     @staticmethod
-    def forward(ctx, q, k, v, n, cp_para, softmax_scale=None, attn_mask=None):
+    def forward(ctx, q, k, v, n, cp_para, softmax_scale=None, attn_mask=None, dropout_p=0.):
+        keep_prob = 1. - dropout_p
         causal = cp_para['causal']
         cp_group = mpu.get_context_parallel_group()
         cp_size = mpu.get_context_parallel_world_size()
@@ -113,6 +114,9 @@ class AttentionWithCp(torch.autograd.Function):
         recv_kv = None
         send_recv_ops = []
         attn_out, softmax_max, softmax_sum = None, None, None
+        # (seed, offset, numels) for dropout mask
+        rng_states = [[0, 0, 0] for _ in range(cp_size)]
+
         for i in range(cp_size):
             # wait until KV is received from recv_src
             if len(send_recv_ops) > 0:
@@ -153,7 +157,7 @@ class AttentionWithCp(torch.autograd.Function):
                     scale=softmax_scale,
                     pre_tockens=cur_k.shape[0],
                     next_tockens=0 if cur_attn_mask is not None else cur_k.shape[0],
-                    keep_prob=1.,
+                    keep_prob=keep_prob,
                     sparse_mode=3 if cur_attn_mask is not None else 0
                 )
 
@@ -162,6 +166,8 @@ class AttentionWithCp(torch.autograd.Function):
                 cur_attn_out = attn_outs[0] 
                 cur_softmax_max = attn_outs[1]
                 cur_softmax_sum = attn_outs[2]
+                # (seed, offset, numels)
+                rng_states[i] = (attn_outs[4], attn_outs[5], attn_outs[6])
 
                 if i == 0:
                     attn_out = cur_attn_out
@@ -205,11 +211,12 @@ class AttentionWithCp(torch.autograd.Function):
                     scale=softmax_scale,
                     pre_tockens=cur_k.shape[0],
                     next_tockens=cur_k.shape[0],
-                    keep_prob=1.,
+                    keep_prob=keep_prob,
                     sparse_mode=0
                 )
 
                 cur_attn_out, cur_softmax_max, cur_softmax_sum = attn_outs[0], attn_outs[1], attn_outs[2]
+                rng_states[i] = (attn_outs[4], attn_outs[5], attn_outs[6])
                 if i == 0:
                     attn_out = cur_attn_out
                     softmax_max = cur_softmax_max
@@ -232,6 +239,8 @@ class AttentionWithCp(torch.autograd.Function):
         ctx.cp_size = cp_size
         ctx.cp_rank = rank
         ctx.cp_global_ranks = cp_global_ranks
+        ctx.keep_prob = keep_prob
+        ctx.rng_states = rng_states
         return attn_out
 
     @staticmethod
@@ -243,6 +252,8 @@ class AttentionWithCp(torch.autograd.Function):
         cp_group = ctx.cp_group
         cp_size = ctx.cp_size
         rank = ctx.cp_rank
+        keep_prob = ctx.keep_prob
+        rng_states = ctx.rng_states
         # Reversed order of forward
         send_dst = ctx.cp_global_ranks[(rank + cp_size - 1) % cp_size]
         recv_src = ctx.cp_global_ranks[(rank + 1) % cp_size]
@@ -330,7 +341,11 @@ class AttentionWithCp(torch.autograd.Function):
                     scale_value=softmax_scale,
                     pre_tockens=cur_k.shape[0],
                     next_tockens=0 if cur_attn_mask is not None else cur_k.shape[0],
-                    sparse_mode=3 if cur_attn_mask is not None else 0
+                    sparse_mode=3 if cur_attn_mask is not None else 0,
+                    keep_prob=keep_prob,
+                    seed=rng_states[cp_size - i - 1][0],
+                    offset=rng_states[cp_size - i - 1][1],
+                    numels=rng_states[cp_size - i - 1][2],
                 )
 
                 cur_dq, cur_dk, cur_dv = attn_grad_outs[0], attn_grad_outs[1], attn_grad_outs[2]
@@ -388,7 +403,11 @@ class AttentionWithCp(torch.autograd.Function):
                     scale_value=softmax_scale,
                     pre_tockens=cur_k.shape[0],
                     next_tockens=cur_k.shape[0],
-                    sparse_mode=0
+                    sparse_mode=0,
+                    keep_prob=keep_prob,
+                    seed=rng_states[cp_size - i - 1][0],
+                    offset=rng_states[cp_size - i - 1][1],
+                    numels=rng_states[cp_size - i - 1][2],
                 )
                 cur_dq, cur_dk, cur_dv = attn_grad_outs[0], attn_grad_outs[1], attn_grad_outs[2]
                 if i == 0:
@@ -413,11 +432,11 @@ class AttentionWithCp(torch.autograd.Function):
         # [2, s, b, h] -> [2s, b, h]
         if causal:
             dq, dk, dv = [x.view(-1, *x.shape[2:]) for x in [dq, dk, dv]]
-        return dq, dk, dv, None, None, None, None
+        return dq, dk, dv, None, None, None, None, None
 
 
-def ringattn_context_parallel(q, k, v, n, cp_para, softmax_scale=None, attn_mask=None):
+def ringattn_context_parallel(q, k, v, n, cp_para, softmax_scale=None, attn_mask=None, dropout_p=0.):
     out = AttentionWithCp.apply(
-        q, k, v, n, cp_para, softmax_scale, attn_mask
+        q, k, v, n, cp_para, softmax_scale, attn_mask, dropout_p
     )
     return out
