@@ -25,19 +25,21 @@ class TestMOELayer(DistributedTest):
         use_cpu_initialization=True,
         fp16=True,
     )
-    num_experts = 4
-    ep_size = 2
-    topk_gate_1 = TopKGate(Config(hidden_size=2, num_experts=4, topk=1))
-    topk_gate_2 = TopKGate(Config(hidden_size=2, num_experts=4, topk=2))
+    topk_gate = {
+        "ne_4_k_1": TopKGate(Config(hidden_size=2, num_experts=4, topk=1)),
+        "ne_4_k_2": TopKGate(Config(hidden_size=2, num_experts=4, topk=2)),
+        "ne_2_k_2": TopKGate(Config(hidden_size=2, num_experts=2, topk=2)),
+    }
     parallel_mlp = None
 
-    def get_moe_layer_output(self, topk, input_data):
-        expert = Experts(self.parallel_mlp, self.num_experts).npu()
+    def get_moe_layer_output(self, topk, input_data, ep_size, num_experts):
+        expert = Experts(self.parallel_mlp, num_experts).npu()
+        gate = self.topk_gate.get(f"ne_{num_experts}_k_{topk}", None)
         moe_layer_module = MOELayer(
-            self.topk_gate_1 if topk == 1 else self.topk_gate_2,
+            gate,
             expert,
-            ep_size=self.ep_size,
-            num_local_experts=self.num_experts // self.ep_size
+            ep_size=ep_size,
+            num_local_experts=num_experts // ep_size
         ).npu()
         expert_parallel_group = get_expert_model_parallel_group()
         moe_layer_module.set_ep_group(expert_parallel_group)
@@ -45,11 +47,11 @@ class TestMOELayer(DistributedTest):
         return moe_layer_module(input_data)
     
     @pytest.mark.parametrize("tp_pp_ep", [(1, 1, 2)])
-    @pytest.mark.parametrize("topk", [1, 2])
-    def test_moe_layer(self, tp_pp_ep, topk):
+    @pytest.mark.parametrize("ne_topk", [(4, 1), (4, 2), (2, 2)])
+    def test_moe_layer(self, tp_pp_ep, ne_topk):
         set_random_seed(1)
         (tp, pp, ep) = tp_pp_ep
-        topk = topk
+        (num_experts, topk) = ne_topk
         destroy_model_parallel()
         args = parse_args(None, True)
         set_args(args)
@@ -66,13 +68,13 @@ class TestMOELayer(DistributedTest):
         args_base.moe_router_topk = topk
         set_args(args_base)
         self.parallel_mlp = ParallelMLP(self.config)
-        output_base = self.get_moe_layer_output(args_base.moe_router_topk, input_data)
+        output_base = self.get_moe_layer_output(args_base.moe_router_topk, input_data, ep, num_experts)
 
         # with token rearraged
         args_rearrange = parse_args(None, True)
         args_rearrange.enable_token_rearrange_opt = False
         args_rearrange.moe_router_topk = topk
         set_args(args_rearrange)
-        output_rearrage = self.get_moe_layer_output(args_rearrange.moe_router_topk, input_data)
+        output_rearrage = self.get_moe_layer_output(args_rearrange.moe_router_topk, input_data, ep, num_experts)
 
         assert torch.allclose(output_base, output_rearrage, rtol=0.0001, atol=0.0001)

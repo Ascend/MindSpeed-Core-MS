@@ -281,6 +281,9 @@ def validate_args_wrapper(validate_args):
             args.recompute_method = None
         if args.use_flash_attn:
             assert args.sparse_mode == 0 or args.sparse_mode == 2, f"Only supports sparse modes 0 and 2"
+        if args.num_experts <= args.moe_router_topk:
+            raise ValueError(f"num_experts={args.num_experts} is equal or smaller than topk={args.moe_router_topk}!"
+                             f" please check whether the parameters is correct")
 
     return wrapper
 

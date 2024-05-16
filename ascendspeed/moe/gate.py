@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright (c) Microsoft Corporation.
 #
 # This source code is licensed under the Apache license found in the
@@ -73,7 +74,7 @@ def top1gating(logits: Tensor, config: Config) -> Tuple[Tensor, ...]:
     if config.noisy_gate_policy == 'RSample':
         logits_w_noise = logits + gumbel_rsample(logits.shape, device=logits.device)
     # everything is in fp32 in this function
-    # token_sel_expert_weights: [S, E], Ã¿¸ötokenÑ¡ÔñÃ¿¸ö×¨¼ÒµÄ¸ÅÂÊ
+    # token_sel_expert_weights: [S, E], æ¯ä¸ªtokené€‰æ‹©æ¯ä¸ªä¸“å®¶çš„æ¦‚çŽ‡
     token_sel_expert_weights = F.softmax(logits, dim=1)
     capacity = _capacity(token_sel_expert_weights,
                         torch.tensor(config.capacity_factor),
@@ -83,7 +84,7 @@ def top1gating(logits: Tensor, config: Config) -> Tuple[Tensor, ...]:
     # noisy gating
     final_logits = logits_w_noise if config.noisy_gate_policy == "RSample" else \
         token_sel_expert_weights
-    # [S] Ã¿¸ötoken¶ÔÓ¦µÄ×¨¼Ò£¨È¡¸ÅÂÊ×î´óµÄ£©
+    # [S] æ¯ä¸ªtokenå¯¹åº”çš„ä¸“å®¶ï¼ˆå–æ¦‚çŽ‡æœ€å¤§çš„ï¼‰
     token_sel_expert_idx = torch.argmax(final_logits, dim=1)
     num_experts = int(token_sel_expert_weights.shape[1])
     token_sel_expert_mask = F.one_hot(token_sel_expert_idx, num_classes=num_experts)
@@ -111,12 +112,12 @@ def top1gating(logits: Tensor, config: Config) -> Tuple[Tensor, ...]:
             dist.all_reduce(new_capacity, op=dist.ReduceOp.MAX, group=dist.group.WORLD)
             capacity = new_capacity
 
-    # Compute l_aux¸ºÔØ¾ùºâaux_loss
+    # Compute l_auxè´Ÿè½½å‡è¡¡aux_loss
     me = torch.mean(token_sel_expert_weights, dim=0)
     ce = torch.mean(token_sel_expert_mask.float(), dim=0)
     l_aux = torch.sum(me * ce) * num_experts
     all_args = get_args()
-    # Random Token Selection(½«tokenÑ¡Ôñ×¨¼ÒµÄÑÚÂë0/1¾ØÕóÖÐµÄ1×ª³É0~1Ö®¼äµÄÈ¨ÖØÖµ)
+    # Random Token Selection(å°†tokené€‰æ‹©ä¸“å®¶çš„æŽ©ç 0/1çŸ©é˜µä¸­çš„1è½¬æˆ0~1ä¹‹é—´çš„æƒé‡å€¼)
     if all_args.use_rts:  # default True.
         uniform = exp_selection_uniform_map.get(logits.device)
         if uniform is None:
@@ -129,8 +130,8 @@ def top1gating(logits: Tensor, config: Config) -> Tuple[Tensor, ...]:
     else:
         token_sel_expert_score = token_sel_expert_mask
 
-    # Í¨¹ýtopCÃ¿¸ö×¨¼ÒÑ¡ÔñÖÁ¶àC¸ötoken£¬È»ºóºÍÔ­Ê¼µÄmask1£¨Ã¿¸ö×¨¼Ò¿ÉÄÜÑ¡Ôñ³¬¹ýC¸ötoken£©¾ØÕóÏà³Ë£¬
-    # ¶ªµô³¬¹ý×¨¼ÒÈÝÁ¿µÄÈ¨ÖØµÍµÄtoken£¬¸üÐÂµÃµ½ token_sel_expert_mask
+    # é€šè¿‡topCæ¯ä¸ªä¸“å®¶é€‰æ‹©è‡³å¤šCä¸ªtokenï¼Œç„¶åŽå’ŒåŽŸå§‹çš„mask1ï¼ˆæ¯ä¸ªä¸“å®¶å¯èƒ½é€‰æ‹©è¶…è¿‡Cä¸ªtokenï¼‰çŸ©é˜µç›¸ä¹˜ï¼Œ
+    # ä¸¢æŽ‰è¶…è¿‡ä¸“å®¶å®¹é‡çš„æƒé‡ä½Žçš„tokenï¼Œæ›´æ–°å¾—åˆ° token_sel_expert_mask
     expert_sel_top_c_token_idx = torch.topk(token_sel_expert_score, k=capacity, dim=0)[1]
     token_sel_expert_mask *= torch.zeros_like(token_sel_expert_mask).scatter_(0, expert_sel_top_c_token_idx, 1)
 
@@ -142,9 +143,9 @@ def top1gating(logits: Tensor, config: Config) -> Tuple[Tensor, ...]:
     masked_token_idx_in_expert = token_idx_in_expert_with_noise * token_sel_expert_mask
     token_offset_for_expert = torch.sum(masked_token_idx_in_expert, dim=1)
     if all_args.enable_token_rearrange_opt:
-        # ÖØÅÅ¹ý³Ì£º¼ÆËã³öÃ¿¸ö×¨¼ÒÑ¡ÔñµÄtokenµÄË÷Òý£ºexpert_select_token_idx£¬shapeÎª: [E*C]
-        # MoEÇ°Ïò¹ý³ÌÖÐ¸ù¾Ý´ËË÷ÒýÍ¨¹ýindex_select APIÊµÏÖtokenµÄÖØÅÅ
-        # shape±ä»¯¹ý³Ì£º[S, E]->[C, E]->[E, C]->[E*C]
+        # é‡æŽ’è¿‡ç¨‹ï¼šè®¡ç®—å‡ºæ¯ä¸ªä¸“å®¶é€‰æ‹©çš„tokençš„ç´¢å¼•ï¼šexpert_select_token_idxï¼Œshapeä¸º: [E*C]
+        # MoEå‰å‘è¿‡ç¨‹ä¸­æ ¹æ®æ­¤ç´¢å¼•é€šè¿‡index_select APIå®žçŽ°tokençš„é‡æŽ’
+        # shapeå˜åŒ–è¿‡ç¨‹ï¼š[S, E]->[C, E]->[E, C]->[E*C]
         expert_sel_top_c_token_idx = torch.topk(token_sel_expert_mask,
                                                 k=capacity,
                                                 dim=0,
@@ -262,9 +263,9 @@ def top2gating(logits: Tensor, config: Config) -> Tuple[Tensor, Tensor, Tensor, 
     if all_args.enable_token_rearrange_opt:
         token_rearranged_first_ec_idx = token_first_exp_idx.int() * capacity + token_idx_in_first_expert.int()
         token_rearranged_second_ec_idx = token_second_exp_idx.int() * capacity + token_idx_in_second_expert.int()
-        # ÖØÅÅ¹ý³Ì£º¼ÆËã³öÃ¿¸ö×¨¼ÒÑ¡ÔñµÄtokenµÄË÷Òý£ºexpert_select_token_idx£¬shapeÎª: [E*C]
-        # MoEÇ°Ïò¹ý³ÌÖÐ¸ù¾Ý´ËË÷ÒýÍ¨¹ýindex_select APIÊµÏÖtokenµÄÖØÅÅ
-        # shape±ä»¯¹ý³Ì£º[S, E]->[C, E]->[E, C]->[E*C]
+        # é‡æŽ’è¿‡ç¨‹ï¼šè®¡ç®—å‡ºæ¯ä¸ªä¸“å®¶é€‰æ‹©çš„tokençš„ç´¢å¼•ï¼šexpert_select_token_idxï¼Œshapeä¸º: [E*C]
+        # MoEå‰å‘è¿‡ç¨‹ä¸­æ ¹æ®æ­¤ç´¢å¼•é€šè¿‡index_select APIå®žçŽ°tokençš„é‡æŽ’
+        # shapeå˜åŒ–è¿‡ç¨‹ï¼š[S, E]->[C, E]->[E, C]->[E*C]
         token_sel_first_exp_int_mask = first_expert_mask * 2
         token_sel_second_exp_int_mask = second_expert_mask
         expert_sel_top_c_token_idx = torch.topk(token_sel_first_exp_int_mask + token_sel_second_exp_int_mask,

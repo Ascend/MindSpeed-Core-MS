@@ -41,11 +41,14 @@ def _capacity(gates: Tensor, capacity_factor: Tensor, min_capacity: Tensor) -> T
     # gates has shape of S,E
     num_tokens = gates.shape[0]
     num_experts = gates.shape[1]
+    max_capacity = num_tokens
     # to(torch.int64) works around a bug in torch.onnx.export:
     # it should cast k to int64 when converting torch.topk but it doesn't.
     capacity = torch.ceil((num_tokens / num_experts) * capacity_factor).to(torch.int64)
     if capacity < min_capacity:
         capacity = min_capacity.to(torch.int64)
+    elif capacity > max_capacity:
+        capacity = torch.tensor(max_capacity, dtype=torch.int64)
     return capacity
 
 
