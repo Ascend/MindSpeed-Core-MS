@@ -14,11 +14,6 @@ from megatron.core.tensor_parallel.layers import (linear_with_grad_accumulation_
 
 
 def vocab_parallel_embedding_forward(self, input_):
-
-    if torch.any(
-        (input_ < 0) | (input_ >= self.num_embeddings)
-    ):
-        raise ValueError("An input token is out of bounds of the embedding table")
     if self.tensor_model_parallel_size > 1:
         # Build the mask.
         input_mask = (input_ < self.vocab_start_index) | \

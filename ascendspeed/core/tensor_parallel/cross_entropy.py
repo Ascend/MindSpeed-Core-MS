@@ -9,7 +9,7 @@ from megatron.core.parallel_state import (
 from megatron.core.tensor_parallel.utils import VocabUtility
 
 
-def _VocabParallelCrossEntropyForward(ctx, vocab_parallel_logits, target, label_smoothing=0.0):
+def vocab_parallel_cross_entropy_forward(ctx, vocab_parallel_logits, target, label_smoothing=0.0):
     # Maximum value along vocab dimension across all GPUs.
     logits_max = torch.max(vocab_parallel_logits, dim=-1)[0]
     torch.distributed.all_reduce(logits_max,

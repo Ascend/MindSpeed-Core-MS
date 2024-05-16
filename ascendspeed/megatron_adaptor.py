@@ -116,6 +116,7 @@ def megatron_core_adaptation(aspm):
     megatron.core.jit.jit_fuser = dummy_jit
     from .core.tensor_parallel.random import _set_cuda_rng_state, checkpoint_function_backward
     from .core.tensor_parallel.layers import vocab_parallel_embedding_forward
+    from .core.tensor_parallel.cross_entropy import vocab_parallel_cross_entropy_forward
     from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
@@ -135,6 +136,8 @@ def megatron_core_adaptation(aspm):
     from .core.pipeline_parallel.schedules import get_forward_backward_func_wrapper
     from .optimizer.distrib_optimizer import reuse_fp32_param_distrib_optimizer_init_wrapper
 
+    aspm.register_patch('megatron.core.tensor_parallel.cross_entropy._VocabParallelCrossEntropy.forward',
+                        vocab_parallel_cross_entropy_forward)
     aspm.register_patch('megatron.core.tensor_parallel.random._set_cuda_rng_state', _set_cuda_rng_state)
     aspm.register_patch('megatron.core.tensor_parallel.random.CheckpointFunction.backward',
                         checkpoint_function_backward)
