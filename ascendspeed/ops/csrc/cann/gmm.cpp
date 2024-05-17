@@ -56,8 +56,8 @@ void _create_new_tensor_multi_dim(std::vector<at::Tensor> &y, const at::Tensor &
     y.emplace_back(at::empty(output_size, options));
 }
 
-void _create_new_tensor(std::vector<at::Tensor> &y, size_t dim_m, size_t dim_n, c10::TensorOptions options,
-                        int64_t group_type_value, size_t num_group_list)
+void _create_new_tensor(std::vector<at::Tensor> &y, int64_t dim_m, int64_t dim_n, c10::TensorOptions options,
+                        int64_t group_type_value, int64_t num_group_list)
 {
     auto output_size = (2 == group_type_value) ? op_infer::array_to_small_vector({num_group_list, dim_m, dim_n})
                                                : op_infer::array_to_small_vector({dim_m, dim_n});
@@ -111,6 +111,44 @@ std::vector<at::Tensor> npu_gmm(const std::vector<at::Tensor>& x,
     return y;
 }
 
+std::vector<at::Tensor> npu_gmm(const std::vector<at::Tensor>& x,
+                                const std::vector<at::Tensor>& weight,
+                                const std::vector<at::Tensor>& bias,
+                                const c10::optional<at::Tensor>& group_list,
+                                c10::optional<int64_t> group_type)
+{
+    auto num_x = x.size();
+    auto num_w = weight.size();
+    auto group_list_real = group_list.value_or(at::Tensor());
+    auto num_group_list = group_list_real.sizes()[0];
+    int64_t split_item_value = 3;
+    int64_t group_type_value = group_type.value_or(-1);
+    int64_t sum_group_list = num_group_list > 0 ? group_list_real[num_group_list - 1].item<int>() : 0;
+
+    const at::TensorList x_(x);
+    const at::TensorList weight_(weight);
+    const at::TensorList bias_(bias);
+
+    _check_dims(num_x, weight_, num_group_list, sum_group_list);
+
+    std::vector<at::Tensor> y;
+    c10::TensorOptions options = x_[0].options().dtype(x_[0].scalar_type());
+
+    size_t dim_num_w = weight[0].sizes().size();
+    _create_new_tensor(y, x[0].sizes()[0], weight[0].sizes()[dim_num_w - 1], options, group_type_value,
+                        num_group_list);
+
+    at::TensorList result = at::TensorList(y);
+    auto scale_real = at::TensorList();
+    auto offset_real = at::TensorList();
+    auto antiquant_scale_real = at::TensorList();
+    auto antiquant_offset_real = at::TensorList();
+    ACLNN_CMD(aclnnGroupedMatmulV3, x_, weight_, bias_, scale_real, offset_real, antiquant_scale_real,
+              antiquant_offset_real, group_list_real, split_item_value, group_type_value, result);
+
+    return y;
+}
+
 std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>, std::vector<at::Tensor>> npu_gmm_backward(
     const std::vector<at::Tensor>& grad,
     const std::vector<at::Tensor>& x,
@@ -147,6 +185,9 @@ std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>, std::vector<at::Ten
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("npu_gmm", &npu_gmm, "grouped matmul forward");
+    using gmmv1 = std::vector<at::Tensor>(*)(const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, c10::optional<std::vector<int64_t>>, c10::optional<int64_t>);
+    using gmmv2 = std::vector<at::Tensor>(*)(const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, const c10::optional<at::Tensor>&, c10::optional<int64_t>);
+    m.def("npu_gmm", (gmmv1)&npu_gmm, "grouped matmul forward with group_list type List[int]");
     m.def("npu_gmm_backward", &npu_gmm_backward, "grouped matmul backward");
+    m.def("npu_gmm", (gmmv2)&npu_gmm, "grouped matmul forward with group_list type Tensor");
 }

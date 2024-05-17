@@ -1,6 +1,7 @@
 import re
 import os
 from abc import ABC, abstractmethod
+from typing import List, Union
 from torch.utils.cpp_extension import load
 from torch.library import Library
 import torch_npu
@@ -30,8 +31,11 @@ class AscendSpeedOpBuilder(ABC):
         ascendspeed_path = os.path.abspath(os.path.dirname(ascendspeed.__file__))
         return [os.path.join(ascendspeed_path, path) for path in paths]
 
-    def register_op_proto(self, op_proto: str):
-        AS_LIBRARY.define(op_proto)
+    def register_op_proto(self, op_proto: Union[str, List[str]]):
+        if isinstance(op_proto, str):
+            op_proto = [op_proto]
+        for proto in op_proto:
+            AS_LIBRARY.define(proto)
 
     @abstractmethod
     def sources(self):

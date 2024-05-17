@@ -7,7 +7,7 @@ npu_gmm(x, weight, bias=None, group_list=None, group_type=0)
 - x：必选输入，为tensor，数据类型float16, bfloat16, float32
 - weight：必选输入，为tensor，数据类型float16, bfloat16, float32
 - bias：可选输入，为tensor，数据类型float16, float32, 默认值为none。训练场景下，仅支持bias为none
-- group_list：可选输入，数据类型list[int64]，默认值为none。代表分组轴（见group_type参数）上不同组的索引。
+- group_list：可选输入，数据类型list[int64], tensor，默认值为none。代表分组轴（见group_type参数）上不同组的索引。
 - group_type：可选输入，数据类型int64，代表需要分组的轴，如矩阵乘为C[m,n]=A[m,k]xB[k,n]，则groupType取值-1：不分组，0：m轴分组，1：n轴分组，2：k轴分组，默认值为0（限制：不支持group_type=1的场景）。
 
 输出：
