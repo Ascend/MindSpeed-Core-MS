@@ -287,6 +287,7 @@ def validate_args_wrapper(validate_args):
             if args.num_experts <= args.moe_router_topk:
                 raise ValueError(f"num_experts={args.num_experts} is equal or smaller than topk={args.moe_router_topk}!"
                              f" please check whether the parameters is correct")
+        args.create_attention_mask_in_dataloader = False
 
     return wrapper
 

@@ -26,8 +26,7 @@ try:
 except ImportError:
     rearrange = None
 
-global global_attention_mask
-global_attention_mask = None
+_GLOBAL_ATTN_MASK = None
 
 
 class Alibi:
@@ -287,20 +286,29 @@ def parallel_transformer_init_wrapper(fn):
     return wrapper
 
 
+def set_attention_mask(attn_mask):
+    global _GLOBAL_ATTN_MASK
+    _GLOBAL_ATTN_MASK = attn_mask
+        
+
+def get_attention_mask():
+    global _GLOBAL_ATTN_MASK
+    if _GLOBAL_ATTN_MASK is None:
+        args = get_args()
+        if args.use_flash_attn and (args.seq_length > 2048 or args.context_parallel_algo == 'megatron_cp_algo'):
+            args.sparse_mode = 2
+            _GLOBAL_ATTN_MASK = torch.triu(torch.ones([2048, 2048], dtype=bool, device=torch.cuda.current_device()), diagonal=1)
+        else:
+            args.sparse_mode = 0
+            _GLOBAL_ATTN_MASK = (torch.tril(torch.ones([args.micro_batch_size, 1, args.seq_length, args.seq_length], dtype=bool, device=torch.cuda.current_device()), diagonal=-(args.pre_tockens + 1)) \
+                + torch.triu(torch.ones([args.micro_batch_size, 1, args.seq_length, args.seq_length], dtype=bool, device=torch.cuda.current_device()), diagonal=args.next_tockens + 1))
+    return _GLOBAL_ATTN_MASK
+
+
 def parallel_transformer_forward_wrapper(fn):
     @wraps(fn)
     def wrapper(self, hidden_states, attention_mask, **kwargs):
-        global global_attention_mask
-        if global_attention_mask is None:
-            args = get_args()
-            if args.use_flash_attn and (args.seq_length > 2048 or args.context_parallel_algo == 'megatron_cp_algo'):
-                args.sparse_mode = 2
-                global_attention_mask = torch.triu(torch.ones([2048, 2048], dtype=bool, device=torch.cuda.current_device()), diagonal=1)
-            else:
-                args.sparse_mode = 0
-                global_attention_mask = (torch.tril(torch.ones([args.seq_length, args.seq_length], dtype=bool, device=torch.cuda.current_device()), diagonal=-(args.pre_tockens + 1)) \
-                    + torch.triu(torch.ones([args.seq_length, args.seq_length], dtype=bool, device=torch.cuda.current_device()), diagonal=args.next_tockens + 1))
-        attention_mask = global_attention_mask
+        attention_mask = get_attention_mask()
         return fn(self, hidden_states, attention_mask, **kwargs)
     return wrapper
 

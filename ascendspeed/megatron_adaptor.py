@@ -248,8 +248,8 @@ def megatron_legacy_adaptation(aspm):
 
 
 def megatron_training_adaptation(aspm):
-    from .initialize import _compile_dependencies, set_jit_fusion_options
-    from .utils import get_batch_on_this_cp_rank, get_batch_on_this_tp_rank
+    from .initialize import _compile_dependencies, set_jit_fusion_options_wrapper
+    from .utils import get_batch_on_this_cp_rank
     from .training import pretrain
     from .arguments import parse_args_wrapper, validate_args_wrapper, core_transformer_config_from_args_wrapper
     from .tokenizer import build_tokenizer_wrapper
@@ -261,7 +261,6 @@ def megatron_training_adaptation(aspm):
                         core_transformer_config_from_yaml_wrapper)
     aspm.register_patch('megatron.training.initialize._compile_dependencies', _compile_dependencies)
     aspm.register_patch('megatron.training.utils.get_batch_on_this_cp_rank', get_batch_on_this_cp_rank)
-    aspm.register_patch('megatron.training.utils.get_batch_on_this_tp_rank', get_batch_on_this_tp_rank)
     aspm.register_patch('megatron.training.arguments.parse_args',
                         parse_args_wrapper)
     aspm.register_patch('megatron.training.arguments.validate_args',
@@ -270,7 +269,7 @@ def megatron_training_adaptation(aspm):
                         validate_args_wrapper)
     aspm.register_patch('megatron.training.arguments.core_transformer_config_from_args',
                         core_transformer_config_from_args_wrapper)
-    aspm.register_patch('megatron.training.initialize.set_jit_fusion_options', set_jit_fusion_options)
+    aspm.register_patch('megatron.training.initialize.set_jit_fusion_options', set_jit_fusion_options_wrapper)
     aspm.register_patch('megatron.training.training.pretrain', pretrain)
     aspm.register_patch('megatron.training.tokenizer.tokenizer.build_tokenizer', build_tokenizer_wrapper)
 
