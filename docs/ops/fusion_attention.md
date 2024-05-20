@@ -17,19 +17,22 @@ npu_fusion_attention(
 ```
 ## 前向接口：
 输入：
-- query：必选输入，数据类型float16, bfloat16	
-- key：必选输入，数据类型float16, bfloat16	
-- value：必选输入，数据类型float16, bfloat16
-- atten_mask：可选输入，数据类型bool，缺省none。在softmax之前drop的mask
-- pse：可选输入，数据类型float16, bfloat16，缺省none，如果psetype为2或3的话，为float32类型。在softmax之前score的偏移量。支持 b, n, s_outer 维度广播
-- padding_mask：Device侧的Tensor，暂不支持该参数
-- atten_mask：Device侧的Tensor，可选参数，取值为1代表该位不参与计算（不生效），为0代表该位参与计算，数据类型支持BOOL、UINT8，数据格式支持ND格式，输入shape类型支持BNSS格式、B1SS格式、11SS格式、SS格式。varlen场景只支持SS格式，SS分别是maxSq和maxSkv
-- prefix：Host侧的int array，可选参数，代表prefix稀疏计算场景每个Batch的N值。数据类型支持INT64，数据格式支持ND
-- actual_seq_qlen：Host侧的int array，可选参数，varlen场景时需要传入此参数。表示query每个S的累加和长度，数据类型支持INT64，数据格式支持ND
-- actual_seq_kvlen：Host侧的int array，可选参数，varlen场景时需要传入此参数。表示key/value每个S的累加和长度。数据类型支持INT64，数据格式支持ND
-- sparse_mode：Host侧的int，表示sparse的模式，可选参数。数据类型支持：INT64，默认值为0，支持配置值为0、1、2、3、4、5、6、7、8。当整网的atten_mask都相同且shape小于2048*2048时，建议使用defaultMask模式，来减少内存使用量
-- q_start_idx 外切时候s1方向偏移 暂未使用
-- kv_start_idx 外切时候s2方向偏移 暂未使用
+- query：必选输入，Device侧的Tensor，数据类型支持FLOAT16、BFLOAT16，数据格式支持ND。
+- key：必选输入，Device侧的Tensor，数据类型支持FLOAT16、BFLOAT16，数据格式支持ND。
+- value：必选输入，Device侧的Tensor，数据类型支持FLOAT16、BFLOAT16，数据格式支持ND。
+- atten_mask：可选输入，数据类型bool，缺省none。在softmax之前drop的mask。
+- pse：可选输入，Device侧的Tensor，可选参数，表示位置编码。数据类型支持FLOAT16、BFLOAT16，数据格式支持ND。非varlen场景支持四维输入，包含BNSS格式、BN1Skv格式、1NSS格式。如果非varlen场景Sq大于1024或varlen场景、每个batch的Sq与Skv等长且是sparse_mode为0、2、3的下三角掩码场景，可使能alibi位置编码压缩，此时只需要输入原始PSE最后1024行进行内存优化，即alibi_compress = ori_pse[:, :, -1024:, :]，参数每个batch不相同时，输入BNHSkv(H=1024)，每个batch相同时，输入1NHSkv(H=1024)。如果psetype为2或3的话，为float32类型 传入slope数据，slope数据支持BN或N两种shape。
+- padding_mask：可选输入，Device侧的Tensor，暂不支持该参数。
+- atten_mask：Device侧的Tensor，可选参数，取值为1代表该位不参与计算（不生效），为0代表该位参与计算，数据类型支持BOOL、UINT8，数据格式支持ND格式，输入shape类型支持BNSS格式、B1SS格式、11SS格式、SS格式。varlen场景只支持SS格式，SS分别是maxSq和maxSkv。
+- prefix：Host侧的int array，可选参数，代表prefix稀疏计算场景每个Batch的N值。数据类型支持INT64，数据格式支持ND。
+- actual_seq_qlen：Host侧的int array，可选参数，varlen场景时需要传入此参数。表示query每个S的累加和长度，数据类型支持INT64，数据格式支持ND。
+  比如真正的S长度列表为：2 2 2 2 2 则actual_seq_qlen传：2 4 6 8 10。
+- actual_seq_kvlen：Host侧的int array，可选参数，varlen场景时需要传入此参数。表示key/value每个S的累加和长度。数据类型支持INT64，数据格式支持ND。
+  比如真正的S长度列表为：2 2 2 2 2 则actual_seq_kvlen传：2 4 6 8 10。
+- sparse_mode：Host侧的int，表示sparse的模式，可选参数。数据类型支持：INT64，默认值为0，支持配置值为0、1、2、3、4、5、6、7、8。当整网的atten_mask都相同且shape小于2048*2048时，建议使用defaultMask模式，来减少内存使用,
+  具体可参考昇腾社区说明https://www.hiascend.com/document/detail/zh/Pytorch/60RC1/apiref/apilist/ptaoplist_000448.html。
+- q_start_idx 可选参数，外切时候s1方向偏移 暂未使用。
+- kv_start_idx 可选参数，外切时候s2方向偏移 暂未使用。
 
 输出：
 (Tensor, Tensor, Tensor, Tensor, int, int, int)
@@ -43,19 +46,14 @@ npu_fusion_attention(
 - 第7个输出为int，DSA生成dropoutmask的长度。
 
 属性：
-- scale_value：可选属性，数据类型float，缺省1。在 softmax 之前应用缩放因子。
-- pse_type  可选属性 int64  范围0-3   0表示外部传入，1暂不开放， 2和3表示核内生成， 3做pse的时候会做sqrt  
-- q_scale：可选属性，数据类型float，缺省1。query的缩放因子。
-- head_num：可选属性，数据类型int64，缺省1。输入 shape 中的 n。
-- io_layout：可选属性，数据类型string	缺省“BNSD”。可支持“BSH”, “SBH”, “BNSD”
-- h = n * d
-- BNSD 下输入shape：query（b, n, s, d）   key（b, n, s, d） value（b, n, s, d） atten_mask (s, s,) alibi_mask（b(1), n(1), s(1), s）
-- BSH 下输入shape：query（b, s, h）   key（b, s, h） value（b, s, h） atten_mask (s, s,) alibi_mask（b(1), n(1), s(1), s）
-- SBH 下输入shape：query（s, b, h）   key（s, b, h） value（s, b, h） atten_mask (s, s,) alibi_mask（b(1), n(1), s(1), s）
+- scale：可选属性，Host侧的double，可选参数，代表缩放系数，作为计算流中Muls的scalar值，数据类型支持DOUBLE，默认值为1。
+- pse_type：可选属性，int64  范围0-3   0表示外部传入，1暂不开放， 2和3表示核内生成， 3做pse的时候会做sqrt
+- head_num：必选属性，Host侧的int，代表head个数，数据类型支持INT64。
+- input_layout：必选属性，Host侧的string，代表输入query、key、value的数据排布格式，支持BSH、SBH、BSND、BNSD、TND(actual_seq_qlen/actual_seq_kvlen需传值)；后续章节如无特殊说明，S表示query或key、value的sequence length，Sq表示query的sequence length，Skv表示key、value的sequence length，SS表示Sq*Skv
 - keep_prob：可选属性，数据类型float，默认值为1.0。在 softmax 后的保留比例。
-- pre_tokens：可选属性，数据类型int64，默认值为2147483647。
-- next_tokens：可选属性，数据类型int64，默认值为2147483647。
-- precise_mode：可选属性，数据类型int64，缺省0。0内存优化，1性能优化
+- pre_tokens：可选属性，Host侧的int，用于稀疏计算的参数，可选参数，数据类型支持INT64，默认值为2147483647。
+- next_tokens：可选属性，Host侧的int，用于稀疏计算的参数，可选参数，数据类型支持INT64，默认值为2147483647。
+- inner_precise：可选属性，Host侧的int，用于提升精度，数据类型支持INT64，默认值为0。
 - gen_mask_parallel：debug参数，DSA生成dropout随机数向量mask的控制开关，默认值为True：同AICORE计算并行，False：同AICORE计算串行
 - sync：debug参数，DSA生成dropout随机数向量mask的控制开关，默认值为False：dropout mask异步生成，True：dropout mask同步生成
 
@@ -71,7 +69,7 @@ npu_fusion_attention(
 
 ## 输入限制
 - 输入query、key、value的B：batchsize必须相等，取值范围1~2K。
-- 输入query、key、value、pse的数据类型必须一致。
+- 输入query、key、value、pse的数据类型必须一致。pse_type=2或3的时候例外，此时pse需要传fp32的slope
 - 输入query、key、value的input_layout必须一致。
 - 输入query的N和key/value的N 必须成比例关系，即Nq/Nkv必须是非0整数，Nq取值范围1~256。当Nq/Nkv > 1时，即为GQA，当Nkv=1时，即为MQA。
 - 输入key/value的shape必须一致。
@@ -82,6 +80,10 @@ npu_fusion_attention(
 - sparse_mode配置为0、4时，须保证atten_mask与pre_tokens、next_tokens的范围一致。
 - prefix稀疏计算场景B不大于32，varlen场景不支持非压缩prefix，即不支持sparse_mode=5；当Sq>Skv时，prefix的N值取值范围[0, Skv]，当Sq<=Skv时，prefix的N值取值范围[Skv-Sq, Skv]。
 - sparse_mode=7或者8时，不支持可选输入pse。
+- varlen场景：
+  atten_mask输入不支持补pad，即atten_mask中不能存在某一行全1的场景。
+  pse仅支持alibi场景，即shape为BNHSkv(H=1024)、1NHSkv(H=1024)两种场景。
+- 支持actual_seq_qlen中某个Batch上的S长度为0；如果存在S为0的情况，不支持pse输入， 假设真实的S长度为[2,2,0,2,2]，则传入的actual_seq_qlen为[2,4,4,6,8]；不支持某个batch中Sq不为0，但是Skv为0的场景。
 
 ## flash_attention_v2 类的调用方式
 
@@ -118,7 +120,7 @@ key.requires_grad = True
 value.requires_grad = True
 
 #正向接口案例
-result = npu_fusion_attention(query.npu(), key.npu(), value.npu(), head_num, input_layout, atten_mask=atten_mask.npu(), scale=scale_value, keep_prob=keep_prob, pre_tokens=pre_tokens, next_tokens=next_tokens)
+result = npu_fusion_attention(query.npu(), key.npu(), value.npu(), head_num, input_layout, atten_mask=atten_mask.npu(), scale=scale_value, keep_prob=keep_prob, pre_tokens=pre_tokens, next_tokens=next_tokens, pse_type=1)
 
 #反向接口案例
 result[0].backward(dx.npu())
