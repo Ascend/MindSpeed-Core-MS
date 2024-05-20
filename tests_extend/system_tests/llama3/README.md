@@ -42,22 +42,22 @@ LLAMA3-8B 训练的硬件配置:
    # 修改 ascend-toolkit 路径
    source /usr/local/Ascend/ascend-toolkit/set_env.sh
    ```
-3. 下载 LLAMA3-8B 的 [预训练权重和词表](https://huggingface.co/unsloth/llama-3-8B/tree/main)
+3. 下载 LLAMA3-8B 的 [预训练权重和词表](https://hf-mirror.com/unsloth/llama-3-8b/tree/main)
 
    ```shell
      #!/bin/bash
      mkdir ./model_from_hf/llama-3-8b-hf/
      cd ./model_from_hf/llama-3-8b-hf/
-     wget https://huggingface.co/unsloth/llama-3-8B/blob/main/config.json
-     wget https://huggingface.co/unsloth/llama-3-8B/blob/main/generation_config.json
-     wget https://huggingface.co/unsloth/llama-3-8B/blob/main/model-00001-of-00004.safetensors
-     wget https://huggingface.co/unsloth/llama-3-8B/blob/main/model-00002-of-00004.safetensors
-     wget https://huggingface.co/unsloth/llama-3-8B/blob/main/model-00003-of-00004.safetensors
-     wget https://huggingface.co/unsloth/llama-3-8B/blob/main/model-00004-of-00004.safetensors
-     wget https://huggingface.co/unsloth/llama-3-8B/blob/main/model.safetensors.index.json
-     wget https://huggingface.co/unsloth/llama-3-8B/blob/main/special_tokens_map.json
-     wget https://huggingface.co/unsloth/llama-3-8B/blob/main/tokenizer.json
-     wget https://huggingface.co/unsloth/llama-3-8B/blob/main/tokenizer_config.json
+     wget https://hf-mirror.com/unsloth/llama-3-8b/raw/main/config.json
+     wget https://hf-mirror.com/unsloth/llama-3-8b/raw/main/generation_config.json
+     wget https://hf-mirror.com/unsloth/llama-3-8b/raw/main/model-00001-of-00004.safetensors
+     wget https://hf-mirror.com/unsloth/llama-3-8b/raw/main/model-00002-of-00004.safetensors
+     wget https://hf-mirror.com/unsloth/llama-3-8b/raw/main/model-00003-of-00004.safetensors
+     wget https://hf-mirror.com/unsloth/llama-3-8b/raw/main/model-00004-of-00004.safetensors
+     wget https://hf-mirror.com/unsloth/llama-3-8b/raw/main/model.safetensors.index.json
+     wget https://hf-mirror.com/unsloth/llama-3-8b/raw/main/special_tokens_map.json
+     wget https://hf-mirror.com/unsloth/llama-3-8b/raw/main/tokenizer.json
+     wget https://hf-mirror.com/unsloth/llama-3-8b/raw/main/tokenizer_config.json
      cd ../../
    ```
 
