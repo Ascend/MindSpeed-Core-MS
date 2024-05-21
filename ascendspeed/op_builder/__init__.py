@@ -12,3 +12,4 @@ from .gmm_builder import GMMOpBuilder
 from .ffn_builder import FFNOpBuilder
 from .npu_mm_all_reduce_add_rms_norm_builder import MatmulAllReduceAddRmsNormOpBuilder
 from .npu_inplace_mm_all_reduce_add_rms_norm_builder import InplaceMatmulAllReduceAddRmsNormOpBuilder
+from .npu_rotary_position_embedding_builder import RotaryPositionEmbeddingOpBuilder
