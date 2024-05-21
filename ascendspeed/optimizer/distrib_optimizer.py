@@ -61,10 +61,14 @@ def reuse_fp32_param_distrib_optimizer_init_wrapper(init_func):
                         shard_main_param_world_range_start
                     )
             torch_npu.npu.empty_cache()
+            self._copy_model_params_to_main_params = _copy_model_params_to_main_params
             self.fp16_tensor_convert_to_fp32_tensor = types.MethodType(fp16_tensor_convert_to_fp32_tensor, self)
             self.fp32_tensor_convert_to_fp16_tensor = types.MethodType(fp32_tensor_convert_to_fp16_tensor, self)    
     return reuse_fp32_param_distrib_optimizer_init
 
+
+def _copy_model_params_to_main_params():
+    pass
 
 
 def fp16_tensor_convert_to_fp32_tensor(self):
@@ -76,6 +80,7 @@ def fp16_tensor_convert_to_fp32_tensor(self):
     """
     data_parallel_world_size = torch.distributed.get_world_size(self.data_parallel_group)
     data_parallel_rank = torch.distributed.get_rank(self.data_parallel_group_gloo)
+    iteration = getattr(get_args(), "iteration", 0)
     for shard_main_param_res_and_model_param_bucket, shard_main_param_int32_view_bucket in zip(
         self.shard_main_param_res_and_model_param_buckets, self.shard_main_param_int32_view_buckets):
         per_dp_numel = shard_main_param_res_and_model_param_bucket.numel() // (data_parallel_world_size + 1)
@@ -110,7 +115,7 @@ def fp16_tensor_convert_to_fp32_tensor(self):
             shard_fp32_main_param_view[:remain * 2].copy_(
                 workspace_convert_view.view(2, -1).transpose(1, 0).reshape(-1).contiguous())
         
-        if not self.first_sub_flag:
+        if not self.first_sub_flag or iteration != 0:
             shard_main_param_int32_view_bucket[:per_dp_numel].sub_(32768)
     
 

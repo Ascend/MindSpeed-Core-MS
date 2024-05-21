@@ -116,9 +116,14 @@ def reuse_fp32_param_init_wrapper(init_func):
                 self.res_float16_groups.append(res_float16_params_this_group)
                 self.float16_float32_groups.append(float16_float32_params_this_group)
                 self.int32_float32_groups.append(int32_float32_params_this_group)
+            self._copy_model_params_to_main_params = _copy_model_params_to_main_params
             self.fp16_tensor_convert_to_fp32_tensor = types.MethodType(fp16_tensor_convert_to_fp32_tensor, self)
             self.fp32_tensor_convert_to_fp16_tensor = types.MethodType(fp32_tensor_convert_to_fp16_tensor, self)    
     return reuse_fp32_param_init
+
+
+def _copy_model_params_to_main_params():
+    pass
 
 
 def init_and_reuse_storage_of_tensors(
