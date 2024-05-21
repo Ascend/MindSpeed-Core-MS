@@ -269,7 +269,7 @@ def parallel_transformer_init_wrapper(fn):
                 if parallel_state.get_pipeline_model_parallel_rank() == idx:
                     self.num_layers = value
                     for layer_num in range(start_layer_num, start_layer_num + value):
-                        self.layers.append(build_layer(kwargs['model_type'], args[0], layer_num))
+                        self.layers.append(build_layer(kwargs['model_type'], args[0], layer_num, self_attn_mask_type=kwargs['self_attn_mask_type']))
                 start_layer_num += value
             self.layers = torch.nn.ModuleList(self.layers)
 
