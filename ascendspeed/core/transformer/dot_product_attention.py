@@ -68,7 +68,7 @@ def dot_product_attention_forward(
         self.attention_mask = (torch.tril(torch.ones([seq_length, seq_length]), diagonal=-(args.pre_tockens + 1))
                                + torch.triu(torch.ones([seq_length, seq_length]), diagonal=args.next_tockens + 1)).bool().npu()
 
-    if args.context_parallel_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
+    if args.context_parallel_size > 1 and args.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']:
         cp_para = dict()
         cp_para['causal'] = args.cp_attention_mask_type == 'causal'
         output = ringattn_context_parallel(query, key, value, self.num_attention_heads_per_partition, cp_para, scale, None)

@@ -68,7 +68,8 @@ def _add_moe_args(parser):
 def _add_cp_args(parser):
     group = parser.add_argument_group(title='cp parallel')
     group.add_argument('--context-parallel-algo', type=str, default='ulysses_cp_algo',
-                       choices=['ulysses_cp_algo', 'megatron_cp_algo'], help='context parallel algorithm')
+                       choices=['ulysses_cp_algo', 'megatron_cp_algo', 'hybrid_cp_algo'], help='context parallel algorithm')
+    group.add_argument('--ulysses-degree-in-cp', type=int, default=None)
     group.add_argument('--cp-attention-mask-type', type=str, default='causal',
                        choices=['causal', 'full'], help='context parallel attention mask type')
     group.add_argument('--use-cp-send-recv-overlap', action='store_true',
@@ -258,6 +259,18 @@ def validate_args_wrapper(validate_args):
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
             assert args.seq_length % (2 * args.context_parallel_size) == 0, f"sequence length must be divisible by 2 * context_parallel_size"
             args.use_flash_attn = True
+        if args.context_parallel_size > 1 and args.context_parallel_algo == 'hybrid_cp_algo':
+            assert args.ulysses_degree_in_cp is not None, "--ulysses-degree-in-cp must be specified in hybrid_cp_algo"
+            ring_degree, remainder = divmod(args.context_parallel_size, args.ulysses_degree_in_cp)
+            assert ring_degree > 1 and remainder == 0, "--ulysses-degree-in-cp must be devisible by --context-parallel-size"
+
+            head, remainder = divmod(args.num_attention_heads, args.ulysses_degree_in_cp)
+            assert head >= 1 and remainder == 0, f"num_attention_heads must be divisible by --ulysse-degree-in-cp in hybrid cp"
+
+            assert args.seq_length % (2 * ring_degree) == 0, f"sequence length must be divisible by 2 * ring_degree in hybrid cp"
+            args.use_flash_attn = True
+            
+            
         # Mandatory modification to SBH, subsequent abandonment of other formats such as BSH,BSND
         if args.shape_order != 'SBH':
             args.shape_order = 'SBH'

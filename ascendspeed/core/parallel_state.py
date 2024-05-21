@@ -23,7 +23,12 @@ import torch
 import megatron
 
 _CONTEXT_PARALLEL_GROUP_FOR_SEND_RECV_OVERLAP = None
+_CONTEXT_PARALLEL_GROUP_FOR_HYBRID_ULYSSES = None
+_CONTEXT_PARALLEL_GROUP_FOR_HYBRID_RING = None
 _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM = None
+
+_CONTEXT_PARALLEL_RANKS_FOR_HYBRID_ULYSSES = None
+_CONTEXT_PARALLEL_RANKS_FOR_HYBRID_RING = None
 
 
 def initialize_model_parallel_wrapper(initialize_model_parallel):
@@ -152,6 +157,13 @@ def initialize_model_parallel_wrapper(initialize_model_parallel):
             nccl_comm_cfgs
         )
 
+        initialize_context_parallel_group_for_hybrid_cp(
+            tensor_model_parallel_size,
+            pipeline_model_parallel_size,
+            context_parallel_size,
+            nccl_comm_cfgs
+        )
+
         print_rank_0(f"all tp gourps {all_tp_groups}")
         print_rank_0(f"all ep groups {all_ep_groups}")
         print_rank_0(f"all dp groups {all_data_parallel_group_ranks}")
@@ -225,6 +237,109 @@ def get_pipeline_parallel_group_for_new_stream():
     return _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM
 
 
+def initialize_context_parallel_group_for_hybrid_cp(
+    tensor_model_parallel_size,
+    pipeline_model_parallel_size,
+    context_parallel_size,
+    nccl_comm_cfgs
+):
+    from megatron.training import get_args
+    if (not hasattr(get_args(), 'context_parallel_algo') or 
+        get_args().context_parallel_algo != 'hybrid_cp_algo'):
+        return
+
+    rank = torch.distributed.get_rank()
+    world_size: int = torch.distributed.get_world_size()
+    num_pipeline_model_parallel_groups: int = world_size // pipeline_model_parallel_size
+    data_parallel_size: int = world_size // (
+            tensor_model_parallel_size * pipeline_model_parallel_size * context_parallel_size
+    )
+
+    ulysses_degree = get_args().ulysses_degree_in_cp
+    assert (context_parallel_size > ulysses_degree and context_parallel_size % ulysses_degree == 0)
+    ring_degree = context_parallel_size // ulysses_degree
+
+    global _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_ULYSSES
+    global _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_ULYSSES
+    global _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_RING
+    global _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_RING
+    for i in range(pipeline_model_parallel_size):
+        for j in range(data_parallel_size):
+            start_rank = (
+                    i * num_pipeline_model_parallel_groups
+                    + j * tensor_model_parallel_size * context_parallel_size
+            )
+            end_rank = (
+                    i * num_pipeline_model_parallel_groups
+                    + (j + 1) * tensor_model_parallel_size * context_parallel_size
+            )
+            for k in range(tensor_model_parallel_size):
+                # cp ranks
+                ranks = list(range(start_rank + k, end_rank, tensor_model_parallel_size))
+                # ulysses cp ranks. 
+                # Ulysses need higher communication bandwidth than Ring.
+                # Try to put Ulysses ranks in the same node.
+                for m in range(ring_degree):
+                    ulysses_ranks = [ranks[idx] for idx in range(m * ulysses_degree, (m + 1) * ulysses_degree)]
+                    ulysses_group = torch.distributed.new_group(
+                        ulysses_ranks, pg_options=megatron.core.parallel_state.get_nccl_options('cp_ulysses', nccl_comm_cfgs)
+                    )
+                    if rank in ulysses_ranks:
+                        _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_ULYSSES = ulysses_group
+                        _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_ULYSSES = ulysses_ranks
+                
+                # ring cp ranks
+                for m in range(ulysses_degree):
+                    ring_ranks = [ranks[idx] for idx in range(m, len(ranks), ulysses_degree)]
+                    ring_group = torch.distributed.new_group(
+                        ring_ranks, pg_options=megatron.core.parallel_state.get_nccl_options('cp_ring', nccl_comm_cfgs)
+                    )
+                    if rank in ring_ranks:
+                        _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_RING = ring_group
+                        _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_RING = ring_ranks
+                    
+
+def get_context_parallel_group_for_hybrid_ulysses(check_initialized=True):
+    """Get the context parallel group for hybrid ulysses the caller rank belongs to."""
+    if check_initialized:
+        assert (
+            _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_ULYSSES is not None
+        ), 'context parallel group for hybrid ulysses is not initialized'
+    return _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_ULYSSES
+
+
+def get_context_parallel_for_hybrid_ulysses_world_size():
+    return torch.distributed.get_world_size(group=get_context_parallel_group_for_hybrid_ulysses())
+
+
+def get_context_parallel_for_hybrid_ulysses_rank():
+    return torch.distributed.get_rank(group=get_context_parallel_group_for_hybrid_ulysses())
+
+
+def get_context_parallel_group_for_hybrid_ring(check_initialized=True):
+    """Get the context parallel group for hybrid ring the caller rank belongs to."""
+    if check_initialized:
+        assert (
+            _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_RING is not None
+        ), 'context parallel group for hybrid ring is not initialized'
+    return _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_RING
+
+
+def get_context_parallel_for_hybrid_ring_world_size():
+    return torch.distributed.get_world_size(group=get_context_parallel_group_for_hybrid_ring())
+
+
+def get_context_parallel_for_hybrid_ring_rank():
+    return torch.distributed.get_rank(group=get_context_parallel_group_for_hybrid_ring())
+
+
+def get_context_parallel_for_hybrid_ring_global_ranks():
+    assert (_CONTEXT_PARALLEL_GROUP_FOR_HYBRID_RING is not None
+    ), 'context parallel group for hybrid ring is not initialized'
+    global _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_RING
+    return _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_RING
+
+
 def destroy_model_parallel_wrapper(destroy_model_parallel):
     @wraps(destroy_model_parallel)
     def wrapper():
@@ -232,8 +347,16 @@ def destroy_model_parallel_wrapper(destroy_model_parallel):
 
         global _CONTEXT_PARALLEL_GROUP_FOR_SEND_RECV_OVERLAP
         global _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM
+        global _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_RING
+        global _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_ULYSSES
+        global _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_RING
+        global _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_ULYSSES
         _CONTEXT_PARALLEL_GROUP_FOR_SEND_RECV_OVERLAP = None
         _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM = None
+        _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_RING = None
+        _CONTEXT_PARALLEL_GROUP_FOR_HYBRID_ULYSSES = None
+        _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_RING = None
+        _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_ULYSSES = None
 
     return wrapper
 

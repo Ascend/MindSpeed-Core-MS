@@ -4,6 +4,10 @@
 import torch
 from megatron.training import get_args
 from megatron.core import mpu
+from ascendspeed.core.parallel_state import (get_context_parallel_for_hybrid_ulysses_world_size,
+                                             get_context_parallel_for_hybrid_ulysses_rank,
+                                             get_context_parallel_for_hybrid_ring_world_size,
+                                             get_context_parallel_for_hybrid_ring_rank)
 
 
 def get_batch_on_this_cp_rank(batch):
@@ -20,6 +24,8 @@ def get_batch_on_this_cp_rank(batch):
     args = get_args()
     cp_size = args.context_parallel_size
     if cp_size > 1:
+        if args.context_parallel_algo == 'hybrid_cp_algo':
+            return _get_batch_on_this_cp_rank_in_hybrid_cp(batch)
         cp_rank = mpu.get_context_parallel_rank()
         for key, val in batch.items():
             if key == 'attention_mask':
@@ -36,5 +42,32 @@ def get_batch_on_this_cp_rank(batch):
                 val = val.index_select(seq_dim, index)
                 val = val.view(*val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2):])
                 batch[key] = val
+
+    return batch
+
+
+def _get_batch_on_this_cp_rank_in_hybrid_cp(batch):
+    u_size = get_context_parallel_for_hybrid_ulysses_world_size()
+    r_size = get_context_parallel_for_hybrid_ring_world_size()
+
+    u_rank = get_context_parallel_for_hybrid_ulysses_rank()
+    r_rank = get_context_parallel_for_hybrid_ring_rank()
+
+    for key, val in batch.items():
+        if key == 'attention_mask':
+            continue
+        if val is not None:
+            seq_dim = 1 if key != 'attention_mask' else 2
+            val = val.view(
+                *val.shape[0:seq_dim],
+                2 * r_size,
+                val.shape[seq_dim] // (2 * r_size),
+                *val.shape[(seq_dim + 1):],
+            )
+            index = torch.tensor([r_rank, (2 * r_size - r_rank - 1)], device=val.device)
+            val = val.index_select(seq_dim, index)
+            val = val.view(*val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2):])
+            val = val.chunk(u_size, dim=seq_dim)[u_rank]
+            batch[key] = val
 
     return batch

@@ -4,6 +4,10 @@ import torch
 import torch_npu
 from einops import rearrange
 from megatron.core import mpu
+from ascendspeed.core.parallel_state import (get_context_parallel_group_for_hybrid_ring,
+                                             get_context_parallel_for_hybrid_ring_world_size,
+                                             get_context_parallel_for_hybrid_ring_rank,
+                                             get_context_parallel_for_hybrid_ring_global_ranks)
 
 
 def flash_attn_p2p_communicate(rank, send_tensor, send_dst,
@@ -93,10 +97,22 @@ class AttentionWithCp(torch.autograd.Function):
     def forward(ctx, q, k, v, n, cp_para, softmax_scale=None, attn_mask=None, dropout_p=0.):
         keep_prob = 1. - dropout_p
         causal = cp_para['causal']
-        cp_group = mpu.get_context_parallel_group()
-        cp_size = mpu.get_context_parallel_world_size()
-        rank = mpu.get_context_parallel_rank()
-        cp_global_ranks = mpu.get_context_parallel_global_ranks()
+        in_hybrid_mode = False
+        if get_context_parallel_group_for_hybrid_ring(check_initialized=False) is not None:
+            in_hybrid_mode = True
+
+        if not in_hybrid_mode:    
+            cp_group = mpu.get_context_parallel_group()
+            cp_size = mpu.get_context_parallel_world_size()
+            rank = mpu.get_context_parallel_rank()
+            cp_global_ranks = mpu.get_context_parallel_global_ranks()
+        else:
+            cp_group = get_context_parallel_group_for_hybrid_ring()
+            cp_size = get_context_parallel_for_hybrid_ring_world_size()
+            rank = get_context_parallel_for_hybrid_ring_rank()
+            cp_global_ranks = get_context_parallel_for_hybrid_ring_global_ranks()
+            
+
         send_dst = cp_global_ranks[(rank + 1) % cp_size]
         recv_src = cp_global_ranks[(rank + cp_size - 1) % cp_size]
 

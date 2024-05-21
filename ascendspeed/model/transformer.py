@@ -17,6 +17,7 @@ from megatron.legacy.model.fused_bias_gelu import bias_gelu_impl
 
 from ascendspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 from ascendspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
+from ascendspeed.core.parallel_state import get_context_parallel_group_for_hybrid_ulysses
 from ascendspeed.core.fusions.fused_swiglu import fused_swiglu
 from ascendspeed.core.tensor_parallel.random import CheckpointWithoutOutput
 
@@ -427,7 +428,7 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
     except Exception as e:
         raise ValueError('Invalid head_dim: {}'.format(head_dim)) from e
 
-    if args.context_parallel_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
+    if args.context_parallel_size > 1 and args.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']:
         cp_para = dict()
         cp_para['causal'] = args.cp_attention_mask_type == 'causal'
         output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask, self.dropout_p)
@@ -461,11 +462,14 @@ def parallel_attention_init_wrapper(fn):
             kv_projection_size = _args.kv_channels * _args.num_attention_heads
         # qkv bias
         bias = _args.add_qkv_bias or _args.add_bias_linear
-        if args[0].context_parallel_size > 1 and args[0].context_parallel_algo == 'ulysses_cp_algo':
+        if args[0].context_parallel_size > 1 and args[0].context_parallel_algo in ['ulysses_cp_algo', 'hybrid_cp_algo']:
+            u_group = mpu.get_context_parallel_group()
+            if args[0].context_parallel_algo == 'hybrid_cp_algo':
+                u_group = get_context_parallel_group_for_hybrid_ulysses()
             if self.use_flash_attn:
-                self.core_attention_flash = UlyssesContextAttention(self.core_attention_flash, mpu.get_context_parallel_group())
+                self.core_attention_flash = UlyssesContextAttention(self.core_attention_flash, u_group)
             else:
-                self.core_attention = UlyssesContextAttention(self.core_attention, mpu.get_context_parallel_group())
+                self.core_attention = UlyssesContextAttention(self.core_attention, u_group)
         self.query_key_value = tensor_parallel.ColumnParallelLinear(
             config.hidden_size,
             query_projection_size + 2 * kv_projection_size,
