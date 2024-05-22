@@ -12,20 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
 from functools import wraps
-from megatron.training.arguments import parse_args
-from ascendspeed.arguments import parse_args_wrapper
+from megatron.training import get_args
 from ascendspeed.core.pipeline_parallel import flexible_schedules
 
 
 def get_forward_backward_func_wrapper(get_forward_backward_func):
     @wraps(get_forward_backward_func)
     def wrapper(*args, **kwargs):
-        forward_backward_func = get_forward_backward_func()
-        new_parse_args = parse_args_wrapper(parse_args)
-        arguments = new_parse_args(None, False)
+        arguments = get_args()
         if arguments.optimize_send_recv_comm:
-            forward_backward_func = flexible_schedules.forward_backward_pipelining_without_interleaving
-        return forward_backward_func
+            return flexible_schedules.forward_backward_pipelining_without_interleaving
+        return get_forward_backward_func(*args, **kwargs)
     return wrapper
