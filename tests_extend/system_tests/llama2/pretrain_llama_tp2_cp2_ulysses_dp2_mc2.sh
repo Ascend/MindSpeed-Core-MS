@@ -31,6 +31,7 @@ GPT_ARGS="
     --sequence-parallel \
     --context-parallel-size 2 \
     --context-parallel-algo ulysses_cp_algo \
+    --recompute-activation-function \
     --use-distributed-optimizer \
     --overlap-grad-reduce \
     --overlap-param-gather \

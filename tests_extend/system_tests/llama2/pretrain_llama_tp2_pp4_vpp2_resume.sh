@@ -28,6 +28,9 @@ GPT_ARGS="
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
     --num-layers-per-virtual-pipeline-stage 2 \
+    --reuse-fp32-param \
+    --automated-pipeline \
+    --optimize-send-recv-comm \
     --no-delay-grad-reduce \
     --delay-param-gather \
     --no-scatter-gather-tensors-in-pipeline \

@@ -30,6 +30,7 @@ GPT_ARGS="
     --sequence-parallel \
     --expert-model-parallel-size 2 \
     --num-experts 2 \
+    --enable-token-rearrange-opt \
     --num-layers 16 \
     --hidden-size 4096 \
     --ffn-hidden-size 11008 \

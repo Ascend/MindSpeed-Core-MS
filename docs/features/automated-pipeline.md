@@ -16,7 +16,7 @@
 
 PP自动并行1.0流程如下图所示：
 
-<p align="center"> <img src="../sources/images/auto_pipeline_parallel.png"></p>
+<p align="center"> <img src="../../sources/images/auto_pipeline_parallel.png"></p>
 
 
 ## 使用场景
