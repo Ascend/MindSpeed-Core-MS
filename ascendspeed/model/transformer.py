@@ -437,13 +437,13 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
             q, k, v, head_num, args.shape_order,
             pse=None,
             padding_mask=None,
-            atten_mask=attention_mask,
+            atten_mask=attention_mask if args.cp_attention_mask_type == 'causal' else None,
             scale=scale,
             pre_tockens=args.pre_tockens,
             next_tockens=args.next_tockens,
             keep_prob=1 - self.dropout_p,
             inner_precise=0,
-            sparse_mode=args.sparse_mode
+            sparse_mode=args.sparse_mode if args.cp_attention_mask_type == 'causal' else 0
         )[0]
 
     return output
