@@ -533,8 +533,59 @@ using InitHugeMemThreadLocal = int (*)(void *, bool);
 using UnInitHugeMemThreadLocal = void (*)(void *, bool);
 using ReleaseHugeMem = void (*)(void *, bool);
 
+/**
+ * check arg is at::Tensor ?
+ */
+template<typename T>
+struct is_at_tensor : std::false_type {};
+
+template<>
+struct is_at_tensor<at::Tensor> : std::true_type {};
+
+/**
+ * check arg is at::TensorList ?
+ */
+template<typename T>
+struct is_at_tensor_list : std::false_type {};
+
+template<>
+struct is_at_tensor_list<at::TensorList> : std::true_type {};
+
+/**
+ * find first at::Tensor
+ */
+template <std::size_t I = 0, typename...Ts>
+typename std::enable_if<I == sizeof...(Ts), void>::type GetFirstTensor(const std::tuple<Ts...>& t, at::Tensor& res) {}
+
+template <std::size_t I = 0, typename... Ts>
+typename std::enable_if < I<sizeof...(Ts), void>::type GetFirstTensor(const std::tuple<Ts...> &t, at::Tensor &res)
+{
+    if constexpr (is_at_tensor<typename std::tuple_element<I, std::tuple<Ts...>>::type>::value) {
+        res = std::get<I>(t);
+        return;
+    } else if constexpr (is_at_tensor_list<typename std::tuple_element<I, std::tuple<Ts...>>::type>::value) {
+        res = std::get<I>(t)[0];
+        return;
+    }
+    return GetFirstTensor<I + 1, Ts...>(t, res);
+}
+
+/**
+ * get the device
+ */
+template <typename... Ts>
+auto DecodeDevice(Ts&... args) -> at::Device
+{
+    auto tp = std::make_tuple(args...);
+    at::Tensor ft;
+    GetFirstTensor(tp, ft);
+    return ft.device();
+}
+
 #define ACLNN_CMD(aclnn_api, ...)                                                                           \
     do {                                                                                                    \
+        auto device = DecodeDevice(__VA_ARGS__);                                                            \
+        const c10::OptionalDeviceGuard device_guard(device);                                                \
         static const auto getWorkspaceSizeFuncAddr = GetOpApiFuncAddr(#aclnn_api "GetWorkspaceSize");       \
         static const auto opApiFuncAddr = GetOpApiFuncAddr(#aclnn_api);                                     \
         static const auto initMemAddr = GetOpApiFuncAddr("InitHugeMemThreadLocal");                         \
