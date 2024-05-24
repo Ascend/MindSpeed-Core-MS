@@ -118,6 +118,17 @@ def atb_package():
         f.write(manifest_content)
 
 
+def package_files(directory):
+    paths = []
+    for path, directories, filenames in os.walk(directory):
+        for filename in filenames:
+            paths.append(os.path.join(path, filename))
+    return paths
+
+
+src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ascendspeed')
+
+
 setuptools.setup(
     name=__package_name__,
     # Versions should comply with PEP440.  For a discussion on single-sourcing
@@ -157,7 +168,7 @@ setuptools.setup(
     include_package_data=True,
     install_package_data=True,
     exclude_package_data={'': ['**/*.md']},
-    package_data={'ascendspeed': ['**/*.h', '**/*.cpp']},
+    package_data={'': package_files(src_path)},
     zip_safe=False,
     # PyPI package information.
     keywords=__keywords__,
