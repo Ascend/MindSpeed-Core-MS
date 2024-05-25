@@ -135,7 +135,10 @@ def megatron_core_adaptation(aspm):
                                       reuse_fp32_param_init_wrapper, optimizer_config_init_wrapper)
     from .core.pipeline_parallel.schedules import get_forward_backward_func_wrapper
     from .optimizer.distrib_optimizer import reuse_fp32_param_distrib_optimizer_init_wrapper
+    from .core.models.common.embeddings.rotary_pos_embedding import get_pos_emb_on_this_cp_rank
 
+    aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.get_pos_emb_on_this_cp_rank',
+                        get_pos_emb_on_this_cp_rank)
     aspm.register_patch('megatron.core.tensor_parallel.cross_entropy._VocabParallelCrossEntropy.forward',
                         vocab_parallel_cross_entropy_forward)
     aspm.register_patch('megatron.core.tensor_parallel.random._set_cuda_rng_state', _set_cuda_rng_state)
