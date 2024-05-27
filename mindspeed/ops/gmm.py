@@ -52,6 +52,16 @@ def _npu_gmm(x, weight, *, bias=None, group_list=None, group_type=0):
         raise TypeError(f"group_list must be a List of int, torch.Tensor or None, got {type(group_list)}.")
     if not isinstance(group_type, (int, type(None))):
         raise TypeError(f"group_type must be an int or None, got {type(group_type)}.")
+    # Ensure all tensors on the same device
+    x_device = x.device
+    device_warning = "Expected all tensors to be on the same device, but found at least two devices"
+    if weight.device != x_device:
+        raise RuntimeError(f"{device_warning}, {x_device}(arg0) and {weight.device}(arg1)!")
+    if bias is not None and bias.device != x_device:
+        raise RuntimeError(f"{device_warning}, {x_device}(arg0) and {bias.device}(bias)!")
+    if isinstance(group_list, torch.Tensor) and group_list.device != x_device:
+        raise RuntimeError(f"{device_warning}, {x_device}(arg0) and {group_list.device}(group_list)!")
+
     return GMMFunction.apply(x, weight, bias, group_list, group_type)
 
 

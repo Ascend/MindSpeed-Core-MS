@@ -69,18 +69,21 @@ class GMMOpBuilder(MindSpeedOpBuilder):
 
             if bias is None:
                 if x_dtype == DataType.DT_BF16:
-                    bias = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_FLOAT))]
+                    bias = ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_FLOAT))
                 elif x_dtype == DataType.DT_UINT8:
-                    bias = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_INT32))]
+                    bias = ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_INT32))
                 else:
-                    bias = [ge.Fill([0], ge.Cast(0., dst_type=x_dtype))]
+                    bias = ge.Fill([0], ge.Cast(0., dst_type=x_dtype))
 
             scale = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_UINT64))]
             offset = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_FLOAT))]
-            antiquant_scale = [ge.Fill([0], ge.Cast(0., dst_type=x_dtype))]
-            antiquant_offset = [ge.Fill([0], ge.Cast(0., dst_type=x_dtype))]
+            antiquant_scale = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_FP16))]
+            antiquant_offset = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_FP16))]
+            if x_dtype == DataType.DT_BF16:
+                antiquant_scale = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_BF16))]
+                antiquant_offset = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_BF16))]
 
-            return GroupedMatmul([x], [weight], bias, scale, offset, antiquant_scale, antiquant_offset, group_list,
+            return GroupedMatmul([x], [weight], [bias], scale, offset, antiquant_scale, antiquant_offset, group_list,
                                  size_of_y=1, split_item=3, group_type=group_type, dtype=-1, transpose_weight=False)[0]
 
 
