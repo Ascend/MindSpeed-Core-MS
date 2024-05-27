@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch_npu
 
-from ascendspeed.ops.gmm import npu_gmm
+from mindspeed.ops.gmm import npu_gmm
 
 DEVICE_NAME = torch_npu.npu.get_device_name(0)[:10]
 

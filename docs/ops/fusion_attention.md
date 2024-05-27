@@ -93,7 +93,7 @@ import torch
 import torch_npu
 import numpy as np
 import math
-from ascendspeed.ops.fusion_attention_v2 import npu_fusion_attention
+from mindspeed.ops.fusion_attention_v2 import npu_fusion_attention
 
 batch_size, head_num, seq_size, head_dim = 1, 32, 2048, 128
 input_layout = "BNSD"

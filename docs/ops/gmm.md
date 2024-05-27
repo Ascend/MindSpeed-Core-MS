@@ -34,7 +34,7 @@ import torch
 import torch_npu
 import numpy as np
 import math
-from ascendspeed.ops import gmm
+from mindspeed.ops import gmm
 
 num_expert, seq_len, hidden_dim = 8, 32, 256
 group_list = [1, 3, 6, 10, 15, 21, 28, 32]

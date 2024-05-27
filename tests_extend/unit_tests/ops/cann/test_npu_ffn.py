@@ -5,8 +5,8 @@ import torch_npu
 import torchair as tng
 from torchair.configs.compiler_config import CompilerConfig
 from unit_tests.common import DistributedTest
-from ascendspeed.ops import ffn
-from ascendspeed.op_builder import FFNOpBuilder
+from mindspeed.ops import ffn
+from mindspeed.op_builder import FFNOpBuilder
 
 os.environ["ENABLE_ACLNN"] = "true"
 config = CompilerConfig()
@@ -89,8 +89,8 @@ class TestNPUFFN(DistributedTest):
 
     def custom_op_exec(self, x, weight1, weight2, *, expert_tokens=None, expert_tokens_index=None,
         bias1=None, bias2=None):
-        ascendspeed_ops = FFNOpBuilder().load()
-        return ascendspeed_ops.npu_ffn(x, weight1, weight2, ACTIVATION_TYPE, expert_tokens, expert_tokens_index,
+        mindspeed_ops = FFNOpBuilder().load()
+        return mindspeed_ops.npu_ffn(x, weight1, weight2, ACTIVATION_TYPE, expert_tokens, expert_tokens_index,
             bias1, bias2, None, None, None, None, None, None, None, None, 0, None)
 
     @pytest.mark.skipif(DEVICE_NAME != 'Ascend910B', reason='device type is not supported, skip this UT!')

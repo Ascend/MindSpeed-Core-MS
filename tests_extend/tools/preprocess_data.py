@@ -25,7 +25,7 @@ import logging
 from typing import List
 
 import torch
-import ascendspeed.megatron_adaptor
+import mindspeed.megatron_adaptor
 from megatron.training.tokenizer.tokenizer import build_tokenizer
 from data_handler import build_dataset, get_dataset_handler
 

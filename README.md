@@ -1,17 +1,17 @@
 # 简介
 
-AscendSpeed 是针对华为昇腾设备的大模型加速库。
+MindSpeed 是针对华为昇腾设备的大模型加速库。
 
 大模型训练是一种非常复杂的过程，涉及到许多技术和挑战，其中大模型训练需要大量的显存资源是一个难题，对计算卡提出了不小的挑战。
 为了在单个计算卡显存资源不足时，可以通过多张计算卡进行计算，业界出现了类似 Megatron、DeepSpeed 等第三方大模型加速库，对模型、输入数据等进行切分并分配到不同的计算卡上，最后再通过集合通信对结果进行汇总。
 
-昇腾提供 AscendSpeed 加速库，使能客户大模型业务快速迁移至昇腾设备，并且支持昇腾专有算法，确保开箱可用。
+昇腾提供 MindSpeed 加速库，使能客户大模型业务快速迁移至昇腾设备，并且支持昇腾专有算法，确保开箱可用。
 
 # 安装
 
 ### 1. 安装依赖
 
-在安装**AscendSpeed**之前，请参考[版本配套表](#版本配套表)，安装最新昇腾软件栈：[https://www.hiascend.com/zh/](https://www.hiascend.com/zh/)。
+在安装**MindSpeed**之前，请参考[版本配套表](#版本配套表)，安装最新昇腾软件栈：[https://www.hiascend.com/zh/](https://www.hiascend.com/zh/)。
 
 | 依赖软件      |
 |-----------|
@@ -24,19 +24,19 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 | apex      | 
 
 
-### 2. 安装 AscendSpeed
+### 2. 安装 MindSpeed
 
 下载源码安装：
 
  ```shell
- git clone https://gitee.com/ascend/AscendSpeed.git
- pip install -e AscendSpeed
+ git clone https://gitee.com/ascend/MindSpeed.git
+ pip install -e MindSpeed
  ```
 
 如需使用ATB算子，请在安装前添加环境变量`ENABLE_ATB=1`，例如：
  ```shell
- git clone https://gitee.com/ascend/AscendSpeed.git
- ENABLE_ATB=1 pip install -e AscendSpeed
+ git clone https://gitee.com/ascend/MindSpeed.git
+ ENABLE_ATB=1 pip install -e MindSpeed
  ```
 
 ### 3. 获取 Megatron-LM 并指定 commit id
@@ -52,12 +52,12 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 
 以 GPT 模型为例：
 
-1. 在 Megatron-LM 目录下修改`pretrain_gpt.py`文件，在`import torch`下新增一行`import ascendspeed.megatron_adaptor`
+1. 在 Megatron-LM 目录下修改`pretrain_gpt.py`文件，在`import torch`下新增一行`import mindspeed.megatron_adaptor`
 
     ```diff
      import os
      import torch
-    +import ascendspeed.megatron_adaptor
+    +import mindspeed.megatron_adaptor
      from torch import Tensor
      from functools import partial
      from typing import Union
@@ -133,7 +133,7 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 
 **PyTorch Extension**版本号采用`{PyTorch版本}-{昇腾版本}`命名规则，前者为**PyTorch Extension**匹配的PyTorch版本，后者用于匹配CANN版本，详细匹配如下：
 
-| AscendSpeed版本   | PyTorch版本   | Extension版本    |Python版本                               |
+| MindSpeed版本   | PyTorch版本   | Extension版本    |Python版本                               |
 | ----------------- | ------------- | ------------- | --------------------------------------- |
 |       1.0         |     2.1.0     |   2.1.0.post3 | Python3.8.x, Python3.9.x, Python3.10.x  |
 
@@ -141,4 +141,4 @@ AscendSpeed 是针对华为昇腾设备的大模型加速库。
 
 # 安全声明
 
-[AscendSpeed 安全声明](SECURITYNOTE.md)
+[MindSpeed 安全声明](SECURITYNOTE.md)

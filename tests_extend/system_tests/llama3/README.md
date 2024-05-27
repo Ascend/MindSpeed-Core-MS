@@ -10,22 +10,22 @@ LLAMA3-8B 训练的硬件配置:
 
 ### 脚本
 
-1. 按照readme安装AscendSpeed和Megatron-LM
+1. 按照readme安装MindSpeed和Megatron-LM
 
    ```shell
-   git clone https://gitee.com/ascend/AscendSpeed.git
-   pip install -e AscendSpeed
+   git clone https://gitee.com/ascend/MindSpeed.git
+   pip install -e MindSpeed
    git clone https://github.com/NVIDIA/Megatron-LM.git
    cd Megatron-LM
    # git checkout 到使用的Megatron-LM分支
    git checkout xxx
-   ascendspeed -P
+   mindspeed -P
    mkdir model_from_hf
    mkdir dataset
    mkdir ckpt
-   mv ../AscendSpeed/tests_extend/tools/preprocess_data.py .
-   mv ../AscendSpeed/tests_extend/tools/data_handler.py .
-   mv ../AscendSpeed/tests_extend/system_tests/llama3/pretrain_llama3_8b_ptd.sh ./examples/
+   mv ../MindSpeed/tests_extend/tools/preprocess_data.py .
+   mv ../MindSpeed/tests_extend/tools/data_handler.py .
+   mv ../MindSpeed/tests_extend/system_tests/llama3/pretrain_llama3_8b_ptd.sh ./examples/
    ```
 2. 搭建环境
 
@@ -93,7 +93,7 @@ LLAMA3-8B 训练的硬件配置:
     source /usr/local/Ascend/ascend-toolkit/set_env.sh 
 
     # 根据实际情况配置词表、数据集、环境变量保存路径
-    source "../AscendSpeed/tests_extend/system_tests/env_npu.sh"
+    source "../MindSpeed/tests_extend/system_tests/env_npu.sh"
     CKPT_SAVE_DIR="./ckpt/"
     DATA_PATH="./dataset/llama-3-8b-hf/alpaca_text_document"  #数据集路径
     TOKENIZER_MODEL="./model_from_hf/llama-3-8b-hf/"  #词表路径

@@ -59,5 +59,5 @@ activate; 1.59 GiB free;
 从而报hccl内存不足的错误。此问题可以通过设置torch_npu.npu.set_per_process_memory_fraction接口来设置允许torch占用的内存上限来解决该问题
 
 **接口设置**：  
-位置：AscendSpeed/ascendspeed/core/memory/memory_fragmentation/memory_recorder.py  
+位置：MindSpeed/mindspeed/core/memory/memory_fragmentation/memory_recorder.py  
 添加：torch_npu.npu.set_per_process_memory_fraction(x)，其中x为想要限制torch占用内存的最高比例，例如x设置为0.94，表示torch最多占用"单卡内存*0.94"的内存。

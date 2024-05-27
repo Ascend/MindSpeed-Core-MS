@@ -5,7 +5,7 @@ import torch.distributed as dist
 from torch.distributed.distributed_c10d import _get_default_group, ReduceOp
 import torch_npu
 from unit_tests.common import DistributedTest
-from ascendspeed.op_builder import GroupedMatMulAllReduceOpBuilder
+from mindspeed.op_builder import GroupedMatMulAllReduceOpBuilder
 
 DEVICE_NAME = torch_npu.npu.get_device_name(0)[:10]
 
@@ -36,8 +36,8 @@ class TestNPUGroupedMatMulAllReduce(DistributedTest):
         return output_npu
 
     def custom_op_exec(self, x, weight, bias, group_list, split_item, hccl_group, reduce_op, comm_turn):
-        ascendspeed_ops = GroupedMatMulAllReduceOpBuilder().load()
-        return ascendspeed_ops.npu_grouped_mat_mul_all_reduce(x, weight, bias, group_list, split_item,
+        mindspeed_ops = GroupedMatMulAllReduceOpBuilder().load()
+        return mindspeed_ops.npu_grouped_mat_mul_all_reduce(x, weight, bias, group_list, split_item,
                     hccl_group, reduce_op, comm_turn)
 
     def get_hcomm_info(self, n, i):

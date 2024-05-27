@@ -3,8 +3,8 @@ import torch
 import torch_npu
 
 from torch.autograd import Variable
-from ascendspeed import megatron_adaptor
-from ascendspeed.core.tensor_parallel.random import CheckpointWithoutOutput
+from mindspeed import megatron_adaptor
+from mindspeed.core.tensor_parallel.random import CheckpointWithoutOutput
 
 
 class TestActivationFunctionRecomputing:

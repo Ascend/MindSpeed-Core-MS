@@ -41,7 +41,7 @@ import os
 import torch
 import torchair as tng
 from torchair.configs.compiler_config import CompilerConfig
-from ascendspeed.ops import ffn
+from mindspeed.ops import ffn
 
 os.environ["ENABLE_ACLNN"] = "true"
 config = CompilerConfig()

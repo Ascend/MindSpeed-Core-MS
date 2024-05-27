@@ -37,7 +37,7 @@
 此处提供一个示例，可以灵活使用 CheckpointWithoutOutput 来对自定义的函数进行重计算：
 
 ```python
-from ascendspeed.core.tensor_parallel.random import CheckpointWithoutOutput
+from mindspeed.core.tensor_parallel.random import CheckpointWithoutOutput
 
 
 class Custom_module(torch.nn.Module):

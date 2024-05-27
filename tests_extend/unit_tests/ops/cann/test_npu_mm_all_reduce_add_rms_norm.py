@@ -5,7 +5,7 @@ import torch.distributed as dist
 from torch.distributed.distributed_c10d import _get_default_group, ReduceOp
 import torch_npu
 from unit_tests.common import DistributedTest
-from ascendspeed.ops.npu_mm_all_reduce_add_rms_norm import npu_mm_all_reduce_add_rms_norm
+from mindspeed.ops.npu_mm_all_reduce_add_rms_norm import npu_mm_all_reduce_add_rms_norm
 
 DEVICE_NAME = torch_npu.npu.get_device_name(0)[:10]
 

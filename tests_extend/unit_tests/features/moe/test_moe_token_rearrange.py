@@ -4,11 +4,11 @@ import torch
 from unit_tests.common import DistributedTest
 from commons import set_random_seed
 
-from ascendspeed import megatron_adaptor
-from ascendspeed.moe.config import Config
-from ascendspeed.moe.gate import TopKGate
-from ascendspeed.moe.experts import Experts
-from ascendspeed.moe.moe_layer import MOELayer
+from mindspeed import megatron_adaptor
+from mindspeed.moe.config import Config
+from mindspeed.moe.gate import TopKGate
+from mindspeed.moe.experts import Experts
+from mindspeed.moe.moe_layer import MOELayer
 from megatron.legacy.model.transformer import ParallelMLP
 from megatron.core.transformer import TransformerConfig
 from megatron.training.global_vars import set_args
