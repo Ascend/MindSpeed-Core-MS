@@ -34,3 +34,12 @@ Ring Attention的并行维度不受attention head数限制，因此理论上序�
 ## 使用效果
 
 可支持混合长序列并行。
+
+## 开源引用
+
+1. GitHub项目地址：
+https://github.com/feifeibear/long-context-attention
+
+2. 论文预印本地址：
+USP: A Unified Sequence Parallelism Approach for Long Context Generative AI
+https://arxiv.org/abs/2405.07719
