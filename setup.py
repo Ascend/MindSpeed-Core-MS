@@ -30,18 +30,6 @@ except FileNotFoundError:
 #                             Dependency Loading                              #
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-
-def req_file(filename):
-    try:
-        with open(filename) as f:
-            content = f.readlines()
-        res = [x.strip() for x in content]
-    except FileNotFoundError:
-        res = []
-    return res
-
-
-install_requires = req_file("requirements.txt")
 cmd_class = {}
 exts = []
 flags = os.O_WRONLY | os.O_CREAT
@@ -127,7 +115,9 @@ def package_files(directory):
 
 
 src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mindspeed')
-
+subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt'])
+if os.getenv('ENABLE_ATB', '0') == '1':
+    atb_package()
 
 setuptools.setup(
     name=__package_name__,
@@ -163,7 +153,6 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     packages=setuptools.find_packages(),
-    install_requires=install_requires,
     # Add in any packaged data.
     include_package_data=True,
     install_package_data=True,
@@ -175,6 +164,3 @@ setuptools.setup(
     cmdclass={},
     ext_modules=exts
 )
-
-if os.getenv('ENABLE_ATB', '0') == '1':
-    atb_package()
