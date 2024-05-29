@@ -33,7 +33,7 @@ import torch
 from torch.library import Library, impl
 from torchair.ge_concrete_graph import ge_apis as ge
 from torchair.ge_concrete_graph.fx2ge_converter import register_fx_node_ge_converter
-from torchair.ge_concrete_graph.ge_graph import Tensor, TensorSpec
+from torchair.ge_concrete_graph.ge_graph import Tensor, TensorSpec, DataType
 from torchair.ge_concrete_graph.ge_graph import get_default_ge_graph, next_unique_name
 from torchair.ge_concrete_graph.ge_graph import compat_as_bytes
 from torchair.ge_concrete_graph.ge_graph import get_invalid_desc
@@ -127,10 +127,10 @@ class FFNOpBuilder(MindSpeedOpBuilder):
                 expert_tokens = expert_tokens_index
 
             y_dtype = -1
-            if output_dtype is not None:
-                if x.dtype == DataType.DT_INT8 and output_dtype == torch.float16:
+            if x.dtype == DataType.DT_INT8 and output_dtype is not None:
+                if output_dtype == torch.float16:
                     y_dtype = 0
-                elif x.dtype == DataType.DT_INT8 and output_dtype == torch.bfloat16:
+                elif output_dtype == torch.bfloat16:
                     y_dtype = 1
                 else:
                     raise NotImplementedError("In the quant scenario, output_dtype should be float16 or bfloat16,"

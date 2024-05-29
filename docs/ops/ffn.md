@@ -39,6 +39,7 @@ $$
 ```python
 import os
 import torch
+import torch_npu
 import torchair as tng
 from torchair.configs.compiler_config import CompilerConfig
 from mindspeed.ops import ffn
