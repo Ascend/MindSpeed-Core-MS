@@ -121,6 +121,7 @@ def megatron_core_adaptation(aspm):
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
     from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb_bshd_wrapper, rotary_embedding_init_wrapper
+    from .core.fusions.fused_bias_swiglu import SwiGLUFunction, BiasSwiGLUFunction
     from .core.transformer.attention import attention_init_wrapper
     from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
     from .core.transformer.custom_layers.transformer_engine import PTNorm
@@ -157,6 +158,8 @@ def megatron_core_adaptation(aspm):
                         is_kernel_available)
     aspm.register_patch('megatron.core.fusions.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax',
                         forward_fused_softmax)
+    aspm.register_patch('megatron.core.fusions.fused_bias_swiglu.SwiGLUFunction', SwiGLUFunction)
+    aspm.register_patch('megatron.core.fusions.fused_bias_swiglu.BiasSwiGLUFunction', BiasSwiGLUFunction)
     aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.apply_rotary_pos_emb_bshd',
                         apply_fused_rotary_pos_emb_bshd_wrapper)
     aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.__init__',

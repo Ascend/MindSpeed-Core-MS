@@ -18,7 +18,7 @@ from megatron.legacy.model.fused_bias_gelu import bias_gelu_impl
 from mindspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
 from mindspeed.core.parallel_state import get_context_parallel_group_for_hybrid_ulysses
-from mindspeed.core.fusions.fused_swiglu import fused_swiglu
+from mindspeed.core.fusions.fused_bias_swiglu import fused_swiglu
 from mindspeed.core.tensor_parallel.random import CheckpointWithoutOutput
 
 
