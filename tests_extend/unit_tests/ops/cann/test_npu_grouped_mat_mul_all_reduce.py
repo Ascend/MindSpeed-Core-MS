@@ -12,7 +12,7 @@ DEVICE_NAME = torch_npu.npu.get_device_name(0)[:10]
 
 class TestNPUGroupedMatMulAllReduce(DistributedTest):
     world_size = 2
-    backend = 'gloo'
+    backend = 'hccl'
 
     def supported_op_exec(self, rank, x, weight, bias, group_list, split_item, outputs_num):
         torch_version = torch.__version__

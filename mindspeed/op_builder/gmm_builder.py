@@ -77,8 +77,8 @@ class GMMOpBuilder(MindSpeedOpBuilder):
 
             scale = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_UINT64))]
             offset = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_FLOAT))]
-            antiquant_scale = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_FP16))]
-            antiquant_offset = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_FP16))]
+            antiquant_scale = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_FLOAT16))]
+            antiquant_offset = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_FLOAT16))]
             if x_dtype == DataType.DT_BF16:
                 antiquant_scale = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_BF16))]
                 antiquant_offset = [ge.Fill([0], ge.Cast(0., dst_type=DataType.DT_BF16))]
