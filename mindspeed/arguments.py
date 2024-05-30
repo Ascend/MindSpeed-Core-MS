@@ -245,8 +245,6 @@ def validate_args_wrapper(validate_args):
                     '--position-embedding-type=rope')
         if args.reuse_fp32_param and not args.bf16:
             raise AssertionError('--reuse-fp32-param only support for `bf16`')
-        if args.reuse_fp32_param and args.overlap_grad_reduce:
-            raise AssertionError('`--reuse-fp32-param` is not compatible with `--overlap-grad-reduce`')
         if args.optimize_recomp_communication_level > 0:
             if not hasattr(args, "optimize_recomp_communication_status"):
                 args.optimize_recomp_communication_status = 0
