@@ -282,6 +282,7 @@ def megatron_training_adaptation(aspm):
 
 def ascend_adaptation(aspm):
     from .initialize import coc_registration_wrapper, mc2_wrapper
+    from megatron.legacy.model.transformer import ParallelTransformerLayer
     if int(os.getenv('MEMORY_FRAGMENTATION', '0')):
         from .core.memory.memory_fragmentation.pluggable_allocator_adpator import change_allocator
         change_allocator()
@@ -296,7 +297,7 @@ def ascend_adaptation(aspm):
         aspm.register_patch('megatron.core.optimizer.optimizer.MixedPrecisionOptimizer.step', optimizer_init_wrapper)
 
         from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
-        allowed_recomputing_module_wrapper(megatron.legacy.model.transformer.ParallelTransformerLayer)
+        allowed_recomputing_module_wrapper(ParallelTransformerLayer)
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
         aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
 
@@ -304,12 +305,21 @@ def ascend_adaptation(aspm):
         from .core.memory.adaptive_recomputing.pluggable_allocator_adpator import change_allocator
         change_allocator()
         from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
-        allowed_recomputing_module_wrapper(megatron.legacy.model.transformer.ParallelTransformerLayer)
+        allowed_recomputing_module_wrapper(ParallelTransformerLayer)
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
         aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
 
     if int(os.getenv('ASCEND_MC2', '0')):
         aspm.register_patch('megatron.training.initialize.initialize_megatron', mc2_wrapper)
+
+        # MoE MLP not use mc2 linear
+        from .core.models.gpt.gpt_layer_specs import get_mlp_module_spec_wrapper
+        from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
+        import megatron.core.models.gpt.gpt_layer_specs
+        megatron.core.models.gpt.gpt_layer_specs._get_mlp_module_spec = get_mlp_module_spec_wrapper(
+            megatron.core.models.gpt.gpt_layer_specs._get_mlp_module_spec, ColumnParallelLinear.forward,
+            RowParallelLinear.forward)
+
     aspm.register_patch('megatron.training.initialize.initialize_megatron', coc_registration_wrapper)
 
     if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) or int(os.getenv('MEMORY_FRAGMENTATION', '0')):

@@ -59,7 +59,7 @@ import torch
 import torch_npu
 import numpy as np
 import math
-from mindspeed.ops import npu_rotary_position_embedding
+from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embedding
 
 x = np.random.uniform(-2, 2, (4, 8192, 4, 128))
 cos = np.random.uniform(-1, 1, (1, 8192, 1, 128))

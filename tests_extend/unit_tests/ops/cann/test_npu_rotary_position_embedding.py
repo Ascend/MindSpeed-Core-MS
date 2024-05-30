@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch_npu
 
-from mindspeed.ops import npu_rotary_position_embedding
+from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embedding
 
 DEVICE_NAME = torch_npu.npu.get_device_name(0)[:10]
 
