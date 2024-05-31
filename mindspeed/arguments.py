@@ -255,8 +255,8 @@ def validate_args_wrapper(validate_args):
         if args.moe_dynamic_padding and not args.moe_no_drop:
             raise AssertionError('`--moe-dynamic-padding` only support for `--moe-no-drop`.') 
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'ulysses_cp_algo':
-            head, remainder = divmod(args.num_attention_heads, args.context_parallel_size)
-            assert head >= 1 and remainder == 0, f"num_attention_heads must be divisible by context_parallel_size"
+            head, remainder = divmod(args.num_attention_heads, args.context_parallel_size * args.tensor_model_parallel_size)
+            assert head >= 1 and remainder == 0, f"num_attention_heads must be divisible by context_parallel_size * tensor_model_parallel_size"
             args.use_flash_attn = True
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
             assert args.seq_length % (2 * args.context_parallel_size) == 0, f"sequence length must be divisible by 2 * context_parallel_size"
@@ -266,10 +266,10 @@ def validate_args_wrapper(validate_args):
             ring_degree, remainder = divmod(args.context_parallel_size, args.ulysses_degree_in_cp)
             assert ring_degree > 1 and remainder == 0, "--ulysses-degree-in-cp must be devisible by --context-parallel-size"
 
-            head, remainder = divmod(args.num_attention_heads, args.ulysses_degree_in_cp)
-            assert head >= 1 and remainder == 0, f"num_attention_heads must be divisible by --ulysse-degree-in-cp in hybrid cp"
+            head, remainder = divmod(args.num_attention_heads, args.ulysses_degree_in_cp * args.tensor_model_parallel_size)
+            assert head >= 1 and remainder == 0, f"num_attention_heads must be divisible by ulysse-degree-in-cp * tensor_model_parallel_size in hybrid cp"
 
-            assert args.seq_length % (2 * ring_degree) == 0, f"sequence length must be divisible by 2 * ring_degree in hybrid cp"
+            assert args.seq_length % (2 * args.context_parallel_size) == 0, f"sequence length must be divisible by 2 * context_parallel_size in hybrid cp"
             args.use_flash_attn = True
             
             
