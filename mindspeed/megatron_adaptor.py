@@ -208,7 +208,7 @@ def megatron_legacy_adaptation(aspm):
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
     from .core.fusions.rms_norm import rms_norm_init_wrapper, rms_norm_forward_wrapper
-    from .model.transformer import parallel_mlp_init_wrapper, flash_self_attention_forward, parallel_mlp_forward_wrapper, parallel_transformer_init_wrapper, \
+    from .model.transformer import parallel_mlp_init_wrapper, flash_self_attention_forward, flash_self_attention_init_wrapper, parallel_mlp_forward_wrapper, parallel_transformer_init_wrapper, \
         parallel_transformer_forward_wrapper
     from .model.transformer import core_attention_init_wrapper, core_attention_forward, parallel_attention_init_wrapper, \
         parallel_attention_forward
@@ -235,6 +235,7 @@ def megatron_legacy_adaptation(aspm):
     aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.__init__', parallel_mlp_init_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.forward', parallel_mlp_forward_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.FlashSelfAttention.forward', flash_self_attention_forward)
+    aspm.register_patch('megatron.legacy.model.transformer.FlashSelfAttention.__init__', flash_self_attention_init_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelAttention.__init__', parallel_attention_init_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelAttention.forward',
                         parallel_attention_forward)

@@ -243,6 +243,8 @@ def validate_args_wrapper(validate_args):
                 raise AssertionError(
                     '--use-fused-rotary-pos-emb must enable with'
                     '--position-embedding-type=rope')
+        if args.alibi_fusion_attn_type is not None and args.alibi_fusion_attn_type not in [0, 2, 3]:
+            raise AssertionError('--alibi-fusion-attn-type only support for `0, 2, 3`')
         if args.reuse_fp32_param and not args.bf16:
             raise AssertionError('--reuse-fp32-param only support for `bf16`')
         if args.optimize_recomp_communication_level > 0:
@@ -320,5 +322,14 @@ def _add_alibi_args(parser):
                        action='store_true',
                        default=False,
                        help='fill alibi with negative inf')
+
+    group.add_argument('--alibi-fusion-attn-type',
+                    type=int,
+                    help='alibi pse type, support for 0,2,3')
+
+    group.add_argument('--alibi-diagonal-opposite',
+                       action='store_true',
+                       default=False,
+                       help='make alibi diagonal opposite')
 
     return parser
