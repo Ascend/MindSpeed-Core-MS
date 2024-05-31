@@ -97,16 +97,29 @@ def dot_product_attention_forward(
         cp_para['causal'] = args.cp_attention_mask_type == 'causal'
         output = ringattn_context_parallel(query, key, value, self.num_attention_heads_per_partition, cp_para, scale, None)
     else:
-        output = npu_fusion_attention(
-            query, key, value, self.num_attention_heads_per_partition, 'SBH',
-            pse=self.pse,
-            padding_mask=None,
-            atten_mask=self.attention_mask,
-            scale=scale,
-            pse_type=self.pse_type,
-            pre_tokens=args.pre_tockens,
-            next_tokens=args.next_tockens,
-            keep_prob=1 - self.dropout_p,
-            inner_precise=0
-        )[0]
+        if args.use_fusion_attn_v2:
+            output = npu_fusion_attention(
+                query, key, value, self.num_attention_heads_per_partition, 'SBH',
+                pse=self.pse,
+                padding_mask=None,
+                atten_mask=self.attention_mask,
+                scale=scale,
+                pse_type=self.pse_type,
+                pre_tokens=args.pre_tockens,
+                next_tokens=args.next_tockens,
+                keep_prob=1 - self.dropout_p,
+                inner_precise=0
+            )[0]
+        else:
+            output = torch_npu.npu_fusion_attention(
+                query, key, value, self.num_attention_heads_per_partition, 'SBH',
+                pse=None,
+                padding_mask=None,
+                atten_mask=self.attention_mask,
+                scale=scale,
+                pre_tockens=args.pre_tockens,
+                next_tockens=args.next_tockens,
+                keep_prob=1 - self.attention_dropout.p,
+                inner_precise=0
+                )[0]
     return output

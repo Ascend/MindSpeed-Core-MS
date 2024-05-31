@@ -1,5 +1,7 @@
 # fusion attention 对外接口
 
+### 注意当前若要使用v2版本接口，需要开启`--use-fusion-attn-v2`特性
+
 npu_fusion_attention(
                     query, key, value, head_num,
                     input_layout, *, pse=None,

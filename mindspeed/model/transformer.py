@@ -497,19 +497,33 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
         cp_para['causal'] = args.cp_attention_mask_type == 'causal'
         output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask, self.dropout_p)
     else:
-        output = npu_fusion_attention(
-            q, k, v, head_num, args.shape_order,
-            pse=self.pse,
-            padding_mask=None,
-            atten_mask=attention_mask if args.cp_attention_mask_type == 'causal' else None,
-            scale=scale,
-            pse_type=self.pse_type,
-            pre_tokens=args.pre_tockens,
-            next_tokens=args.next_tockens,
-            keep_prob=1 - self.dropout_p,
-            inner_precise=0,
-            sparse_mode=args.sparse_mode if args.cp_attention_mask_type == 'causal' else 0
-        )[0]
+        if args.use_fusion_attn_v2:
+            output = npu_fusion_attention(
+                q, k, v, head_num, args.shape_order,
+                pse=self.pse,
+                padding_mask=None,
+                atten_mask=attention_mask if args.cp_attention_mask_type == 'causal' else None,
+                scale=scale,
+                pse_type=self.pse_type,
+                pre_tokens=args.pre_tockens,
+                next_tokens=args.next_tockens,
+                keep_prob=1 - self.dropout_p,
+                inner_precise=0,
+                sparse_mode=args.sparse_mode if args.cp_attention_mask_type == 'causal' else 0
+            )[0]
+        else:
+            output = torch_npu.npu_fusion_attention(
+                q, k, v, head_num, args.shape_order,
+                pse=None,
+                padding_mask=None,
+                atten_mask=attention_mask if args.cp_attention_mask_type == 'causal' else None,
+                scale=scale,
+                pre_tockens=args.pre_tockens,
+                next_tockens=args.next_tockens,
+                keep_prob=1 - self.dropout_p,
+                inner_precise=0,
+                sparse_mode=args.sparse_mode if args.cp_attention_mask_type == 'causal' else 0
+            )[0]
     return output
 
 
