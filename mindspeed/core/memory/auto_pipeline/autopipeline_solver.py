@@ -1,14 +1,18 @@
 import os
-import sys
 import json
 import statistics
 import math
 import time
 import multiprocessing
+from functools import wraps
 import torch
+import megatron.training.global_vars
 from megatron.training import get_args
 from megatron.training import print_rank_0
 from .autopipeline import check_equal_model_configs
+import mindspeed.model.transformer as mindspeed_transformer
+import megatron.core.parallel_state as megatron_parallel_state
+import mindspeed.core.parallel_state as mindspeed_parallel_state
 
 
 class AutoPipelineSolver():
@@ -363,16 +367,76 @@ def broadcast_policy_in_ranks(src_rank, policy=None):
 
 
 def destroy_global_vars():
-    sys.modules['megatron.training.global_vars']._GLOBAL_ARGS = None
-    sys.modules['megatron.training.global_vars']._GLOBAL_RETRO_ARGS = None
-    sys.modules['megatron.training.global_vars']._GLOBAL_NUM_MICROBATCHES_CALCULATOR = None
-    sys.modules['megatron.training.global_vars']._GLOBAL_TOKENIZER = None
-    sys.modules['megatron.training.global_vars']._GLOBAL_TENSORBOARD_WRITER = None
-    sys.modules['megatron.training.global_vars']._GLOBAL_WANDB_WRITER = None
-    sys.modules['megatron.training.global_vars']._GLOBAL_ADLR_AUTORESUME = None
-    sys.modules['megatron.training.global_vars']._GLOBAL_TIMERS = None
-    sys.modules['megatron.training.global_vars']._GLOBAL_SIGNAL_HANDLER = None
-    sys.modules['megatron.core.parallel_state']._EXPERT_PARALLEL_GROUP = None
+    megatron.training.global_vars._GLOBAL_ARGS = None
+    megatron.training.global_vars._GLOBAL_RETRO_ARGS = None
+    megatron.training.global_vars._GLOBAL_NUM_MICROBATCHES_CALCULATOR = None
+    megatron.training.global_vars._GLOBAL_TOKENIZER = None
+    megatron.training.global_vars._GLOBAL_TENSORBOARD_WRITER = None
+    megatron.training.global_vars._GLOBAL_WANDB_WRITER = None
+    megatron.training.global_vars._GLOBAL_ADLR_AUTORESUME = None
+    megatron.training.global_vars._GLOBAL_TIMERS = None
+    megatron.training.global_vars._GLOBAL_SIGNAL_HANDLER = None
+    megatron_parallel_state._EXPERT_PARALLEL_GROUP = None
+    mindspeed_transformer._GLOBAL_ATTN_MASK = None
+
+
+def destroy_global_parallel_group():
+    global_parallel_group = [
+        megatron_parallel_state._MODEL_PARALLEL_GROUP,
+        megatron_parallel_state._TENSOR_MODEL_PARALLEL_GROUP,
+        megatron_parallel_state._PIPELINE_MODEL_PARALLEL_GROUP,
+        mindspeed_parallel_state._PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM,
+        megatron_parallel_state._DATA_PARALLEL_GROUP,
+        megatron_parallel_state._DATA_PARALLEL_GROUP_WITH_CP,
+        megatron_parallel_state._CONTEXT_PARALLEL_GROUP,
+        megatron_parallel_state._EMBEDDING_GROUP,
+        megatron_parallel_state._POSITION_EMBEDDING_GROUP,
+        megatron_parallel_state._TENSOR_AND_DATA_PARALLEL_GROUP,
+        megatron_parallel_state._TENSOR_AND_DATA_PARALLEL_GROUP_WITH_CP,
+        megatron_parallel_state._EXPERT_MODEL_PARALLEL_GROUP,
+        megatron_parallel_state._TENSOR_AND_EXPERT_PARALLEL_GROUP,
+        megatron_parallel_state._DATA_MODULO_EXPERT_PARALLEL_GROUP
+    ]
+    for gid in range(len(global_parallel_group)):
+        if global_parallel_group[gid]:
+            torch.distributed.destroy_process_group(global_parallel_group[gid])
+        torch.distributed.barrier()
+
+    megatron_parallel_state._MODEL_PARALLEL_GROUP = None
+    megatron_parallel_state._TENSOR_MODEL_PARALLEL_GROUP = None
+    megatron_parallel_state._PIPELINE_MODEL_PARALLEL_GROUP = None
+    mindspeed_parallel_state._PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM = None
+    megatron_parallel_state._DATA_PARALLEL_GROUP = None
+    megatron_parallel_state._DATA_PARALLEL_GROUP_WITH_CP = None
+    megatron_parallel_state._CONTEXT_PARALLEL_GROUP = None
+    megatron_parallel_state._CONTEXT_PARALLEL_GLOBAL_RANKS = None
+    megatron_parallel_state._EMBEDDING_GROUP = None
+    megatron_parallel_state._POSITION_EMBEDDING_GROUP = None
+    megatron_parallel_state._TENSOR_AND_DATA_PARALLEL_GROUP = None
+    megatron_parallel_state._TENSOR_AND_DATA_PARALLEL_GROUP_WITH_CP = None
+    megatron_parallel_state._EXPERT_MODEL_PARALLEL_GROUP = None
+    megatron_parallel_state._TENSOR_AND_EXPERT_PARALLEL_GROUP = None
+    megatron_parallel_state._DATA_MODULO_EXPERT_PARALLEL_GROUP = None
+    megatron_parallel_state._VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = None
+    megatron_parallel_state._VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE = None
+    megatron_parallel_state._MPU_TENSOR_MODEL_PARALLEL_WORLD_SIZE = None
+    megatron_parallel_state._MPU_PIPELINE_MODEL_PARALLEL_WORLD_SIZE = None
+    megatron_parallel_state._MPU_TENSOR_MODEL_PARALLEL_RANK = None
+    megatron_parallel_state._MPU_PIPELINE_MODEL_PARALLEL_RANK = None
+    megatron_parallel_state._GLOBAL_MEMORY_BUFFER = None
+    megatron_parallel_state._MPU_EXPERT_MODEL_PARALLEL_WORLD_SIZE = None
+    megatron_parallel_state._MPU_EXPERT_MODEL_PARALLEL_RANK = None
+
+
+def destroy_model_parallel_profiling_wrapper(destroy_model_parallel):
+    @wraps(destroy_model_parallel)
+    def wrapper(*args, **kwargs):
+        argument = get_args()
+        if argument.automated_pipeline and not argument.num_layer_list:
+            destroy_global_parallel_group()
+        else:
+            destroy_model_parallel(*args, **kwargs)
+    return wrapper
 
 
 def get_profiling_data(policy, args):

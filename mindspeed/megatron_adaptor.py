@@ -131,6 +131,7 @@ def megatron_core_adaptation(aspm):
     from .core.parallel_state import initialize_model_parallel
     from .core.parallel_state import initialize_model_parallel_wrapper
     from .core.parallel_state import destroy_model_parallel_wrapper
+    from .core.memory.auto_pipeline.autopipeline_solver import destroy_model_parallel_profiling_wrapper
     from .core.parallel_state import get_context_parallel_group_for_send_recv_overlap
     from .optimizer.optimizer import (mixed_precision_optimizer_step, \
                                       reuse_fp32_param_init_wrapper, optimizer_config_init_wrapper)
@@ -188,6 +189,8 @@ def megatron_core_adaptation(aspm):
                         initialize_model_parallel_wrapper)
     aspm.register_patch('megatron.core.parallel_state.destroy_model_parallel',
                         destroy_model_parallel_wrapper)
+    aspm.register_patch('megatron.core.parallel_state.destroy_model_parallel',
+                        destroy_model_parallel_profiling_wrapper)
     aspm.register_patch('megatron.core.parallel_state.get_context_parallel_group_for_send_recv_overlap',
                         get_context_parallel_group_for_send_recv_overlap)
     aspm.register_patch('megatron.core.mpu', megatron.core.parallel_state)

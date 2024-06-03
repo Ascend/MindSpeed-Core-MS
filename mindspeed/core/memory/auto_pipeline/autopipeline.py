@@ -195,6 +195,7 @@ class AutoPipeline:
             args.encoder_num_layers = self.args.pipeline_model_parallel_size
         args.train_iters = self.stop_profiling_step
         args.save = False
+        args.log_interval = 10
 
     def restore_args_for_training(self):
         args = get_args()
@@ -204,6 +205,7 @@ class AutoPipeline:
         args.train_iters = self.args.train_iters
         args.optimizer = self.args.optimizer
         args.save = self.args.save
+        args.log_interval = self.args.log_interval
 
 
 def check_equal_model_configs(args, parsed_contents):
@@ -330,20 +332,12 @@ def autopipeline_profiling(model_provider, model_type, forward_step_func, train_
                 value["momentum_buffer"].detach()
                 value["momentum_buffer"].grad = None
                 value["momentum_buffer"].storage().resize_(0)
-        for ofg in optimizer.float16_groups:
-            for og in ofg:
-                og.detach()
-                og.grad = None
-                og.storage().resize_(0)
         for ofg in optimizer.param_groups:
-            for og in ofg["params"]:
-                og.detach()
-                og.grad = None
-                og.storage().resize_(0)
-        for ofg in optimizer.fp32_from_float16_groups:
-            for og in ofg:
-                og.detach()
-                og.storage().resize_(0)
+            if "params" in ofg:
+                for og in ofg["params"]:
+                    og.detach()
+                    og.grad = None
+                    og.storage().resize_(0)
         for md in models:
             for param in md.parameters():
                 param.detach()

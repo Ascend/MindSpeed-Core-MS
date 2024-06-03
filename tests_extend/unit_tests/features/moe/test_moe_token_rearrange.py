@@ -52,9 +52,9 @@ class TestMOELayer(DistributedTest):
         set_random_seed(1)
         (tp, pp, ep) = tp_pp_ep
         (num_experts, topk) = ne_topk
-        destroy_model_parallel()
         args = parse_args(None, True)
         set_args(args)
+        destroy_model_parallel()
         initialize_model_parallel(tensor_model_parallel_size=tp,
                                   pipeline_model_parallel_size=pp,
                                   virtual_pipeline_model_parallel_size=None,

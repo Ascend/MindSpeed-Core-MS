@@ -299,8 +299,9 @@ def parallel_transformer_init_wrapper(fn):
         fn(self, *args, **kwargs)
 
         argument = get_args()
-        if argument.automated_pipeline and argument.num_layer_list:
+        if argument.automated_pipeline and argument.num_layer_list and argument.virtual_pipeline_model_parallel_size is None:
             start_layer_num = 1
+            self.layers = torch.nn.ModuleList()
             for idx, value in enumerate(argument.num_layer_list):
                 if parallel_state.get_pipeline_model_parallel_rank() == idx:
                     self.num_layers = value
