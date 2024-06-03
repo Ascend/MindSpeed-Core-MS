@@ -33,9 +33,9 @@ Ring Attention的并行维度不受attention head数限制，因此理论上序�
 
 ## 使用效果
 
-可支持混合长序列并行。
+利用多个计算设备对输入序列进行并行切分，降低单设备的内存消耗，相比不开启序列并行单步耗时增加，相比重计算计算效率提升。
 
-## 开源引用
+## 鸣谢
 
 1. GitHub项目地址：
 https://github.com/feifeibear/long-context-attention

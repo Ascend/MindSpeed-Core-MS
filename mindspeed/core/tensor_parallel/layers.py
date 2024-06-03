@@ -24,7 +24,9 @@ def vocab_parallel_embedding_forward(self, input_):
     else:
         masked_input = input_
         # Get the embeddings.
-    output_parallel = self.weight[masked_input]
+
+    # For higher accumulation accuracy for bf16 on NPU.
+    output_parallel = F.embedding(masked_input, self.weight)
 
     # Mask the output embedding.
     if self.tensor_model_parallel_size > 1:
