@@ -42,6 +42,7 @@ def process_args(parser):
 
 def _add_moe_args(parser):
     group = parser.add_argument_group(title='moe')
+    # deepspeed moe arguments
     group.add_argument('--moe-model-type', type=str, default='megatron_moe',
                        choices=['deepspeed_moe', 'megatron_moe'], help='moe model type default megatron moe')
     group.add_argument('--expert-interval', type=int, default=1,
@@ -62,6 +63,10 @@ def _add_moe_args(parser):
                        help="Reducing AllReduce communication under the no drop policy through the sliding window mechanism.")
     group.add_argument("--moe-use-sinkhorn", action='store_true',
                        help="Use sinkhorn load balancing in the gate.")
+
+    # megatron mcore moe arguments
+    group.add_argument("--moe-permutation-async-comm", action='store_true',
+                       help="overlap moe permutation 3 all gather communications")
     return parser
 
 
@@ -253,7 +258,10 @@ def validate_args_wrapper(validate_args):
             if not hasattr(args, "optimize_recomp_communication_status"):
                 args.optimize_recomp_communication_status = 0
         if args.moe_dynamic_padding and not args.moe_no_drop:
-            raise AssertionError('`--moe-dynamic-padding` only support for `--moe-no-drop`.') 
+            raise AssertionError('`--moe-dynamic-padding` only support for `--moe-no-drop`.')
+        if args.moe_permutation_async_comm and args.moe_model_type != 'megatron_moe':
+            raise AssertionError('`--moe-permutation-async-comm` only support for megatron core moe.')
+
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'ulysses_cp_algo':
             head, remainder = divmod(args.num_attention_heads, args.context_parallel_size * args.tensor_model_parallel_size)
             assert head >= 1 and remainder == 0, f"num_attention_heads must be divisible by context_parallel_size * tensor_model_parallel_size"

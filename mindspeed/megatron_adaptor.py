@@ -1,10 +1,20 @@
 import os
 import sys
-import types
+import argparse
 from functools import wraps
 import torch
-import apex
 from torch_npu.contrib import transfer_to_npu
+from .arguments import process_args
+
+_ARGS = None
+
+
+def get_mindspeed_args():
+    global _ARGS
+    if _ARGS is None:
+        parser = argparse.ArgumentParser(description='MindSpeed Arguments', allow_abbrev=False)
+        _ARGS, _ = process_args(parser).parse_known_args()
+    return _ARGS
 
 
 def dummy_jit(fn):
@@ -315,7 +325,22 @@ def ascend_adaptation(aspm):
 
     if int(os.getenv('ASCEND_MC2', '0')):
         aspm.register_patch('megatron.training.initialize.initialize_megatron', mc2_wrapper)
+    aspm.register_patch('megatron.training.initialize.initialize_megatron', coc_registration_wrapper)
 
+    if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) or int(os.getenv('MEMORY_FRAGMENTATION', '0')):
+        import megatron.training.initialize
+        aspm.register_patch('megatron.training.initialize_megatron', megatron.training.initialize.initialize_megatron)
+
+
+def mcore_moe_adaptation(pm, args):
+    if args.moe_permutation_async_comm:
+        from .core.transformer.moe.router import aux_loss_load_balancing
+        from .core.transformer.moe.token_dispatcher import token_permutation, token_unpermutation
+        pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_permutation', token_permutation)
+        pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_unpermutation', token_unpermutation)
+        pm.register_patch('megatron.core.transformer.moe.router.TopKRouter.aux_loss_load_balancing', aux_loss_load_balancing)
+
+    if int(os.getenv('ASCEND_MC2', '0')):
         # MoE MLP not use mc2 linear
         from .core.models.gpt.gpt_layer_specs import get_mlp_module_spec_wrapper
         from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
@@ -324,14 +349,9 @@ def ascend_adaptation(aspm):
             megatron.core.models.gpt.gpt_layer_specs._get_mlp_module_spec, ColumnParallelLinear.forward,
             RowParallelLinear.forward)
 
-    aspm.register_patch('megatron.training.initialize.initialize_megatron', coc_registration_wrapper)
-
-    if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) or int(os.getenv('MEMORY_FRAGMENTATION', '0')):
-        import megatron.training.initialize
-        aspm.register_patch('megatron.training.initialize_megatron', megatron.training.initialize.initialize_megatron)
-
 
 def exe_adaptation():
+    mindspeed_args = get_mindspeed_args()
     from .patch_utils import MindSpeedPatchesManager as aspm
     te_adaptation(aspm)
     apex_adaptation(aspm)
@@ -341,6 +361,7 @@ def exe_adaptation():
     megatron_legacy_adaptation(aspm)
     megatron_training_adaptation(aspm)
     ascend_adaptation(aspm)
+    mcore_moe_adaptation(aspm, mindspeed_args)
     aspm.apply_patches()
 
     # accelerate package will check TE on sys.modules，so we need remove this patch
