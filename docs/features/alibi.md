@@ -22,7 +22,7 @@ Alibi算法给attention score添加了一个预设的线性偏置矩阵（如下
 
 （2）对于使用融合算子fusion_attention的情况设置 `--alibi-fusion-attn-type 2`（支持0，2，3）
 0表示生成alibi后传入，1暂不开放， 2和3表示核内生成， 3做pse的时候会做sqrt。
-如果要设置alibi为对角线对称取反，则需设置`alibi_diagonal_opposite`，反正（亦是默认情况，且与2和3时内核生成一致）无需进行设置。
+如果要设置alibi为对角线对称取反，则需设置`alibi_diagonal_opposite`，反之（亦是默认情况，且与2和3时核内生成一致）无需进行设置。
 ## 使用效果
 
 

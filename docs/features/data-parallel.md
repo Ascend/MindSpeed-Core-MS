@@ -23,8 +23,8 @@
 
 ## 使用方法
 
-框架中数据并行通过总设备数(world_size)、模型并行数(tensor_model_parallel_size)、流水线并行数(pipeline_model_parallel_size)计算得到。  
-数据并行数(data_parallel_size) = world_size // (tensor_model_parallel_size * pipeline_model_parallel_size)
+框架中数据并行通过总设备数(world_size)、模型并行数(tensor_model_parallel_size)、流水线并行数(pipeline_model_parallel_size)、长序列并行数(context_parallel_size)计算得到。  
+数据并行数(data_parallel_size) = world_size // (tensor_model_parallel_size * pipeline_model_parallel_size * context_parallel_size)
 
 ## 使用效果
 

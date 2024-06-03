@@ -36,8 +36,6 @@
 
 请根据需要选择下列三种场景中的一个进行使用。（注意：计算通信并行融合算子需要安装ATB后才能使用！）
 
-**注意：当前只支持TP=8的场景！**
-
 ### 1. 不使用计算通信并行
 
 ```shell
@@ -55,7 +53,7 @@ export USE_COC_FUSED_KERNEL=0
 ### 3. 使用通过融合算子使能的计算通信并行特性
 
 ```shell
-export USE_COC_FUSED_KERNEL=1
+export USE_COC_FUSED_KERNEL=1  # 注意：当前只支持TP=8的场景！
 ```
 
 融合算子的环境变量拥有更高优先级，即当 COC_PARALLEL_NUM > 1 且 USE_COC_FUSED_KERNEL = 1 时，前者不会生效。

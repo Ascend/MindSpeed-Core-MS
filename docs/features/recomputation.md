@@ -16,15 +16,15 @@
 
 ## 使用方法
 
-选择性重计算：脚本中添加--recompute-activations开启选择性重计算
+选择性重计算：脚本中添加`--recompute-activations`开启选择性重计算
 
-完全重计算：脚本中配置--recompute-granularity full开启完全重计算，开启完全重计算时使用--recompute-method uniform/block 确认具体重计算方式
+完全重计算：脚本中配置`--recompute-granularity full`开启完全重计算，开启完全重计算时使用`--recompute-method uniform/block` 确认具体重计算方式
 
---recompute-method uniform：将Transformer层均匀划分组（每组大小--recompute-num-layers），按组存储输入和激活值
+`--recompute-method uniform`：将Transformer层均匀划分组（每组大小`--recompute-num-layers`），按组存储输入和激活值
 
---recompute-method block：将前--recompute-num-layers个transformer层重计算，剩余层不进行重计算
+`--recompute-method block`：将前`--recompute-num-layers`个transformer层重计算，剩余层不进行重计算
 
-同时配置--recompute-activations 、--recompute-granularity full生效选择性重计算
+同时配置`--recompute-activations` 、`--recompute-granularity full`生效选择性重计算
 
 ## 使用影响
 显存开销降低、性能降低

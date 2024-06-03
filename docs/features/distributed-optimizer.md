@@ -9,7 +9,7 @@
 主要用于训练场景，当DP不为1时，将优化器状态拆分到所有DP组间，在对梯度进行reduce-scatter后，每个DP组分别进行部分权重更新，最后再用一个all-gather操作收集模型权重。
 
 ## 使用方法
-脚本中添加--use-distributed-optimizer开启分布式优化器
+脚本中添加`--use-distributed-optimizer`开启分布式优化器
 
 ## 使用影响
 降低显存开销

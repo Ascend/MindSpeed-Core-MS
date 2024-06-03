@@ -42,13 +42,13 @@ gelu函数重计算->后续模块A的反向
 
 ## 使用方法
 
-脚本中添加：--recompute-activation-function 可开启激活函数重计算
+脚本中添加：`--recompute-activation-function` 可开启激活函数重计算
 
-添加：--recompute-activation-function-num-layers ${num} 可指定激活函数重计算的层数
+添加：`--recompute-activation-function-num-layers ${num}` 可指定激活函数重计算的层数
 
 激活函数重计算可以与全重计算同时开启：
 
-1.同时开启时，仅支持 --recompute-method 为 block
+1.同时开启时，仅支持 `--recompute-method 为 block`
 
 2.同时开启时，会按照指定的全重计算和激活函数重计算的层数做各自类型的重计算，即不会有一层既做全重计算又做激活函数重计算。
 

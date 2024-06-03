@@ -72,12 +72,12 @@ TOKENIZER_MODEL="./model_from_hf/Mixtral-8x7B/"
 CKPT_SAVE_DIR="./ckpt/Mixtral-8x7B/"
 
 # 根据分布式集群实际情况配置分布式参数
-GPUS_PER_NODE=8
+NPUS_PER_NODE=8
 MASTER_ADDR="your master node IP"
 MASTER_PORT=6000
 NNODES=2
 NODE_RANK="current node id"
-WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
+WORLD_SIZE=$(($NPUS_PER_NODE * $NNODES))
 
 # 根据实际需要设置训练并行策略
 TP=2

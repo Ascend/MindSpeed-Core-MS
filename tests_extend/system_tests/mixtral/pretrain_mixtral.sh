@@ -5,7 +5,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 IPs=('$master_ip' '$other_ips')
 LOCAL_HOST=`hostname -I|awk -F " " '{print$1}'`
-GPUS_PER_NODE=8
+NPUS_PER_NODE=8
 MASTER_ADDR=${IPs[0]}
 MASTER_PORT=6000
 NNODES=${#IPs[@]}
@@ -24,10 +24,10 @@ if [[ $NODE_RANK == "" ]]; then
     echo "[Error] para \"NODE_RANK\" must be configured"
     exit 1
 fi
-WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
+WORLD_SIZE=$(($NPUS_PER_NODE * $NNODES))
 
 DISTRIBUTED_ARGS="
-    --nproc_per_node $GPUS_PER_NODE \
+    --nproc_per_node $NPUS_PER_NODE \
     --nnodes $NNODES \
     --node_rank $NODE_RANK \
     --master_addr $MASTER_ADDR \
