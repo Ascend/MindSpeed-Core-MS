@@ -4,8 +4,6 @@ from functools import wraps
 
 import torch
 from megatron.training import get_args
-from megatron.core import tensor_parallel
-from megatron.core.optimizer.optimizer import Float16OptimizerWithFloat16Params
 
 
 @torch.no_grad()
