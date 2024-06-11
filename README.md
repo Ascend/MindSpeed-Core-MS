@@ -119,6 +119,7 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 | 算子                                         | 介绍                                                  |
 |--------------------------------------------|-----------------------------------------------------|
 | npu_dropout_add_layer_norm                 | [link](docs/ops/npu_dropout_add_layer_norm.md)      |
+| npu_rotary_position_embedding              | [link](docs/ops/npu_rotary_position_embedding.md)   |
 | 【Prototype】ffn                             | [link](docs/ops/ffn.md)                             |
 | 【Prototype】fusion_attention                | [link](docs/ops/fusion_attention.md)                |
 | 【Prototype】rms_norm                        | [link](docs/ops/rms_norm.md)                        |
@@ -128,7 +129,6 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 | 【Prototype】npu_mm_all_reduce_add_rms_norm_ | [link](docs/ops/npu_mm_all_reduce_add_rms_norm_.md) |
 | 【Prototype】npu_grouped_mat_mul             | [link](docs/ops/gmm.md)  |
 | 【Prototype】npu_grouped_mat_mul_all_reduce  | [link](docs/ops/npu_grouped_mat_mul_all_reduce.md)  |
-| 【Prototype】npu_rotary_position_embedding   | [link](docs/ops/npu_rotary_position_embedding.md)   |
 
 # 版本配套表
 
