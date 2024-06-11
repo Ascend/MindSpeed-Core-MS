@@ -4,21 +4,18 @@ import torch
 import torch_npu
 from einops import rearrange
 from megatron.core import mpu
-from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid_ring,
-                                             get_context_parallel_for_hybrid_ring_world_size,
-                                             get_context_parallel_for_hybrid_ring_rank,
-                                             get_context_parallel_for_hybrid_ring_global_ranks)
 
 
 def flash_attn_p2p_communicate(rank, send_tensor, send_dst,
                                recv_tensor, recv_src,
-                               cp_group):
+                               cp_group,
+                               use_cp_send_recv_overlap,
+                               cp_group_for_send_recv_overlap,
+                               ):
     """Point-to-point communications of KV and dKV in Attention with context parallelism"""
     send_recv_ops = []
 
-    from megatron.training import get_args
-    if get_args().use_cp_send_recv_overlap:
-        cp_group_for_send_recv_overlap = mpu.get_context_parallel_group_for_send_recv_overlap()
+    if use_cp_send_recv_overlap:
         if rank % 2 == 0:
             send_op = torch.distributed.isend(send_tensor, send_dst, cp_group)
             recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group_for_send_recv_overlap)
@@ -97,21 +94,12 @@ class AttentionWithCp(torch.autograd.Function):
     def forward(ctx, q, k, v, n, cp_para, softmax_scale=None, attn_mask=None, dropout_p=0.):
         keep_prob = 1. - dropout_p
         causal = cp_para['causal']
-        in_hybrid_mode = False
-        if get_context_parallel_group_for_hybrid_ring(check_initialized=False) is not None:
-            in_hybrid_mode = True
-
-        if not in_hybrid_mode:    
-            cp_group = mpu.get_context_parallel_group()
-            cp_size = mpu.get_context_parallel_world_size()
-            rank = mpu.get_context_parallel_rank()
-            cp_global_ranks = mpu.get_context_parallel_global_ranks()
-        else:
-            cp_group = get_context_parallel_group_for_hybrid_ring()
-            cp_size = get_context_parallel_for_hybrid_ring_world_size()
-            rank = get_context_parallel_for_hybrid_ring_rank()
-            cp_global_ranks = get_context_parallel_for_hybrid_ring_global_ranks()
-            
+        cp_group = cp_para.get("cp_group")
+        cp_size = cp_para.get("cp_size")
+        rank = cp_para.get("rank")
+        cp_global_ranks = cp_para.get("cp_global_ranks")
+        use_cp_send_recv_overlap = cp_para.get("use_cp_send_recv_overlap")
+        cp_group_for_send_recv_overlap = cp_para.get("cp_group_for_send_recv_overlap")
 
         send_dst = cp_global_ranks[(rank + 1) % cp_size]
         recv_src = cp_global_ranks[(rank + cp_size - 1) % cp_size]
@@ -142,7 +130,8 @@ class AttentionWithCp(torch.autograd.Function):
             if i < cp_size - 1:
                 recv_kv = torch.empty_like(send_kv)
                 send_recv_ops = flash_attn_p2p_communicate(rank, send_kv, send_dst,
-                                                           recv_kv, recv_src, cp_group)
+                                                           recv_kv, recv_src, cp_group, use_cp_send_recv_overlap,
+                                                           cp_group_for_send_recv_overlap)
             if i == 0:
                 cur_k, cur_v = k, v
             else:
@@ -257,6 +246,9 @@ class AttentionWithCp(torch.autograd.Function):
         ctx.cp_global_ranks = cp_global_ranks
         ctx.keep_prob = keep_prob
         ctx.rng_states = rng_states
+        ctx.use_cp_send_recv_overlap = use_cp_send_recv_overlap
+        ctx.cp_group_for_send_recv_overlap = cp_group_for_send_recv_overlap
+
         return attn_out
 
     @staticmethod
@@ -273,6 +265,9 @@ class AttentionWithCp(torch.autograd.Function):
         # Reversed order of forward
         send_dst = ctx.cp_global_ranks[(rank + cp_size - 1) % cp_size]
         recv_src = ctx.cp_global_ranks[(rank + 1) % cp_size]
+        use_cp_send_recv_overlap = ctx.use_cp_send_recv_overlap
+        cp_group_for_send_recv_overlap = ctx.cp_group_for_send_recv_overlap
+
         if causal:
             # split chunk[i]~chunk[cp_size-i-1] into chunk[i] and chunk[cp_size-i-1], [2s, b, h] -> [2, s, b, h]
             q, k, v, attn_out, dout = [x.view(2, x.shape[0] // 2, *x.shape[1:]) for x in [q, k, v, attn_out, dout]]
@@ -307,18 +302,21 @@ class AttentionWithCp(torch.autograd.Function):
                 send_kv = kv
                 recv_kv = torch.empty_like(send_kv)
                 send_recv_ops = flash_attn_p2p_communicate(rank, send_kv, send_dst,
-                                                           recv_kv, recv_src, cp_group)
+                                                           recv_kv, recv_src, cp_group, use_cp_send_recv_overlap,
+                                                           cp_group_for_send_recv_overlap)
                 cur_k, cur_v = k, v
             elif i == cp_size - 1: # just send-recv dkv in the last loop
                 send_dkv = send_kv_dkv[1]
                 recv_dkv = torch.empty_like(send_dkv)
                 send_recv_ops = flash_attn_p2p_communicate(rank, send_dkv, send_dst,
-                                                           recv_dkv, recv_src, cp_group)
+                                                           recv_dkv, recv_src, cp_group, use_cp_send_recv_overlap,
+                                                           cp_group_for_send_recv_overlap)
                 cur_k, cur_v = send_kv_dkv[0][0], send_kv_dkv[0][1]
             else:
                 recv_kv_dkv = torch.empty_like(send_kv_dkv)
                 send_recv_ops = flash_attn_p2p_communicate(rank, send_kv_dkv, send_dst,
-                                                           recv_kv_dkv, recv_src, cp_group)
+                                                           recv_kv_dkv, recv_src, cp_group, use_cp_send_recv_overlap,
+                                                           cp_group_for_send_recv_overlap)
                 cur_k, cur_v = send_kv_dkv[0][0], send_kv_dkv[0][1]
 
             if causal:

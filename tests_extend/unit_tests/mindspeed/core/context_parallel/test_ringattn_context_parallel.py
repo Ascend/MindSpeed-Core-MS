@@ -8,6 +8,11 @@ from mindspeed import megatron_adaptor
 from megatron.training.global_vars import set_args
 from megatron.training.arguments import parse_args
 from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
+from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid_ulysses,
+                                             get_context_parallel_group_for_hybrid_ring,
+                                             get_context_parallel_for_hybrid_ring_world_size,
+                                             get_context_parallel_for_hybrid_ring_rank,
+                                             get_context_parallel_for_hybrid_ring_global_ranks)
 
 from commons import set_random_seed, initialize_model_parallel
 from unit_tests.common import DistributedTest
@@ -42,6 +47,7 @@ def get_data_on_all_cp_ranks(data, cp_size, dim=0):
 
 
 def run_ringattn_cp(cp_size, bs, seq_len, dtype, cp_args):
+    from megatron.core import mpu
     causal, send_recv_overlap = cp_args
     args = parse_args(None, True)
     args.use_cp_send_recv_overlap = send_recv_overlap
@@ -84,8 +90,31 @@ def run_ringattn_cp(cp_size, bs, seq_len, dtype, cp_args):
     for x in [q_, k_, v_]:
         x.requires_grad = True
 
+    in_hybrid_mode = False
+    if get_context_parallel_group_for_hybrid_ring(check_initialized=False) is not None:
+        in_hybrid_mode = True
+
+    if not in_hybrid_mode:
+        cp_group = mpu.get_context_parallel_group()
+        cp_size = mpu.get_context_parallel_world_size()
+        rank = mpu.get_context_parallel_rank()
+        cp_global_ranks = mpu.get_context_parallel_global_ranks()
+    else:
+        cp_group = get_context_parallel_group_for_hybrid_ring()
+        cp_size = get_context_parallel_for_hybrid_ring_world_size()
+        rank = get_context_parallel_for_hybrid_ring_rank()
+        cp_global_ranks = get_context_parallel_for_hybrid_ring_global_ranks()
+
     cp_para = dict()
     cp_para['causal'] = causal
+    cp_para['cp_group'] = cp_group
+    cp_para['cp_size'] = cp_size
+    cp_para['rank'] = rank
+    cp_para['cp_global_ranks'] = cp_global_ranks
+    cp_para['use_cp_send_recv_overlap'] = args.use_cp_send_recv_overlap
+    cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
+            if args.use_cp_send_recv_overlap else None
+
     out_ = ringattn_context_parallel(q_, k_, v_, n, cp_para, softmax_scale=scale, attn_mask=None)
     out_.backward(dout_)
 
