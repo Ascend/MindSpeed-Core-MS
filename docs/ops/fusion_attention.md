@@ -13,10 +13,22 @@ npu_fusion_attention(
                     sync=False, pse_type=1, q_start_idx=None,
                     kv_start_idx=None)
 
-```
-计算逻辑：
-同Attention
-```
+- 计算公式：
+
+   注意力的正向计算公式如下：
+
+   - psetype=1时，公式如下：
+
+    $$
+    attention\\_out = Dropout(Softmax(Mask(scale*(pse+query*key^T), atten\\_mask)), keep\\_prob)*value
+    $$
+
+   - psetype=其他取值时，公式如下：
+
+    $$
+    attention\\_out=Dropout(Softmax(Mask(scale*(query*key^T) + pse),atten\\_mask),keep\\_prob)*value
+    $$
+
 ## 前向接口：
 输入：
 - query：必选输入，Device侧的Tensor，数据类型支持FLOAT16、BFLOAT16，数据格式支持ND。
@@ -70,17 +82,18 @@ npu_fusion_attention(
 
 
 ## 输入限制
-- 输入query、key、value的B：batchsize必须相等，取值范围1~2K。
+- 输入query、key、value的B：batchsize必须相等，取值范围1~2M。非varlen prefix场景B最大支持2K，varlen prefix场景B最大支持1K。
 - 输入query、key、value、pse的数据类型必须一致。pse_type=2或3的时候例外，此时pse需要传fp32的slope
 - 输入query、key、value的input_layout必须一致。
 - 输入query的N和key/value的N 必须成比例关系，即Nq/Nkv必须是非0整数，Nq取值范围1~256。当Nq/Nkv > 1时，即为GQA，当Nkv=1时，即为MQA。
 - 输入key/value的shape必须一致。
-- 输入query、key、value的S：sequence length，取值范围1~512K。
+- 输入query、key、value的S：sequence length，取值范围1~1M。
 - 输入query、key、value的D：head dim，取值范围1~512。
 - sparse_mode为1、2、3、4、5、6、7、8时，应传入对应正确的atten_mask，否则将导致计算结果错误。当atten_mask输入为None时，sparse_mode，pre_tokens，next_tokens参数不生效，固定为全计算。
 - sparse_mode配置为1、2、3、5、6时，用户配置的pre_tokens、next_tokens不会生效。
 - sparse_mode配置为0、4时，须保证atten_mask与pre_tokens、next_tokens的范围一致。
-- prefix稀疏计算场景B不大于32，varlen场景不支持非压缩prefix，即不支持sparse_mode=5；当Sq>Skv时，prefix的N值取值范围[0, Skv]，当Sq<=Skv时，prefix的N值取值范围[Skv-Sq, Skv]。
+- keep_prob的取值范围为(0, 1]。
+- varlen场景不支持非压缩prefix，即不支持sparse_mode=5；当Sq>Skv时，prefix的N值取值范围[0, Skv]，当Sq<=Skv时，prefix的N值取值范围[Skv-Sq, Skv]。
 - sparse_mode=7或者8时，不支持可选输入pse。
 - varlen场景：
   atten_mask输入不支持补pad，即atten_mask中不能存在某一行全1的场景。
