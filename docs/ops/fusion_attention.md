@@ -17,13 +17,13 @@ npu_fusion_attention(
 
    注意力的正向计算公式如下：
 
-   - psetype=1时，公式如下：
+   - pse_type=1时，公式如下：
 
     $$
     attention\\_out = Dropout(Softmax(Mask(scale*(pse+query*key^T), atten\\_mask)), keep\\_prob)*value
     $$
 
-   - psetype=其他取值时，公式如下：
+   - pse_type=其他取值时，公式如下：
 
     $$
     attention\\_out=Dropout(Softmax(Mask(scale*(query*key^T) + pse),atten\\_mask),keep\\_prob)*value
@@ -35,7 +35,7 @@ npu_fusion_attention(
 - key：必选输入，Device侧的Tensor，数据类型支持FLOAT16、BFLOAT16，数据格式支持ND。
 - value：必选输入，Device侧的Tensor，数据类型支持FLOAT16、BFLOAT16，数据格式支持ND。
 - atten_mask：可选输入，数据类型bool，缺省none。在softmax之前drop的mask。
-- pse：可选输入，Device侧的Tensor，可选参数，表示位置编码。数据类型支持FLOAT16、BFLOAT16，数据格式支持ND。非varlen场景支持四维输入，包含BNSS格式、BN1Skv格式、1NSS格式。如果非varlen场景Sq大于1024或varlen场景、每个batch的Sq与Skv等长且是sparse_mode为0、2、3的下三角掩码场景，可使能alibi位置编码压缩，此时只需要输入原始PSE最后1024行进行内存优化，即alibi_compress = ori_pse[:, :, -1024:, :]，参数每个batch不相同时，输入BNHSkv(H=1024)，每个batch相同时，输入1NHSkv(H=1024)。如果psetype为2或3的话，为float32类型 传入slope数据，slope数据支持BN或N两种shape。
+- pse：可选输入，Device侧的Tensor，可选参数，表示位置编码。数据类型支持FLOAT16、BFLOAT16，数据格式支持ND。非varlen场景支持四维输入，包含BNSS格式、BN1Skv格式、1NSS格式。如果非varlen场景Sq大于1024或varlen场景、每个batch的Sq与Skv等长且是sparse_mode为0、2、3的下三角掩码场景，可使能alibi位置编码压缩，此时只需要输入原始PSE最后1024行进行内存优化，即alibi_compress = ori_pse[:, :, -1024:, :]，参数每个batch不相同时，输入BNHSkv(H=1024)，每个batch相同时，输入1NHSkv(H=1024)。如果pse_type为2或3的话，需传入数据类型为float32的slope数据，slope数据支持BN或N两种shape。
 - padding_mask：可选输入，Device侧的Tensor，暂不支持该参数。
 - atten_mask：Device侧的Tensor，可选参数，取值为1代表该位不参与计算（不生效），为0代表该位参与计算，数据类型支持BOOL、UINT8，数据格式支持ND格式，输入shape类型支持BNSS格式、B1SS格式、11SS格式、SS格式。varlen场景只支持SS格式，SS分别是maxSq和maxSkv。
 - prefix：Host侧的int array，可选参数，代表prefix稀疏计算场景每个Batch的N值。数据类型支持INT64，数据格式支持ND。
@@ -61,7 +61,11 @@ npu_fusion_attention(
 
 属性：
 - scale：可选属性，Host侧的double，可选参数，代表缩放系数，作为计算流中Muls的scalar值，数据类型支持DOUBLE，默认值为1。
-- pse_type：可选属性，int64  范围0-3   0表示外部传入，1暂不开放， 2和3表示核内生成， 3做pse的时候会做sqrt
+- pse_type：可选属性，Host侧的int，数据类型支持INT64，默认值为1。支持范围0-3。
+- pse_type配置为0的时候，pse由外部传入，计算流程是先mul scale再add pse。
+- pse_type配置为1的时候，pse由外部传入，计算流程是先add pse再mul scale。
+- pse_type配置为2的时候，pse由内部生成，生成标准alibi位置信息。
+- pse_type配置为3的时候，pse由内部生成，生成的alibi位置信息为标准的基础上再做sqrt开平方。
 - head_num：必选属性，Host侧的int，代表head个数，数据类型支持INT64。
 - input_layout：必选属性，Host侧的string，代表输入query、key、value的数据排布格式，支持BSH、SBH、BSND、BNSD、TND(actual_seq_qlen/actual_seq_kvlen需传值)；后续章节如无特殊说明，S表示query或key、value的sequence length，Sq表示query的sequence length，Skv表示key、value的sequence length，SS表示Sq*Skv
 - keep_prob：可选属性，数据类型float，默认值为1.0。在 softmax 后的保留比例。
