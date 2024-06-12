@@ -143,3 +143,9 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 # 安全声明
 
 [MindSpeed 安全声明](SECURITYNOTE.md)
+
+# 常见问题
+
+| 现象                   | 介绍                               |
+|----------------------|----------------------------------|
+| Data helpers 数据预处理出错 | [link](docs/faq/data_helpers.md) |
