@@ -499,7 +499,6 @@ class GraphSolver:
             combination_num = len(self.layers_combination)
             # make combination index id begin for 1.
             self.layers_combination.insert(0, None)
-        # combination_num = len(self.layers_combination)
         # init ans
         ans = [[GoodsValue() for _ in range(self.layers_num + 1)] for _ in range(combination_num + 1)]
         # find max goods value

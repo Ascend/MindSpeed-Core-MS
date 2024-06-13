@@ -751,10 +751,6 @@ def parallel_attention_forward(self, hidden_states, attention_mask,
         q_pos_emb, k_pos_emb = rotary_pos_emb
         query_layer = apply_rotary_pos_emb(query_layer, q_pos_emb, self.config)
         key_layer = apply_rotary_pos_emb(key_layer, k_pos_emb, self.config)
-        # TODO, can apply positional embedding to value_layer so it has
-        # absolute positional embedding.
-        # otherwise, only relative positional embedding takes effect
-        # value_layer = apply_rotary_pos_emb(value_layer, k_pos_emb)
 
     if not self.use_flash_attn:
         if self.checkpoint_core_attention:

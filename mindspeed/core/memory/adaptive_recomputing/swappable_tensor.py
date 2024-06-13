@@ -49,7 +49,6 @@ class SwappableTensor(torch.Tensor):
         with torch.no_grad():
             self.inner_tensor_cpu_data = self.inner_tensor.cpu()
             self.inner_tensor.storage().resize_(0)
-            # torch_npu._npu_storage_resize(self.inner_tensor, 0)
             self._location = "cpu"
 
     def trans_to_device(self):
@@ -58,7 +57,6 @@ class SwappableTensor(torch.Tensor):
         :return:
         """
         with torch.no_grad():
-            # torch_npu._npu_storage_resize(self.inner_tensor, self.inner_tensor_origin_storage_size)
             self.inner_tensor.storage().resize_(self.inner_tensor_origin_storage_size)
             self.inner_tensor.copy_(self.inner_tensor_cpu_data)
             self._location = "device"

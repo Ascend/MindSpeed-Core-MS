@@ -8,11 +8,9 @@ from megatron.legacy.model.rms_norm import RMSNorm
         
 class PTNorm:
     """
-    A conditional wrapper to initialize an instance of Transformer-Engine's
-    `LayerNorm` or `RMSNorm` based on input
+    Conditional Initialization of Transformer-Engine’s LayerNorm or RMSNorm Instance
     """
-
-    # TODO should we ditch normalization config and just use spec to choose LayerNorm vs RMSNorm?
+    
     def __new__(
         cls, config: TransformerConfig, hidden_size: int, eps: float = 1e-5,
     ):
