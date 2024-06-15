@@ -309,6 +309,17 @@ def validate_args_wrapper(validate_args):
         if args.use_flash_attn:
             assert args.sparse_mode == 0 or args.sparse_mode == 2, f"Only supports sparse modes 0 and 2"
         args.create_attention_mask_in_dataloader = False
+        if args.automated_pipeline:
+            if args.recompute_activation_function:
+                print("[WARNING] disable activation function recomputation when enabling automated pipeline")
+                args.recompute_activation_function = False
+            if args.recompute_granularity is not None or args.recompute_method is not None:
+                print("[WARNING] disable recompute granularity and recompute method when enabling automated pipeline")
+                args.recompute_granularity = None
+                args.recompute_method = None
+            if args.optimize_recomp_communication_level > 0:
+                print("[WARNING] disable optimize recomp communication level when enabling automated pipeline")
+                args.optimize_recomp_communication_level = 0
 
     return wrapper
 

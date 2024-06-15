@@ -21,7 +21,7 @@ def get_forward_backward_func_wrapper(get_forward_backward_func):
     @wraps(get_forward_backward_func)
     def wrapper(*args, **kwargs):
         arguments = get_args()
-        if arguments.optimize_send_recv_comm:
+        if arguments.optimize_send_recv_comm and arguments.num_layers_per_virtual_pipeline_stage is None:
             return flexible_schedules.forward_backward_pipelining_without_interleaving
         return get_forward_backward_func(*args, **kwargs)
     return wrapper

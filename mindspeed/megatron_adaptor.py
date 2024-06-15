@@ -324,7 +324,9 @@ def ascend_adaptation(aspm):
         aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
 
     if int(os.getenv('ASCEND_MC2', '0')):
+        from .core.memory.auto_pipeline.autopipeline import initialize_cfg_from_args_wrapper
         aspm.register_patch('megatron.training.initialize.initialize_megatron', mc2_wrapper)
+        aspm.register_patch('mindspeed.core.tensor_parallel.ascend_turbo.initialize.initialize_cfg_from_args', initialize_cfg_from_args_wrapper)
     aspm.register_patch('megatron.training.initialize.initialize_megatron', coc_registration_wrapper)
 
     if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) or int(os.getenv('MEMORY_FRAGMENTATION', '0')):

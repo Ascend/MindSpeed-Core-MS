@@ -4,10 +4,11 @@ _TRAIN_START_TIME = time.time()
 import json
 import os.path
 import gc
+import copy
+from functools import wraps
 import torch
 import torch.nn
 import torch_npu
-import copy
 from megatron.training import print_rank_0
 from megatron.training.arguments import parse_args
 from megatron.core import parallel_state
@@ -267,6 +268,17 @@ def get_auto_pipeline(args):
     if AutoPipeline.auto_pipeline is None:
         AutoPipeline.auto_pipeline = AutoPipeline(args)
     return AutoPipeline.auto_pipeline
+
+
+def initialize_cfg_from_args_wrapper(initialize_cfg_from_args):
+    @wraps(initialize_cfg_from_args)
+    def wrapper(*args, **kwargs):
+        from mindspeed.core import training as mc_training
+        argument = get_args()
+        disable_mc2 = argument.automated_pipeline and not mc_training.policy
+        if not disable_mc2:
+            initialize_cfg_from_args(*args, **kwargs)
+    return wrapper
 
 
 def autopipeline_profiling(model_provider, model_type, forward_step_func, train_valid_test_dataset_provider,
