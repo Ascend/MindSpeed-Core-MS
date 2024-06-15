@@ -808,7 +808,8 @@ def switch_mlp_init_wrapper(fn):
                 noisy_gate_policy=global_args.noisy_gate_policy,
                 no_drop=global_args.moe_no_drop,
                 dynamic_padding=global_args.moe_dynamic_padding,
-                use_sinkhorn=global_args.moe_use_sinkhorn
+                use_sinkhorn=global_args.moe_use_sinkhorn,
+                sequence_parallel=global_args.sequence_parallel
             )
         else:
             if layer_number % global_args.expert_interval == 0:
@@ -825,7 +826,8 @@ def switch_mlp_init_wrapper(fn):
                     noisy_gate_policy=global_args.noisy_gate_policy,
                     no_drop=global_args.moe_no_drop,
                     dynamic_padding=global_args.moe_dynamic_padding,
-                    use_sinkhorn=global_args.moe_use_sinkhorn
+                    use_sinkhorn=global_args.moe_use_sinkhorn,
+                    sequence_parallel=global_args.sequence_parallel
                 )
             else:
                 self.block = ParallelMLP(config)

@@ -13,6 +13,7 @@ class Config:
                  no_drop=False,
                  dynamic_padding=False,
                  use_sinkhorn=False,
+                 sequence_parallel=False
                  ):
         self.hidden_size = hidden_size
         self.num_experts = num_experts
@@ -28,3 +29,4 @@ class Config:
         self.dynamic_padding = dynamic_padding
         self.use_sinkhorn = use_sinkhorn
         self.dynamic_capacity = None
+        self.sequence_parallel = sequence_parallel

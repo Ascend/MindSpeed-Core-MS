@@ -51,13 +51,12 @@ class TopKGate(Module):
         if config.topk != 1 and config.topk != 2:
             raise ValueError('Only top-1 and top-2 gatings are supported.')
         self.weight = torch.nn.Linear(config.hidden_size, config.num_experts, bias=False).float()
+        setattr(self.weight, 'sequence_parallel', config.sequence_parallel)
         self.config = config
 
     def forward(self, gate_input: torch.Tensor) -> Tuple[Tensor, ...]:  # type: ignore
-        if self.weight.weight.dtype != torch.float32:
-            self.weight = self.weight.float()
         input_fp32 = gate_input.float()
-        logits = self.weight(input_fp32)
+        logits = torch.nn.functional.linear(input_fp32, weight=self.weight.weight.float(), bias=None)
 
         if self.config.use_sinkhorn:
             logits = sinkhorn(logits)
