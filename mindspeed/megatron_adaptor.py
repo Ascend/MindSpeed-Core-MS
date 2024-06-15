@@ -148,6 +148,7 @@ def megatron_core_adaptation(aspm):
     from .core.pipeline_parallel.schedules import get_forward_backward_func_wrapper
     from .optimizer.distrib_optimizer import reuse_fp32_param_distrib_optimizer_init_wrapper
     from .core.models.common.embeddings.rotary_pos_embedding import get_pos_emb_on_this_cp_rank
+    from .core.tensor_parallel.layers import parallel_linear_init_wrapper
 
     aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.get_pos_emb_on_this_cp_rank',
                         get_pos_emb_on_this_cp_rank)
@@ -178,6 +179,10 @@ def megatron_core_adaptation(aspm):
     aspm.register_patch('megatron.core.transformer.attention.Attention.__init__', attention_init_wrapper)
     aspm.register_patch('megatron.core.tensor_parallel.layers.RowParallelLinear.forward',
                         row_parallel_nocomm_optimizer_wrapper)
+    aspm.register_patch('megatron.core.tensor_parallel.layers.RowParallelLinear.__init__',
+                        parallel_linear_init_wrapper)
+    aspm.register_patch('megatron.core.tensor_parallel.layers.ColumnParallelLinear.__init__',
+                        parallel_linear_init_wrapper)
 
     aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_with_transformer_engine_spec',
                         get_gpt_layer_local_spec)
@@ -352,6 +357,16 @@ def mcore_moe_adaptation(pm, args):
             RowParallelLinear.forward)
 
 
+def deepspeed_moe_adaptation(pm, args):
+    if args.use_pipe_experts:
+        from .core.tensor_parallel.layers import (row_parallel_moe, column_parallel_moe,
+                                                  linear_with_grad_accumulation_and_async_allreduce)
+        pm.register_patch('megatron.core.tensor_parallel.layers.RowParallelLinear.forward', row_parallel_moe)
+        pm.register_patch('megatron.core.tensor_parallel.layers.ColumnParallelLinear.forward', column_parallel_moe)
+        pm.register_patch('megatron.core.tensor_parallel.layers.linear_with_grad_accumulation_and_async_allreduce',
+                          linear_with_grad_accumulation_and_async_allreduce)
+
+
 def exe_adaptation():
     mindspeed_args = get_mindspeed_args()
     from .patch_utils import MindSpeedPatchesManager as aspm
@@ -364,6 +379,7 @@ def exe_adaptation():
     megatron_training_adaptation(aspm)
     ascend_adaptation(aspm)
     mcore_moe_adaptation(aspm, mindspeed_args)
+    deepspeed_moe_adaptation(aspm, mindspeed_args)
     aspm.apply_patches()
 
     # accelerate package will check TE on sys.modules，so we need remove this patch

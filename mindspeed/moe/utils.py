@@ -33,6 +33,16 @@ class _AllToAll(torch.autograd.Function):
         return (None, _AllToAll.apply(ctx.group, *grad_output))
 
 
+def get_reshape_index_select(num_local_experts, ep_size):
+    reshape_index_select = []
+    for i in range(num_local_experts):
+        index = i
+        for j in range(ep_size):
+            reshape_index_select.append(index)
+            index += num_local_experts
+    return reshape_index_select
+
+
 def _one_hot_to_float(x, num_classes):
     return F.one_hot(x, num_classes=num_classes).float()
 

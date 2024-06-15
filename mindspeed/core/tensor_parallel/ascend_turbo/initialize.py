@@ -42,7 +42,7 @@ def initialize_cfg_from_farmework():
 
 
 def initialize_cfg_from_args(args):
-    if not args.sequence_parallel or args.tensor_model_parallel_size == 1:
+    if not args.sequence_parallel or args.tensor_model_parallel_size == 1 or args.use_pipe_experts:
         return
 
     ascend_turbo_cfg.set_sequence_parallel(args.sequence_parallel)

@@ -118,6 +118,8 @@ def _add_distributed_args(parser):
 
     group.add_argument('--local-rank', type=int, default=None,
                        help='Local rank passed from distributed launcher for torch2.x.')
+    group.add_argument('--use-pipe-experts', action='store_true',
+                       help='Use this flag to enable pipe moe, overlap all2all and expert')
     return parser
 
 
@@ -161,6 +163,12 @@ def _add_training_args(parser):
                        help='Setting jit compile mode to True')
     group.add_argument('--use-fusion-attn-v2', action='store_true', default=False,
                        help='use fusion_attention ops version 2')
+    group.add_argument('--pipe-experts-multi-data', type=int, default=1,
+                       help='Use multi data to split the input tensor to implement masking when --use-pipe-experts. '
+                            'The default is 1.')
+    group.add_argument('--pipe-experts-multi-stream', action='store_true', default=False,
+                       help='Use multi stream to avoid link collision in collective communication when --use-pipe-experts. '
+                            'The default is False.')
     return parser
 
 
@@ -259,6 +267,15 @@ def validate_args_wrapper(validate_args):
         if args.optimize_recomp_communication_level > 0:
             if not hasattr(args, "optimize_recomp_communication_status"):
                 args.optimize_recomp_communication_status = 0
+        if args.use_pipe_experts:
+            if args.pipe_experts_multi_data <= 0:
+                raise AssertionError('--pipe-experts-multi-data must greater than 0')
+            local_experts = args.num_experts // args.expert_model_parallel_size
+            if local_experts == 1 and args.pipe_experts_multi_data == 1:
+                print("[WARNING] if local_experts = num_experts // expert_model_parallel_size is equal to 1 "
+                      "and --pipe-experts-multi-data is set to 1, "
+                      "--use-pipe-experts will be turned off.")
+                args.use_pipe_experts = False
         if args.moe_dynamic_padding and not args.moe_no_drop:
             raise AssertionError('`--moe-dynamic-padding` only support for `--moe-no-drop`.')
         if args.moe_permutation_async_comm and args.moe_model_type != 'megatron_moe':

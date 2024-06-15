@@ -1,3 +1,9 @@
+# coding=utf-8
+# Copyright (c) 2024 Huawei Technologies Co., Ltd. All rights reserved.
+
+import torch
+
+
 class Config:
     def __init__(self,
                  hidden_size,
@@ -13,7 +19,8 @@ class Config:
                  no_drop=False,
                  dynamic_padding=False,
                  use_sinkhorn=False,
-                 sequence_parallel=False
+                 sequence_parallel=False,
+                 reshape_index_select=None,
                  ):
         self.hidden_size = hidden_size
         self.num_experts = num_experts
@@ -30,3 +37,7 @@ class Config:
         self.use_sinkhorn = use_sinkhorn
         self.dynamic_capacity = None
         self.sequence_parallel = sequence_parallel
+        self.reshape_index_select = None
+        if reshape_index_select:
+            self.reshape_index_select = torch.tensor(reshape_index_select, dtype=torch.int32,
+                                                     device=torch.npu.current_device())

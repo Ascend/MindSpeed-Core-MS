@@ -8,11 +8,13 @@
 import typing
 
 import torch
+from megatron.training import get_args
 
 from .experts import Experts
 from .gate import TopKGate
 from .moe_layer import MOELayer
 from .config import Config
+from .utils import get_reshape_index_select
 
 
 class MoE(torch.nn.Module):
@@ -50,9 +52,20 @@ class MoE(torch.nn.Module):
                  use_sinkhorn=False,
                  sequence_parallel=False):
         super(MoE, self).__init__()
+        args = get_args()
+        pipe_experts = args.use_pipe_experts
+        sequence_parallel = args.sequence_parallel
+        pipe_experts_multi_data = args.pipe_experts_multi_data
+        pipe_experts_multi_stream = args.pipe_experts_multi_stream
 
         assert num_experts % ep_size == 0, f"Number of experts ({num_experts}) should be divisible by expert parallel size ({ep_size})"
         num_local_experts = num_experts // ep_size
+
+        if pipe_experts:
+            reshape_index_select = get_reshape_index_select(num_local_experts, ep_size)
+        else:
+            reshape_index_select = None
+
         config = Config(hidden_size=hidden_size,
                         num_experts=num_experts,
                         ep_size=ep_size,
@@ -66,12 +79,18 @@ class MoE(torch.nn.Module):
                         no_drop=no_drop,
                         dynamic_padding=dynamic_padding,
                         use_sinkhorn=use_sinkhorn,
-                        sequence_parallel=sequence_parallel
+                        sequence_parallel=sequence_parallel,
+                        reshape_index_select=reshape_index_select
                         )
         self.moe_layer = MOELayer(TopKGate(config),
                                   Experts(expert, num_local_experts),
                                   ep_size,
-                                  num_local_experts)
+                                  num_local_experts,
+                                  pipe_experts=pipe_experts,
+                                  sequence_parallel=sequence_parallel,
+                                  pipe_experts_multi_data=pipe_experts_multi_data,
+                                  pipe_experts_multi_stream=pipe_experts_multi_stream,
+                                  )
         self.moe_layer.set_ep_group(ep_group)
 
     def forward(self, hidden_states, used_token=None):

@@ -11,7 +11,9 @@ import torch
 from torch import Tensor
 from torch.nn import Module
 import torch.distributed as dist
+
 from .utils import _AllToAll, einsum
+from .pipe_experts import PipeExpert
 
 if TYPE_CHECKING:
     Base = Module[Tensor]
@@ -41,7 +43,11 @@ class MOELayer(Base):
                  gate: Module,
                  experts: Module,
                  ep_size,
-                 num_local_experts: int, ) -> None:
+                 num_local_experts: int,
+                 pipe_experts: bool = False,
+                 sequence_parallel: bool = False,
+                 pipe_experts_multi_data: int = 1,
+                 pipe_experts_multi_stream: bool = False) -> None:
         super().__init__()
         self.gate = gate
         self.experts = experts
@@ -56,6 +62,11 @@ class MOELayer(Base):
         self.capacity_window_size = 20
         self.capacity_history_window = []
         self.gate.config.dynamic_capacity = torch.ceil(torch.tensor(256)).to(torch.int64)
+
+        self.pipe_experts = pipe_experts
+        self.sequence_parallel = sequence_parallel
+        self.pipe_experts_multi_data = pipe_experts_multi_data
+        self.pipe_experts_multi_stream = pipe_experts_multi_stream
 
     def set_ep_group(self, ep_group):
         self.ep_group = ep_group
@@ -101,16 +112,21 @@ class MOELayer(Base):
                 )
             capacity = token_rearrange_infos.expert_select_token_idx.size(0) // self.num_experts
             dispatched_input = rearranged_input.reshape(self.num_experts, capacity, d_model).contiguous()
-            
-        # dispatch all2all
-        dispatched_input = _AllToAll.apply(self.ep_group, dispatched_input)
 
-        # Re-shape after all-to-all: ecm -> gecm
-        dispatched_input = dispatched_input.reshape(self.ep_size, self.num_local_experts, -1, d_model)
-        expert_output = self.experts(dispatched_input)
+        if self.pipe_experts:
+            expert_output = PipeExpert.apply(self.experts, dispatched_input, self.ep_size, self.num_local_experts,
+                                             self.sequence_parallel, self.pipe_experts_multi_data,
+                                             self.pipe_experts_multi_stream)
+        else:
+            # dispatch all2all
+            dispatched_input = _AllToAll.apply(self.ep_group, dispatched_input)
 
-        # combine all2all
-        expert_output = _AllToAll.apply(self.ep_group, expert_output)
+            # Re-shape after all-to-all: ecm -> gecm
+            dispatched_input = dispatched_input.reshape(self.ep_size, self.num_local_experts, -1, d_model)
+            expert_output = self.experts(dispatched_input)
+
+            # combine all2all
+            expert_output = _AllToAll.apply(self.ep_group, expert_output)
 
         # Re-shape back: gecm -> ecm
         expert_output = expert_output.reshape(self.ep_size * self.num_local_experts, -1, d_model)

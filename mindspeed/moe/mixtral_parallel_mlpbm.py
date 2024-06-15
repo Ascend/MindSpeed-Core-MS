@@ -18,6 +18,7 @@ import torch
 import torch.nn.functional as F
 
 from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
+from megatron.training import get_args
 from mindspeed.core.tensor_parallel.random import CheckpointWithoutOutput
 from mindspeed.model.transformer import should_recompute_activation
 
@@ -39,6 +40,7 @@ class MixtralParallelMLPBM(torch.nn.Module):
             gather_output=False,
             skip_bias_add=True,
             is_expert=False,
+            pipe_experts=get_args().use_pipe_experts
         )
 
         self.w2 = RowParallelLinear(
@@ -50,6 +52,7 @@ class MixtralParallelMLPBM(torch.nn.Module):
             skip_bias_add=True,
             input_is_parallel=True,
             is_expert=False,
+            pipe_experts=get_args().use_pipe_experts
         )
 
         self.w3 = ColumnParallelLinear(
@@ -61,6 +64,7 @@ class MixtralParallelMLPBM(torch.nn.Module):
             gather_output=False,
             skip_bias_add=True,
             is_expert=False,
+            pipe_experts=get_args().use_pipe_experts
         )
 
         self.act_fn = F.silu

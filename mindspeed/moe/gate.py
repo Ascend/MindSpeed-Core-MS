@@ -75,6 +75,10 @@ def top1gating(logits: Tensor, config: Config) -> Tuple[Tensor, ...]:
     # everything is in fp32 in this function
     # token_sel_expert_weights: [S, E], 每个token选择每个专家的概率
     token_sel_expert_weights = F.softmax(logits, dim=1)
+
+    if config.reshape_index_select is not None:
+        token_sel_expert_weights = token_sel_expert_weights[:, config.reshape_index_select]
+
     capacity = _capacity(token_sel_expert_weights,
                         torch.tensor(config.capacity_factor),
                         torch.tensor(config.min_capacity))
@@ -201,6 +205,10 @@ def top2gating(logits: Tensor, config: Config) -> Tuple[Tensor, Tensor, Tensor, 
 
     # everything is in fp32 in this function
     token_sel_expert_weights = F.softmax(logits, dim=1)
+
+    if config.reshape_index_select is not None:
+        token_sel_expert_weights = token_sel_expert_weights[:, config.reshape_index_select]
+
     num_experts = int(token_sel_expert_weights.shape[1])
 
     capacity = _capacity(token_sel_expert_weights,
