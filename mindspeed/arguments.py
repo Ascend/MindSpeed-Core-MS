@@ -227,7 +227,9 @@ def core_transformer_config_from_args_wrapper(fn):
 
 def validate_args_wrapper(validate_args):
     @wraps(validate_args)
-    def wrapper(args, defaults):
+    def wrapper(args, defaults=None):
+        if defaults is None:
+            defaults = {}
         overlap_param_gather_without_mcore_models = False
         if args.overlap_param_gather and not args.use_mcore_models:
             args.use_mcore_models = True
@@ -320,6 +322,8 @@ def validate_args_wrapper(validate_args):
             if args.optimize_recomp_communication_level > 0:
                 print("[WARNING] disable optimize recomp communication level when enabling automated pipeline")
                 args.optimize_recomp_communication_level = 0
+
+        return args
 
     return wrapper
 
