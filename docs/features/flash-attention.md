@@ -10,7 +10,7 @@
 
 ### 解决思路:
 
-Flash Attention 是一种优化IO访存开销的精确注意力方法，原理如下图所示[1]，通过Tiling切片、重计算、Kernel Fusion等方式来减少高带宽内存（HBM）和SRAM之间的内存读/写次数。NPU上提供了相同解决方案，可参考[fusion attention 对外接口](docs/features/flash-attention.md) 。
+Flash Attention 是一种优化IO访存开销的精确注意力方法，原理如下图所示[1]，通过Tiling切片、重计算、Kernel Fusion等方式来减少高带宽内存（HBM）和SRAM之间的内存读/写次数。NPU上提供了相同解决方案，可参考[fusion attention 对外接口](../ops/fusion_attention.md) 。
 
 a. Tiling切片：利用更高速的SRAM代替HBM，但SRAM的内存容量较少，无法一次性完成所有数据的完整注意力计算，因此需要进行分块计算。
 
