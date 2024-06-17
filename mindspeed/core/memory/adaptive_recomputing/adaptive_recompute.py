@@ -1,9 +1,12 @@
+# Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
 import sys
+import json
 import time
 from copy import deepcopy
 from functools import wraps
 from collections.abc import Iterable
 
+import os
 import acl
 import numpy as np
 import torch
@@ -17,8 +20,11 @@ from megatron.core import parallel_state
 from mindspeed.core.memory.adaptive_recomputing.adaptive_recompute_apply import get_recompute_hook
 from mindspeed.core.memory.adaptive_recomputing.adaptive_recompute_apply import get_swap_hook
 from mindspeed.core.memory.adaptive_recomputing.adaptive_recompute_apply import register_recursive_apply as apply_adaptive_recompute
+from mindspeed.core.memory.adaptive_recomputing.adaptive_recompute_apply import register_recursive_apply_prefetch as apply_prefetch_strategy
 from mindspeed.core.memory.adaptive_recomputing.adaptive_recompute_solver import get_graph_solver, GraphSolver
 from mindspeed.core.memory.adaptive_recomputing.swap_manager import SwapManager, get_tensor_mem_size
+
+DTYPE_NBYTES_MAP = {"bf16": 2, "fp16": 2, "fp32": 4}
 
 
 class AdaptiveRecomputePolicy:
@@ -61,6 +67,12 @@ class AdaptiveRecomputePolicy:
         self.first_non_oom_device_memory = 0
         self.check_non_oom_times = 0
 
+        # prefetch
+        self.interval = 0
+        self.threshold_prefetch = 0
+        self.num_prefetch = 0
+        self.num_layers = 0
+
     @staticmethod
     def tensor_all_reduce(num_list, op):
         shard_tensor = torch.tensor(num_list, device=torch.npu.current_device())
@@ -84,6 +96,32 @@ class AdaptiveRecomputePolicy:
             if np.all(p == policy):
                 return True
         return False
+
+    @staticmethod
+    def get_hardware(all_args):
+        bandwidth = 16
+        bandwidth_beta = 0.7
+        mfu = 0.5
+        version = acl.get_soc_name()
+        if "910B3" in version:
+            tflops = 313
+        elif "910B1" in version:
+            tflops = 363
+        elif "910C1" in version:
+            tflops = 363
+        else:
+            tflops = 280
+
+        if all_args.bf16:
+            data_bytes = DTYPE_NBYTES_MAP['bf16']
+        elif all_args.fp16:
+            data_bytes = DTYPE_NBYTES_MAP['fp16']
+        elif all_args.fp32:
+            data_bytes = DTYPE_NBYTES_MAP['fp32']
+        else:
+            data_bytes = 2
+        rt_hardware = bandwidth, bandwidth_beta, mfu, tflops, data_bytes
+        return rt_hardware
 
     def is_stable_policy(self, profiling_step):
         all_args = get_args()
@@ -236,6 +274,48 @@ class AdaptiveRecomputePolicy:
         if self.change_num_alloc_retries_times > 1:
             print_rank_0(f"[^?^?^] this is a unstable policy, try select another one.")
             self.swap_size = 1
+
+    def granular_module_allocation(self, vpp_size, recompute_num_layers):
+        swap_list = []
+        recompute_list = []
+        if self.num_prefetch <= vpp_size:
+            swap_list = [['0'] if i < self.num_prefetch else [''] for i in range(vpp_size)]
+            recompute_list = [['0'] if i < recompute_num_layers else [''] for i in range(vpp_size)]
+        else:
+            for chunk in range(vpp_size):
+                chunk_swap_layer = ['0']
+                for layer_id in range(vpp_size, self.num_prefetch):
+                    if layer_id % vpp_size == chunk:
+                        chunk_swap_layer.append(f'{layer_id // vpp_size}')
+                swap_list.append(chunk_swap_layer)
+                chunk_recompute_layer = ['0']
+                for layer_id in range(vpp_size, recompute_num_layers):
+                    if layer_id % vpp_size == chunk:
+                        chunk_recompute_layer.append(f'{layer_id // vpp_size}')
+                recompute_list.append(chunk_recompute_layer)
+        prefetch_list = swap_list
+        interval = 0
+        prefetch_recompute_group = [swap_list, prefetch_list, recompute_list]
+        return prefetch_recompute_group, interval, self.num_prefetch
+
+    def solve_prefetch_policy(self):
+        all_args = get_args()
+        recompute_num_layers = all_args.recompute_num_layers or 0
+        pp_size = all_args.pipeline_model_parallel_size or 1
+        vpp_size = all_args.virtual_pipeline_model_parallel_size or 1
+        if all_args.recompute_method == 'block':
+            self.num_prefetch = recompute_num_layers
+        else:
+            self.num_prefetch = all_args.num_layers // pp_size
+        self.interval = 0
+        if vpp_size > 1:
+            return self.granular_module_allocation(vpp_size, recompute_num_layers)
+        else:
+            swap_list = [str(i * self.interval) for i in range(self.num_prefetch)]
+            recompute_list = [str(i * self.interval) for i in range(recompute_num_layers)]
+            prefetch_list = swap_list
+            prefetch_recompute_group = [[swap_list], [prefetch_list], [recompute_list]]
+            return prefetch_recompute_group, 0, len(prefetch_list)
 
 
 def get_adaptive_recomputing_policy():
@@ -465,54 +545,61 @@ class AdaptiveRecompute:
                         next_have_allowed_recomputing = False
             self.construct_context_recursive(next_name, module, current_ctx, next_have_allowed_recomputing)
 
-    def register_recursive_hook(self, model, ctx, profiling_prefix):
-        index = 0
+    def register_recursive_hook(self, model, ctx, profiling_prefix, layer_index=0, prefetch=False):
+        index = layer_index or 0
         for module in model.children():
             if 'layers' not in ctx:
                 continue
             current_ctx = ctx['layers'][index]
-            # only has allowed_recomputing Tag can set recomputing hook            
-            if 'is_module_list' in ctx and 'allowed_recomputing' in current_ctx and index != 0:
-                # transformer layer
-                module.no_checkpoint_forward = module.forward
-                module.forward = get_recompute_hook().hook_checkpoint_forward(module.forward)
-                self.checkpointed_modules.append(module)
-            prefix_name = current_ctx['prefix_name']
-            name = current_ctx['name']
+            if prefetch:
+                if 'is_module_list' in ctx and 'allowed_recomputing' in current_ctx:
+                    # transformer layer
+                    module.no_checkpoint_forward = module.forward
+                    module.forward = get_recompute_hook().hook_checkpoint_forward(module.forward)
+                    self.checkpointed_modules.append(module)
+            else:
+                # only has allowed_recomputing Tag can set recomputing hook
+                if 'is_module_list' in ctx and 'allowed_recomputing' in current_ctx and index != 0:
+                    # transformer layer
+                    module.no_checkpoint_forward = module.forward
+                    module.forward = get_recompute_hook().hook_checkpoint_forward(module.forward)
+                    self.checkpointed_modules.append(module)
+                prefix_name = current_ctx['prefix_name']
+                name = current_ctx['name']
 
-            # profiling entire module
-            if "module" == prefix_name:
-                pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
-                post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
-                self.modules_hooks.append(pre_hook)
-                self.modules_hooks.append(post_hook)
+                # profiling entire module
+                if "module" == prefix_name:
+                    pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
+                    post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
+                    self.modules_hooks.append(pre_hook)
+                    self.modules_hooks.append(post_hook)
 
-            # profiling transformer Layers
-            if isinstance(module, torch.nn.ModuleList) and 'is_recomputing_layer' in current_ctx:
-                pre_hook = model.register_forward_pre_hook(self.forward_pre_hook(ctx['prefix_name'], ctx['name'], ctx))
-                post_hook = model.register_forward_hook(self.forward_post_hook(ctx['prefix_name'], ctx['name'], ctx))
-                self.modules_hooks.append(pre_hook)
-                self.modules_hooks.append(post_hook)
-            elif 'is_recomputing_layer' in current_ctx:
-                profiling_prefix = prefix_name + "." + name
-                pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
-                post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
-                self.modules_hooks.append(pre_hook)
-                self.modules_hooks.append(post_hook)
+                # profiling transformer Layers
+                if isinstance(module, torch.nn.ModuleList) and 'is_recomputing_layer' in current_ctx:
+                    pre_hook = model.register_forward_pre_hook(self.forward_pre_hook(ctx['prefix_name'], ctx['name'], ctx))
+                    post_hook = model.register_forward_hook(self.forward_post_hook(ctx['prefix_name'], ctx['name'], ctx))
+                    self.modules_hooks.append(pre_hook)
+                    self.modules_hooks.append(post_hook)
+                elif 'is_recomputing_layer' in current_ctx:
+                    profiling_prefix = prefix_name + "." + name
+                    pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
+                    post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
+                    self.modules_hooks.append(pre_hook)
+                    self.modules_hooks.append(post_hook)
 
-            # only has allowed_recomputing Tag and its submodule can set profiling hook
-            if ('allowed_recomputing' in current_ctx and index == 0):
-                profiling_prefix = prefix_name + "." + name
-                pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
-                post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
-                self.modules_hooks.append(pre_hook)
-                self.modules_hooks.append(post_hook)
-            elif profiling_prefix and prefix_name.startswith(profiling_prefix):
-                pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
-                post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
-                self.modules_hooks.append(pre_hook)
-                self.modules_hooks.append(post_hook)
-            self.register_recursive_hook(module, current_ctx, profiling_prefix)
+                # only has allowed_recomputing Tag and its submodule can set profiling hook
+                if ('allowed_recomputing' in current_ctx and index == 0):
+                    profiling_prefix = prefix_name + "." + name
+                    pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
+                    post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
+                    self.modules_hooks.append(pre_hook)
+                    self.modules_hooks.append(post_hook)
+                elif profiling_prefix and prefix_name.startswith(profiling_prefix):
+                    pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
+                    post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
+                    self.modules_hooks.append(pre_hook)
+                    self.modules_hooks.append(post_hook)
+            self.register_recursive_hook(module, current_ctx, profiling_prefix, prefetch=prefetch)
             index += 1
 
     def reset_modules(self):
@@ -554,36 +641,54 @@ class AdaptiveRecompute:
 
     def step_hook(self, models):
         torch.npu.synchronize()
+        all_args = get_args()
         self.reset_all_hook_args()
         if (self.profiling_step < self.solve_graph_at_step
                 or (self.profiling_step > self.solve_graph_at_step and get_adaptive_recomputing_policy().is_stable_policy(
                     self.profiling_step))):
             return
 
-        if get_adaptive_recomputing_policy().context_copy is None:
-            get_adaptive_recomputing_policy().context_copy = deepcopy(self.context)
-            try:
-                get_adaptive_recomputing_policy().get_default_device_memory(self.context["max_device_memory"])
-            except KeyError:
-                print_rank_0("[ERROR] Some of these keys don't exist.")
-            get_graph_solver().build_solver_info(self.context, self.num_warmup_micro_batches)
-
-        get_adaptive_recomputing_policy().check_cur_recompute_policy()
-        print_rank_0("ADAPTIVE-RECOMPUTE: solving recompute policy")
-        print_rank_0("==================== ADAPTIVE-RECOMPUTE Report ====================")
-        context = get_adaptive_recomputing_policy().solve_recompute_policy(self.profiling_step)
-        print_rank_0("==================== ADAPTIVE-RECOMPUTE Report End ====================")
-        if context is not None:
-            self.context = context
+        if all_args.prefetch:
             self.reset_modules()
-            print_rank_0("ADAPTIVE-RECOMPUTE: applying policy to the model")
+            all_args = get_args()
+            pp = all_args.pipeline_model_parallel_size
+            vpp = all_args.virtual_pipeline_model_parallel_size if all_args.virtual_pipeline_model_parallel_size else 1
+            print_rank_0("ADAPTIVE-PREFETCH: Start applying policy to the model")
             config = {
                 "pre_layer_full_name": "",
                 "pre_layer_ctx": {},
                 "cur_layer_name": "module",
             }
-            apply_adaptive_recompute(config, models, self.context)
-            print_rank_0("ADAPTIVE-RECOMPUTE: applying policy to the model fin")
+            prefetch_recompute_group, interval, num_prefetch = get_adaptive_recomputing_policy().solve_prefetch_policy()
+            print(f"【DEBUG】 swap_list： {prefetch_recompute_group[0]},"
+                  f" prefetch_list： {prefetch_recompute_group[1]},"
+                  f" recompute_list： {prefetch_recompute_group[2]}")
+            prefetch_args = [pp, vpp, interval, num_prefetch]
+            apply_prefetch_strategy(config, models, self.context, prefetch_recompute_group, prefetch_args)
+        else:
+            if get_adaptive_recomputing_policy().context_copy is None:
+                get_adaptive_recomputing_policy().context_copy = deepcopy(self.context)
+                try:
+                    get_adaptive_recomputing_policy().get_default_device_memory(self.context["max_device_memory"])
+                except KeyError:
+                    print_rank_0("[ERROR] Some of these keys don't exist.")
+                get_graph_solver().build_solver_info(self.context, self.num_warmup_micro_batches)
+
+            get_adaptive_recomputing_policy().check_cur_recompute_policy()
+            print_rank_0("==================== ADAPTIVE-RECOMPUTE Report ====================")
+            context = get_adaptive_recomputing_policy().solve_recompute_policy(self.profiling_step)
+            print_rank_0("==================== ADAPTIVE-RECOMPUTE Report End ====================")
+            if context is not None:
+                self.context = context
+                self.reset_modules()
+                print_rank_0("ADAPTIVE-RECOMPUTE: Start applying policy to the model")
+                config = {
+                    "pre_layer_full_name": "",
+                    "pre_layer_ctx": {},
+                    "cur_layer_name": "module",
+                }
+                apply_adaptive_recompute(config, models, self.context)
+                print_rank_0("ADAPTIVE-RECOMPUTE: Finish applying policy to the model")
         get_swap_hook().reset_tensor_layer_info()
 
     def hook_step_func(self, step_func, models):
@@ -659,7 +764,7 @@ def is_activate_adaptive_recompute():
     print_rank_0(
         "success to activate adaptive recompute train: adaptive-recompute-device-swap={}, adaptive-recompute-device-size={}, "
         "adaptive-recompute-profiling-step={}".format(all_args.adaptive_recompute_device_swap,
-                                                  all_args.adaptive_recompute_device_size, profiling_step))
+                                                      all_args.adaptive_recompute_device_size, profiling_step))
     return True, profiling_step
 
 
@@ -674,13 +779,16 @@ def setup_model_and_optimizer_wrapper(setup_model_and_optimizer):
         recomputing.set_profiling_step(profile_step)
         recomputing.get_num_warmup_micro_batches(len(models))
         optimizer.step = recomputing.hook_step_func(optimizer.step, models)
+        args = get_args()
         if isinstance(models, list):
-            for model in models:
+            for index, model in enumerate(models):
                 recomputing.construct_context_recursive("module", model, recomputing.context, True)
-                recomputing.register_recursive_hook(model, recomputing.context, recomputing.profiling_prefix)
+                recomputing.register_recursive_hook(model, recomputing.context, recomputing.profiling_prefix,
+                                                    index, prefetch=args.prefetch)
         else:
             recomputing.construct_context_recursive("module", models, recomputing.context, True)
-            recomputing.register_recursive_hook(models, recomputing.context, recomputing.profiling_prefix)
+            recomputing.register_recursive_hook(models, recomputing.context, recomputing.profiling_prefix,
+                                                prefetch=args.prefetch)
         print_rank_0("ADAPTIVE-RECOMPUTE: successfully hooking module")
         return models, optimizer, opt_param_scheduler
 

@@ -161,6 +161,9 @@ def _add_training_args(parser):
                        'and "--recompute-num-layers". ')
     group.add_argument('--jit-compile', action='store_true', default=False,
                        help='Setting jit compile mode to True')
+    group.add_argument('--prefetch', action='store_true', default=False,
+                       help='switch to open prefetch feature.'
+                            'The default is False.')
     group.add_argument('--use-fusion-attn-v2', action='store_true', default=False,
                        help='use fusion_attention ops version 2')
     group.add_argument('--pipe-experts-multi-data', type=int, default=1,
