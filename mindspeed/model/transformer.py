@@ -377,6 +377,7 @@ def should_recompute_activation(self):
         return False
 
     activation_recompute_layers = args.recompute_activation_function_num_layers
+    vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()
     vpp_size = args.virtual_pipeline_model_parallel_size
     pp_size = args.transformer_pipeline_model_parallel_size
     if vpp_size is not None:
@@ -386,10 +387,10 @@ def should_recompute_activation(self):
     else:
         layer_per_chunk = args.num_layers
 
-    recompute_priority = (self.layer_number - 1) % layer_per_chunk
+    recompute_priority = ((self.layer_number - 1) % layer_per_chunk) * vpp_size + vpp_rank
     full_recompute_layers = args.recompute_num_layers
 
-    if args.recompute_method == "block":
+    if full_recompute_layers:
         if recompute_priority < full_recompute_layers:
             # Do full recomputation
             return False
@@ -406,14 +407,8 @@ def should_recompute_activation(self):
     if activation_recompute_layers is None:
         # Do activation function recomputation
         return True
-    elif full_recompute_layers is None:
-        return recompute_priority < activation_recompute_layers
-    elif recompute_priority < full_recompute_layers + activation_recompute_layers:
-        # Do activation function recomputation
-        return True
     else:
-        # No recomputation
-        return False
+        return recompute_priority < activation_recompute_layers
 
 
 def parallel_mlp_forward_wrapper(fn):

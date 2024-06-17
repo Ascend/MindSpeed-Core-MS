@@ -146,9 +146,12 @@ def parallel_transformer_checkpointed_forward_wrapper(forward_func):
     def row_parallel_forward(*args, **kwargs):
         global_args = get_args()
         if global_args.optimize_recomp_communication_level == 0:
-            output = forward_func(*args, **kwargs)
+            if global_args.recompute_method != 'block':
+                output = forward_func(*args, **kwargs)
+            else:
+                output = parallel_transformer_checkpointed_forward(*args, **kwargs)
         else:
-            output = parallel_transformer_checkpointed_forward(*args, **kwargs)
+            output = parallel_transformer_checkpointed_forward_tp_optimized(*args, **kwargs)
         return output
     return row_parallel_forward
 
@@ -156,77 +159,144 @@ def parallel_transformer_checkpointed_forward_wrapper(forward_func):
 def parallel_transformer_checkpointed_forward(self, hidden_states, attention_mask,
                           encoder_output, enc_dec_attn_mask,
                           rotary_pos_emb, is_first_microbatch):
-        """Forward method with activation checkpointing."""
-        def custom(start, end):
-            def custom_forward(*args, **kwargs):
-                x_, *args = args
-                for index in range(start, end):
-                    layer = self._get_layer(index)
-                    x_ = layer(x_, *args, **kwargs)
-                return x_
-            return custom_forward
-        args = get_args()
-        if args.optimize_recomp_communication_level > 1:
-            def custom_nocomm(start, end):
-                def custom_attn(*args, **kwargs):
-                    kwargs['transformer_stage'] = TransformerLayerStage.attn
-                    layer = self._get_layer(start)
-                    output = layer(*args, **kwargs)
-                    return output
+    """Forward method with activation checkpointing."""
+    def custom(start, end):
+        def custom_forward(*args, **kwargs):
+            x_, *args = args
+            for index in range(start, end):
+                layer = self._get_layer(index)
+                x_ = layer(x_, *args, **kwargs)
+            return x_
+        return custom_forward
 
-                def custom_ffn(*args, **kwargs):
-                    kwargs['transformer_stage'] = TransformerLayerStage.ffn
-                    layer = self._get_layer(start)
-                    output = layer(*args, **kwargs)
-                    return output
-                return custom_attn, custom_ffn
-
-            def custom_checkpoint(function, distribute_saved_activations, *args):
-                attn, ffn = function
-                attn_output = checkpoint_func(attn, distribute_saved_activations, *args)
-                args = tuple([attn_output]) + args[1:]
-                return checkpoint_func(ffn, distribute_saved_activations, *args)
-
-            custom = custom_nocomm
-            if not hasattr(self, "replace_checkpoint_flag"):
-                self.replace_checkpoint_flag = False
-            if not self.replace_checkpoint_flag:
-                checkpoint_func = tensor_parallel.checkpoint
-                tensor_parallel.checkpoint = custom_checkpoint
-                self.replace_checkpoint_flag = True
-
-        if self.recompute_method == 'uniform':
-            # Uniformly divide the total number of Transformer layers and
-            # checkpoint the input activation of each divided chunk.
-            # A method to further reduce memory usage reducing checkpoints.
-            l = 0
-            while l < self.num_layers:
+    if self.recompute_method == 'block':
+        # Checkpoint the input activation of only a set number of individual
+        # Transformer layers and skip the rest.
+        # A method fully use the device memory removing redundant re-computation.
+        global_args = get_args()
+        vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()
+        vpp_size = global_args.virtual_pipeline_model_parallel_size
+        if vpp_rank is None:
+            vpp_rank = 0
+        if vpp_size is None:
+            vpp_size = 1
+        for l in range(self.num_layers):
+            # The number of layers each pipeline rank recomputes is self.recompute_num_layers.
+            # If self.recompute_num_layers cannot divide exactly  the number of layers in each pp rank,
+            # we try to balance the number of recomputed layers in each model chunk.
+            # e.g. with 8 layers, 2 stages, and 2 virtual stages, the assignment of
+            # layers to stages like (each list is a model chunk):
+            # Stage 0: [0, 1]   [4, 5]
+            # Stage 1: [2, 3]   [6, 7]
+            # With self.recompute_num_layers = 2, we will recompute layers 0,4 for stage 0, and 2,6 for stage 1.
+            # With self.recompute_num_layers = 3, we will recompute layers 0,1,4 for stage 0, and 2,3,6 for stage 1.
+            if l * vpp_size + vpp_rank < self.recompute_num_layers:
                 hidden_states = tensor_parallel.checkpoint(
-                    custom(l, l + self.recompute_num_layers),
+                    custom(l, l + 1),
                     self.distribute_saved_activations,
                     hidden_states, attention_mask,
                     encoder_output, enc_dec_attn_mask,
                     None, None, None, None, rotary_pos_emb)
-                l += self.recompute_num_layers
+            else:
+                hidden_states = custom(l, l + 1)(
+                    hidden_states, attention_mask,
+                    encoder_output, enc_dec_attn_mask,
+                    None, None, None, None, rotary_pos_emb)
+    else:
+        raise ValueError("Invalid activation recompute method.")
 
-        elif self.recompute_method == 'block':
-            # Checkpoint the input activation of only a set number of individual
-            # Transformer layers and skip the rest.
-            # A method fully use the device memory removing redundant re-computation.
-            for l in range(self.num_layers):
-                if l < self.recompute_num_layers:
-                    hidden_states = tensor_parallel.checkpoint(
-                        custom(l, l + 1),
-                        self.distribute_saved_activations,
-                        hidden_states, attention_mask,
-                        encoder_output, enc_dec_attn_mask,
-                        None, None, None, None, rotary_pos_emb)
-                else:
-                    hidden_states = custom(l, l + 1)(
-                        hidden_states, attention_mask,
-                        encoder_output, enc_dec_attn_mask,
-                        None, None, None, None, rotary_pos_emb)
-        else:
-            raise ValueError("Invalid activation recompute method.")
+    return hidden_states
 
-        return hidden_states
+
+def parallel_transformer_checkpointed_forward_tp_optimized(self, hidden_states, attention_mask,
+                          encoder_output, enc_dec_attn_mask,
+                          rotary_pos_emb, is_first_microbatch):
+    """Forward method with activation checkpointing."""
+    def custom(start, end):
+        def custom_forward(*args, **kwargs):
+            x_, *args = args
+            for index in range(start, end):
+                layer = self._get_layer(index)
+                x_ = layer(x_, *args, **kwargs)
+            return x_
+        return custom_forward
+    args = get_args()
+    if args.optimize_recomp_communication_level > 1:
+        def custom_nocomm(start, end):
+            def custom_attn(*args, **kwargs):
+                kwargs['transformer_stage'] = TransformerLayerStage.attn
+                layer = self._get_layer(start)
+                output = layer(*args, **kwargs)
+                return output
+
+            def custom_ffn(*args, **kwargs):
+                kwargs['transformer_stage'] = TransformerLayerStage.ffn
+                layer = self._get_layer(start)
+                output = layer(*args, **kwargs)
+                return output
+            return custom_attn, custom_ffn
+
+        def custom_checkpoint(function, distribute_saved_activations, *args):
+            attn, ffn = function
+            attn_output = checkpoint_func(attn, distribute_saved_activations, *args)
+            args = tuple([attn_output]) + args[1:]
+            return checkpoint_func(ffn, distribute_saved_activations, *args)
+
+        custom = custom_nocomm
+        if not hasattr(self, "replace_checkpoint_flag"):
+            self.replace_checkpoint_flag = False
+        if not self.replace_checkpoint_flag:
+            checkpoint_func = tensor_parallel.checkpoint
+            tensor_parallel.checkpoint = custom_checkpoint
+            self.replace_checkpoint_flag = True
+
+    if self.recompute_method == 'uniform':
+        # Uniformly divide the total number of Transformer layers and
+        # checkpoint the input activation of each divided chunk.
+        # A method to further reduce memory usage reducing checkpoints.
+        l = 0
+        while l < self.num_layers:
+            hidden_states = tensor_parallel.checkpoint(
+                custom(l, l + self.recompute_num_layers),
+                self.distribute_saved_activations,
+                hidden_states, attention_mask,
+                encoder_output, enc_dec_attn_mask,
+                None, None, None, None, rotary_pos_emb)
+            l += self.recompute_num_layers
+
+    elif self.recompute_method == 'block':
+        # Checkpoint the input activation of only a set number of individual
+        # Transformer layers and skip the rest.
+        # A method fully use the device memory removing redundant re-computation.
+        vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()
+        vpp_size = args.virtual_pipeline_model_parallel_size
+        if vpp_rank is None:
+            vpp_rank = 0
+        if vpp_size is None:
+            vpp_size = 1
+        for l in range(self.num_layers):
+            # The number of layers each pipeline rank recomputes is self.recompute_num_layers.
+            # If self.recompute_num_layers cannot divide exactly  the number of layers in each pp rank,
+            # we try to balance the number of recomputed layers in each model chunk.
+            # e.g. with 8 layers, 2 stages, and 2 virtual stages, the assignment of
+            # layers to stages like (each list is a model chunk):
+            # Stage 0: [0, 1]   [4, 5]
+            # Stage 1: [2, 3]   [6, 7]
+            # With self.recompute_num_layers = 2, we will recompute layers 0,4 for stage 0, and 2,6 for stage 1.
+            # With self.recompute_num_layers = 3, we will recompute layers 0,1,4 for stage 0, and 2,3,6 for stage 1.
+            if l * vpp_size + vpp_rank < self.recompute_num_layers:
+                hidden_states = tensor_parallel.checkpoint(
+                    custom(l, l + 1),
+                    self.distribute_saved_activations,
+                    hidden_states, attention_mask,
+                    encoder_output, enc_dec_attn_mask,
+                    None, None, None, None, rotary_pos_emb)
+            else:
+                hidden_states = custom(l, l + 1)(
+                    hidden_states, attention_mask,
+                    encoder_output, enc_dec_attn_mask,
+                    None, None, None, None, rotary_pos_emb)
+    else:
+        raise ValueError("Invalid activation recompute method.")
+
+    return hidden_states
