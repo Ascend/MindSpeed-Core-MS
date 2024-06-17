@@ -23,7 +23,7 @@ class MindSpeedOpBuilder(ABC):
         self._torch_npu_path = os.path.dirname(os.path.abspath(torch_npu.__file__))
 
     def get_cann_path(self):
-        if ASCEND_HOME_PATH in os.environ or os.path.exists(os.environ[ASCEND_HOME_PATH]):
+        if ASCEND_HOME_PATH in os.environ and os.path.exists(os.environ[ASCEND_HOME_PATH]):
             return os.environ[ASCEND_HOME_PATH]
         return None
 
