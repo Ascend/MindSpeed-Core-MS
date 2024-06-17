@@ -1,4 +1,5 @@
 import enum
+import os
 from functools import wraps
 
 from contextlib import nullcontext
@@ -76,7 +77,7 @@ def parallel_transformer_layer_forward(self, hidden_states, attention_mask=None,
         else:
             residual = hidden_states
 
-        residual_comm = _ckpt_comm_process_sp(residual)
+        residual_comm = _ckpt_comm_process_sp(residual) if int(os.getenv('ASCEND_MC2', '0')) == 0 else residual
         residual = residual if residual_comm is None else residual_comm
         if self.drop_path is None:
             if attention_bias is not None:
@@ -110,7 +111,7 @@ def parallel_transformer_layer_forward(self, hidden_states, attention_mask=None,
         else:
             residual = norm_input
 
-        residual_comm = _ckpt_comm_process_sp(residual)
+        residual_comm = _ckpt_comm_process_sp(residual) if int(os.getenv('ASCEND_MC2', '0')) == 0 else residual
         residual = residual if residual_comm is None else residual_comm
 
         if self.drop_path is None:

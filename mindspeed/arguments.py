@@ -217,6 +217,8 @@ def _add_algorithm_args(parser):
 
     group.add_argument('--optimize-recomp-communication-level', type=int, default=0,
                        help='The algorithm optimize the level of tp communication in the recompute stage.')
+    group.add_argument('--optimize-recomp-communication-status', type=int, default=0,
+                       help='The algorithm optimize the status of tp communication in the recompute stage.')
     group.add_argument('--optimize-send-recv-comm', action='store_true', 
                        help='optimize send_recv communication in pipeline without interleaving.')
     return parser

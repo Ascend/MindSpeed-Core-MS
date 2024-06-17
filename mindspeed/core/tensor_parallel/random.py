@@ -1,3 +1,4 @@
+import os
 from functools import wraps
 import torch
 from torch import _C
@@ -65,7 +66,7 @@ def checkpoint_function_backward(ctx, *args):
     # Compute the forward pass.
     detached_inputs = detach_variable(inputs)
     if global_args.optimize_recomp_communication_level > 0:
-        if global_args.sequence_parallel:
+        if global_args.sequence_parallel and int(os.getenv('ASCEND_MC2', '0')) == 0:
             dim_size = list(args[0].size())
             dim_size[0] = dim_size[0] * get_tensor_model_parallel_world_size()
             allgather_grad = torch.empty(dim_size, dtype=args[0].dtype, device=torch.cuda.current_device())
@@ -76,7 +77,7 @@ def checkpoint_function_backward(ctx, *args):
             global_args.optimize_recomp_communication_status = global_args.optimize_recomp_communication_level
             outputs = ctx.run_function(*detached_inputs)
             global_args.optimize_recomp_communication_status = 0
-        if global_args.sequence_parallel:
+        if global_args.sequence_parallel and int(os.getenv('ASCEND_MC2', '0')) == 0:
             handle.wait()
             args = tuple([allgather_grad])
     else:

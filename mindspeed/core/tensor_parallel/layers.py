@@ -38,9 +38,13 @@ from megatron.core.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
+from megatron.core.tensor_parallel.layers import (linear_with_grad_accumulation_and_async_allreduce, 
+                                                  linear_with_frozen_weight)
+from megatron.core.parallel_state import get_tensor_model_parallel_world_size
 from megatron.core.model_parallel_config import ModelParallelConfig
 from megatron.core.tensor_parallel.utils import VocabUtility, divide, split_tensor_along_last_dim
 from megatron.core.utils import make_tp_sharded_tensor_for_checkpoint, prepare_input_tensors_for_wgrad_compute
+from .ascend_turbo.mc2_linears_seq_parallel import RowSeqParallelLinear
 
 
 def vocab_parallel_embedding_forward(self, input_):
@@ -128,6 +132,41 @@ def row_parallel_nocomm(self, input_):
         output = output_
         output_bias = self.bias
     return output, output_bias
+
+
+class RowSeqParallelLinearNoComm(RowSeqParallelLinear):
+    @staticmethod
+    def forward(ctx, input_, weight, bias, group):
+        global_args = get_args()
+        world_size = get_tensor_model_parallel_world_size()
+        rank = torch.distributed.get_rank(group)
+        if global_args.optimize_recomp_communication_status < 2:
+            global_args.optimize_recomp_communication_status = global_args.optimize_recomp_communication_status + 1 \
+                if global_args.optimize_recomp_communication_status > 0 \
+                else global_args.optimize_recomp_communication_status
+            return RowSeqParallelLinear.forward(ctx, input_, weight, bias, group)
+        else:
+            if torch.__version__ > "2.0":
+                global_rank = torch.distributed.get_global_rank(group, rank)
+                hcomm_info = group._get_backend(torch.device("npu")).get_hccl_comm_name(
+                    global_rank
+                )
+            else:
+                hcomm_info = group.get_hccl_comm_name(rank)
+            ctx.save_for_backward(input_, weight)
+            ctx.hcomm_info = hcomm_info
+            ctx.world_size = world_size
+            ctx.use_bias = bias is not None
+            output_ = torch.matmul(input_, weight.t())
+            global_args.optimize_recomp_communication_status = global_args.optimize_recomp_communication_status + 1 \
+                if global_args.optimize_recomp_communication_status > 0 \
+                else global_args.optimize_recomp_communication_status
+
+            return output_[:output_.shape[0] // world_size]
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return RowSeqParallelLinear.backward(ctx, grad_output)
 
 
 class LinearWithGradAccumulationAndAsyncCommunicationPipeExperts(torch.autograd.Function):
