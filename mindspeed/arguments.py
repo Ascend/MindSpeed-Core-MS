@@ -289,6 +289,7 @@ def validate_args_wrapper(validate_args):
             raise AssertionError('`--moe-permutation-async-comm` only support for allgather token dispatcher type.')
 
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'ulysses_cp_algo':
+            assert args.seq_length % args.context_parallel_size == 0, f"sequence length must be divisible by context_parallel_size"
             head, remainder = divmod(args.num_attention_heads, args.context_parallel_size * args.tensor_model_parallel_size)
             assert head >= 1 and remainder == 0, f"num_attention_heads must be divisible by context_parallel_size * tensor_model_parallel_size"
             args.use_flash_attn = True
