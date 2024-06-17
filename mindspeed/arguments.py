@@ -76,7 +76,7 @@ def _add_cp_args(parser):
                        choices=['ulysses_cp_algo', 'megatron_cp_algo', 'hybrid_cp_algo'], help='context parallel algorithm')
     group.add_argument('--ulysses-degree-in-cp', type=int, default=None)
     group.add_argument('--cp-attention-mask-type', type=str, default='causal',
-                       choices=['causal', 'full'], help='context parallel attention mask type')
+                       choices=['causal', 'general'], help='context parallel attention mask type')
     group.add_argument('--use-cp-send-recv-overlap', action='store_true',
                        help='use this flag to enable cp send-recv-overlap.')
     return parser

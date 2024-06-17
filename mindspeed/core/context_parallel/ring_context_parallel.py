@@ -208,11 +208,12 @@ class AttentionWithCp(torch.autograd.Function):
                                                    softmax_sum.shape[-1])
             else:
                 # [2s, b, h], [b, n, 2s, 8], [b, n, 2s, 8]
+                this_mask = attn_mask[(rank - i) % cp_size] if isinstance(attn_mask, list) else None
                 attn_outs = torch_npu.npu_fusion_attention(
                     q, cur_k, cur_v, n, "SBH",
                     pse=None,
                     padding_mask=None,
-                    atten_mask=None,
+                    atten_mask=this_mask,
                     scale=softmax_scale,
                     pre_tockens=cur_k.shape[0],
                     next_tockens=cur_k.shape[0],
@@ -236,7 +237,10 @@ class AttentionWithCp(torch.autograd.Function):
         k, v = send_kv[0], send_kv[1]
         if causal:
             q, k, v = [x.view(-1, *x.shape[2:]) for x in [q, k, v]]
-        ctx.save_for_backward(q, k, v, attn_mask, attn_out, softmax_max, softmax_sum)
+        
+        attn_mask = attn_mask if isinstance(attn_mask, list) else [attn_mask]
+        
+        ctx.save_for_backward(q, k, v, *attn_mask, attn_out, softmax_max, softmax_sum)
         ctx.n = n
         ctx.causal = causal
         ctx.softmax_scale = softmax_scale
@@ -253,7 +257,10 @@ class AttentionWithCp(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dout):
-        q, k, v, attn_mask, attn_out, softmax_max, softmax_sum = ctx.saved_tensors
+        q, k, v, *attn_mask, attn_out, softmax_max, softmax_sum = ctx.saved_tensors
+        if len(attn_mask) == 1:
+            attn_mask = attn_mask[0]
+
         n = ctx.n
         causal = ctx.causal
         softmax_scale = ctx.softmax_scale
@@ -405,12 +412,13 @@ class AttentionWithCp(torch.autograd.Function):
                         dk.add_(cur_dk)
                         dv.add_(cur_dv)
             else:
+                this_mask = attn_mask[(rank + i + 1) % cp_size] if attn_mask else None
                 attn_grad_outs = torch_npu.npu_fusion_attention_grad(
                     q, cur_k, cur_v, dout, n,
                     "SBH",
                     pse=None,
                     padding_mask=None,
-                    atten_mask=None,
+                    atten_mask=this_mask,
                     softmax_max=softmax_max,
                     softmax_sum=softmax_sum,
                     attention_in=attn_out,

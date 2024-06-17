@@ -332,7 +332,7 @@ def set_attention_mask(attn_mask):
     _GLOBAL_ATTN_MASK = attn_mask
 
 
-def get_attention_mask():
+def generate_attention_mask():
     global _GLOBAL_ATTN_MASK
     if _GLOBAL_ATTN_MASK is None:
         args = get_args()
@@ -346,10 +346,16 @@ def get_attention_mask():
     return _GLOBAL_ATTN_MASK
 
 
+def get_attention_mask():
+    return _GLOBAL_ATTN_MASK
+
+
 def parallel_transformer_forward_wrapper(fn):
     @wraps(fn)
     def wrapper(self, hidden_states, attention_mask, **kwargs):
-        attention_mask = get_attention_mask()
+        args = get_args()
+        if not getattr(args, 'cp_attention_mask_type', None) == 'general':
+            attention_mask = generate_attention_mask()
         return fn(self, hidden_states, attention_mask, **kwargs)
     return wrapper
 
