@@ -146,6 +146,7 @@ def megatron_core_adaptation(aspm):
     from .optimizer.optimizer import (mixed_precision_optimizer_step, \
                                       reuse_fp32_param_init_wrapper, optimizer_config_init_wrapper)
     from .core.pipeline_parallel.schedules import get_forward_backward_func_wrapper
+    from .core.pipeline_parallel.p2p_communication import _communicate_shapes
     from .optimizer.distrib_optimizer import reuse_fp32_param_distrib_optimizer_init_wrapper
     from .core.models.common.embeddings.rotary_pos_embedding import get_pos_emb_on_this_cp_rank
     from .core.tensor_parallel.layers import parallel_linear_init_wrapper
@@ -195,6 +196,8 @@ def megatron_core_adaptation(aspm):
                         dot_product_attention_forward_wrapper)
     aspm.register_patch('megatron.core.pipeline_parallel.schedules.get_forward_backward_func',
                         get_forward_backward_func_wrapper)
+    aspm.register_patch('megatron.core.pipeline_parallel.p2p_communication._communicate_shapes',
+                        _communicate_shapes)
 
     # Bugfix for Megatron-LM core 0.6.0, to be removed for next version.
     aspm.register_patch('megatron.core.parallel_state.initialize_model_parallel', initialize_model_parallel)
