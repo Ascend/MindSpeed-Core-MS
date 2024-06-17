@@ -797,7 +797,7 @@ def switch_mlp_init_wrapper(fn):
         if layer_number is None:
             self.block = MoE(
                 global_args.hidden_size,
-                MixtralParallelMLPBM(config, ),
+                MixtralParallelMLPBM(config, ) if global_args.swiglu else ParallelMLP(config, is_expert=False),
                 num_experts=global_args.num_experts,
                 ep_size=global_args.expert_model_parallel_size,
                 k=global_args.moe_router_topk,
@@ -815,7 +815,7 @@ def switch_mlp_init_wrapper(fn):
             if layer_number % global_args.expert_interval == 0:
                 self.block = MoE(
                     global_args.hidden_size,
-                    MixtralParallelMLPBM(config, ),
+                    MixtralParallelMLPBM(config, ) if global_args.swiglu else ParallelMLP(config, is_expert=False),
                     num_experts=global_args.num_experts,
                     ep_size=global_args.expert_model_parallel_size,
                     k=global_args.moe_router_topk,
