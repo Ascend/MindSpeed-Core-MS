@@ -111,7 +111,6 @@ def run_ringattn_cp(cp_size, bs, seq_len, dtype, cp_args):
     cp_para['cp_size'] = cp_size
     cp_para['rank'] = rank
     cp_para['cp_global_ranks'] = cp_global_ranks
-    cp_para['use_cp_send_recv_overlap'] = args.use_cp_send_recv_overlap
     cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
             if args.use_cp_send_recv_overlap else None
 

@@ -9,48 +9,25 @@ from megatron.core import mpu
 def flash_attn_p2p_communicate(rank, send_tensor, send_dst,
                                recv_tensor, recv_src,
                                cp_group,
-                               use_cp_send_recv_overlap,
                                cp_group_for_send_recv_overlap,
                                ):
     """Point-to-point communications of KV and dKV in Attention with context parallelism"""
     send_recv_ops = []
 
-    if use_cp_send_recv_overlap:
-        if rank % 2 == 0:
-            send_op = torch.distributed.isend(send_tensor, send_dst, cp_group)
-            recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group_for_send_recv_overlap)
-            send_recv_ops.append(send_op)
-            send_recv_ops.append(recv_op)
-        else:
-            recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group)
-            send_op = torch.distributed.isend(send_tensor, send_dst, cp_group_for_send_recv_overlap)
-            send_recv_ops.append(recv_op)
-            send_recv_ops.append(send_op)
-        send_recv_reqs = send_recv_ops
+    if cp_group_for_send_recv_overlap is None:
+        cp_group_for_send_recv_overlap = cp_group
+
+    if rank % 2 == 0:
+        send_op = torch.distributed.isend(send_tensor, send_dst, cp_group)
+        recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group_for_send_recv_overlap)
+        send_recv_ops.append(send_op)
+        send_recv_ops.append(recv_op)
     else:
-        if rank % 2 == 0:
-            send_op = torch.distributed.P2POp(torch.distributed.isend,
-                                              send_tensor,
-                                              send_dst,
-                                              cp_group)
-            recv_op = torch.distributed.P2POp(torch.distributed.irecv,
-                                              recv_tensor,
-                                              recv_src,
-                                              cp_group)
-            send_recv_ops.append(send_op)
-            send_recv_ops.append(recv_op)
-        else:
-            recv_op = torch.distributed.P2POp(torch.distributed.irecv,
-                                              recv_tensor,
-                                              recv_src,
-                                              cp_group)
-            send_op = torch.distributed.P2POp(torch.distributed.isend,
-                                              send_tensor,
-                                              send_dst,
-                                              cp_group)
-            send_recv_ops.append(recv_op)
-            send_recv_ops.append(send_op)
-        send_recv_reqs = torch.distributed.batch_isend_irecv(send_recv_ops)
+        recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group)
+        send_op = torch.distributed.isend(send_tensor, send_dst, cp_group_for_send_recv_overlap)
+        send_recv_ops.append(recv_op)
+        send_recv_ops.append(send_op)
+    send_recv_reqs = send_recv_ops
 
     return send_recv_reqs
 
@@ -98,7 +75,6 @@ class AttentionWithCp(torch.autograd.Function):
         cp_size = cp_para.get("cp_size")
         rank = cp_para.get("rank")
         cp_global_ranks = cp_para.get("cp_global_ranks")
-        use_cp_send_recv_overlap = cp_para.get("use_cp_send_recv_overlap")
         cp_group_for_send_recv_overlap = cp_para.get("cp_group_for_send_recv_overlap")
 
         send_dst = cp_global_ranks[(rank + 1) % cp_size]
@@ -130,7 +106,7 @@ class AttentionWithCp(torch.autograd.Function):
             if i < cp_size - 1:
                 recv_kv = torch.empty_like(send_kv)
                 send_recv_ops = flash_attn_p2p_communicate(rank, send_kv, send_dst,
-                                                           recv_kv, recv_src, cp_group, use_cp_send_recv_overlap,
+                                                           recv_kv, recv_src, cp_group,
                                                            cp_group_for_send_recv_overlap)
             if i == 0:
                 cur_k, cur_v = k, v
@@ -250,7 +226,6 @@ class AttentionWithCp(torch.autograd.Function):
         ctx.cp_global_ranks = cp_global_ranks
         ctx.keep_prob = keep_prob
         ctx.rng_states = rng_states
-        ctx.use_cp_send_recv_overlap = use_cp_send_recv_overlap
         ctx.cp_group_for_send_recv_overlap = cp_group_for_send_recv_overlap
 
         return attn_out
@@ -272,7 +247,6 @@ class AttentionWithCp(torch.autograd.Function):
         # Reversed order of forward
         send_dst = ctx.cp_global_ranks[(rank + cp_size - 1) % cp_size]
         recv_src = ctx.cp_global_ranks[(rank + 1) % cp_size]
-        use_cp_send_recv_overlap = ctx.use_cp_send_recv_overlap
         cp_group_for_send_recv_overlap = ctx.cp_group_for_send_recv_overlap
 
         if causal:
@@ -309,20 +283,20 @@ class AttentionWithCp(torch.autograd.Function):
                 send_kv = kv
                 recv_kv = torch.empty_like(send_kv)
                 send_recv_ops = flash_attn_p2p_communicate(rank, send_kv, send_dst,
-                                                           recv_kv, recv_src, cp_group, use_cp_send_recv_overlap,
+                                                           recv_kv, recv_src, cp_group,
                                                            cp_group_for_send_recv_overlap)
                 cur_k, cur_v = k, v
             elif i == cp_size - 1: # just send-recv dkv in the last loop
                 send_dkv = send_kv_dkv[1]
                 recv_dkv = torch.empty_like(send_dkv)
                 send_recv_ops = flash_attn_p2p_communicate(rank, send_dkv, send_dst,
-                                                           recv_dkv, recv_src, cp_group, use_cp_send_recv_overlap,
+                                                           recv_dkv, recv_src, cp_group,
                                                            cp_group_for_send_recv_overlap)
                 cur_k, cur_v = send_kv_dkv[0][0], send_kv_dkv[0][1]
             else:
                 recv_kv_dkv = torch.empty_like(send_kv_dkv)
                 send_recv_ops = flash_attn_p2p_communicate(rank, send_kv_dkv, send_dst,
-                                                           recv_kv_dkv, recv_src, cp_group, use_cp_send_recv_overlap,
+                                                           recv_kv_dkv, recv_src, cp_group,
                                                            cp_group_for_send_recv_overlap)
                 cur_k, cur_v = send_kv_dkv[0][0], send_kv_dkv[0][1]
 
