@@ -288,8 +288,8 @@ class AdaptiveRecomputePolicy:
                     if layer_id % vpp_size == chunk:
                         chunk_swap_layer.append(f'{layer_id // vpp_size}')
                 swap_list.append(chunk_swap_layer)
-                chunk_recompute_layer = ['0']
-                for layer_id in range(vpp_size, recompute_num_layers):
+                chunk_recompute_layer = []
+                for layer_id in range(recompute_num_layers):
                     if layer_id % vpp_size == chunk:
                         chunk_recompute_layer.append(f'{layer_id // vpp_size}')
                 recompute_list.append(chunk_recompute_layer)
@@ -749,7 +749,7 @@ def get_adaptive_recomputing():
 def is_activate_adaptive_recompute():
     all_args = get_args()
     profiling_step = 0
-    if all_args.adaptive_recompute_device_size < 0 and not all_args.adaptive_recompute_device_swap:
+    if all_args.adaptive_recompute_device_size < 0 and not all_args.adaptive_recompute_device_swap and not all_args.prefetch:
         print_rank_0("[ERROR] failed to activate adaptive selective recompute train, please add param: "
                      "\"adaptive-recompute-device-swap\", or set param: \"adaptive-recompute-device-size\".")
         return False, profiling_step

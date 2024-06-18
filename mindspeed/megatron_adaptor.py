@@ -325,7 +325,8 @@ def ascend_adaptation(aspm):
 
     if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) and not int(os.getenv('MEMORY_FRAGMENTATION', '0')):
         from .core.memory.adaptive_recomputing.pluggable_allocator_adpator import change_allocator
-        change_allocator()
+        if os.getenv('ENABLE_PREFETCH', '0') == '0':
+            change_allocator()
         from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
         allowed_recomputing_module_wrapper(ParallelTransformerLayer)
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
