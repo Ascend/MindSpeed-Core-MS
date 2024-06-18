@@ -89,14 +89,15 @@ class TestNPUFFN(DistributedTest):
 
     def custom_op_exec(self, x, weight1, weight2, *, expert_tokens=None, expert_tokens_index=None,
         bias1=None, bias2=None):
-        mindspeed_ops = FFNOpBuilder().load()
-        return mindspeed_ops.npu_ffn(x, weight1, weight2, ACTIVATION_TYPE, expert_tokens, expert_tokens_index,
-            bias1, bias2, None, None, None, None, None, None, None, None, 0, None)
+        return ffn.npu_ffn(x, weight1, weight2, ACTIVATION_TYPE,
+            expert_tokens=expert_tokens, expert_tokens_index=expert_tokens_index,
+            bias1=bias1, bias2=bias2)
 
+    @pytest.mark.skip(reason='CANN packages are too old, only valid with CANN packages released after 2024/6/14')
     @pytest.mark.skipif(DEVICE_NAME != 'Ascend910B', reason='device type is not supported, skip this UT!')
     @pytest.mark.parametrize('tokens_mode', [EXPERT_TOKENS_MODE_NONE, EXPERT_TOKENS_MODE_TOKENS])
     @pytest.mark.parametrize('dtype', [torch.float16])
-    @pytest.mark.parametrize('is_graph_mode', [True])
+    @pytest.mark.parametrize('is_graph_mode', [True, False])
     def test_npu_ffn(self, tokens_mode, dtype, is_graph_mode):
         M = 512
         K1 = 256
