@@ -29,7 +29,9 @@ class Experts(torch.nn.Module):
             chunk = torch.squeeze(chunk, dim=1).contiguous()
             out = expert(chunk)
             if type(out) is tuple:
-                out = out[0]  # Ignore the bias term for now
+                out, bias = out
+                if bias is not None:
+                    out = out + bias
             out = torch.unsqueeze(out, dim=1)
             expert_outputs += [out]
 
