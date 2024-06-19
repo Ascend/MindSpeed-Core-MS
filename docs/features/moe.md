@@ -1,4 +1,4 @@
-# Ascend Moe 相关特性
+# Ascend DeepSpeed MoE 相关特性
 
 ## 整体方案：
 
