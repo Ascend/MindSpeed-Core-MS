@@ -11,6 +11,7 @@ from megatron.training.checkpointing import save_checkpoint
 from megatron.training.initialize import initialize_megatron
 from megatron.training.initialize import set_jit_fusion_options
 
+from megatron.training.training import append_to_progress_log
 from megatron.training.training import setup_model_and_optimizer
 from megatron.training.training import build_train_valid_test_data_iterators
 from megatron.training.training import train

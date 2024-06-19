@@ -248,7 +248,30 @@ def validate_args_wrapper(validate_args):
             args.use_mcore_models = True
             overlap_param_gather_without_mcore_models = True
 
+        # for vpp assert pp should > 2
+        flag_num_layers_per_virtual_pipeline_stage = None
+        flag_overlap_p2p_comm = False
+        if args.num_layers_per_virtual_pipeline_stage is not None and args.pipeline_model_parallel_size == 2:
+            flag_num_layers_per_virtual_pipeline_stage = args.num_layers_per_virtual_pipeline_stage
+            args.num_layers_per_virtual_pipeline_stage = None
+            if args.overlap_p2p_comm:
+                flag_overlap_p2p_comm = True
+
         args = validate_args(args, defaults)
+
+        # for vpp assert pp should > 2
+        if flag_num_layers_per_virtual_pipeline_stage is not None and args.pipeline_model_parallel_size == 2:
+            args.num_layers_per_virtual_pipeline_stage = flag_num_layers_per_virtual_pipeline_stage
+            args.overlap_p2p_comm = flag_overlap_p2p_comm
+            if args.num_layers_per_virtual_pipeline_stage is not None:
+                assert args.num_layers % args.transformer_pipeline_model_parallel_size == 0, \
+                    'number of layers should be divisible by the pipeline parallel size'
+                num_layers_per_pipeline_stage = args.num_layers // args.transformer_pipeline_model_parallel_size
+                assert num_layers_per_pipeline_stage % args.num_layers_per_virtual_pipeline_stage == 0, \
+                    'number of layers per pipeline stage must be divisible number of layers per virtual pipeline stage'
+                args.virtual_pipeline_model_parallel_size = num_layers_per_pipeline_stage // \
+                                                            args.num_layers_per_virtual_pipeline_stage
+
         if args.use_fused_rmsnorm:
             if args.normalization != "RMSNorm":
                 raise AssertionError(
