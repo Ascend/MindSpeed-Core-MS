@@ -505,10 +505,6 @@ def initialize_model_parallel(
     num_pipeline_model_parallel_groups: int = world_size // pipeline_model_parallel_size
 
     if virtual_pipeline_model_parallel_size is not None:
-        if not pipeline_model_parallel_size > 2:
-            raise RuntimeError(
-                "pipeline-model-parallel size should be greater than 2 with interleaved schedule"
-            )
         ps._VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = 0
         ps._VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE = virtual_pipeline_model_parallel_size
 
