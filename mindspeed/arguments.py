@@ -36,7 +36,25 @@ def process_args(parser):
     parser = _add_algorithm_args(parser)
     parser = _add_automated_pipeline_args(parser)
     parser = _add_alibi_args(parser)
+    parser = _add_coc_args(parser)
 
+    return parser
+
+
+def _add_coc_args(parser):
+    group = parser.add_argument_group(title='coc')
+    # ascend mc2 arguments
+    group.add_argument("--use-ascend-mc2", action='store_true',
+                       help="Use ascend mc2")
+    # ascend coc arguments
+    group.add_argument("--use-ascend-coc", action='store_true',
+                       help="Use ascend coc")
+    group.add_argument('--coc-mode', type=int, default=-1,
+                       help='coc-mode: 0=original, 1=rewrite, 2=coc default')
+    group.add_argument('--coc-parallel-num', type=int, default=1,
+                       help='coc parallel num')
+    group.add_argument('--coc-fused-kernel', action='store_true',
+                       help='use coc fused kernel')
     return parser
 
 
@@ -368,6 +386,8 @@ def validate_args_wrapper(validate_args):
             if args.optimize_recomp_communication_level > 0:
                 print("[WARNING] disable optimize recomp communication level when enabling automated pipeline")
                 args.optimize_recomp_communication_level = 0
+        if args.use_ascend_mc2 and args.use_ascend_coc:
+            raise AssertionError('--mc2 and coc can not be used together')
 
         from megatron.training.arguments import _print_args
         _print_args('arguments', args, True)

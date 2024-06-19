@@ -302,7 +302,6 @@ def megatron_training_adaptation(aspm):
 
 
 def ascend_adaptation(aspm):
-    from .initialize import coc_registration_wrapper, mc2_wrapper
     from megatron.legacy.model.transformer import ParallelTransformerLayer
     if int(os.getenv('MEMORY_FRAGMENTATION', '0')):
         from .core.memory.memory_fragmentation.pluggable_allocator_adpator import change_allocator
@@ -331,12 +330,6 @@ def ascend_adaptation(aspm):
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
         aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
 
-    if int(os.getenv('ASCEND_MC2', '0')):
-        from .core.memory.auto_pipeline.autopipeline import initialize_cfg_from_args_wrapper
-        aspm.register_patch('megatron.training.initialize.initialize_megatron', mc2_wrapper)
-        aspm.register_patch('mindspeed.core.tensor_parallel.ascend_turbo.initialize.initialize_cfg_from_args', initialize_cfg_from_args_wrapper)
-    aspm.register_patch('megatron.training.initialize.initialize_megatron', coc_registration_wrapper)
-
     if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) or int(os.getenv('MEMORY_FRAGMENTATION', '0')):
         import megatron.training.initialize
         aspm.register_patch('megatron.training.initialize_megatron', megatron.training.initialize.initialize_megatron)
@@ -350,7 +343,7 @@ def mcore_moe_adaptation(pm, args):
         pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_unpermutation', token_unpermutation)
         pm.register_patch('megatron.core.transformer.moe.router.TopKRouter.aux_loss_load_balancing', aux_loss_load_balancing)
 
-    if int(os.getenv('ASCEND_MC2', '0')):
+    if args.use_ascend_mc2:
         # MoE MLP not use mc2 linear
         from .core.models.gpt.gpt_layer_specs import get_mlp_module_spec_wrapper
         from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
@@ -370,6 +363,16 @@ def deepspeed_moe_adaptation(pm, args):
                           linear_with_grad_accumulation_and_async_allreduce)
 
 
+def coc_adaptation(aspm, args):
+    from .initialize import coc_registration_wrapper, mc2_wrapper
+    if args.use_ascend_mc2:
+        from .core.memory.auto_pipeline.autopipeline import initialize_cfg_from_args_wrapper
+        aspm.register_patch('megatron.training.initialize.initialize_megatron', mc2_wrapper)
+        aspm.register_patch('mindspeed.core.tensor_parallel.ascend_turbo.initialize.initialize_cfg_from_args', initialize_cfg_from_args_wrapper)
+    if args.use_ascend_coc:
+        aspm.register_patch('megatron.training.initialize.initialize_megatron', coc_registration_wrapper)
+
+
 def exe_adaptation():
     mindspeed_args = get_mindspeed_args()
     from .patch_utils import MindSpeedPatchesManager as aspm
@@ -381,6 +384,7 @@ def exe_adaptation():
     megatron_legacy_adaptation(aspm)
     megatron_training_adaptation(aspm)
     ascend_adaptation(aspm)
+    coc_adaptation(aspm, mindspeed_args)
     mcore_moe_adaptation(aspm, mindspeed_args)
     deepspeed_moe_adaptation(aspm, mindspeed_args)
     aspm.apply_patches()

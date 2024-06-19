@@ -194,7 +194,8 @@ class LinearWithGradAccumulationAndAsyncCommunicationPipeExperts(torch.autograd.
         ctx.pipe_experts = pipe_experts
 
         if sequence_parallel:
-            if int(os.getenv("ASCEND_MC2", "0")) and not pipe_experts:
+            global_args = get_args()
+            if global_args.use_ascend_mc2 and not pipe_experts:
                 from .ascend_turbo.ascend_turbo_cfg import ascend_turbo_cfg
                 group = get_tensor_model_parallel_group()
                 rank = get_tensor_model_parallel_rank()
@@ -490,7 +491,8 @@ def row_parallel_moe(self, input_):
             ), "CPU Offloading cannot be enabled while using non-TE modules"
 
     # Set up backprop all-reduce.
-    if int(os.getenv("ASCEND_MC2", "0")) and not self.pipe_experts:
+    global_args = get_args()
+    if global_args.use_ascend_mc2 and not self.pipe_experts:
         output = Mc2RowSeqParallelLinear.apply(
             input_, self.weight, None, get_tensor_model_parallel_group()
         )

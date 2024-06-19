@@ -2,7 +2,6 @@
 
 source "tests_extend/system_tests/env_npu.sh"
 export CUDA_DEVICE_MAX_CONNECTIONS=1
-export ASCEND_MC2=1
 
 NPUS_PER_NODE=8
 MASTER_ADDR=localhost
@@ -72,6 +71,7 @@ GPT_ARGS="
     --no-load-optim \
     --no-load-rng \
     --no-gradient-accumulation-fusion \
+    --use-ascend-mc2 \
     --bf16
 "
 

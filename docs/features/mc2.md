@@ -24,10 +24,8 @@ MC2算子接口参见[link](https://www.hiascend.com/document/detail/zh/Pytorch/
 
 ## 使用方法
 
-在启动训练脚本前，设置`ASCEND_MC2`环境变量：
-``` bash
-export ASCEND_MC2=1
-```
+设置--use-ascend-mc2即可使能MC2算子。
+
 
 **同时需要确保开启**`--sequence-parallel`。
 

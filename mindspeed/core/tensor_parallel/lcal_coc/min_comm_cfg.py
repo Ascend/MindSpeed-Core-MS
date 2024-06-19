@@ -4,6 +4,7 @@ from enum import Enum
 import torch
 import torch_npu
 import torch.nn.functional as F
+from megatron.training import get_args
 
 
 def column_forward(self, input_, column_parallel_function=None, check_fcn=None):
@@ -52,13 +53,15 @@ class ModuleType(Enum):
 
 
 class MinCommConfig:
-    def __init__(self, coc_mode, coc_parallel_num, coc_fused_kernel):
+    def __init__(self):
         # basic settings acquired from environmental variables
         # default module_type is ModuleType.ORIGINAL_SEQ_PARALLEL
+        global_args = get_args()
+
         self.module_type: ModuleType = ModuleType.ORIGINAL_SEQ_PARALLEL
-        self.coc_mode = coc_mode
-        self.parallel_num = coc_parallel_num
-        self.coc_fused_kernel = coc_fused_kernel
+        self.coc_mode = global_args.coc_mode
+        self.parallel_num = global_args.coc_parallel_num
+        self.coc_fused_kernel = global_args.coc_fused_kernel
 
         # configurations registered from framework
         self.ColumnParallelLinear = None
@@ -194,9 +197,9 @@ class MinCommConfig:
                             ModuleType.COC_FOR_ALL_REDUCE]
 
         if self.parallel_num not in [1, 2, 4, 8]:
-            raise RuntimeError("COC_PARALLEL_NUM must be either 1, 2, 4 or 8. Current value not supported")
+            raise RuntimeError("coc_parallel_num must be either 1, 2, 4 or 8. Current value not supported")
         if self.coc_mode not in [-1, 0, 1, 2]:
-            raise RuntimeError("COC_MODE must be either 0, 1, or 2. Current value not supported")
+            raise RuntimeError("coc_mode must be either 0, 1, or 2. Current value not supported")
 
         if self.coc_mode == -1:
             self.coc_mode = 0 if self.parallel_num == 1 else 2
@@ -218,10 +221,4 @@ class MinCommConfig:
         self.print_settings()
 
 
-# 0 = original, 1 = rewrite, 2 = coc default
-coc_mode_from_env = int(os.getenv("COC_MODE", -1))
-coc_parallel_num_from_env = int(os.getenv("COC_PARALLEL_NUM", 1))
-coc_fused_kernel_from_env = int(os.getenv("USE_COC_FUSED_KERNEL", 0))
-
-min_comm_config = MinCommConfig(coc_mode=coc_mode_from_env, coc_parallel_num=coc_parallel_num_from_env,
-                                coc_fused_kernel=coc_fused_kernel_from_env)
+min_comm_config = MinCommConfig()

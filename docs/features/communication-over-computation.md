@@ -28,7 +28,7 @@
 3. ALL_GATHER_MATMUL, ALL_GATHER_MATMUL_V2融合算子（先通信后计算）（V2版本接口支持ALL_GATHER中间结果获取）；
 4. 量化场景：MATMUL_ALL_REDUCE融合算子支持fp16格式的w8A16伪量化，粒度包含per tensor / per channel / per group；
 
-## 使用方法 —— 在ModelLink中进行整网训练
+## 使用方法 —— 在MindSpeed中进行整网训练
 
 计算通信并行优化算法通过在训练脚本(MindSpeed/tests_extend/xxx/xxx.sh)中配置环境变量来进行使能，需要安装mindspeed。
 
@@ -36,27 +36,23 @@
 
 请根据需要选择下列三种场景中的一个进行使用。（注意：计算通信并行融合算子需要安装ATB后才能使用！）
 
-### 1. 不使用计算通信并行
+设置--use-ascend-coc使能计算通信并行功能，使用方式通过如下变量进行设置：
+
+### 1. 使用通过Python脚本使能的计算通信并行特性
 
 ```shell
-export COC_PARALLEL_NUM=1
-export USE_COC_FUSED_KERNEL=0
+--use-ascend-coc 
+--coc-parallel-num 2 # 或者4，或者8
 ```
 
-### 2. 使用通过Python脚本使能的计算通信并行特性
+### 2. 使用通过融合算子使能的计算通信并行特性
 
 ```shell
-export COC_PARALLEL_NUM=2 # 或者4，或者8
-export USE_COC_FUSED_KERNEL=0
+--use-ascend-coc
+--coc-fused-kernel # 注意：当前只支持TP=8的场景！
 ```
 
-### 3. 使用通过融合算子使能的计算通信并行特性
-
-```shell
-export USE_COC_FUSED_KERNEL=1  # 注意：当前只支持TP=8的场景！
-```
-
-融合算子的环境变量拥有更高优先级，即当 COC_PARALLEL_NUM > 1 且 USE_COC_FUSED_KERNEL = 1 时，前者不会生效。
+融合算子的环境变量拥有更高优先级，即当 coc-parallel-num > 1 且 使能coc-fused-kernel时，前者不会生效。
 
 
 ## CFG自定义方法
@@ -65,7 +61,7 @@ export USE_COC_FUSED_KERNEL=1  # 注意：当前只支持TP=8的场景！
 
 【只对通过Python脚本使能的计算通信并行实现适用】
 'matmul_soc_friendly'：是否对输入matmul的张量做transpose/padding操作，使其以NPU亲和的shape进入Matmul算子从而获得一定性能提升，默认为True；
-'customized_coc': 自定义指定shape的matmul的COC切分份数，默认为{}。如果需要设置指定shape的matmul的CoC切分份数为1（不开COC）或与COC_PARALLEL_NUM不同的值，可以按照这个例子设置：
+'customized_coc': 自定义指定shape的matmul的COC切分份数，默认为{}。如果需要设置指定shape的matmul的CoC切分份数为1（不开COC）或与coc-parallel-num不同的值，可以按照这个例子设置：
 'customized_coc': {"[16384, 5120, 1920]": 8, "[16384, 1920, 5120]": 1}
 
 【只对通过融合算子使能的计算通信并行实现适用】
