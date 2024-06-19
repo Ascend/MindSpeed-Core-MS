@@ -1,0 +1,96 @@
+# entry file : pretrain_gpt_usecase.py
+
+spec:
+  data_path: /home/dataset/gpt-3.5/alpaca_text_document
+  vocab_file: /home/dataset/model/gpt-3.5/vocab.json
+  merge_file: /home/dataset/model/gpt-3.5/merges.txt
+  checkpoint_path: ./ckpt
+  nnodes: 1
+  max_steps: 20
+  micro_batch_size: 4 # MBS
+  batch_size: 32 # GBS
+  moe_grouped_gemm: 0
+
+products:
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 2 ], training_dtype: [ bf16, fp16 ], memory_fragmentation: [ 1 ], extra_args: [ '"--test-mode --use-cpu-initialization --no-overlap-p2p-communication"' ] }
+  - { use_mcore: [ False ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ "--no-create-attention-mask-in-dataloader" ], args_meta: [ "no_create_attention_mask_in_dataloader" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ "--no-mmap-bin-files" ], args_meta: [ "no_mmap_bin_files" ] }
+  - { use_mcore: [ False ], tp_size: [ 1 ], pp_size: [ 4 ], vp_size: [ 1 ] }
+  # mcore vpp bug (pp=4) - { use_mcore: [ True ], tp_size: [ 1 ], pp_size: [ 4 ], vp_size: [ 1 ] }
+  - { use_mcore: [ False ], tp_size: [ 4 ], pp_size: [ 1 ], extra_args: [ '"--qk-layernorm --test-mode"' ] }
+  - { use_mcore: [ True, False ], tp_size: [ 1 ], pp_size: [ 2 ], extra_args: [ '"--position-embedding-type rope --context-parallel-size 2"' ], args_meta: [ "rope_embeddings" ] }
+  - { use_mcore: [ True ], tp_size: [ 1 ], pp_size: [ 2 ], extra_args: [ '"--position-embedding-type alibi --square-alibi-mask"' ], args_meta: [ "alibi_embeddings" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 1 ], pp_size: [ 2 ], extra_args: [ '"--position-embedding-type alibi --square-alibi-mask --fill-neg-inf"' ], args_meta: [ "alibi_embeddings" ] }
+  - { use_mcore: [ True ], tp_size: [ 1 ], pp_size: [ 2 ], extra_args: [ '"--position-embedding-type rope --rotary-interleaved --no-rope-fusion"' ], args_meta: [ "rope_embeddings_interleaved_no_fusion" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ "--swiglu" ], args_meta: [ "swiglu" ] }
+  - { use_mcore: [ False ], tp_size: [ 1 ], pp_size: [ 4 ], extra_args: [ "--disable-bias-linear" ], args_meta: [ "disable_bias_linear" ] }
+  - { use_mcore: [ False ], tp_size: [ 1 ], pp_size: [ 4 ], extra_args: [ "--untie-embeddings-and-output-weights" ], args_meta: [ "untie_embeddings_and_outputs" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 1 ], pp_size: [ 1 ], extra_args: [ '"--recompute-granularity full --recompute-method uniform --recompute-num-layers 1"' ], args_meta: [ "uniform_full_recompute" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 1 ], pp_size: [ 1 ], extra_args: [ '"--recompute-granularity full --recompute-method block --recompute-num-layers 1"' ], args_meta: [ "uniform_full_recompute" ] }
+  - { use_mcore: [ True ], tp_size: [ 2 ], pp_size: [ 1 ], extra_args: [ '"--sequence-parallel --num-experts 8 --expert-model-parallel-size 2 --moe-router-load-balancing-type sinkhorn --moe-router-topk 1"' ], args_meta: [ "te_8experts2parallel" ] }
+  # alltoall torch.argsort the operator is not supported. - { use_mcore: [True], tp_size: [ 2 ], pp_size: [ 1 ], extra_args: [ '"--sequence-parallel --num-experts 8 --expert-model-parallel-size 2 --moe-token-dispatcher-type alltoall --disable-bias-linear"' ], args_meta: [ "te_8experts2parallel" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 1 ], extra_args: [ '"--sequence-parallel --num-experts 8 --expert-model-parallel-size 2 --use-distributed-optimizer --moe-router-load-balancing-type sinkhorn --moe-router-topk 1"' ], args_meta: [ "te_8experts2parallel_dist_optimizer" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 1 ], extra_args: [ '"--disable-bias-linear --sequence-parallel --num-experts 8 --expert-model-parallel-size 2 --moe-router-load-balancing-type aux_loss --moe-router-topk 2 --moe-aux-loss-coeff 1e-2"' ], moe_grouped_gemm: [ 1 ], args_meta: [ "te_8experts2parallel_top2router" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 1 ], pp_size: [ 1 ], extra_args: [ "--use-distributed-optimizer" ], args_meta: [ "dist_optimizer" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 1 ], pp_size: [ 1 ], extra_args: [ '"--use-distributed-optimizer --no-mmap-bin-files"' ], args_meta: [ "dist_optimizer_no_mmap_bin_files" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 4 ], pp_size: [ 1 ], extra_args: [ '"--use-distributed-optimizer --overlap-grad-reduce"' ], args_meta: [ "dist_optimizer_overlap_grad_reduce" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 4 ], pp_size: [ 1 ], extra_args: [ '"--use-distributed-optimizer --overlap-grad-reduce --overlap-param-gather"' ], args_meta: [ "dist_optimizer_overlap_grad_reduce_param_gather" ] }
+  # bug  - { use_mcore: [True, False], tp_size: [1], pp_size: [4], vp_size: [1], extra_args: ['"--decoupled-lr 0.0002"'], args_meta: ["decoupled_lr"]}
+  - { use_mcore: [ False ], tp_size: [ 1 ], pp_size: [ 4 ], vp_size: [ 1 ], extra_args: [ '"--use-distributed-optimizer --overlap-grad-reduce"' ], args_meta: [ "dist_optimizer_overlap_grad_reduce" ] }
+  - { use_mcore: [ False ], tp_size: [ 1 ], pp_size: [ 4 ], vp_size: [ 1 ], extra_args: [ '"--use-distributed-optimizer --overlap-grad-reduce --untie-embeddings-and-output-weights"' ], args_meta: [ "dist_optimizer_overlap_grad_reduce_untied" ] }
+  - { use_mcore: [ False ], tp_size: [ 1 ], pp_size: [ 4 ], vp_size: [ 1 ], extra_args: [ '"--use-distributed-optimizer --overlap-grad-reduce --overlap-param-gather"' ], args_meta: [ "dist_optimizer_overlap_grad_reduce_param_gather" ] }
+  # flash attention
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 1 ], extra_args: [ '"--use-flash-attn --sequence-parallel"' ], args_meta: [ "use_flash_attn and sp" ] }
+  - { use_mcore: [ False ], tp_size: [ 2 ], pp_size: [ 1 ], extra_args: [ '"--normalization RMSNorm --use-fused-rmsnorm"' ], args_meta: [ "fused-rmsnorm" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 1 ], extra_args: [ '"--use-rotary-position-embeddings --use-fused-rotary-pos-emb"' ], args_meta: [ "fused-rotary-pos-emb" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 1 ], extra_args: [ '"--no-async-tensor-model-parallel-allreduce"' ], args_meta: [ "no_async_tensor_model_parallel_allreduce" ] }
+  # no new coverage - { use_mcore: [False], tp_size: [ 2 ], pp_size: [ 1 ], extra_args: [ '"--disable-bias-linear --sequence-parallel --num-experts 8 --expert-model-parallel-size 2 --moe-router-load-balancing-type aux_loss --moe-router-topk 2 --moe-aux-loss-coeff 1e-2"' ], moe_grouped_gemm: [ 1 ], args_meta: [ "te_8experts2parallel_top2router" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--log-progress --eval-interval 10 --exit-duration-in-mins 5"' ], args_meta: [ "log_propress" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--lr-decay-style constant --weight-decay-incr-style linear --start-weight-decay 1e-3 --end-weight-decay 1e-2"', '"--lr-decay-style cosine --weight-decay-incr-style constant"', '"--lr-decay-style inverse-square-root --weight-decay-incr-style cosine --start-weight-decay 1e-3 --end-weight-decay 1e-2"' ], args_meta: [ "lr_decay_style" ] }
+  # depends on TE  - { use_mcore: [True, False], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--tp-comm-overlap --sequence-parallel"' ], args_meta: [ "tp_comm_overlap" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--exit-signal-handler"' ], args_meta: [ "exit_signal_handler" ] }
+  # Open-source code bugs - { use_mcore: [True, False], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--init-method-xavier-uniform"' ], args_meta: [ "init_method_xavier_uniform" ] }
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--group-query-attention --num-query-groups 4"' ], args_meta: [ "group_query_attention" ] }
+  # Recalculation Communication Optimization
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--optimize-recomp-communication-level 1 --recompute-granularity full --recompute-method block --recompute-num-layers 2"' ], args_meta: [ "optimize-recomp-communication-level" ] }
+  # There is a bug currently.  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--optimize-send-recv-comm"' ] }  # 开pp，不开vpp场景
+  # Adaptive Selective Recalculation
+  - { use_mcore: [ False ], adaptive_recomputing: [ 1 ], tp_size: [ 2 ], pp_size: [ 2 ],  extra_args: [ '"--adaptive-recompute-device-swap"' ] }
+  # Activation Function Recalculation
+  - { use_mcore: [ True ],  tp_size: [ 2 ], pp_size: [ 2 ],  extra_args: [ '"--recompute-activation-function --recompute-activation-function-num-layers 2"' ] }
+  # Parallel computing and communication COC: Currently, only the scenario where TP is 8 is supported.
+  - { use_mcore: [ False ],  tp_size: [ 8 ], pp_size: [ 1 ], use_coc_fused_kernel: [ 0 ], coc_parallel_num: [ 1, 8 ], extra_args: [ '"--sequence-parallel"' ] }
+  - { use_mcore: [ True, False ],  tp_size: [ 8 ], pp_size: [ 1 ], use_coc_fused_kernel: [ 1 ], coc_parallel_num: [ 1, 8 ], extra_args: [ '"--sequence-parallel"' ] }
+  - { use_mcore: [ True, False ],  tp_size: [ 8 ], pp_size: [ 1 ], use_coc_fused_kernel: [ 1 ], coc_parallel_num: [ 1, 4 ] } # 需要ENABLE_TAB=1安装AscendSpeed
+  # bf16: parameter copy reuse. This feature cannot be used together with --overlap-grad-reduce.
+  # bug - { use_mcore: [ False ], tp_size: [ 2 ], pp_size: [ 2 ],  extra_args: [ '"--reuse-fp32-param --use-distributed-optimizer"' ], args_meta: [ "reuse fp32 param" ] }
+  # The token rearrangement performance is optimized.
+  - { use_mcore: [ True ], tp_size: [ 2 ], pp_size: [ 2 ],  extra_args: [ '"--enable-token-rearrange-opt"' ] }
+  # Ulysses Long Sequence Parallelism cp>1 cp_algo=ulysses_cp_algo
+  - { use_mcore: [ True, False ], tp_size: [ 2 ], pp_size: [ 2 ],  extra_args: [ '"--context-parallel-size 2 --context-parallel-algo ulysses_cp_algo"' ] }
+  # Ring Attention Long Sequence Parallelism cp>1 and cp_algo = megatron_cp_algo
+  - { use_mcore: [ False ], tp_size: [ 2 ], pp_size: [ 2 ],  extra_args: [ '"--context-parallel-size 2 --context-parallel-algo megatron_cp_algo --cp-attention-mask-type full"' ] }
+  - { use_mcore: [ False ], tp_size: [ 2 ], pp_size: [ 2 ],  extra_args: [ '"--context-parallel-size 2 --context-parallel-algo megatron_cp_algo --use-cp-send-recv-overlap"' ] }
+  - { use_mcore: [ False ], tp_size: [ 2 ], pp_size: [ 2 ],  extra_args: [ '"--context-parallel-size 2 --context-parallel-algo megatron_cp_algo"' ] }
+  # MC2
+  - { use_mcore: [ False ], tp_size: [ 2 ], pp_size: [ 2 ],  ascend_mc2: [ 1 ],  extra_args: [ '"--sequence-parallel"' ] }
+  # PP Automatic parallelism
+  # bug - { use_mcore: [ False ], tp_size: [ 1 ], pp_size: [ 8 ],  extra_args: [ '"--automated-pipeline"' ] }
+
+  # Checkpoint resume
+  - { use_mcore: [ True ], tp_size: [ 1 ], pp_size: [ 2 ], extra_args: [ '"--log-progress --auto-detect-ckpt-format --use-distributed-optimizer"' ], args_meta: [ "log_propress" ] }
+  - { checkpoint_resume_test: [ 1 ], use_mcore: [ True ], tp_size: [ 1 ], pp_size: [ 2 ], extra_args: [ '"--auto-detect-ckpt-format --use-checkpoint-args --log-progress --use-distributed-optimizer"' ], args_meta: [ "use_checkpoint_args" ] }
+  - { use_mcore: [ False ], tp_size: [ 1 ], pp_size: [ 2 ] }
+  - { checkpoint_resume_test: [ 1 ], use_mcore: [ False ], tp_size: [ 1 ], pp_size: [ 2 ] }
+  # bug  - {scope: [ merge-request-resume ], steps: [50], use_mcore: [True], tp_size: [ 1 ], pp_size: [ 2 ], extra_args: [ '"--moe-grouped-gemm --disable-bias-linear --sequence-parallel --num-experts 8 --expert-model-parallel-size 2 --use-distributed-optimizer --moe-router-load-balancing-type sinkhorn --moe-router-topk 2"' ], args_meta: [ "te_8experts2parallel_dist_optimizer_groupedGEMM" ] }
+  # bug - {checkpoint_resume_test: [1], scope: [merge-request-resume], steps: [100], use_mcore: [True], tp_size: [1], pp_size: [2], extra_args: ['"--moe-grouped-gemm --disable-bias-linear --sequence-parallel --num-experts 8 --expert-model-parallel-size 2 --use-distributed-optimizer --moe-router-load-balancing-type sinkhorn --moe-router-topk 2"'], args_meta: ["te_8experts2parallel_dist_optimizer_groupedGEMM"]}
+  - { use_mcore: [ True ], tp_size: [ 1 ], pp_size: [ 2 ], extra_args: [ '"--sequence-parallel --num-experts 8 --expert-model-parallel-size 2 --moe-router-load-balancing-type sinkhorn --moe-router-topk 2"' ], args_meta: [ "te_8experts2parallel" ] }
+  - { checkpoint_resume_test: [ 1 ], use_mcore: [ True ], tp_size: [ 1 ], pp_size: [ 2 ], extra_args: [ '"--sequence-parallel --num-experts 8 --expert-model-parallel-size 2 --moe-router-load-balancing-type sinkhorn --moe-router-topk 2"' ], args_meta: [ "te_8experts2parallel" ] }
+  - { use_mcore: [ True ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--distribute-saved-activations --recompute-granularity full --recompute-method block --recompute-num-layers 1"' ], args_meta: [ "distribute_saved_activations" ] }
+  - { checkpoint_resume_test: [ 1 ], use_mcore: [ True ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--distribute-saved-activations --recompute-granularity full --recompute-method block --recompute-num-layers 1"' ], args_meta: [ "distribute_saved_activations" ] }
+  - { use_mcore: [ False ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--distribute-saved-activations --recompute-granularity full --recompute-method block --recompute-num-layers 1"' ], args_meta: [ "distribute_saved_activations" ] }
+  - { checkpoint_resume_test: [ 1 ], use_mcore: [ False ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--distribute-saved-activations --recompute-granularity full --recompute-method block --recompute-num-layers 1"' ], args_meta: [ "distribute_saved_activations" ] }
+  # use-dist-ckpt, Only use-mcore is supported.
+  # new feature, bug - { use_mcore: [ True ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--use-dist-ckpt"' ], args_meta: [ "use_dist_ckpt" ]  }
+  # new feature, bug - { checkpoint_resume_test: [ 1 ], use_mcore: [ True ], tp_size: [ 2 ], pp_size: [ 2 ], extra_args: [ '"--use-dist-ckpt"' ], args_meta: [ "use_dist_ckpt" ]  }
+
