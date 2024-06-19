@@ -369,6 +369,8 @@ def validate_args_wrapper(validate_args):
                 print("[WARNING] disable optimize recomp communication level when enabling automated pipeline")
                 args.optimize_recomp_communication_level = 0
 
+        from megatron.training.arguments import _print_args
+        _print_args('arguments', args, True)
         return args
 
     return wrapper

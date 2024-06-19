@@ -281,7 +281,7 @@ def megatron_training_adaptation(aspm):
     from .training import pretrain
     from .arguments import parse_args_wrapper, validate_args_wrapper, core_transformer_config_from_args_wrapper
     from .tokenizer import build_tokenizer_wrapper
-    from .yaml_arguments import core_transformer_config_from_yaml_wrapper
+    from .yaml_arguments import core_transformer_config_from_yaml_wrapper, print_args_wrapper
     from .core.training import pretrain_decorator, setup_model_and_optimizer_decorator
     aspm.register_patch('megatron.training.training.pretrain', pretrain_decorator)
     aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_decorator)
@@ -289,12 +289,11 @@ def megatron_training_adaptation(aspm):
                         core_transformer_config_from_yaml_wrapper)
     aspm.register_patch('megatron.training.initialize._compile_dependencies', _compile_dependencies)
     aspm.register_patch('megatron.training.utils.get_batch_on_this_cp_rank', get_batch_on_this_cp_rank)
-    aspm.register_patch('megatron.training.arguments.parse_args',
-                        parse_args_wrapper)
-    aspm.register_patch('megatron.training.arguments.validate_args',
-                        validate_args_wrapper)
-    aspm.register_patch('megatron.training.yaml_arguments.validate_yaml',
-                        validate_args_wrapper)
+    aspm.register_patch('megatron.training.arguments.parse_args', parse_args_wrapper)
+    aspm.register_patch('megatron.training.arguments.validate_args', validate_args_wrapper)
+    aspm.register_patch('megatron.training.arguments._print_args', print_args_wrapper)
+    aspm.register_patch('megatron.training.yaml_arguments.validate_yaml', validate_args_wrapper)
+    aspm.register_patch('megatron.training.yaml_arguments._print_args', print_args_wrapper)
     aspm.register_patch('megatron.training.arguments.core_transformer_config_from_args',
                         core_transformer_config_from_args_wrapper)
     aspm.register_patch('megatron.training.initialize.set_jit_fusion_options', set_jit_fusion_options_wrapper)

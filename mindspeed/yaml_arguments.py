@@ -13,3 +13,12 @@ def core_transformer_config_from_yaml_wrapper(fn):
         return config
 
     return wrapper
+
+
+def print_args_wrapper(fn):
+    @wraps(fn)
+    def wrapper(title, args, after_validate=False):
+        if after_validate:
+            fn(title, args)
+
+    return wrapper
