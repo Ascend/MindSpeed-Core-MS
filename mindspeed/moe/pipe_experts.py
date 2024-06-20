@@ -224,8 +224,8 @@ class PipeExpert(torch.autograd.Function):
 
         inputs_list = []
         outputs_list_for_each_local_expert = []
-        before_expert_input_list = []
-        after_expert_out_list = []
+        input_list_before_expert = []
+        output_list_after_expert = []
         PipeExpertUtil.set_parameters(args, slice_seq_size)
         PipeExpertUtil.deal_data(inputs, inputs_list)
         inputs.untyped_storage().resize_(0)
@@ -246,38 +246,39 @@ class PipeExpert(torch.autograd.Function):
                 else:
                     PipeExpertUtil.get_first_a2a_event()[i * multi_data + j].wait()
 
-                detach_out1 = inputs_list[i * multi_data + j].detach()
-                detach_out1.requires_grad = True
-                before_expert_input_list.append(detach_out1)
+                input_detach_before_expert = inputs_list[i * multi_data + j].detach()
+                input_detach_before_expert.requires_grad = True
+                input_list_before_expert.append(input_detach_before_expert)
 
                 with torch.enable_grad():
-                    out = Experts.experts[i](before_expert_input_list[i * multi_data + j])
+                    output_expert = Experts.experts[i](input_list_before_expert[i * multi_data + j])
                 if sequence_parallel:
                     get_fw_ag_output().pop(0)
 
-                if isinstance(out, tuple):
-                    out = out[0]
+                if isinstance(output_expert, tuple):
+                    output_expert = output_expert[0]
 
-                after_expert_out_list.append(out)
-                out_detach = out.detach()
+                output_list_after_expert.append(output_expert)
+                output_detach_after_expert = output_expert.detach()
 
                 if not multi_stream:
                     PipeExpertUtil.a2a_after_ar_rs(i, j, output_list_for_each_multi_data,
                                                    outputs_list_for_each_local_expert)
 
-                    out_detach, handle = async_fw_ar_rs(out_detach, sequence_parallel)
-                    output_list_for_each_multi_data.append(out_detach)
+                    output_detach_after_expert, handle = async_fw_ar_rs(output_detach_after_expert, sequence_parallel)
+                    output_list_for_each_multi_data.append(output_detach_after_expert)
                     PipeExpertUtil.get_ar_rs_event().append(handle)
                 else:
                     # all2all allgather wait release memory
                     PipeExpertUtil.get_first_a2a_event()[i * multi_data + j].wait()
                     PipeExpertUtil.get_fw_ag_event()[i * multi_data + j].wait()
 
-                    out_detach, handle = async_fw_ar_rs(out_detach, sequence_parallel)
+                    output_detach_after_expert, handle = async_fw_ar_rs(output_detach_after_expert, sequence_parallel)
                     PipeExpertUtil.get_ar_rs_event().append(handle)
-                    out_detach, handle = async_all_to_all(out_detach,
-                                                          PipeExpertUtil.get_ar_rs_event()[i * multi_data + j])
-                    output_list_for_each_multi_data.append(out_detach)
+                    output_detach_after_expert, handle = async_all_to_all(output_detach_after_expert,
+                                                                          PipeExpertUtil.get_ar_rs_event()[
+                                                                              i * multi_data + j])
+                    output_list_for_each_multi_data.append(output_detach_after_expert)
                     PipeExpertUtil.get_second_a2a_event().append(handle)
 
             outputs_list_for_each_local_expert.append(output_list_for_each_multi_data)
@@ -296,15 +297,15 @@ class PipeExpert(torch.autograd.Function):
         PipeExpertUtil.get_fw_ag_event().clear()
         PipeExpertUtil.get_ar_rs_event().clear()
 
-        output = torch.cat(
+        output_forward = torch.cat(
             [torch.cat((outputs_list_for_each_local_expert[i]), dim=1) for i in range(num_local_experts)], dim=0)
 
-        for tensor in after_expert_out_list:
+        for tensor in output_list_after_expert:
             tensor.untyped_storage().resize_(0)
 
-        ctx.save_for_backward(*tuple(before_expert_input_list), *tuple(after_expert_out_list))
+        ctx.save_for_backward(*tuple(input_list_before_expert), *tuple(output_list_after_expert))
 
-        return output
+        return output_forward
 
     @staticmethod
     def backward(ctx, *args):
@@ -314,8 +315,8 @@ class PipeExpert(torch.autograd.Function):
         multi_data = ctx.multi_data
 
         saved_tensors_list = list(ctx.saved_tensors)
-        before_expert_input_list = saved_tensors_list[:len(saved_tensors_list) // 2]
-        after_expert_out_list = saved_tensors_list[len(saved_tensors_list) // 2:]
+        input_list_before_expert = saved_tensors_list[:len(saved_tensors_list) // 2]
+        output_list_after_expert = saved_tensors_list[len(saved_tensors_list) // 2:]
 
         grad_outputs = args[0]
         global ASYNC_BW_ALL_GATHER_COUNT
@@ -343,8 +344,8 @@ class PipeExpert(torch.autograd.Function):
                 else:
                     PipeExpertUtil.get_first_a2a_event()[i * multi_data + j].wait()
                 ASYNC_BW_ALL_GATHER_COUNT += 1
-                after_expert_out_list[i * multi_data + j].backward(grad_outputs_list[i * multi_data + j])
-                grads_expert_output = before_expert_input_list[i * multi_data + j].grad
+                output_list_after_expert[i * multi_data + j].backward(grad_outputs_list[i * multi_data + j])
+                grads_expert_output = input_list_before_expert[i * multi_data + j].grad
 
                 grads_expert_output, handle = async_all_to_all(grads_expert_output)
                 grad_output_list_for_each_multi_data.append(grads_expert_output)

@@ -367,6 +367,9 @@ def parallel_mlp_init_wrapper(fn):
         fn(self, *args, **kwargs)
         self.layer_number = None
         args = get_args()
+        if not args.swiglu:
+            self.dense_h_to_4h.pipe_experts = args.use_pipe_experts
+            self.dense_4h_to_h.pipe_experts = args.use_pipe_experts
         if args.swiglu and args.use_fused_swiglu:
             self.activation_func = fused_swiglu
     return wrapper

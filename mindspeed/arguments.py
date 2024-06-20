@@ -318,6 +318,8 @@ def validate_args_wrapper(validate_args):
         if args.use_pipe_experts:
             if args.pipe_experts_multi_data <= 0:
                 raise AssertionError('--pipe-experts-multi-data must greater than 0')
+            if not args.sequence_parallel and args.pipe_experts_multi_stream:
+                raise AssertionError('--pipe-experts-multi-stream can only be used with --sequence-parallel.')
             local_experts = args.num_experts // args.expert_model_parallel_size
             if local_experts == 1 and args.pipe_experts_multi_data == 1:
                 print("[WARNING] if local_experts = num_experts // expert_model_parallel_size is equal to 1 "
