@@ -639,6 +639,25 @@ class AdaptiveRecompute:
             self.modules_hooks.clear()
             SwapManager().reset_swap_manager_tensors()
 
+    def prefetch_hook(self, models):
+        self.reset_modules()
+        all_args = get_args()
+        pp = all_args.pipeline_model_parallel_size
+        vpp = all_args.virtual_pipeline_model_parallel_size if all_args.virtual_pipeline_model_parallel_size else 1
+        print_rank_0("ADAPTIVE-PREFETCH: Start applying policy to the model")
+        config = {
+            "pre_layer_full_name": "",
+            "pre_layer_ctx": {},
+            "cur_layer_name": "module",
+        }
+        prefetch_recompute_group, interval, num_prefetch = get_adaptive_recomputing_policy().solve_prefetch_policy()
+        print(f"[DEBUG] swap_list： {prefetch_recompute_group[0]},"
+              f" prefetch_list： {prefetch_recompute_group[1]},"
+              f" recompute_list： {prefetch_recompute_group[2]}")
+        prefetch_args = [pp, vpp, interval, num_prefetch]
+        apply_prefetch_strategy(config, models, self.context, prefetch_recompute_group, prefetch_args)
+
+
     def step_hook(self, models):
         torch.npu.synchronize()
         all_args = get_args()
@@ -648,47 +667,29 @@ class AdaptiveRecompute:
                     self.profiling_step))):
             return
 
-        if all_args.prefetch:
+        if get_adaptive_recomputing_policy().context_copy is None:
+            get_adaptive_recomputing_policy().context_copy = deepcopy(self.context)
+            try:
+                get_adaptive_recomputing_policy().get_default_device_memory(self.context["max_device_memory"])
+            except KeyError:
+                print_rank_0("[ERROR] Some of these keys don't exist.")
+            get_graph_solver().build_solver_info(self.context, self.num_warmup_micro_batches)
+
+        get_adaptive_recomputing_policy().check_cur_recompute_policy()
+        print_rank_0("==================== ADAPTIVE-RECOMPUTE Report ====================")
+        context = get_adaptive_recomputing_policy().solve_recompute_policy(self.profiling_step)
+        print_rank_0("==================== ADAPTIVE-RECOMPUTE Report End ====================")
+        if context is not None:
+            self.context = context
             self.reset_modules()
-            all_args = get_args()
-            pp = all_args.pipeline_model_parallel_size
-            vpp = all_args.virtual_pipeline_model_parallel_size if all_args.virtual_pipeline_model_parallel_size else 1
-            print_rank_0("ADAPTIVE-PREFETCH: Start applying policy to the model")
+            print_rank_0("ADAPTIVE-RECOMPUTE: Start applying policy to the model")
             config = {
                 "pre_layer_full_name": "",
                 "pre_layer_ctx": {},
                 "cur_layer_name": "module",
             }
-            prefetch_recompute_group, interval, num_prefetch = get_adaptive_recomputing_policy().solve_prefetch_policy()
-            print(f"【DEBUG】 swap_list： {prefetch_recompute_group[0]},"
-                  f" prefetch_list： {prefetch_recompute_group[1]},"
-                  f" recompute_list： {prefetch_recompute_group[2]}")
-            prefetch_args = [pp, vpp, interval, num_prefetch]
-            apply_prefetch_strategy(config, models, self.context, prefetch_recompute_group, prefetch_args)
-        else:
-            if get_adaptive_recomputing_policy().context_copy is None:
-                get_adaptive_recomputing_policy().context_copy = deepcopy(self.context)
-                try:
-                    get_adaptive_recomputing_policy().get_default_device_memory(self.context["max_device_memory"])
-                except KeyError:
-                    print_rank_0("[ERROR] Some of these keys don't exist.")
-                get_graph_solver().build_solver_info(self.context, self.num_warmup_micro_batches)
-
-            get_adaptive_recomputing_policy().check_cur_recompute_policy()
-            print_rank_0("==================== ADAPTIVE-RECOMPUTE Report ====================")
-            context = get_adaptive_recomputing_policy().solve_recompute_policy(self.profiling_step)
-            print_rank_0("==================== ADAPTIVE-RECOMPUTE Report End ====================")
-            if context is not None:
-                self.context = context
-                self.reset_modules()
-                print_rank_0("ADAPTIVE-RECOMPUTE: Start applying policy to the model")
-                config = {
-                    "pre_layer_full_name": "",
-                    "pre_layer_ctx": {},
-                    "cur_layer_name": "module",
-                }
-                apply_adaptive_recompute(config, models, self.context)
-                print_rank_0("ADAPTIVE-RECOMPUTE: Finish applying policy to the model")
+            apply_adaptive_recompute(config, models, self.context)
+            print_rank_0("ADAPTIVE-RECOMPUTE: Finish applying policy to the model")
         get_swap_hook().reset_tensor_layer_info()
 
     def hook_step_func(self, step_func, models):
@@ -778,17 +779,22 @@ def setup_model_and_optimizer_wrapper(setup_model_and_optimizer):
         recomputing = get_adaptive_recomputing()
         recomputing.set_profiling_step(profile_step)
         recomputing.get_num_warmup_micro_batches(len(models))
-        optimizer.step = recomputing.hook_step_func(optimizer.step, models)
         args = get_args()
+        if not args.prefetch:
+            optimizer.step = recomputing.hook_step_func(optimizer.step, models)
         if isinstance(models, list):
             for index, model in enumerate(models):
                 recomputing.construct_context_recursive("module", model, recomputing.context, True)
-                recomputing.register_recursive_hook(model, recomputing.context, recomputing.profiling_prefix,
-                                                    index, prefetch=args.prefetch)
+                if not args.prefetch:
+                    recomputing.register_recursive_hook(model, recomputing.context, recomputing.profiling_prefix,
+                                                        index, prefetch=args.prefetch)
         else:
             recomputing.construct_context_recursive("module", models, recomputing.context, True)
-            recomputing.register_recursive_hook(models, recomputing.context, recomputing.profiling_prefix,
-                                                prefetch=args.prefetch)
+            if not args.prefetch:
+                recomputing.register_recursive_hook(models, recomputing.context, recomputing.profiling_prefix,
+                                                    prefetch=args.prefetch)
+        if args.prefetch:
+            recomputing.prefetch_hook(models)
         print_rank_0("ADAPTIVE-RECOMPUTE: successfully hooking module")
         return models, optimizer, opt_param_scheduler
 
