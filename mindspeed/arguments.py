@@ -292,6 +292,12 @@ def validate_args_wrapper(validate_args):
                 args.virtual_pipeline_model_parallel_size = num_layers_per_pipeline_stage // \
                                                             args.num_layers_per_virtual_pipeline_stage
 
+        # num_layers_per_virtual_pipeline_stage should be meaningful
+        if args.num_layers_per_virtual_pipeline_stage is not None:
+            num_layers_per_pipeline_stage = args.num_layers // args.pipeline_model_parallel_size
+            assert num_layers_per_pipeline_stage // args.num_layers_per_virtual_pipeline_stage > 1, \
+            'considering args of num_layers and pipeline_model_parallel_size, vpp setting should be meaningful'
+
         if args.use_fused_rmsnorm:
             if args.normalization != "RMSNorm":
                 raise AssertionError(

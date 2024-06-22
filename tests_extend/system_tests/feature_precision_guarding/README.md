@@ -63,7 +63,7 @@ spec:
 ### 方式一： 用例配置文件中直接添加
 举例说明：验证MC2+分布式优化器的精度
 **分析**
-- MC2需要设置环境变量ASCEND_MC2=1，MC2依赖TP和序列并行 (SP基础脚本已配置)
+- MC2需要设置参数--use-ascend-mc2，MC2依赖TP和序列并行 (SP基础脚本已配置)
 - 分布式优化器需要添加额外参数 --use-distributed-optimizer
 在fpg_llama_usecase.yaml的features下添加一条即可，如下所示：
 ```yaml
