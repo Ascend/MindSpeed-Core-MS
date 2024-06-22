@@ -45,8 +45,8 @@ npu_fusion_attention(
   比如真正的S长度列表为：2 2 2 2 2 则actual_seq_kvlen传：2 4 6 8 10。
 - sparse_mode：Host侧的int，表示sparse的模式，可选参数。数据类型支持：INT64，默认值为0，支持配置值为0、1、2、3、4、5、6、7、8。当整网的atten_mask都相同且shape小于2048*2048时，建议使用defaultMask模式，来减少内存使用,
   具体可参考昇腾社区说明https://www.hiascend.com/document/detail/zh/Pytorch/60RC1/apiref/apilist/ptaoplist_000448.html。
-- q_start_idx Host侧的int array，可选参数，外切时候s1方向偏移。
-- kv_start_idx Host侧的int array，可选参数，外切时候s2方向偏移。
+- q_start_idx：Host侧的int array，可选参数，长度为1的int类型数组。pse_type配置为2或3时，表示内部生成alibi编码在Sq方向偏移的格数，正数表示0对角线向上移动。缺省值为0，表示不进行偏移。
+- kv_start_idx：Host侧的int array，可选参数，长度为1的int类型数组。pse_type配置为2或3时，表示内部生成alibi编码在Skv方向偏移的格数，正数表示0对角线向左移动。缺省值为0，表示不进行偏移。
 
 输出：
 (Tensor, Tensor, Tensor, Tensor, int, int, int)
@@ -64,8 +64,8 @@ npu_fusion_attention(
 - pse_type：可选属性，Host侧的int，数据类型支持INT64，默认值为1。支持范围0-3。
 - pse_type配置为0的时候，pse由外部传入，计算流程是先mul scale再add pse。
 - pse_type配置为1的时候，pse由外部传入，计算流程是先add pse再mul scale。
-- pse_type配置为2的时候，pse由内部生成，生成标准alibi位置信息，npu核内生成是左上对角。
-- pse_type配置为3的时候，pse由内部生成，生成的alibi位置信息为标准的基础上再做sqrt开平方，npu核内生成是左上对角。
+- pse_type配置为2的时候，pse由内部生成，生成标准alibi位置信息。内部生成的alibi矩阵0线与Q@K^T的左上角对齐。
+- pse_type配置为3的时候，pse由内部生成，生成的alibi位置信息为标准的基础上再做sqrt开平方。内部生成的alibi矩阵0线与Q@K^T的左上角对齐。
 - head_num：必选属性，Host侧的int，代表head个数，数据类型支持INT64。
 - input_layout：必选属性，Host侧的string，代表输入query、key、value的数据排布格式，支持BSH、SBH、BSND、BNSD、TND(actual_seq_qlen/actual_seq_kvlen需传值)；后续章节如无特殊说明，S表示query或key、value的sequence length，Sq表示query的sequence length，Skv表示key、value的sequence length，SS表示Sq*Skv
 - keep_prob：可选属性，数据类型float，默认值为1.0。在 softmax 后的保留比例。
