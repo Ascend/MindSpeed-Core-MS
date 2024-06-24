@@ -7,6 +7,7 @@ from .async_comm_utils import (async_all_to_all, async_fw_ar_rs, get_fw_ag_outpu
                                async_bw_all_gather)
 
 ASYNC_BW_ALL_GATHER_COUNT = 0
+FLAG_GRAD_REDUCE = False
 
 
 def get_async_bw_all_gather_count():
@@ -256,7 +257,10 @@ class PipeExpert(torch.autograd.Function):
                     get_fw_ag_output().pop(0)
 
                 if isinstance(output_expert, tuple):
-                    output_expert = output_expert[0]
+                    output_expert, bias = output_expert
+                    if bias is not None:
+                        with torch.enable_grad():
+                            output_expert = output_expert + bias
 
                 output_list_after_expert.append(output_expert)
                 output_detach_after_expert = output_expert.detach()
@@ -332,6 +336,8 @@ class PipeExpert(torch.autograd.Function):
 
         for i in range(num_local_experts):
             grad_output_list_for_each_multi_data = []
+            global FLAG_GRAD_REDUCE
+            FLAG_GRAD_REDUCE = False
             for j in range(multi_data):
                 if sequence_parallel:
                     if not multi_stream:
@@ -344,6 +350,8 @@ class PipeExpert(torch.autograd.Function):
                 else:
                     PipeExpertUtil.get_first_a2a_event()[i * multi_data + j].wait()
                 ASYNC_BW_ALL_GATHER_COUNT += 1
+                if j == multi_data - 1:
+                    FLAG_GRAD_REDUCE = True
                 output_list_after_expert[i * multi_data + j].backward(grad_outputs_list[i * multi_data + j])
                 grads_expert_output = input_list_before_expert[i * multi_data + j].grad
 

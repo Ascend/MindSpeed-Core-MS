@@ -78,6 +78,14 @@ def row_parallel_nocomm_optimizer_wrapper(forward_func):
             output = forward_func(*args, **kwargs)
         else:
             output = row_parallel_nocomm(*args, **kwargs)
+
+        if isinstance(output, tuple) and global_args.prefetch and global_args.recompute_num_layers > 0:
+            output, bias = output
+            if bias is not None:
+                # where only recompute mlp, training enters an infinite loop, this * 1 fix this bug
+                bias = bias * 1
+            return output, bias
+
         return output
     return row_parallel_forward
 
@@ -244,8 +252,8 @@ class LinearWithGradAccumulationAndAsyncCommunicationPipeExperts(torch.autograd.
             total_input = input
             output = torch.matmul(total_input, weight.t())
 
-            if bias is not None:
-                output = output + bias
+        if bias is not None:
+            output = output + bias
         return output
 
     @staticmethod
