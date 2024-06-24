@@ -147,7 +147,7 @@ def parallel_transformer_checkpointed_forward_wrapper(forward_func):
     def row_parallel_forward(*args, **kwargs):
         global_args = get_args()
         if global_args.optimize_recomp_communication_level == 0:
-            if global_args.recompute_method != 'block':
+            if global_args.recompute_method != 'block' or not global_args.enable_recompute_layers_per_pp_rank:
                 output = forward_func(*args, **kwargs)
             else:
                 output = parallel_transformer_checkpointed_forward(*args, **kwargs)
@@ -271,9 +271,9 @@ def parallel_transformer_checkpointed_forward_tp_optimized(self, hidden_states, 
         # A method fully use the device memory removing redundant re-computation.
         vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()
         vpp_size = args.virtual_pipeline_model_parallel_size
-        if vpp_rank is None:
+        if vpp_rank is None or not args.enable_recompute_layers_per_pp_rank:
             vpp_rank = 0
-        if vpp_size is None:
+        if vpp_size is None or not args.enable_recompute_layers_per_pp_rank:
             vpp_size = 1
         for l in range(self.num_layers):
             # The number of layers each pipeline rank recomputes is self.recompute_num_layers.

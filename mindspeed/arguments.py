@@ -174,6 +174,11 @@ def _add_training_args(parser):
                        action='store_true', default=False,
                        help='switch to open adaptive recompute feature. '
                             'The default is False.')
+    group.add_argument('--enable-recompute-layers-per-pp-rank',
+                       action='store_true', default=False,
+                       help='If enabled, --recompute-num-layers will mean the number of '
+                       'layers recomputed in each pp rank. Otherwise it means the number '
+                       'of layers recomputed in each vpp rank.')
     group.add_argument('--recompute-activation-function', action='store_true',
                        help='Recompute the activation function in MLP layers.')
     group.add_argument('--recompute-activation-function-num-layers', type=int, default=None,

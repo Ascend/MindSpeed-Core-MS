@@ -303,6 +303,8 @@ class AdaptiveRecomputePolicy:
         recompute_num_layers = all_args.recompute_num_layers or 0
         pp_size = all_args.pipeline_model_parallel_size or 1
         vpp_size = all_args.virtual_pipeline_model_parallel_size or 1
+        if not all_args.enable_recompute_layers_per_pp_rank:
+            recompute_num_layers *= vpp_size
         if all_args.recompute_method == 'block':
             self.num_prefetch = recompute_num_layers
         else:

@@ -391,6 +391,10 @@ def should_recompute_activation(self):
     else:
         layer_per_chunk = args.num_layers
 
+    if vpp_rank is None or not args.enable_recompute_layers_per_pp_rank:
+        vpp_rank = 0
+    if vpp_size is None or not args.enable_recompute_layers_per_pp_rank:
+        vpp_size = 1
     recompute_priority = ((self.layer_number - 1) % layer_per_chunk) * vpp_size + vpp_rank
     full_recompute_layers = args.recompute_num_layers
 
