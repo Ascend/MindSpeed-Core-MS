@@ -17,6 +17,7 @@ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid
                                            get_context_parallel_for_hybrid_ring_world_size,
                                            get_context_parallel_for_hybrid_ring_rank,
                                            get_context_parallel_for_hybrid_ring_global_ranks)
+from mindspeed.model.transformer import get_attention_mask
 
 try:
     from einops import rearrange
@@ -60,10 +61,11 @@ def dot_product_attention_init_wrapper(fn):
 
 def dot_product_attention_forward_wrapper(fn):
     @wraps(fn)
-    def wrapper(*args, **kwargs):
+    def wrapper(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params):
+        attention_mask = get_attention_mask()
         if get_args().use_flash_attn:
-            return dot_product_attention_forward(*args, **kwargs)
-        return fn(*args, **kwargs)
+            return dot_product_attention_forward(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
+        return fn(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
 
     return wrapper
 
@@ -93,10 +95,6 @@ def dot_product_attention_forward(
     query, key, value = [rearrange(x, 's b h d -> s b (h d)') for x in [query, key, value]]
 
     scale = 1.0 / math.sqrt(self.hidden_size_per_attention_head) if self.scale_mask_softmax.scale is None else self.softmax_scale
-
-    if not hasattr(self, 'attention_mask'):
-        self.attention_mask = (torch.tril(torch.ones([seq_length, seq_length]), diagonal=-(args.pre_tockens + 1))
-                               + torch.triu(torch.ones([seq_length, seq_length]), diagonal=args.next_tockens + 1)).bool().npu()
 
     if args.context_parallel_size > 1 and args.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']:
         in_hybrid_mode = False
@@ -129,24 +127,26 @@ def dot_product_attention_forward(
                 query, key, value, n_head, 'SBH',
                 pse=self.pse,
                 padding_mask=None,
-                atten_mask=self.attention_mask,
+                atten_mask=attention_mask,
                 scale=scale,
                 pse_type=self.pse_type,
                 pre_tokens=args.pre_tockens,
                 next_tokens=args.next_tockens,
                 keep_prob=1 - self.dropout_p,
-                inner_precise=0
+                inner_precise=0,
+                sparse_mode=args.sparse_mode
             )[0]
         else:
             output = torch_npu.npu_fusion_attention(
                 query, key, value, n_head, 'SBH',
                 pse=None,
                 padding_mask=None,
-                atten_mask=self.attention_mask,
+                atten_mask=attention_mask,
                 scale=scale,
                 pre_tockens=args.pre_tockens,
                 next_tockens=args.next_tockens,
                 keep_prob=1 - self.attention_dropout.p,
-                inner_precise=0
+                inner_precise=0,
+                sparse_mode=args.sparse_mode
                 )[0]
     return output

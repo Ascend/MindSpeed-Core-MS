@@ -12,6 +12,7 @@ from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
 from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
 from megatron.training.global_vars import set_args
 from megatron.training.arguments import parse_args
+from mindspeed.model.transformer import set_attention_mask
 
 
 class TestRecompute(DistributedTest):
@@ -65,8 +66,9 @@ class TestRecompute(DistributedTest):
         hidden_states = hidden_states.cuda()
 
         attention_mask = torch.ones((1, 1, sequence_length, sequence_length), dtype=bool).cuda()
+        set_attention_mask(attention_mask)
 
-        hidden_states = transformer_block(hidden_states=hidden_states, attention_mask=attention_mask)
+        hidden_states = transformer_block(hidden_states=hidden_states, attention_mask=None)
         assert hidden_states.shape[0] == sequence_length
         assert hidden_states.shape[1] == micro_batch_size
         assert hidden_states.shape[2] == config.hidden_size

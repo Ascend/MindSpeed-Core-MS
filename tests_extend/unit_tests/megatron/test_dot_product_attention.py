@@ -15,6 +15,7 @@ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid
                                              get_context_parallel_for_hybrid_ring_world_size,
                                              get_context_parallel_for_hybrid_ring_rank,
                                              get_context_parallel_for_hybrid_ring_global_ranks)
+from mindspeed.model.transformer import get_attention_mask
 
 from commons import set_random_seed, initialize_model_parallel # noqa
 from unit_tests.common import DistributedTest # noqa
@@ -29,6 +30,9 @@ def run_dot_product_att(cp_size, bs, seq_len, dtype):
     args.context_parallel_size = cp_size
     args.context_parallel_algo = 'megatron_cp_algo' if cp_size > 1 else None
     args.use_flash_attn = True
+    args.micro_batch_size = bs
+    args.seq_length = seq_len
+
     set_args(args)
     initialize_model_parallel(context_parallel_size=cp_size)
     set_random_seed(1234)
@@ -42,8 +46,9 @@ def run_dot_product_att(cp_size, bs, seq_len, dtype):
     q = torch.randn(s, b, n, d, dtype=dtype, device='npu', requires_grad=True)
     k = torch.randn(s, b, n, d, dtype=dtype, device='npu', requires_grad=True)
     v = torch.randn(s, b, n, d, dtype=dtype, device='npu', requires_grad=True)
+    attention_mask = get_attention_mask()
 
-    out = attn(q, k, v, None, None, None)
+    out = attn(q, k, v, attention_mask, None, None)
     assert isinstance(out, torch.Tensor)
 
 

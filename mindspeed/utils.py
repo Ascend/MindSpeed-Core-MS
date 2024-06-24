@@ -8,7 +8,6 @@ from mindspeed.core.parallel_state import (get_context_parallel_for_hybrid_ulyss
                                              get_context_parallel_for_hybrid_ulysses_rank,
                                              get_context_parallel_for_hybrid_ring_world_size,
                                              get_context_parallel_for_hybrid_ring_rank)
-from mindspeed.model.transformer import get_attention_mask
 
 
 def get_batch_on_this_cp_rank(batch):
@@ -26,8 +25,6 @@ def get_batch_on_this_cp_rank(batch):
     cp_size = args.context_parallel_size
     if not cp_size > 1:
         return batch
-    
-    batch['attention_mask'] = get_attention_mask()
 
     if args.context_parallel_algo == 'megatron_cp_algo':
         if args.cp_attention_mask_type == 'general':

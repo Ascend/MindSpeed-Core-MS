@@ -335,19 +335,21 @@ def set_attention_mask(attn_mask):
 
 def generate_attention_mask():
     global _GLOBAL_ATTN_MASK
-    if _GLOBAL_ATTN_MASK is None:
-        args = get_args()
-        if args.use_flash_attn and (args.seq_length > 2048 or args.context_parallel_algo == 'megatron_cp_algo'):
-            args.sparse_mode = 2
-            _GLOBAL_ATTN_MASK = torch.triu(torch.ones([2048, 2048], dtype=bool, device=torch.cuda.current_device()), diagonal=1)
-        else:
-            args.sparse_mode = 0
-            _GLOBAL_ATTN_MASK = (torch.tril(torch.ones([args.micro_batch_size, 1, args.seq_length, args.seq_length], dtype=bool, device=torch.cuda.current_device()), diagonal=-(args.pre_tockens + 1)) \
-                + torch.triu(torch.ones([args.micro_batch_size, 1, args.seq_length, args.seq_length], dtype=bool, device=torch.cuda.current_device()), diagonal=args.next_tockens + 1))
-    return _GLOBAL_ATTN_MASK
+    args = get_args()
+    if args.use_flash_attn and (args.seq_length > 2048 or args.context_parallel_algo == 'megatron_cp_algo'):
+        args.sparse_mode = 2
+        _GLOBAL_ATTN_MASK = torch.triu(torch.ones([2048, 2048], dtype=bool, device=torch.cuda.current_device()), diagonal=1)
+    else:
+        args.sparse_mode = 0
+        _GLOBAL_ATTN_MASK = (torch.tril(torch.ones([args.micro_batch_size, 1, args.seq_length, args.seq_length], dtype=bool, device=torch.cuda.current_device()), diagonal=-(args.pre_tockens + 1)) \
+            + torch.triu(torch.ones([args.micro_batch_size, 1, args.seq_length, args.seq_length], dtype=bool, device=torch.cuda.current_device()), diagonal=args.next_tockens + 1))
 
 
 def get_attention_mask():
+    global _GLOBAL_ATTN_MASK
+    args = get_args()
+    if args.cp_attention_mask_type == 'causal' and _GLOBAL_ATTN_MASK is None:
+        generate_attention_mask()
     return _GLOBAL_ATTN_MASK
 
 
@@ -355,8 +357,7 @@ def parallel_transformer_forward_wrapper(fn):
     @wraps(fn)
     def wrapper(self, hidden_states, attention_mask, **kwargs):
         args = get_args()
-        if not getattr(args, 'cp_attention_mask_type', None) == 'general':
-            attention_mask = generate_attention_mask()
+        attention_mask = get_attention_mask()
         return fn(self, hidden_states, attention_mask, **kwargs)
     return wrapper
 
@@ -554,14 +555,14 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
                 q, k, v, head_num, args.shape_order,
                 pse=self.pse,
                 padding_mask=None,
-                atten_mask=attention_mask if args.cp_attention_mask_type == 'causal' else None,
+                atten_mask=attention_mask,
                 scale=scale,
                 pse_type=self.pse_type,
                 pre_tokens=args.pre_tockens,
                 next_tokens=args.next_tockens,
                 keep_prob=1 - self.dropout_p,
                 inner_precise=0,
-                sparse_mode=args.sparse_mode if args.cp_attention_mask_type == 'causal' else 0
+                sparse_mode=args.sparse_mode
             )[0]
         else:
             q, k, v = [rearrange(x, 's b h d -> s b (h d)') for x in [q, k, v]]
@@ -569,13 +570,13 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
                 q, k, v, head_num, args.shape_order,
                 pse=None,
                 padding_mask=None,
-                atten_mask=attention_mask if args.cp_attention_mask_type == 'causal' else None,
+                atten_mask=attention_mask,
                 scale=scale,
                 pre_tockens=args.pre_tockens,
                 next_tockens=args.next_tockens,
                 keep_prob=1 - self.dropout_p,
                 inner_precise=0,
-                sparse_mode=args.sparse_mode if args.cp_attention_mask_type == 'causal' else 0
+                sparse_mode=args.sparse_mode
             )[0]
     return output
 
