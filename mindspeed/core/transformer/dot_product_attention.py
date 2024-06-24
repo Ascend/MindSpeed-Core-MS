@@ -17,6 +17,7 @@ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid
                                            get_context_parallel_for_hybrid_ring_world_size,
                                            get_context_parallel_for_hybrid_ring_rank,
                                            get_context_parallel_for_hybrid_ring_global_ranks)
+
 try:
     from einops import rearrange
 except ImportError:
@@ -87,12 +88,13 @@ def dot_product_attention_forward(
             self.num_attention_heads_per_partition // self.num_query_groups_per_partition, dim=2
         )
 
+    seq_length, _, n_head, head_dim = query.shape[0], query.shape[1], query.shape[2], query.shape[3]
+    
     query, key, value = [rearrange(x, 's b h d -> s b (h d)') for x in [query, key, value]]
 
     scale = 1.0 / math.sqrt(self.hidden_size_per_attention_head) if self.scale_mask_softmax.scale is None else self.softmax_scale
 
     if not hasattr(self, 'attention_mask'):
-        seq_length = query.shape[0]
         self.attention_mask = (torch.tril(torch.ones([seq_length, seq_length]), diagonal=-(args.pre_tockens + 1))
                                + torch.triu(torch.ones([seq_length, seq_length]), diagonal=args.next_tockens + 1)).bool().npu()
 
@@ -118,14 +120,13 @@ def dot_product_attention_forward(
         cp_para['cp_size'] = cp_size
         cp_para['rank'] = rank
         cp_para['cp_global_ranks'] = cp_global_ranks
-        cp_para['use_cp_send_recv_overlap'] = args.use_cp_send_recv_overlap
         cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
             if args.use_cp_send_recv_overlap else None
-        output = ringattn_context_parallel(query, key, value, self.num_attention_heads_per_partition, cp_para, scale, None)
+        output = ringattn_context_parallel(query, key, value, n_head, cp_para, scale, None)
     else:
         if args.use_fusion_attn_v2:
             output = npu_fusion_attention(
-                query, key, value, self.num_attention_heads_per_partition, 'SBH',
+                query, key, value, n_head, 'SBH',
                 pse=self.pse,
                 padding_mask=None,
                 atten_mask=self.attention_mask,
@@ -138,7 +139,7 @@ def dot_product_attention_forward(
             )[0]
         else:
             output = torch_npu.npu_fusion_attention(
-                query, key, value, self.num_attention_heads_per_partition, 'SBH',
+                query, key, value, n_head, 'SBH',
                 pse=None,
                 padding_mask=None,
                 atten_mask=self.attention_mask,

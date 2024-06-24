@@ -590,13 +590,13 @@ def parallel_attention_init_wrapper(fn):
         # qkv bias
         bias = _args.add_qkv_bias or _args.add_bias_linear
         if args[0].context_parallel_size > 1 and args[0].context_parallel_algo in ['ulysses_cp_algo', 'hybrid_cp_algo']:
-            u_group = mpu.get_context_parallel_group()
+            ulysses_group = mpu.get_context_parallel_group()
             if args[0].context_parallel_algo == 'hybrid_cp_algo':
-                u_group = get_context_parallel_group_for_hybrid_ulysses()
+                ulysses_group = get_context_parallel_group_for_hybrid_ulysses()
             if self.use_flash_attn:
-                self.core_attention_flash = UlyssesContextAttention(self.core_attention_flash, u_group)
+                self.core_attention_flash = UlyssesContextAttention(self.core_attention_flash, ulysses_group)
             else:
-                self.core_attention = UlyssesContextAttention(self.core_attention, u_group)
+                self.core_attention = UlyssesContextAttention(self.core_attention, ulysses_group)
         self.query_key_value = tensor_parallel.ColumnParallelLinear(
             config.hidden_size,
             query_projection_size + 2 * kv_projection_size,
