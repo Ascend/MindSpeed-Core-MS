@@ -90,8 +90,10 @@ class Patch:
                     module = getattr(importlib.import_module(parent), modules[i - 1])
                     if hasattr(module, function_name):
                         return module, getattr(module, function_name)
+                    elif create_dummy:
+                        return module, dummy_function_wrapper(function_name)
                     else:
-                        raise RuntimeError('no support this type patch!')
+                        raise RuntimeError('no exist {} of {}'.format(function_name, module))
 
         if function_name is not None and not hasattr(sys.modules[module_path], function_name):
             setattr(sys.modules[module_path], function_name, None)
