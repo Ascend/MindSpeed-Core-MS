@@ -138,6 +138,8 @@ def _add_distributed_args(parser):
 
     group.add_argument('--local-rank', type=int, default=None,
                        help='Local rank passed from distributed launcher for torch2.x.')
+    group.add_argument('--use-nanopipe', action='store_true',
+                       default=False, help='use nano pipeline parallelism for reduce bubble.')
     group.add_argument('--use-pipe-experts', action='store_true',
                        help='Use this flag to enable pipe moe, overlap all2all and expert')
     return parser

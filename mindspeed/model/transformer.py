@@ -373,6 +373,10 @@ def parallel_mlp_init_wrapper(fn):
             self.dense_4h_to_h.pipe_experts = args.use_pipe_experts
         if args.swiglu and args.use_fused_swiglu:
             self.activation_func = fused_swiglu
+        if args.use_nanopipe and parallel_state.get_pipeline_model_parallel_world_size() > 1 \
+                    and parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None:
+            setattr(self.dense_h_to_4h, "in_nano", True)
+            setattr(self.dense_4h_to_h, "in_nano", True)
     return wrapper
 
 
@@ -621,6 +625,10 @@ def parallel_attention_init_wrapper(fn):
             bias=bias,
             input_is_parallel=True,
             skip_bias_add=skip_bias_add)
+        if _args.use_nanopipe and parallel_state.get_pipeline_model_parallel_world_size() > 1 \
+                    and parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None:
+            setattr(self.query_key_value, "in_nano", True)
+            setattr(self.dense, "in_nano", True)
     return wrapper
 
 

@@ -4,46 +4,39 @@ from functools import wraps
 
 import os
 import warnings
-from typing import Any, Callable, List, Optional, Tuple
+from typing import List, Optional
 
 import torch
 import torch_npu
+import torch.distributed
 import torch.nn.functional as F
 from torch.cuda.amp import custom_bwd, custom_fwd
-from torch.nn.parameter import Parameter
 
+from megatron.core import parallel_state, tensor_parallel, mpu
 from megatron.training import get_args
+
 from megatron.core.tensor_parallel.mappings import (
     copy_to_tensor_model_parallel_region,
-    gather_from_sequence_parallel_region,
     gather_from_tensor_model_parallel_region,
     reduce_from_tensor_model_parallel_region,
     reduce_scatter_to_sequence_parallel_region,
     scatter_to_tensor_model_parallel_region,
+    _reduce_scatter_along_first_dim,
+    _gather_along_first_dim,
 )
 from megatron.core.tensor_parallel.layers import (
-    ColumnParallelLinear,
-    RowParallelLinear,
-    _initialize_affine_weight_cpu,
-    set_tensor_model_parallel_attributes,
-    _initialize_affine_weight_gpu,
-    _grad_accum_fusion_available,
     linear_with_grad_accumulation_and_async_allreduce,
     linear_with_frozen_weight,
-    LinearWithGradAccumulationAndAsyncCommunication
 )
 from megatron.core.parallel_state import (
     get_global_memory_buffer,
     get_tensor_model_parallel_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
+    is_pipeline_first_stage
 )
-from megatron.core.tensor_parallel.layers import (linear_with_grad_accumulation_and_async_allreduce, 
-                                                  linear_with_frozen_weight)
-from megatron.core.parallel_state import get_tensor_model_parallel_world_size
-from megatron.core.model_parallel_config import ModelParallelConfig
-from megatron.core.tensor_parallel.utils import VocabUtility, divide, split_tensor_along_last_dim
-from megatron.core.utils import make_tp_sharded_tensor_for_checkpoint, prepare_input_tensors_for_wgrad_compute
+from megatron.core.utils import prepare_input_tensors_for_wgrad_compute
+from mindspeed.core.weight_grad_store import WeightGradStore
 from .ascend_turbo.mc2_linears_seq_parallel import RowSeqParallelLinear
 
 
@@ -218,7 +211,7 @@ class LinearWithGradAccumulationAndAsyncCommunicationPipeExperts(torch.autograd.
 
                 x = input.reshape(input.shape[0] * input.shape[1], input.shape[2])
                 world_size = ascend_turbo_cfg.get_world_size()
-                output, all_gather_grad_output = torch_npu.npu_all_gather_base_mm(
+                output, _ = torch_npu.npu_all_gather_base_mm(
                     x,
                     weight.t(),
                     hcomm_info,
@@ -230,9 +223,6 @@ class LinearWithGradAccumulationAndAsyncCommunicationPipeExperts(torch.autograd.
                 output = output.view(
                     output.shape[0] // input.shape[1], input.shape[1], output.shape[1]
                 )
-                ctx.all_gather_output = all_gather_grad_output
-                ctx.world_size = world_size
-                ctx.group = group
             elif pipe_experts:
                 from mindspeed.moe.async_comm_utils import get_fw_ag_output
                 total_input = get_fw_ag_output()[0]
@@ -372,7 +362,314 @@ class LinearWithGradAccumulationAndAsyncCommunicationPipeExperts(torch.autograd.
         return grad_input, grad_weight, grad_bias, None, None, None, None, None
 
 
-def linear_with_grad_accumulation_and_async_allreduce(
+class LinearWithGradAccumulationAndAsyncCommunication_nano_row(torch.autograd.Function):
+    """See linear_with_grad_accumulation_and_async_allreduce"""
+
+    @staticmethod
+    @custom_fwd
+    def forward(
+        ctx,
+        input,
+        weight,
+        bias,
+        gradient_accumulation_fusion,
+        async_grad_allreduce,
+        sequence_parallel,
+        grad_output_buffer,
+        pipe_experts,
+    ):
+        ctx.input, ctx.weight = input, weight
+        ctx.use_bias = bias is not None
+        ctx.gradient_accumulation_fusion = gradient_accumulation_fusion
+        ctx.async_grad_allreduce = async_grad_allreduce
+        ctx.sequence_parallel = sequence_parallel
+        ctx.grad_output_buffer = grad_output_buffer
+        ctx.pipe_experts = pipe_experts
+        total_input = input
+        global_args = get_args()
+
+        if sequence_parallel:
+            if pipe_experts:
+                output = torch.matmul(total_input, weight.t())
+            elif global_args.use_ascend_mc2:
+                from .ascend_turbo.ascend_turbo_cfg import ascend_turbo_cfg
+                rank = get_tensor_model_parallel_rank()
+                ascend_turbo_cfg.set_world_size(get_tensor_model_parallel_world_size)
+                world_size = ascend_turbo_cfg.get_world_size()
+                group = get_tensor_model_parallel_group()
+                hcomm_info = None
+                if torch.__version__ > "2.0":
+                    global_rank = torch.distributed.get_global_rank(group, rank)
+                    hcomm_info = group._get_backend(torch.device("npu")).get_hccl_comm_name(global_rank)
+                else:
+                    hcomm_info = group.get_hccl_comm_name(rank)
+                
+                x = input.reshape(input.shape[0] * input.shape[1], input.shape[2])
+                output = torch_npu.npu_mm_reduce_scatter_base(
+                    x, weight.t(), hcomm_info, world_size, reduce_op="sum", bias=bias
+                )
+                ctx.hcomm_info = hcomm_info
+                ctx.world_size = world_size
+                output = output.view(
+                    output.shape[0] // input.shape[1], input.shape[1], output.shape[1]
+                )
+                return output
+            else:
+                output = torch.matmul(total_input, weight.t())
+                output = _reduce_scatter_along_first_dim(output)
+        else:
+            output = torch.matmul(total_input, weight.t())
+        if bias is not None:
+            output = output + bias
+        return output
+
+    @staticmethod
+    @custom_bwd
+    def backward(ctx, grad_output):
+        input, weight = ctx.input, ctx.weight
+        use_bias = ctx.use_bias
+        pipe_experts = ctx.pipe_experts
+        global_args = get_args()
+        grad_input = None
+        if ctx.sequence_parallel:
+            if pipe_experts:
+                grad_input = grad_output.matmul(weight)
+            elif global_args.use_ascend_mc2:
+                hcomm_info = ctx.hcomm_info
+                world_size = ctx.world_size
+                grad_output_ = grad_output.reshape(
+                    grad_output.shape[0] * grad_output.shape[1], grad_output.shape[2]
+                )
+                grad_input, _ = torch_npu.npu_all_gather_base_mm(
+                    grad_output_, weight, hcomm_info, world_size, bias=None, gather_index=0
+                )
+
+                grad_input = grad_input.view_as(input)
+            else:
+                grad_output_gathered = _gather_along_first_dim(grad_output)
+                grad_input = grad_output_gathered.matmul(weight)
+        else:
+            grad_input = grad_output.matmul(weight)
+
+        total_input = input
+
+        if ctx.async_grad_allreduce:
+            # Asynchronous all-reduce
+            handle = torch.distributed.all_reduce(
+                grad_input, group=get_tensor_model_parallel_group(), async_op=True
+            )
+            # Here we rely on CUDA_DEVICE_MAX_CONNECTIONS=1 to ensure that the
+            # all-reduce is scheduled before the weight gradient computation
+
+        if ctx.gradient_accumulation_fusion:
+            if weight.main_grad.dtype == torch.float32:
+                fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp32(
+                    total_input, grad_output, weight.main_grad
+                )
+            elif weight.main_grad.dtype in (torch.float16, torch.bfloat16):
+                fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp16(
+                    total_input, grad_output, weight.main_grad
+                )
+            else:
+                raise RuntimeError("Unsupported gradient type for gradient accumulation fusion")
+            grad_bias = grad_output.sum(dim=0) if use_bias else None
+            if hasattr(weight, 'grad_added_to_main_grad'):
+                # When overlap_grad_reduce is True, need to ensure that backward hooks
+                # are all run on the main backprop thread to prevent deadlocks. Setup
+                # dummy grad_weight tensor to prevent backward hooks from being run
+                # in a background thread.
+                grad_weight = torch.empty(
+                    weight.main_grad.shape,
+                    dtype=input.dtype,
+                    device=torch.cuda.current_device(),
+                    requires_grad=False,
+                )
+                weight.grad_added_to_main_grad = True
+            else:
+                grad_weight = None
+        else:
+            grad_bias = grad_output_gathered.sum(dim=0) if use_bias else None
+            grad_output_gathered = None
+            WeightGradStore.put(
+                input,
+                None if pipe_experts and ctx.sequence_parallel else grad_output.clone(),
+                weight,
+                ctx.sequence_parallel,
+                in_row=True, 
+                pipe_experts=pipe_experts
+            )
+            if hasattr(weight, 'grad_added_to_main_grad'):
+                grad_weight = torch.empty(
+                    weight.main_grad.shape,
+                    dtype=input.dtype,
+                    device=torch.cuda.current_device(),
+                    requires_grad=False,
+                )
+                weight.grad_added_to_main_grad = True
+        from mindspeed.moe.pipe_experts import get_async_bw_all_gather_count
+        if pipe_experts and get_async_bw_all_gather_count() != 2:
+            grad_output.storage().resize_(0)
+        if ctx.async_grad_allreduce:
+            handle.wait()
+
+        return grad_input, grad_weight, grad_bias, None, None, None, None, None, None
+
+
+class LinearWithGradAccumulationAndAsyncCommunication_nano_column(torch.autograd.Function):
+    @staticmethod
+    @custom_fwd
+    def forward(
+        ctx,
+        input,
+        weight,
+        bias,
+        gradient_accumulation_fusion,
+        async_grad_allreduce,
+        sequence_parallel,
+        grad_output_buffer,
+        pipe_experts
+    ):
+        ctx.save_for_backward(input, weight)
+        ctx.use_bias = bias is not None
+        ctx.gradient_accumulation_fusion = gradient_accumulation_fusion
+        ctx.async_grad_allreduce = async_grad_allreduce
+        ctx.sequence_parallel = sequence_parallel
+        ctx.grad_output_buffer = grad_output_buffer
+        ctx.pipe_experts = pipe_experts
+        global_args = get_args()
+
+        if sequence_parallel:
+            if pipe_experts:
+                from mindspeed.moe.pipe_experts import get_fw_ag_output
+                total_input = get_fw_ag_output()[0]
+                output = torch.matmul(total_input, weight.t())
+            elif global_args.use_ascend_mc2:
+                from .ascend_turbo.ascend_turbo_cfg import ascend_turbo_cfg
+                group = get_tensor_model_parallel_group()
+                rank = get_tensor_model_parallel_rank()
+                ascend_turbo_cfg.set_world_size(get_tensor_model_parallel_world_size)
+                hcomm_info = None
+                if torch.__version__ > "2.0":
+                    global_rank = torch.distributed.get_global_rank(group, rank)
+                    hcomm_info = group._get_backend(torch.device('npu')).get_hccl_comm_name(global_rank)
+                else:
+                    hcomm_info = group.get_hccl_comm_name(rank)
+                x = input.reshape(input.shape[0] * input.shape[1], input.shape[2])
+                world_size = ascend_turbo_cfg.get_world_size()
+                output, _ = torch_npu.npu_all_gather_base_mm(
+                    x,
+                    weight.t(),
+                    hcomm_info,
+                    world_size,
+                    bias=bias,
+                    gather_index=0,
+                    gather_output=(not ascend_turbo_cfg.all_gather_recomputation),
+                )
+                output = output.view(
+                    output.shape[0] // input.shape[1], input.shape[1], output.shape[1]
+                )
+            else:
+                world_size = get_tensor_model_parallel_world_size()
+                dim_size = list(input.size())
+                dim_size[0] = dim_size[0] * world_size
+                all_gather_buffer = get_global_memory_buffer().get_tensor(dim_size, input.dtype, "mpu")
+                torch.distributed._all_gather_base(
+                    all_gather_buffer, input, group=get_tensor_model_parallel_group(),
+                )
+                total_input = all_gather_buffer
+                output = torch.matmul(total_input, weight.t())
+        else:
+            total_input = input
+            output = torch.matmul(total_input, weight.t())
+            if bias is not None:
+                output = output + bias
+        return output
+
+    @staticmethod
+    @custom_bwd
+    def backward(ctx, grad_output):
+        input, weight = ctx.saved_tensors
+        use_bias = ctx.use_bias
+        pipe_experts = ctx.pipe_experts
+        WeightGradStore.put(
+            input,
+            grad_output.clone(),
+            weight,
+            ctx.sequence_parallel,
+        )
+        global_args = get_args()
+
+        if hasattr(weight, 'grad_added_to_main_grad'):
+            # When overlap_grad_reduce is True, need to ensure that backward hooks
+            # are all run on the main backprop thread to prevent deadlocks. Setup
+            # dummy grad_weight tensor to prevent backward hooks from being run
+            # in a background thread.
+            grad_weight = torch.empty(
+                weight.main_grad.shape,
+                dtype=input.dtype,
+                device=torch.cuda.current_device(),
+                requires_grad=False,
+            )
+            weight.grad_added_to_main_grad = True
+        else:
+            grad_weight = None
+        handle = None
+        if ctx.sequence_parallel:
+            if global_args.use_ascend_mc2:
+                from .ascend_turbo.ascend_turbo_cfg import ascend_turbo_cfg
+                rank = get_tensor_model_parallel_rank()
+                ascend_turbo_cfg.set_world_size(get_tensor_model_parallel_world_size)
+                world_size = ascend_turbo_cfg.get_world_size()
+                group = get_tensor_model_parallel_group()
+                hcomm_info = None
+                if torch.__version__ > "2.0":
+                    global_rank = torch.distributed.get_global_rank(group, rank)
+                    hcomm_info = group._get_backend(torch.device("npu")).get_hccl_comm_name(global_rank)
+                else:
+                    hcomm_info = group.get_hccl_comm_name(rank)
+                
+                x = grad_output.reshape(grad_output.shape[0] * grad_output.shape[1], grad_output.shape[2])
+                grad_input = torch_npu.npu_mm_reduce_scatter_base(
+                    x, weight, hcomm_info, world_size, reduce_op="sum"
+                )
+                grad_input = grad_input.view(
+                    grad_input.shape[0] // grad_output.shape[1], grad_output.shape[1], grad_input.shape[1]
+                )
+            else:
+                grad_input = grad_output.matmul(weight)
+                dim_size = list(input.size())
+                sub_grad_input = torch.empty(
+                    dim_size, dtype=input.dtype, device=torch.cuda.current_device(), requires_grad=False
+                )
+                # reduce_scatter
+                handle = torch.distributed._reduce_scatter_base(
+                    sub_grad_input, grad_input, group=get_tensor_model_parallel_group(), async_op=True
+                )
+                # Here we rely on CUDA_DEVICE_MAX_CONNECTIONS=1 to ensure that the
+                # reduce scatter is scheduled before the weight gradient computation
+        else:
+            grad_input = grad_output.matmul(weight)
+            if ctx.async_grad_allreduce:
+                # Asynchronous all-reduce
+                handle = torch.distributed.all_reduce(
+                    grad_input, group=get_tensor_model_parallel_group(), async_op=True,
+                )
+                # Here we rely on CUDA_DEVICE_MAX_CONNECTIONS=1 to ensure that the
+                # all-reduce is scheduled before the weight gradient computation
+
+        grad_bias = grad_output.sum(dim=0) if use_bias else None
+        if handle is not None:
+            if ctx.sequence_parallel:
+                handle.wait()
+                return sub_grad_input, grad_weight, grad_bias, None, None, None, None, None, None
+
+            if ctx.async_grad_allreduce:
+                handle.wait()
+
+        return grad_input, grad_weight, grad_bias, None, None, None, None, None, None
+
+
+def linear_with_grad_accumulation_and_async_allreduce_moe(
     input: torch.Tensor,
     weight: torch.Tensor,
     bias: Optional[torch.Tensor],
@@ -381,6 +678,8 @@ def linear_with_grad_accumulation_and_async_allreduce(
     sequence_parallel: bool,
     pipe_experts=False,
     grad_output_buffer: Optional[List[torch.Tensor]] = None,
+    is_nano_row: bool = False,
+    is_nano_column: bool = False,
 ) -> torch.Tensor:
     """Linear layer execution with asynchronous communication and
     gradient accumulation fusion in backprop.
@@ -429,33 +728,15 @@ def linear_with_grad_accumulation_and_async_allreduce(
             gradients. If sequence_parallel is True, this must be
             False, as no all reduce is performed.
 
-    sequence_parallel (bool required): Indicates that sequence
-        parallelism is used and thus in the forward pass the input is
-        all gathered, and the backward pass the input gradients are
-        reduce scattered.
+        sequence_parallel (bool required): Indicates that sequence
+            parallelism is used and thus in the forward pass the input is
+            all gathered, and the backward pass the input gradients are
+            reduce scattered.
 
-    grad_output_buffer (List[torch.Tensor] optional): Buffer used to save
-        output gradients when embedding table wgrad compute is deferred.
-        Defaults to None.
+        grad_output_buffer (List[torch.Tensor] optional): Buffer used to save
+            output gradients when embedding table wgrad compute is deferred.
+            Defaults to None.
     """
-    if not linear_with_grad_accumulation_and_async_allreduce.warned:
-        if os.environ.get('CUDA_DEVICE_MAX_CONNECTIONS') != "1":
-            if sequence_parallel:
-                warnings.warn(
-                    "When using sequence parallelism it is recommended to set the "
-                    "environment variable CUDA_DEVICE_MAX_CONNECTIONS to 1 for "
-                    "maximum speedup"
-                )
-                linear_with_grad_accumulation_and_async_allreduce.warned = True
-
-            if async_grad_allreduce:
-                warnings.warn(
-                    "When using async grad allreduce it is recommended to set the "
-                    "environment variable CUDA_DEVICE_MAX_CONNECTIONS to 1 for "
-                    "maximum speedup"
-                )
-                linear_with_grad_accumulation_and_async_allreduce.warned = True
-
     args = [
         input,
         weight,
@@ -466,17 +747,46 @@ def linear_with_grad_accumulation_and_async_allreduce(
         grad_output_buffer,
         pipe_experts
     ]
+
+    if not linear_with_grad_accumulation_and_async_allreduce_moe.warned:
+        if os.environ.get('CUDA_DEVICE_MAX_CONNECTIONS') != "1":
+            if sequence_parallel:
+                warnings.warn(
+                    "When using sequence parallelism it is recommended to set the "
+                    "environment variable CUDA_DEVICE_MAX_CONNECTIONS to 1 for "
+                    "maximum speedup"
+                )
+                linear_with_grad_accumulation_and_async_allreduce_moe.warned = True
+
+            if async_grad_allreduce:
+                warnings.warn(
+                    "When using async grad allreduce it is recommended to set the "
+                    "environment variable CUDA_DEVICE_MAX_CONNECTIONS to 1 for "
+                    "maximum speedup"
+                )
+                linear_with_grad_accumulation_and_async_allreduce_moe.warned = True
+
+    if get_args().use_nanopipe and parallel_state.get_pipeline_model_parallel_world_size() > 1 \
+            and parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None:
+        if is_pipeline_first_stage(True):
+            return LinearWithGradAccumulationAndAsyncCommunicationPipeExperts.apply(*args)
+        if is_nano_row:
+            return LinearWithGradAccumulationAndAsyncCommunication_nano_row.apply(*args)
+        if is_nano_column:
+            return LinearWithGradAccumulationAndAsyncCommunication_nano_column.apply(*args)
+
     return LinearWithGradAccumulationAndAsyncCommunicationPipeExperts.apply(*args)
 
 
-linear_with_grad_accumulation_and_async_allreduce.warned = False
+linear_with_grad_accumulation_and_async_allreduce_moe.warned = False
 
 
 def parallel_linear_init_wrapper(init_func):
     @wraps(init_func)
-    def parallel_linear_init_func(self, *args, pipe_experts: bool = False, **kwargs):
+    def parallel_linear_init_func(self, *args, pipe_experts: bool = False, in_nano: bool = False, **kwargs):
         output = init_func(self, *args, **kwargs)
         self.pipe_experts = pipe_experts
+        self.in_nano = in_nano
         return output
     return parallel_linear_init_func
 
@@ -500,7 +810,7 @@ def row_parallel_moe(self, input_):
 
     # Set up backprop all-reduce.
     global_args = get_args()
-    if global_args.use_ascend_mc2 and not self.pipe_experts:
+    if global_args.use_ascend_mc2 and not self.pipe_experts and not self.in_nano:
         output = Mc2RowSeqParallelLinear.apply(
             input_, self.weight, None, get_tensor_model_parallel_group()
         )
@@ -523,24 +833,37 @@ def row_parallel_moe(self, input_):
         self._forward_impl = linear_with_frozen_weight
     else:
         self._forward_impl = linear_with_grad_accumulation_and_async_allreduce
-    output_parallel = self._forward_impl(
-        input=input_parallel,
-        weight=self.weight,
-        bias=None,
-        gradient_accumulation_fusion=self.gradient_accumulation_fusion,
-        async_grad_allreduce=False,
-        sequence_parallel=False,
-        pipe_experts=self.pipe_experts
-    )
-
-    # All-reduce across all the partitions or self.pipe_experts
-    if self.explicit_expert_comm or self.pipe_experts:
-        assert self.skip_bias_add
+    if self.in_nano and self.sequence_parallel and not is_pipeline_first_stage(True):
+        output_parallel = self._forward_impl(
+            input=input_parallel,
+            weight=self.weight,
+            bias=None,
+            gradient_accumulation_fusion=self.gradient_accumulation_fusion,
+            async_grad_allreduce=False,
+            sequence_parallel=True,
+            pipe_experts=self.pipe_experts,
+            is_nano_row=self.in_nano,
+        )
         output_ = output_parallel
-    elif self.sequence_parallel:
-        output_ = reduce_scatter_to_sequence_parallel_region(output_parallel)
     else:
-        output_ = reduce_from_tensor_model_parallel_region(output_parallel)
+        output_parallel = self._forward_impl(
+            input=input_parallel,
+            weight=self.weight,
+            bias=None,
+            gradient_accumulation_fusion=self.gradient_accumulation_fusion,
+            async_grad_allreduce=False,
+            sequence_parallel=False,
+            pipe_experts=self.pipe_experts,
+            is_nano_row=self.in_nano,
+        )
+        # All-reduce across all the partitions or self.pipe_experts
+        if self.explicit_expert_comm or self.pipe_experts:
+            assert self.skip_bias_add
+            output_ = output_parallel
+        elif self.sequence_parallel:
+            output_ = reduce_scatter_to_sequence_parallel_region(output_parallel)
+        else:
+            output_ = reduce_from_tensor_model_parallel_region(output_parallel)
     if not self.skip_bias_add:
         output = (output_ + self.bias) if self.bias is not None else output_
         output_bias = None
@@ -618,7 +941,8 @@ def column_parallel_moe(self, input_: torch.Tensor, weight: Optional[torch.Tenso
         grad_output_buffer=self.grad_output_buffer
         if self.config.defer_embedding_wgrad_compute
         else None,
-        pipe_experts=self.pipe_experts
+        pipe_experts=self.pipe_experts,
+        is_nano_column=self.in_nano,
     )
     if self.gather_output:
         # All-gather across the partitions.

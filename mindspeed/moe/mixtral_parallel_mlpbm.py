@@ -19,6 +19,7 @@ import torch.nn.functional as F
 
 from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
 from megatron.training import get_args
+from megatron.core import parallel_state
 from mindspeed.core.tensor_parallel.random import CheckpointWithoutOutput
 from mindspeed.model.transformer import should_recompute_activation
 
@@ -68,6 +69,11 @@ class MixtralParallelMLPBM(torch.nn.Module):
         )
 
         self.act_fn = F.silu
+        if get_args().use_nanopipe and parallel_state.get_pipeline_model_parallel_world_size() > 1 \
+                    and parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None:
+            setattr(self.w1, "in_nano", True)
+            setattr(self.w2, "in_nano", True)
+            setattr(self.w3, "in_nano", True)
 
     def forward(self, hidden_states):
         is_recompute_activation = should_recompute_activation(self)

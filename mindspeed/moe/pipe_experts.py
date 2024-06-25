@@ -3,6 +3,10 @@
 
 import torch
 
+from megatron.training import get_args
+from megatron.core.parallel_state import is_pipeline_first_stage
+from mindspeed.core.weight_grad_store import WeightGradStore
+
 from .async_comm_utils import (async_all_to_all, async_fw_ar_rs, get_fw_ag_output, async_fw_all_gather,
                                async_bw_all_gather)
 
@@ -83,6 +87,8 @@ class PipeExpertUtil:
                     input_data_list[num_local_experts_index * cls.multi_data + multi_data_index])
                 cls.fw_ag_event.append(handle)
             else:
+                if get_args().use_nanopipe and not is_pipeline_first_stage(True):
+                    WeightGradStore.save_grad_output(input_data_list[num_local_experts_index * cls.multi_data + multi_data_index].clone().detach())
                 input_data_list[
                     num_local_experts_index * cls.multi_data + multi_data_index], handle = async_bw_all_gather(
                     input_data_list[num_local_experts_index * cls.multi_data + multi_data_index])
@@ -100,6 +106,8 @@ class PipeExpertUtil:
                         input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1])
                 cls.fw_ag_event.append(handle)
             else:
+                if get_args().use_nanopipe and not is_pipeline_first_stage(True):
+                    WeightGradStore.save_grad_output(input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1].clone().detach())
                 if num_local_experts_index * cls.multi_data + multi_data_index == 0:
                     input_data_list[
                         num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_bw_all_gather(
@@ -124,6 +132,8 @@ class PipeExpertUtil:
                     cls.first_a2a_event[num_local_experts_index * cls.multi_data + multi_data_index])
                 cls.fw_ag_event.append(handle)
             else:
+                if get_args().use_nanopipe and not is_pipeline_first_stage(True):
+                    WeightGradStore.save_grad_output(input_data_list[num_local_experts_index * cls.multi_data + multi_data_index].clone().detach())
                 input_data_list[
                     num_local_experts_index * cls.multi_data + multi_data_index], handle = async_bw_all_gather(
                     input_data_list[num_local_experts_index * cls.multi_data + multi_data_index],
@@ -149,6 +159,8 @@ class PipeExpertUtil:
                         cls.first_a2a_event[num_local_experts_index * cls.multi_data + multi_data_index + 1])
                 cls.fw_ag_event.append(handle)
             else:
+                if get_args().use_nanopipe and not is_pipeline_first_stage(True):
+                    WeightGradStore.save_grad_output(input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1].clone().detach())
                 input_data_list[
                     num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_all_to_all(
                     input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1],

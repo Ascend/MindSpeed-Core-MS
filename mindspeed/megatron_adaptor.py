@@ -184,7 +184,6 @@ def megatron_core_adaptation(aspm):
                         parallel_linear_init_wrapper)
     aspm.register_patch('megatron.core.tensor_parallel.layers.ColumnParallelLinear.__init__',
                         parallel_linear_init_wrapper)
-
     aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_with_transformer_engine_spec',
                         get_gpt_layer_local_spec)
     aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_local_spec',
@@ -354,16 +353,16 @@ def mcore_moe_adaptation(pm, args):
 
 
 def deepspeed_moe_adaptation(pm, args):
-    if args.use_pipe_experts:
+    if args.use_pipe_experts or args.use_nanopipe:
         from .core.tensor_parallel.layers import (row_parallel_moe, column_parallel_moe,
-                                                  linear_with_grad_accumulation_and_async_allreduce)
-        from .core.distributed.param_and_grad_buffer import pipe_register_grad_ready
+                                                  linear_with_grad_accumulation_and_async_allreduce_moe)
         pm.register_patch('megatron.core.tensor_parallel.layers.RowParallelLinear.forward', row_parallel_moe)
         pm.register_patch('megatron.core.tensor_parallel.layers.ColumnParallelLinear.forward', column_parallel_moe)
         pm.register_patch('megatron.core.tensor_parallel.layers.linear_with_grad_accumulation_and_async_allreduce',
-                          linear_with_grad_accumulation_and_async_allreduce)
+                          linear_with_grad_accumulation_and_async_allreduce_moe)
+    if args.use_pipe_experts:
+        from .core.distributed.param_and_grad_buffer import pipe_register_grad_ready
         pm.register_patch('megatron.core.distributed.ParamAndGradBuffer.register_grad_ready', pipe_register_grad_ready)
-
 
 def coc_adaptation(aspm, args):
     from .initialize import coc_registration_wrapper, mc2_wrapper
