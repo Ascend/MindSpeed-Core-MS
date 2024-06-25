@@ -8,11 +8,20 @@ npu_gmm(x, weight, bias=None, group_list=None, group_type=0)
 - weight：必选输入，为tensor，数据类型float16, bfloat16, float32
 - bias：可选输入，为tensor，数据类型float16, float32, 默认值为none。训练场景下，仅支持bias为none
 - group_list：可选输入，数据类型list[int64], tensor，默认值为none。代表分组轴（见group_type参数）上不同组的索引。
-- group_type：可选输入，数据类型int64，代表需要分组的轴，如矩阵乘为C[m,n]=A[m,k]xB[k,n]，则groupType取值-1：不分组，0：m轴分组，1：n轴分组，2：k轴分组，默认值为0（限制：不支持group_type=1的场景）。
+- group_type：可选输入，数据类型int64，代表需要分组的轴，如矩阵乘为C[m,n]=A[m,k]xB[k,n]，则groupType取值-1：不分组，0：m轴分组，1：n轴分组，2：k轴分组，默认值为0。
 
 输出：
 - y：必选输出，数据类型float16, bfloat16, float32
 
+约束与限制：
+- group_list必须为非负递增数列，且长度不能为1
+- 不同group_type支持场景：
+    |  group_type   |   场景限制  |
+    | :---: | :---: |
+    |  0  |  1. weight中tensor需为3维，x，y中tensor需为2维<br>2. 必须传group_list，且最后一个值与x中tensor的第一维相等  |
+    |  2  |  1. x，weight中tensor需为2维，y中tensor需为2维<br>2. 必须传group_list，且最后一个值与x中tensor的第二维相等  |
+- group_type不支持group_type=1的场景
+- 每组的k值小于65536
 
 ## 反向接口
 输入：
