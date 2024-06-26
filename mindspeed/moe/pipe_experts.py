@@ -7,7 +7,7 @@ from .async_comm_utils import (async_all_to_all, async_fw_ar_rs, get_fw_ag_outpu
                                async_bw_all_gather)
 
 ASYNC_BW_ALL_GATHER_COUNT = 0
-FLAG_GRAD_REDUCE = False
+FLAG_GRAD_REDUCE = True
 
 
 def get_async_bw_all_gather_count():
