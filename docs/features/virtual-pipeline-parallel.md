@@ -33,8 +33,11 @@ Pipedream流水线并行切分粒度过大，运行过程中仍然有许多空�
 
 设置`--num-layers-per-virtual-pipeline-stage N`。表示每个阶段的层数。要求模型的总层数 L % N == 0。要求 `--pipeline-model-parallel-size` > 2。
 
-
 ## 使用效果
 
 空泡比率进一步减小
 
+## 注意事项
+
+1. Megatron虚拟流水并行vpp影响权重切分方式，保存、加载权重时需保证vpp配置一致，才能正常加载；
+2. 暂不支持同时开启虚拟流水线并行（vpp）与TP重计算通信优化。
