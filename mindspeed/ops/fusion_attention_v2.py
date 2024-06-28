@@ -18,13 +18,13 @@ from mindspeed.op_builder import FusionAttentionV2OpBuilder
 
 
 class FusionAttentionV2Function(torch.autograd.Function):
-    mindspeed_ops = FusionAttentionV2OpBuilder().load()
 
     @staticmethod
     def forward(ctx, query, key, value, head_num, input_layout, pse, padding_mask, atten_mask, scale, keep_prob,
                 pre_tokens, next_tokens, inner_precise, prefix, actual_seq_qlen, actual_seq_kvlen, sparse_mode,
                 gen_mask_parallel, sync, pse_type, q_start_idx, kv_start_idx):
-        outputs = FusionAttentionV2Function.mindspeed_ops.npu_fusion_attention_v2(query, key, value, head_num,
+        mindspeed_ops = FusionAttentionV2OpBuilder().load()
+        outputs = mindspeed_ops.npu_fusion_attention_v2(query, key, value, head_num,
                                                                                   input_layout, pse,
                                                                                   padding_mask, atten_mask,
                                                                                   scale, keep_prob, pre_tokens,
@@ -60,9 +60,10 @@ class FusionAttentionV2Function(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_outputs, dq=None, dk=None, dv=None, seed=0, offset=0, numels=0):
+        mindspeed_ops = FusionAttentionV2OpBuilder().load()
         query, key, value, pse, padding_mask, atten_mask, attention_in, softmax_max, \
         softmax_sum, softmax_in = ctx.saved_tensors
-        results = FusionAttentionV2Function.mindspeed_ops.npu_fusion_attention_grad_v2(
+        results = mindspeed_ops.npu_fusion_attention_grad_v2(
             query, key, value, grad_outputs, ctx.head_num, ctx.input_layout, pse, padding_mask, atten_mask,
             softmax_max, softmax_sum, softmax_in, attention_in, ctx.scale, ctx.keep_prob, ctx.pre_tokens,
             ctx.next_tokens, ctx.inner_precise, ctx.seed, ctx.offset, ctx.numels, ctx.prefix, ctx.actual_seq_qlen,
