@@ -24,13 +24,14 @@ def token_permutation(self, hidden_states: torch.Tensor, max_prob: torch.Tensor,
                                 (global_indices <= self.local_expert_indices[-1])
             local_indices = global_indices.masked_select(global_local_mask)
             self.indices = torch.argsort(local_indices, dim=0)
-            tokens_per_expert = torch.histc(
-                local_indices,
-                bins=self.num_local_experts,
-                min=self.local_expert_indices[0],
-                max=self.local_expert_indices[-1],
+            all_tokens_per_expert = torch.histc(
+                global_indices,
+                bins=self.num_local_experts * parallel_state.get_expert_model_parallel_world_size(),
+                min=0,
+                max=self.num_local_experts * parallel_state.get_expert_model_parallel_world_size() - 1,
             )
-        tokens_per_expert = tokens_per_expert.cpu().to(torch.long)
+        self.all_tokens_per_expert = all_tokens_per_expert.cpu().to(torch.long)
+        tokens_per_expert = self.all_tokens_per_expert[self.local_expert_indices[0]: self.local_expert_indices[-1] + 1]
         self.global_local_map = global_local_mask.nonzero()[:, 0]
 
         if self.router_topk > 1:  # k > 1
@@ -64,6 +65,7 @@ def token_permutation(self, hidden_states: torch.Tensor, max_prob: torch.Tensor,
                 max=self.local_expert_indices[-1],
             )
             tokens_per_expert = tokens_per_expert.cpu().to(torch.long)
+        self.all_tokens_per_expert = tokens_per_expert
 
     permuted_local_hidden_states = local_hidden_states[self.indices, :]
     return (

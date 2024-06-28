@@ -86,6 +86,10 @@ def _add_moe_args(parser):
     # megatron mcore moe arguments
     group.add_argument("--moe-permutation-async-comm", action='store_true',
                        help="overlap moe permutation 3 all gather communications")
+    group.add_argument("--moe-adaptive-recompute-activation", action='store_true',
+                       help="MoE adaptive recompute, avoiding memory imbalance in the early stage.")
+    group.add_argument('--moe-adaptive-recompute-activation-scale', type=float, default=2.0,
+                       help='MoE adaptive recompute threshold factor.')
     return parser
 
 

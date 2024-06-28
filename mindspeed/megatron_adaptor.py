@@ -338,9 +338,11 @@ def mcore_moe_adaptation(pm, args):
     if args.moe_permutation_async_comm:
         from .core.transformer.moe.router import aux_loss_load_balancing
         from .core.transformer.moe.token_dispatcher import token_permutation, token_unpermutation
+        from .core.transformer.moe.moe_layer import moe_layer_init_wrapper
         pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_permutation', token_permutation)
         pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_unpermutation', token_unpermutation)
         pm.register_patch('megatron.core.transformer.moe.router.TopKRouter.aux_loss_load_balancing', aux_loss_load_balancing)
+        pm.register_patch('megatron.core.transformer.moe.moe_layer.MoELayer.__init__', moe_layer_init_wrapper)
 
     if args.use_ascend_mc2:
         # MoE MLP not use mc2 linear
