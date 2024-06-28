@@ -1,5 +1,6 @@
 # Copyright (c) 2024, Huawei Technologies Co., Ltd.  All rights reserved.
 
+import os
 from functools import wraps
 import argparse
 
@@ -303,6 +304,9 @@ def validate_args_wrapper(validate_args):
             assert num_layers_per_pipeline_stage // args.num_layers_per_virtual_pipeline_stage > 1, \
             'considering args of num_layers and pipeline_model_parallel_size, vpp setting should be meaningful'
 
+        if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) and int(os.getenv('MEMORY_FRAGMENTATION', '0')):
+            raise AssertionError('ADAPTIVE_RECOMPUTING and MEMORY_FRAGMENTATION all open is not allowed')
+
         if args.use_fused_rmsnorm:
             if args.normalization != "RMSNorm":
                 raise AssertionError(
@@ -326,6 +330,13 @@ def validate_args_wrapper(validate_args):
         if args.optimize_recomp_communication_level > 0:
             if not hasattr(args, "optimize_recomp_communication_status"):
                 args.optimize_recomp_communication_status = 0
+            if args.num_layers_per_virtual_pipeline_stage is not None:
+                raise AssertionError('--optimize-recomp-communication-level and --num-layers-per-virtual-pipeline-stage'
+                                     ' all open is not allowed')
+            recompute_mode = (args.recompute_granularity == 'full' and args.recompute_method == "uniform"
+                              and args.recompute_num_layers == 1)
+            if not recompute_mode:
+                raise AssertionError('--optimize-recomp-communication-level is open in limited recompute condition')
         if args.use_pipe_experts:
             if args.pipe_experts_multi_data <= 0:
                 raise AssertionError('--pipe-experts-multi-data must greater than 0')

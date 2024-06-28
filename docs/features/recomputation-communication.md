@@ -38,3 +38,7 @@
 
 Llama2-7B 模型在重计算全部开启的场景下，level1 吞吐提升 2.0%，level2 吞吐提升 4.1%。
 
+## 注意事项
+
+1. 暂不支持同时开启TP重计算通信优化与虚拟流水线并行（vpp）；
+2. TP重计算通信优化开启时，重计算需要配置为：`--recompute-granularity full`，`--recompute-method uniform`，`--recompute-num-layers 1`。

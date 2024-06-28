@@ -34,3 +34,7 @@ SwapManager 能需要内存管理适配 PTA 的 NPUPluggableAllocator 接口拦�
 ## 使用效果
 
 相比全重计算，Llama2-7B场景下，性能提升约 16.29%，Llama2-13B 性能提升约12.05%。
+
+## 注意事项
+
+由于自适应选择重计算与内存碎片优化两个特性都修改了PyTorch内存管理模块，这两个特性都打开会存在冲突，mindspeed进行了assert判断。
