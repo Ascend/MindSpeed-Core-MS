@@ -4,7 +4,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 source "tests_extend/system_tests/env_npu.sh"
 
 # Change for multinode config
-NPUS_PER_NODE=8
+NPUS_PER_NODE=16
 MASTER_ADDR=<master_ip_address>
 MASTER_PORT=6000
 NNODES=8
@@ -17,8 +17,9 @@ MERGE_FILE=/home/dataset/enwiki/gpt2-merges.txt
 DATA_PATH=/home/dataset/enwiki/my-t5_text_sentence
 
 TP=8
-PP=2
-CP=4
+PP=4
+EP=4
+CP=2
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
@@ -29,32 +30,29 @@ DISTRIBUTED_ARGS="
 "
 
 GPT_ARGS="
-    --context-parallel-size ${CP} \
+    --use-ascend-mc2 \
+    --reuse-fp32-param \
+    --enable-token-rearrange-opt \
     --use-fused-rotary-pos-emb \
     --use-cp-send-recv-overlap \
-    --context-parallel-algo megatron_cp_algo \
-    --recompute-granularity full \
-    --recompute-method block \
-    --recompute-num-layers 24 \
-    --use-ascend-mc2 \
-    --num-layers-per-virtual-pipeline-stage 2 \
-    --use-distributed-optimizer \
-    --overlap-grad-reduce \
-    --overlap-param-gather \
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
+    --use-distributed-optimizer \
+    --num-layers-per-virtual-pipeline-stage 2\
+    --overlap-grad-reduce \
+    --overlap-param-gather \
     --sequence-parallel \
-    --num-layers 48 \
+    --num-layers 24 \
     --hidden-size 12288 \
     --num-attention-heads 96 \
-    --seq-length 32768 \
-    --max-position-embeddings 32768 \
+    --seq-length 8192 \
+    --max-position-embeddings 8192 \
     --micro-batch-size 1 \
-    --global-batch-size 8 \
-    --train-iters 1000 \
+    --global-batch-size 16 \
+    --num-experts 4 \
+    --train-iters 10 \
     --lr-decay-iters 320000 \
     --lr 5.0e-7 \
-    --min-lr 5.0e-8 \
     --lr-decay-style cosine \
     --clip-grad 1.0 \
     --weight-decay 0.1 \
@@ -66,6 +64,10 @@ GPT_ARGS="
     --position-embedding-type rope \
     --no-bias-gelu-fusion \
     --no-bias-dropout-fusion \
+    --expert-model-parallel-size ${EP} \
+    --moe-model-type deepspeed_moe \
+    --moe-router-topk 2 \
+    --moe-train-capacity-factor 1.1 \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     --bf16
@@ -99,7 +101,7 @@ torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \
     --distributed-timeout-minutes 10 \
     --seed 1234 \
     --save $CHECKPOINT_PATH \
-    --no-save-optim \
+    --no-save-optiom \
     --no-save-rng
 
 set +x

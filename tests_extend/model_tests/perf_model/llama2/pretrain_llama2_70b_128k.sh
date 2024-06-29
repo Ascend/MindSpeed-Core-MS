@@ -4,7 +4,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 source "tests_extend/system_tests/env_npu.sh"
 
 # Change for multinode config
-NPUS_PER_NODE=8
+NPUS_PER_NODE=16
 MASTER_ADDR=<master_ip_address>
 MASTER_PORT=6000
 NNODES=8
@@ -16,8 +16,8 @@ DATA_PATH="/home/dataset/llama2/alpaca_text_document"
 TOKENIZER_MODEL="/home/dataset/model/llama-2-7b-hf/tokenizer.model"
 
 TP=8
-PP=4
-CP=1
+PP=2
+CP=8
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
@@ -30,13 +30,20 @@ DISTRIBUTED_ARGS="
 GPT_ARGS="
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
+    --context-parallel-size ${CP} \
+    --context-parallel-algo megatron_cp_algo \
+    --use-ascend-mc2 \
+    --recompute-activation-function \
+    --prefetch \
+    --recompute-num-layers 1 \
+    --reuse-fp32-param \
     --use-fused-rotary-pos-emb \
     --use-fused-swiglu \
     --use-fused-rmsnorm \
+    --use-cp-send-recv-overlap \
     --log-throughput \
     --overlap-grad-reduce \
     --overlap-param-gather \
-    --use-ascend-mc2 \
     --num-layers-per-virtual-pipeline-stage 2 \
     --sequence-parallel \
     --use-distributed-optimizer \
@@ -46,10 +53,10 @@ GPT_ARGS="
     --num-attention-heads 64 \
     --tokenizer-type Llama2Tokenizer \
     --tokenizer-model ${TOKENIZER_MODEL} \
-    --seq-length 4096 \
-    --max-position-embeddings 4096 \
+    --seq-length 131072 \
+    --max-position-embeddings 131072 \
     --micro-batch-size 1 \
-    --global-batch-size 32 \
+    --global-batch-size 4 \
     --make-vocab-size-divisible-by 1 \
     --lr 1.0e-6 \
     --train-iters 5000 \
