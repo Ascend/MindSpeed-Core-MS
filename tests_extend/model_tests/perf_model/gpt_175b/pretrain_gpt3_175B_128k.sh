@@ -4,7 +4,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 source "tests_extend/system_tests/env_npu.sh"
 
 # Change for multinode config
-NPUS_PER_NODE=8
+NPUS_PER_NODE=16
 MASTER_ADDR=<master_ip_address>
 MASTER_PORT=6000
 NNODES=8
@@ -17,7 +17,7 @@ MERGE_FILE=/home/dataset/enwiki/gpt2-merges.txt
 DATA_PATH=/home/dataset/enwiki/my-t5_text_sentence
 
 TP=8
-PP=2
+PP=4
 CP=4
 
 DISTRIBUTED_ARGS="
@@ -29,14 +29,14 @@ DISTRIBUTED_ARGS="
 "
 
 GPT_ARGS="
+    --reuse-fp32-param \
     --context-parallel-size ${CP} \
     --use-fused-rotary-pos-emb \
     --use-cp-send-recv-overlap \
     --context-parallel-algo megatron_cp_algo \
-    --recompute-granularity full \
-    --recompute-method block \
-    --recompute-num-layers 24 \
-    --use-ascend-mc2 \
+    --recompute-activation-function \
+    --prefetch \
+    --recompute-num-layers 4 \
     --num-layers-per-virtual-pipeline-stage 2 \
     --use-distributed-optimizer \
     --overlap-grad-reduce \
@@ -47,8 +47,8 @@ GPT_ARGS="
     --num-layers 48 \
     --hidden-size 12288 \
     --num-attention-heads 96 \
-    --seq-length 32768 \
-    --max-position-embeddings 32768 \
+    --seq-length 131072 \
+    --max-position-embeddings 131072 \
     --micro-batch-size 1 \
     --global-batch-size 8 \
     --train-iters 1000 \

@@ -4,7 +4,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 source "tests_extend/system_tests/env_npu.sh"
 
 # Change for multinode config
-NPUS_PER_NODE=8
+NPUS_PER_NODE=16
 MASTER_ADDR=<master_ip_address>
 MASTER_PORT=6000
 NNODES=8

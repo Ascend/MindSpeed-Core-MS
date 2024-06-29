@@ -5,10 +5,10 @@ source "tests_extend/system_tests/env_npu.sh"
 
 # Change for multinode config
 NPUS_PER_NODE=8
-MASTER_ADDR=localhost
+MASTER_ADDR=<master_ip_address>
 MASTER_PORT=6000
-NNODES=1
-NODE_RANK=0
+NNODES=8
+NODE_RANK=<local_rank>
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 CHECKPOINT_PATH=./ckpt_gpt
@@ -35,6 +35,7 @@ GPT_ARGS="
     --use-distributed-optimizer \
     --num-layers-per-virtual-pipeline-stage 2\
     --use-ascend-mc2 \
+    --use-fused-rotary-pos-emb \
     --overlap-grad-reduce \
     --overlap-param-gather \
     --optimizer-recomp-communication-level 0 \

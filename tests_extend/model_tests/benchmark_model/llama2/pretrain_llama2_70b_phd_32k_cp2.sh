@@ -7,7 +7,7 @@ source "tests_extend/system_tests/env_npu.sh"
 NPUS_PER_NODE=8
 MASTER_ADDR=<master_ip_address>
 MASTER_PORT=6000
-NNODES=1
+NNODES=8
 NODE_RANK=<local_rank>
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
