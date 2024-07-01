@@ -311,7 +311,10 @@ def validate_args_wrapper(validate_args):
             'considering args of num_layers and pipeline_model_parallel_size, vpp setting should be meaningful'
 
         if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) and int(os.getenv('MEMORY_FRAGMENTATION', '0')):
-            raise AssertionError('ADAPTIVE_RECOMPUTING and MEMORY_FRAGMENTATION all open is not allowed')
+            raise AssertionError('ADAPTIVE_RECOMPUTING and MEMORY_FRAGMENTATION all open is not supported')
+
+        if args.use_fused_rotary_pos_emb and int(os.getenv('MEMORY_FRAGMENTATION', '0')):
+            raise AssertionError('use_fused_rotary_pos_emb and MEMORY_FRAGMENTATION all open is not supported yet')
 
         if args.use_fused_rmsnorm:
             if args.normalization != "RMSNorm":

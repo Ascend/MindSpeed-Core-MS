@@ -63,3 +63,5 @@ activate; 1.59 GiB free;
 添加：torch_npu.npu.set_per_process_memory_fraction(x)，其中x为想要限制torch占用内存的最高比例，例如x设置为0.94，表示torch最多占用"单卡内存*0.94"的内存。
 
 由于内存碎片优化与自适应选择重计算两个特性都修改了PyTorch内存管理模块，这两个特性都打开会存在冲突，mindspeed进行了assert判断。
+
+暂不支持同时开启内存碎片优化与rope融合算子`-use-fused-rotary-pos-emb`
