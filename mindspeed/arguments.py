@@ -37,6 +37,7 @@ def process_args(parser):
     parser = _add_algorithm_args(parser)
     parser = _add_automated_pipeline_args(parser)
     parser = _add_alibi_args(parser)
+    parser = _add_ndmm_args(parser)
     parser = _add_coc_args(parser)
 
     return parser
@@ -326,6 +327,8 @@ def validate_args_wrapper(validate_args):
                     '--use-fused-rmsnorm must enable with '
                     '--normalization=RMSNorm, but got normalization'
                     '={}.'.format(args.normalization))
+            if args.use_nd_matmul:
+                raise AssertionError("ND_MatMul is not compatible with fused_rmsnorm.")
         if args.use_fused_swiglu:
             if not args.swiglu:
                 raise AssertionError(
@@ -427,6 +430,15 @@ def validate_args_wrapper(validate_args):
                 args.optimize_recomp_communication_level = 0
         if args.use_ascend_mc2 and args.use_ascend_coc:
             raise AssertionError('--mc2 and coc can not be used together')
+        if args.use_nd_matmul:
+            if args.normalization == 'LayerNorm':
+                raise AssertionError('ND_MatMul is temporarily incompatible with LayerNorm')
+            if args.load is not None or args.pretrained_checkpoint is not None:
+                raise AssertionError('ND_MatMul does not support loading weights for training temporarily')
+            if args.tensor_model_parallel_size % args.nd1_dim1_size != 0:
+                raise AssertionError('tensor_model_parallel_size must be divisible by nd1_dim1_size')
+            if args.tensor_model_parallel_size % args.nd2_dim1_size != 0:
+                raise AssertionError('tensor_model_parallel_size must be divisible by nd2_dim1_size')
 
         args.reduce_recompute_for_last_chunk = False
         if args.recompute_in_advance:
@@ -492,4 +504,15 @@ def _add_alibi_args(parser):
                        default=False,
                        help='make alibi diagonal opposite')
 
+    return parser
+
+
+def _add_ndmm_args(parser):
+    group = parser.add_argument_group(title='ndmm')
+    group.add_argument('--use-nd-matmul', action='store_true', default=False,
+                       help='use use-nd-matmul to replace megatron-style tensor parallel')
+    group.add_argument('--nd1-dim1-size', type=int, default=1,
+                       help='Dim1 of the first nd matmul when use-3d-matmul is True')
+    group.add_argument('--nd2-dim1-size', type=int, default=1,
+                       help='Dim1 of the second nd matmul when use-3d-matmul is True')
     return parser

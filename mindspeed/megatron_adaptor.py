@@ -230,7 +230,7 @@ def megatron_legacy_adaptation(aspm):
     from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN, fused_layer_norm_affine
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
-    from .core.fusions.rms_norm import rms_norm_init_wrapper, rms_norm_forward_wrapper
+    from .core.fusions.rms_norm import rms_norm_init_wrapper, rms_norm_forward_wrapper, rms_norm_norm_wrapper
     from .model.transformer import parallel_mlp_init_wrapper, flash_self_attention_forward, flash_self_attention_init_wrapper, parallel_mlp_forward_wrapper, parallel_transformer_init_wrapper, \
         parallel_transformer_forward_wrapper
     from .model.transformer import core_attention_init_wrapper, core_attention_forward, parallel_attention_init_wrapper, \
@@ -239,6 +239,9 @@ def megatron_legacy_adaptation(aspm):
         parallel_transformer_checkpointed_forward_wrapper
     from .model.transformer import switch_mlp_init_wrapper, switch_mlp_forward_wrapper, \
                                     parallel_transformer_layer_init_wrapper
+    from .model.language_model import parallel_lm_logits, embedding_forward_wrapper
+    aspm.register_patch('megatron.legacy.model.language_model.parallel_lm_logits', parallel_lm_logits)
+    aspm.register_patch('megatron.legacy.model.language_model.Embedding.forward', embedding_forward_wrapper)
     from .model.gpt_model import post_language_model_processing_wrapper
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.__init__', parallel_transformer_init_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.forward', parallel_transformer_forward_wrapper)
@@ -256,6 +259,7 @@ def megatron_legacy_adaptation(aspm):
                         forward_fused_softmax)
     aspm.register_patch('megatron.legacy.model.rms_norm.RMSNorm.__init__', rms_norm_init_wrapper)
     aspm.register_patch('megatron.legacy.model.rms_norm.RMSNorm.forward', rms_norm_forward_wrapper)
+    aspm.register_patch('megatron.legacy.model.rms_norm.RMSNorm._norm', rms_norm_norm_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.__init__', parallel_mlp_init_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.forward', parallel_mlp_forward_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.FlashSelfAttention.forward', flash_self_attention_forward)

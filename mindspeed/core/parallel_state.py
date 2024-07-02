@@ -30,6 +30,15 @@ _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM = None
 _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_ULYSSES = None
 _CONTEXT_PARALLEL_RANKS_FOR_HYBRID_RING = None
 
+_TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM1 = None
+_TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM2 = None
+_TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM1 = None
+_TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM2 = None
+_TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND1_DIM1 = None
+_TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND1_DIM2 = None
+_TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND2_DIM1 = None
+_TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND2_DIM2 = None
+
 
 def initialize_model_parallel_wrapper(initialize_model_parallel):
     @wraps(initialize_model_parallel)
@@ -182,6 +191,15 @@ def initialize_model_parallel_wrapper(initialize_model_parallel):
             )
             if rank in ranks:
                 _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM = group
+
+        from megatron.training import get_args
+        args = get_args()
+        initialize_ndmm_parallel_group(
+            nccl_comm_cfgs,
+            tensor_model_parallel_size=tensor_model_parallel_size,
+            nd1_dim1_size=args.nd1_dim1_size,
+            nd2_dim1_size=args.nd2_dim1_size,
+        )
 
     return wrapper
 
@@ -782,3 +800,162 @@ def initialize_model_parallel(
     # put this. If we end up with a more generic initialization of megatron-core
     # we could stick it there
     ps._set_global_memory_buffer()
+
+
+def get_tensor_model_parallel_group_for_nd1_dim1(check_initialized=True):
+    if check_initialized and _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM1 is None:
+        raise AssertionError('tensor model parallel group for nd1 dim1 is not initialized')
+    return _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM1
+
+
+def get_tensor_model_parallel_group_for_nd1_dim2(check_initialized=True):
+    if check_initialized and _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM2 is None:
+        raise AssertionError('tensor model parallel group for nd1 dim2 is not initialized')
+    return _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM2
+
+
+def get_tensor_model_parallel_group_for_nd2_dim1(check_initialized=True):
+    if check_initialized and _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM1 is None:
+        raise AssertionError('tensor model parallel group for nd2 dim1 is not initialized')
+    return _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM1
+
+
+def get_tensor_model_parallel_group_for_nd2_dim2(check_initialized=True):
+    if check_initialized and _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM2 is None:
+        raise AssertionError('tensor model parallel group for nd2 dim2 is not initialized')
+    return _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM2
+
+
+def get_tensor_model_parallel_world_size_for_nd1_dim1():
+    global _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND1_DIM1
+    if _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND1_DIM1 is None:
+        _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND1_DIM1 = torch.distributed.get_world_size(
+            group=get_tensor_model_parallel_group_for_nd1_dim1()
+        )
+    return _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND1_DIM1
+
+
+def get_tensor_model_parallel_world_size_for_nd1_dim2():
+    global _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND1_DIM2
+    if _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND1_DIM2 is None:
+        _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND1_DIM2 = torch.distributed.get_world_size(
+            group=get_tensor_model_parallel_group_for_nd1_dim2()
+        )
+    return _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND1_DIM2
+
+
+def get_tensor_model_parallel_world_size_for_nd2_dim1():
+    global _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND2_DIM1
+    if _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND2_DIM1 is None:
+        _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND2_DIM1 = torch.distributed.get_world_size(
+            group=get_tensor_model_parallel_group_for_nd2_dim1()
+        )
+    return _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND2_DIM1
+
+
+def get_tensor_model_parallel_world_size_for_nd2_dim2():
+    global _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND2_DIM2
+    if _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND2_DIM2 is None:
+        _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND2_DIM2 = torch.distributed.get_world_size(
+            group=get_tensor_model_parallel_group_for_nd2_dim2()
+        )
+    return _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND2_DIM2
+
+
+def initialize_ndmm_parallel_group(
+    nccl_comm_cfgs: dict,
+    tensor_model_parallel_size: int = 1,
+    nd1_dim1_size: int = 1,
+    nd2_dim1_size: int = 1,
+) -> None:
+    import megatron.core.parallel_state as ps
+    from megatron.training import get_args
+    from megatron.training.global_vars import _ensure_var_is_not_initialized
+
+    args = get_args()
+    if not args.use_nd_matmul:
+        return
+
+    global _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM1
+    _ensure_var_is_not_initialized(
+        _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM1, 'nd1_dim1'
+    )
+
+    global _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM2
+    _ensure_var_is_not_initialized(
+        _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM2, 'nd1_dim2'
+    )
+
+    global _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM1
+    _ensure_var_is_not_initialized(
+        _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM1, 'nd2_dim1'
+    )
+
+    global _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM2
+    _ensure_var_is_not_initialized(
+        _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM2, 'nd2_dim2'
+    )
+
+    if tensor_model_parallel_size % nd1_dim1_size != 0:
+        raise RuntimeError(
+            f"tensor_model_parallel_size can't divisible by nd1_dim1_size"
+        )
+
+    if tensor_model_parallel_size % nd2_dim1_size != 0:
+        raise RuntimeError(
+            f"tensor_model_parallel_size can't divisible by nd2_dim1_size"
+        )
+
+    rank = torch.distributed.get_rank()
+    world_size: int = torch.distributed.get_world_size()
+    num_tensor_model_parallel_group: int = world_size // tensor_model_parallel_size
+
+    for i in range(num_tensor_model_parallel_group):
+        for j in range(tensor_model_parallel_size // nd1_dim1_size):
+            ranks = range(
+                i * tensor_model_parallel_size + j * nd1_dim1_size,
+                i * tensor_model_parallel_size + (j + 1) * nd1_dim1_size
+            )
+            group = torch.distributed.new_group(
+                ranks, pg_options=ps.get_nccl_options('nd1_dim1', nccl_comm_cfgs)
+            )
+            if rank in ranks:
+                _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM1 = group
+
+        nd1_dim2_size = tensor_model_parallel_size // nd1_dim1_size
+        for j in range(tensor_model_parallel_size // nd1_dim2_size):
+            ranks = range(
+                i * tensor_model_parallel_size + j,
+                (i + 1) * tensor_model_parallel_size,
+                nd1_dim1_size
+            )
+            group = torch.distributed.new_group(
+                ranks, pg_options=ps.get_nccl_options('nd1_dim2', nccl_comm_cfgs)
+            )
+            if rank in ranks:
+                _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND1_DIM2 = group
+
+        for j in range(tensor_model_parallel_size // nd2_dim1_size):
+            ranks = range(
+                i * tensor_model_parallel_size + j * nd2_dim1_size,
+                i * tensor_model_parallel_size + (j + 1) * nd2_dim1_size
+            )
+            group = torch.distributed.new_group(
+                ranks, pg_options=ps.get_nccl_options('nd2_dim1', nccl_comm_cfgs)
+            )
+            if rank in ranks:
+                _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM1 = group
+
+        nd2_dim2_size = tensor_model_parallel_size // nd2_dim1_size
+        for j in range(tensor_model_parallel_size // nd2_dim2_size):
+            ranks = range(
+                i * tensor_model_parallel_size + j,
+                (i + 1) * tensor_model_parallel_size,
+                nd2_dim1_size
+            )
+            group = torch.distributed.new_group(
+                ranks, pg_options=ps.get_nccl_options('nd2_dim2', nccl_comm_cfgs)
+            )
+            if rank in ranks:
+                _TENSOR_MODEL_PARALLEL_GROUP_FOR_ND2_DIM2 = group
+

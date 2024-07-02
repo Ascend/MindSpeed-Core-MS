@@ -1,16 +1,35 @@
-# Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
+# coding=utf-8
 # Copyright (c) 2024, Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from functools import wraps
 
 import os
 import warnings
-from typing import List, Optional
+from typing import List, Optional, Callable
 
 import torch
 import torch_npu
 import torch.distributed
 import torch.nn.functional as F
 from torch.cuda.amp import custom_bwd, custom_fwd
+from torch.nn.parameter import Parameter
+import megatron.core.parallel_state as ps
+from megatron.core.tensor_parallel.layers import (
+    _initialize_affine_weight_cpu,
+    _initialize_affine_weight_gpu
+)
 
 from megatron.core import parallel_state, tensor_parallel, mpu
 from megatron.training import get_args
@@ -35,7 +54,24 @@ from megatron.core.parallel_state import (
     get_tensor_model_parallel_world_size,
     is_pipeline_first_stage
 )
-from megatron.core.utils import prepare_input_tensors_for_wgrad_compute
+from megatron.core.tensor_parallel.layers import set_tensor_model_parallel_attributes
+from megatron.core.parallel_state import get_tensor_model_parallel_world_size
+from megatron.core.model_parallel_config import ModelParallelConfig
+from megatron.core.tensor_parallel.utils import VocabUtility, divide, split_tensor_along_last_dim
+from megatron.core.utils import (
+    make_tp_sharded_tensor_for_checkpoint,
+    prepare_input_tensors_for_wgrad_compute
+)
+from mindspeed.core.parallel_state import (
+    get_tensor_model_parallel_group_for_nd1_dim1,
+    get_tensor_model_parallel_group_for_nd1_dim2,
+    get_tensor_model_parallel_group_for_nd2_dim1,
+    get_tensor_model_parallel_group_for_nd2_dim2,
+    get_tensor_model_parallel_world_size_for_nd1_dim1,
+    get_tensor_model_parallel_world_size_for_nd1_dim2,
+    get_tensor_model_parallel_world_size_for_nd2_dim1,
+    get_tensor_model_parallel_world_size_for_nd2_dim2
+)
 from mindspeed.core.weight_grad_store import WeightGradStore
 from .ascend_turbo.mc2_linears_seq_parallel import RowSeqParallelLinear
 
@@ -682,6 +718,7 @@ def linear_with_grad_accumulation_and_async_allreduce_moe(
     sequence_parallel: bool,
     pipe_experts=False,
     grad_output_buffer: Optional[List[torch.Tensor]] = None,
+    matmul_id: int = 1,
     is_nano_row: bool = False,
     is_nano_column: bool = False,
 ) -> torch.Tensor:
@@ -778,6 +815,10 @@ def linear_with_grad_accumulation_and_async_allreduce_moe(
             return LinearWithGradAccumulationAndAsyncCommunication_nano_row.apply(*args)
         if is_nano_column:
             return LinearWithGradAccumulationAndAsyncCommunication_nano_column.apply(*args)
+
+    if get_args().use_nd_matmul:
+        args.append(matmul_id)
+        return LinearWithGradAccumulationAndAsyncCommunication_Nd.apply(*args)
 
     return LinearWithGradAccumulationAndAsyncCommunicationPipeExperts.apply(*args)
 
@@ -1026,3 +1067,333 @@ class Mc2RowSeqParallelLinear(torch.autograd.Function):
             grad_bias = None
 
         return grad_input, grad_weight, grad_bias, None
+
+
+def _initialize_affine_weight_cpu_nd(
+    weight,
+    output_size,
+    input_size,
+    input_size_per_partition,
+    output_size_per_partition,
+    init_method,
+    stride=1,
+    return_master_weight=False,
+    *,
+    params_dtype=torch.float32
+):
+    """Initialize affine weight for model parallel when use nd-matmul"""
+    set_tensor_model_parallel_attributes(
+        tensor=weight, is_parallel=True, dim=0, stride=stride
+    )
+
+    # Initialize master weight
+    master_weight = torch.empty(output_size, input_size, dtype=torch.float, requires_grad=False)
+    init_method(master_weight)
+
+    master_weight = master_weight.to(dtype=params_dtype)
+    # Split and copy
+    rank = ps.get_tensor_model_parallel_rank()
+    world_size = ps.get_tensor_model_parallel_world_size()
+
+    def compute_target_rank(rank, row_num, col_num):
+        return rank % row_num * col_num + rank // row_num
+
+    # The weight positions of nd and megatron are different. So weight needs to be rearranged.
+    # This rearrangement is only to make the calculations of nd and megatron consistent.
+    # Even if this rearrangement is removed, it will not affect the correctness of nd calculation.
+    row_num = input_size // input_size_per_partition
+    col_num = output_size // output_size_per_partition
+    weight_list = torch.split(master_weight, master_weight.size()[0] // world_size, dim=0)
+    tensor_list = [weight_list[compute_target_rank(i, row_num, col_num)] for i in range(world_size)]
+    master_weight = torch.cat(tensor_list, dim=0)
+
+    weight_list_1 = torch.split(master_weight, input_size_per_partition, dim=1)
+    weight_1 = weight_list_1[rank // col_num]
+    weight_list_2 = torch.split(weight_1, output_size_per_partition, dim=0)
+    my_weight_list = weight_list_2[rank % col_num:: world_size]
+
+    with torch.no_grad():
+        torch.cat(my_weight_list, dim=0, out=weight)
+    if return_master_weight:
+        return master_weight
+    return None
+
+
+class LinearWithGradAccumulationAndAsyncCommunication_Nd(torch.autograd.Function):
+
+    @staticmethod
+    def forward(
+        ctx,
+        input,
+        weight,
+        bias,
+        gradient_accumulation_fusion,
+        async_grad_allreduce,
+        sequence_parallel,
+        grad_output_buffer,
+        pipe_experts,
+        matmul_id,
+    ):
+        if sequence_parallel:
+            raise AssertionError(
+                'Nd_matmul cannot be used with sequence_parallel.'
+                'If you want to train long sequences, '
+                'you can use ulysess or context_parallel that is compatible with nd_matmul.'
+            )
+        ctx.use_bias = bias is not None
+        ctx.gradient_accumulation_fusion = gradient_accumulation_fusion
+        ctx.async_grad_allreduce = async_grad_allreduce
+        ctx.sequence_parallel = sequence_parallel
+        ctx.save_for_backward(input, weight)
+
+        if matmul_id == 1:
+            world_size1 = get_tensor_model_parallel_world_size_for_nd1_dim1()
+            comm_group1 = get_tensor_model_parallel_group_for_nd1_dim1()
+            world_size2 = get_tensor_model_parallel_world_size_for_nd1_dim2()
+            comm_group2 = get_tensor_model_parallel_group_for_nd1_dim2()
+        else:
+            world_size1 = get_tensor_model_parallel_world_size_for_nd2_dim1()
+            comm_group1 = get_tensor_model_parallel_group_for_nd2_dim1()
+            world_size2 = get_tensor_model_parallel_world_size_for_nd2_dim2()
+            comm_group2 = get_tensor_model_parallel_group_for_nd2_dim2()
+
+        ctx.world_size1 = world_size1
+        ctx.comm_group1 = comm_group1
+        ctx.world_size2 = world_size2
+        ctx.comm_group2 = comm_group2
+
+        last_dim = input.dim() - 1
+        total_input_list = [torch.empty_like(input) for _ in range(world_size1)]
+        torch.distributed.all_gather(total_input_list, input, group=comm_group1)
+        total_input = torch.cat(total_input_list, dim=last_dim)
+
+        output_parallel = torch.matmul(total_input, weight.t())
+        output_parallel = output_parallel.transpose(0, 2)
+
+        dim_size = list(output_parallel.size())
+        dim_size[0] //= world_size2
+        output = torch.empty(dim_size, dtype=output_parallel.dtype, device=torch.cuda.current_device())
+        torch.distributed._reduce_scatter_base(
+            output, output_parallel.contiguous(), group=comm_group2
+        )
+
+        output = output.transpose(0, 2).contiguous()
+
+        if bias is not None:
+            output = output + bias
+
+        return output
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        world_size1 = ctx.world_size1
+        comm_group1 = ctx.comm_group1
+        world_size2 = ctx.world_size2
+        comm_group2 = ctx.comm_group2
+        input, weight = ctx.saved_tensors
+        use_bias = ctx.use_bias
+        last_dim = grad_output.dim() - 1
+
+        grad_output_ag_list = [torch.empty_like(grad_output) for _ in range(world_size2)]
+        torch.distributed.all_gather(grad_output_ag_list, grad_output.contiguous(), group=comm_group2)
+        grad_output_ag = torch.cat(grad_output_ag_list, dim=last_dim)
+
+        total_input_list = [torch.empty_like(input) for _ in range(world_size1)]
+        handle1 = torch.distributed.all_gather(total_input_list, input, group=comm_group1, async_op=True)
+
+        grad_bias = grad_output_ag.view(
+            grad_output_ag.shape[0] * grad_output_ag.shape[1], grad_output_ag.shape[2]
+        ).sum(dim=0) if use_bias else None
+
+        grad_input = grad_output_ag.matmul(weight)
+
+        grad_input = grad_input.transpose(0, 2)
+        dim_size = list(grad_input.size())
+        dim_size[0] = dim_size[0] // world_size1
+
+        handle1.wait()
+        total_input = torch.cat(total_input_list, dim=last_dim)
+
+        grad_input_rs = torch.empty(dim_size, dtype=grad_input.dtype, device=torch.cuda.current_device())
+
+        handle2 = torch.distributed._reduce_scatter_base(
+            grad_input_rs, grad_input.contiguous(), group=comm_group1, async_op=True
+        )
+
+        grad_output_ag = grad_output_ag.view(
+            grad_output_ag.shape[0] * grad_output_ag.shape[1], grad_output_ag.shape[2]
+        )
+        total_input = total_input.view(
+            total_input.shape[0] * total_input.shape[1], total_input.shape[2]
+        )
+
+        if ctx.gradient_accumulation_fusion:
+            if weight.main_grad.dtype == torch.float32:
+                fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp32(
+                    total_input, grad_output_ag, weight.main_grad
+                )
+            elif weight.main_grad.dtype in (torch.float16, torch.bfloat16):
+                fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp16(
+                    total_input, grad_output_ag, weight.main_grad
+                )
+            else:
+                raise RuntimeError("Unsupported gradient type for gradient accumulation fusion")
+
+            if hasattr(weight, 'grad_added_to_main_grad'):
+                # When overlap_grad_reduce is True, need to ensure that backward hooks
+                # are all run on the main backprop thread to prevent deadlocks. Setup
+                # dummy grad_weight tensor to prevent backward hooks from being run
+                # in a background thread.
+                grad_weight = torch.empty(
+                    weight.main_grad.shape,
+                    dtype=input.dtype,
+                    device=torch.cuda.current_device(),
+                    requires_grad=False,
+                )
+                weight.grad_added_to_main_grad = True
+            else:
+                grad_weight = None
+        else:
+            grad_weight = grad_output_ag.t().matmul(total_input)
+
+        handle2.wait()
+        grad_input_rs = grad_input_rs.transpose(0, 2).contiguous()
+        return grad_input_rs, grad_weight, grad_bias, None, None, None, None, None, None, None, None
+
+
+class Nd_ParallelLinear(torch.nn.Module):
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        *,
+        config: ModelParallelConfig,
+        init_method: Callable,
+        bias: bool,
+        input_is_parallel: bool,
+        skip_bias_add: bool,
+        stride: int = 1,
+        keep_master_weight_for_test: bool = False,
+        is_expert: bool = False,
+        tp_comm_buffer_name: str = None,  # Not used
+        matmul_id: int = 1,
+    ):
+        """Nd_ParallelLinear is used to replace the columnParallelLinear and RowParallelLinear in Megatron TP.
+
+        Args:
+            matmul_id: which GEMM operation within the attention or FFN block.
+                       if matmul_id is 1 in attention, which represents GEMM for compute QKV.
+        """
+        super(Nd_ParallelLinear, self).__init__()
+
+        self.input_size = input_size
+        self.output_size = output_size
+        self.input_is_parallel = input_is_parallel
+        if matmul_id == 1:
+            self.world_size_dim1 = get_tensor_model_parallel_world_size_for_nd1_dim1()
+            self.world_size_dim2 = get_tensor_model_parallel_world_size_for_nd1_dim2()
+        else:
+            self.world_size_dim1 = get_tensor_model_parallel_world_size_for_nd2_dim1()
+            self.world_size_dim2 = get_tensor_model_parallel_world_size_for_nd2_dim2()
+
+        self.matmul_id = matmul_id
+        self.input_size_per_partition = divide(input_size, self.world_size_dim2)
+        self.output_size_per_partition = divide(output_size, self.world_size_dim1)
+
+        self.skip_bias_add = skip_bias_add
+        self.config = config
+        self.is_expert = is_expert
+        self.expert_parallel = config.expert_model_parallel_size > 1
+        self.gradient_accumulation_fusion = config.gradient_accumulation_fusion
+        self.sequence_parallel = config.sequence_parallel
+        if self.sequence_parallel:
+            raise RuntimeError(
+                'Nd_matmul cannot be used with sequence_parallel.'
+                'If you want to train long sequences, '
+                'you can use ulysess or context_parallel that is compatible with nd_matmul.'
+            )
+
+        if config.use_cpu_initialization:
+            self.weight = torch.nn.Parameter(
+                torch.empty(self.output_size, self.input_size_per_partition, dtype=config.params_dtype)
+            )
+
+            if config.perform_initialization:
+                self.master_weight = _initialize_affine_weight_cpu_nd(
+                    self.weight,
+                    self.output_size,
+                    self.input_size,
+                    self.input_size_per_partition,
+                    self.output_size_per_partition,
+                    init_method,
+                    stride=stride,
+                    return_master_weight=keep_master_weight_for_test,
+                    params_dtype=config.params_dtype
+                )
+        else:
+            self.weight = torch.nn.Parameter(
+                torch.empty(
+                    self.output_size_per_partition,
+                    self.input_size_per_partition,
+                    device=torch.cuda.current_device(),
+                    dtype=config.params_dtype
+                )
+            )
+            if config.perform_initialization:
+                _initialize_affine_weight_gpu(
+                    self.weight,
+                    init_method,
+                    partition_dim=1,
+                    stride=stride,
+                    expert_parallel=(self.is_expert and self.expert_parallel)
+                )
+
+        setattr(self.weight, 'allreduce', not (self.is_expert and self.expert_parallel))
+
+        if bias:
+            if config.use_cpu_initialization:
+                self.bias = torch.nn.Parameter(
+                    torch.empty(self.output_size, dtype=config.params_dtype)
+                )
+            else:
+                self.bias = torch.nn.Parameter(
+                    torch.empty(
+                        self.output_size,
+                        device=torch.cuda.current_device(),
+                        dtype=config.params_dtype
+                    )
+                )
+
+            if config.perform_initialization:
+                with torch.no_grad():
+                    self.bias.zero_()
+
+            setattr(self.bias, 'allreduce', not (self.is_expert and self.expert_parallel))
+            setattr(self.bias, 'sequence_parallel', self.sequence_parallel)
+        else:
+            self.register_parameter('bias', None)
+
+        self.explicit_expert_comm = self.is_expert and (
+                self.sequence_parallel or self.expert_parallel
+        )
+
+    def forward(self, input_):
+        self._forward_impl = linear_with_grad_accumulation_and_async_allreduce_moe
+        output_ = self._forward_impl(
+            input=input_,
+            weight=self.weight,
+            bias=None,
+            gradient_accumulation_fusion=self.gradient_accumulation_fusion,
+            async_grad_allreduce=False,
+            sequence_parallel=False,
+            matmul_id=self.matmul_id
+        )
+
+        if not self.skip_bias_add:
+            output = (output_ + self.bias) if self.bias is not None else output_
+            output_bias = None
+        else:
+            output = output_
+            output_bias = self.bias
+
+        return output, output_bias

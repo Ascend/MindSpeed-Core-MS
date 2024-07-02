@@ -14,6 +14,7 @@ def create_test_args(use_fused_rmsnorm=False):
     # Set dummy values for the args
     args = SimpleNamespace()
     args.use_fused_rmsnorm = use_fused_rmsnorm
+    args.use_nd_matmul = False
     return args
 
 

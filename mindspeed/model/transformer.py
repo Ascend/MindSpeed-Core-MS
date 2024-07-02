@@ -1,3 +1,19 @@
+# coding=utf-8
+# Copyright (c) 2024, Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2023 Alibaba PAI and Nvidia Megatron-LM Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import math
 import threading
 from functools import wraps
@@ -26,6 +42,7 @@ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid
 from mindspeed.core.fusions.fused_bias_swiglu import fused_swiglu
 from mindspeed.core.tensor_parallel.random import CheckpointWithoutOutput
 from mindspeed.ops.fusion_attention_v2 import npu_fusion_attention
+from mindspeed.core.tensor_parallel.layers import Nd_ParallelLinear
 from mindspeed.core.tensor_parallel.checkpoint_manager import get_pipeline_checkpoint_manager
 
 
@@ -368,13 +385,64 @@ def parallel_mlp_init_wrapper(fn):
     def wrapper(self, *args, **kwargs):
         fn(self, *args, **kwargs)
         self.layer_number = None
-        args = get_args()
-        if not args.swiglu:
-            self.dense_h_to_4h.pipe_experts = args.use_pipe_experts
-            self.dense_4h_to_h.pipe_experts = args.use_pipe_experts
-        if args.swiglu and args.use_fused_swiglu:
+        _args = get_args()
+        if not _args.swiglu:
+            self.dense_h_to_4h.pipe_experts = _args.use_pipe_experts
+            self.dense_4h_to_h.pipe_experts = _args.use_pipe_experts
+        if _args.swiglu and _args.use_fused_swiglu:
             self.activation_func = fused_swiglu
-        if args.use_nanopipe and parallel_state.get_pipeline_model_parallel_world_size() > 1 \
+
+        config = args[0]
+        is_expert = kwargs.get('is_expert') if 'is_expert' in kwargs.keys() else False
+
+        ffn_hidden_size = config.ffn_hidden_size
+        if config.gated_linear_unit:
+            ffn_hidden_size *= 2
+        if _args.use_nd_matmul:
+            self.dense_h_to_4h = Nd_ParallelLinear(
+                config.hidden_size,
+                ffn_hidden_size,
+                config=config,
+                init_method=config.init_method,
+                bias=self.add_bias,
+                skip_bias_add=True,
+                input_is_parallel=True,
+                is_expert=is_expert,
+                matmul_id=1
+            )
+            self.dense_4h_to_h = Nd_ParallelLinear(
+                config.ffn_hidden_size,
+                config.hidden_size,
+                config=config,
+                init_method=config.output_layer_init_method,
+                bias=self.add_bias,
+                skip_bias_add=True,
+                input_is_parallel=True,
+                is_expert=is_expert,
+                matmul_id=2
+            )
+        else:
+            self.dense_h_to_4h = tensor_parallel.ColumnParallelLinear(
+                config.hidden_size,
+                ffn_hidden_size,
+                config=config,
+                init_method=config.init_method,
+                bias=self.add_bias,
+                gather_output=False,
+                skip_bias_add=True,
+                is_expert=is_expert
+            )
+            self.dense_4h_to_h = tensor_parallel.RowParallelLinear(
+                config.ffn_hidden_size,
+                config.hidden_size,
+                config=config,
+                init_method=config.output_layer_init_method,
+                bias=self.add_bias,
+                skip_bias_add=True,
+                input_is_parallel=True,
+                is_expert=is_expert
+            )
+        if _args.use_nanopipe and parallel_state.get_pipeline_model_parallel_world_size() > 1 \
                     and parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None:
             setattr(self.dense_h_to_4h, "in_nano", True)
             setattr(self.dense_4h_to_h, "in_nano", True)
@@ -615,25 +683,52 @@ def parallel_attention_init_wrapper(fn):
                 self.core_attention_flash = UlyssesContextAttention(self.core_attention_flash, ulysses_group)
             else:
                 self.core_attention = UlyssesContextAttention(self.core_attention, ulysses_group)
-        self.query_key_value = tensor_parallel.ColumnParallelLinear(
-            config.hidden_size,
-            query_projection_size + 2 * kv_projection_size,
-            config=config,
-            init_method=config.init_method,
-            bias=bias,
-            gather_output=False)
+
+        if _args.use_nd_matmul:
+            self.query_key_value = Nd_ParallelLinear(
+                config.hidden_size,
+                query_projection_size + 2 * kv_projection_size,
+                config=config,
+                init_method=config.init_method,
+                bias=bias,
+                skip_bias_add=True,
+                input_is_parallel=True,
+                matmul_id=1
+            )
+        else:
+            self.query_key_value = tensor_parallel.ColumnParallelLinear(
+                config.hidden_size,
+                query_projection_size + 2 * kv_projection_size,
+                config=config,
+                init_method=config.init_method,
+                bias=bias,
+                gather_output=False)
+
         # dense bias
         bias = _args.add_dense_bias or _args.add_bias_linear
         skip_bias_add = _args.skip_bias_add
         # Output.
-        self.dense = tensor_parallel.RowParallelLinear(
-            query_projection_size,
-            config.hidden_size,
-            config=config,
-            init_method=config.output_layer_init_method,
-            bias=bias,
-            input_is_parallel=True,
-            skip_bias_add=skip_bias_add)
+        if _args.use_nd_matmul:
+            self.dense = Nd_ParallelLinear(
+                query_projection_size,
+                config.hidden_size,
+                config=config,
+                init_method=config.output_layer_init_method,
+                bias=bias,
+                skip_bias_add=True,
+                input_is_parallel=True,
+                matmul_id=2
+            )
+        else:
+            self.dense = tensor_parallel.RowParallelLinear(
+                query_projection_size,
+                config.hidden_size,
+                config=config,
+                init_method=config.output_layer_init_method,
+                bias=bias,
+                input_is_parallel=True,
+                skip_bias_add=skip_bias_add)
+        
         if _args.use_nanopipe and parallel_state.get_pipeline_model_parallel_world_size() > 1 \
                     and parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None:
             setattr(self.query_key_value, "in_nano", True)
