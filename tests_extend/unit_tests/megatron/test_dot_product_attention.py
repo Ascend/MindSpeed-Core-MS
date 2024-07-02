@@ -15,7 +15,7 @@ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid
                                              get_context_parallel_for_hybrid_ring_world_size,
                                              get_context_parallel_for_hybrid_ring_rank,
                                              get_context_parallel_for_hybrid_ring_global_ranks)
-from mindspeed.model.transformer import get_attention_mask
+from mindspeed.model.transformer import get_attention_mask, set_attention_mask
 
 from commons import set_random_seed, initialize_model_parallel # noqa
 from unit_tests.common import DistributedTest # noqa
@@ -36,6 +36,8 @@ def run_dot_product_att(cp_size, bs, seq_len, dtype):
     set_args(args)
     initialize_model_parallel(context_parallel_size=cp_size)
     set_random_seed(1234)
+    # clear global attn mask set by last test case
+    set_attention_mask(None)
 
     config = TransformerConfig(num_layers=2, hidden_size=32, num_attention_heads=4, use_cpu_initialization=True)
     attn = DotProductAttention(
@@ -46,9 +48,9 @@ def run_dot_product_att(cp_size, bs, seq_len, dtype):
     q = torch.randn(s, b, n, d, dtype=dtype, device='npu', requires_grad=True)
     k = torch.randn(s, b, n, d, dtype=dtype, device='npu', requires_grad=True)
     v = torch.randn(s, b, n, d, dtype=dtype, device='npu', requires_grad=True)
-    attention_mask = get_attention_mask()
 
-    out = attn(q, k, v, attention_mask, None, None)
+    # global attn mask will be generated at DotProductAttention forward wrapper
+    out = attn(q, k, v, None, None, None)
     assert isinstance(out, torch.Tensor)
 
 
