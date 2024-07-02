@@ -147,7 +147,7 @@ def parallel_transformer_checkpointed_forward_wrapper(forward_func):
     def row_parallel_forward(*args, **kwargs):
         global_args = get_args()
         if global_args.optimize_recomp_communication_level == 0:
-            if global_args.recompute_method != 'block' or not global_args.enable_recompute_layers_per_pp_rank:
+            if global_args.recompute_method != 'block':
                 output = forward_func(*args, **kwargs)
             else:
                 output = parallel_transformer_checkpointed_forward(*args, **kwargs)
@@ -158,9 +158,10 @@ def parallel_transformer_checkpointed_forward_wrapper(forward_func):
 
 
 def parallel_transformer_checkpointed_forward(self, hidden_states, attention_mask,
-                          encoder_output, enc_dec_attn_mask,
-                          rotary_pos_emb, is_first_microbatch):
+                                              encoder_output, enc_dec_attn_mask,
+                                              rotary_pos_emb, is_first_microbatch):
     """Forward method with activation checkpointing."""
+
     def custom(start, end):
         def custom_forward(*args, **kwargs):
             x_, *args = args
@@ -168,6 +169,7 @@ def parallel_transformer_checkpointed_forward(self, hidden_states, attention_mas
                 layer = self._get_layer(index)
                 x_ = layer(x_, *args, **kwargs)
             return x_
+
         return custom_forward
     
     args = get_args()
@@ -178,9 +180,9 @@ def parallel_transformer_checkpointed_forward(self, hidden_states, attention_mas
         global_args = get_args()
         vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()
         vpp_size = global_args.virtual_pipeline_model_parallel_size
-        if vpp_rank is None:
+        if vpp_rank is None or not global_args.enable_recompute_layers_per_pp_rank:
             vpp_rank = 0
-        if vpp_size is None:
+        if vpp_size is None or not global_args.enable_recompute_layers_per_pp_rank:
             vpp_size = 1
         for l in range(self.num_layers):
             # The number of layers each pipeline rank recomputes is self.recompute_num_layers.
@@ -192,7 +194,16 @@ def parallel_transformer_checkpointed_forward(self, hidden_states, attention_mas
             # Stage 1: [2, 3]   [6, 7]
             # With self.recompute_num_layers = 2, we will recompute layers 0,4 for stage 0, and 2,6 for stage 1.
             # With self.recompute_num_layers = 3, we will recompute layers 0,1,4 for stage 0, and 2,3,6 for stage 1.
-            if l * vpp_size + vpp_rank < self.recompute_num_layers:
+            def should_recompute():
+                if global_args.reduce_recompute_for_last_chunk:
+                    def is_last_layer():
+                        return (l == self.num_layers - 1) and mpu.is_pipeline_last_stage()
+
+                    return ((l * vpp_size + vpp_rank) < self.recompute_num_layers) and not is_last_layer()
+                else:
+                    return (l * vpp_size + vpp_rank) < self.recompute_num_layers
+
+            if should_recompute():
                 hidden_states = tensor_parallel.checkpoint(
                     custom(l, l + 1),
                     self.distribute_saved_activations,

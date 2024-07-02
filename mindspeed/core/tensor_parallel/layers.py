@@ -378,7 +378,8 @@ class LinearWithGradAccumulationAndAsyncCommunication_nano_row(torch.autograd.Fu
         grad_output_buffer,
         pipe_experts,
     ):
-        ctx.input, ctx.weight = input, weight
+        ctx.save_for_backward(input)
+        ctx.weight = weight
         ctx.use_bias = bias is not None
         ctx.gradient_accumulation_fusion = gradient_accumulation_fusion
         ctx.async_grad_allreduce = async_grad_allreduce
@@ -426,7 +427,8 @@ class LinearWithGradAccumulationAndAsyncCommunication_nano_row(torch.autograd.Fu
     @staticmethod
     @custom_bwd
     def backward(ctx, grad_output):
-        input, weight = ctx.input, ctx.weight
+        input, = ctx.saved_tensors
+        weight = ctx.weight
         use_bias = ctx.use_bias
         pipe_experts = ctx.pipe_experts
         global_args = get_args()
@@ -529,7 +531,8 @@ class LinearWithGradAccumulationAndAsyncCommunication_nano_column(torch.autograd
         grad_output_buffer,
         pipe_experts
     ):
-        ctx.save_for_backward(input, weight)
+        ctx.save_for_backward(input)
+        ctx.weight = weight
         ctx.use_bias = bias is not None
         ctx.gradient_accumulation_fusion = gradient_accumulation_fusion
         ctx.async_grad_allreduce = async_grad_allreduce
@@ -588,7 +591,8 @@ class LinearWithGradAccumulationAndAsyncCommunication_nano_column(torch.autograd
     @staticmethod
     @custom_bwd
     def backward(ctx, grad_output):
-        input, weight = ctx.saved_tensors
+        input, = ctx.saved_tensors
+        weight = ctx.weight
         use_bias = ctx.use_bias
         pipe_experts = ctx.pipe_experts
         WeightGradStore.put(

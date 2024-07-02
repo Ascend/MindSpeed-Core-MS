@@ -319,7 +319,8 @@ class PipeExpert(torch.autograd.Function):
         for tensor in output_list_after_expert:
             tensor.untyped_storage().resize_(0)
 
-        ctx.save_for_backward(*tuple(input_list_before_expert), *tuple(output_list_after_expert))
+        ctx.input_list_before_expert = input_list_before_expert
+        ctx.save_for_backward(*tuple(output_list_after_expert))
 
         return output_forward
 
@@ -330,9 +331,7 @@ class PipeExpert(torch.autograd.Function):
         multi_stream = ctx.multi_stream
         multi_data = ctx.multi_data
 
-        saved_tensors_list = list(ctx.saved_tensors)
-        input_list_before_expert = saved_tensors_list[:len(saved_tensors_list) // 2]
-        output_list_after_expert = saved_tensors_list[len(saved_tensors_list) // 2:]
+        output_list_after_expert = list(ctx.saved_tensors)
 
         grad_outputs = args[0]
         global ASYNC_BW_ALL_GATHER_COUNT
@@ -365,7 +364,7 @@ class PipeExpert(torch.autograd.Function):
                 if j == multi_data - 1:
                     FLAG_GRAD_REDUCE = True
                 output_list_after_expert[i * multi_data + j].backward(grad_outputs_list[i * multi_data + j])
-                grads_expert_output = input_list_before_expert[i * multi_data + j].grad
+                grads_expert_output = ctx.input_list_before_expert[i * multi_data + j].grad
 
                 grads_expert_output, handle = async_all_to_all(grads_expert_output)
                 grad_output_list_for_each_multi_data.append(grads_expert_output)
@@ -388,4 +387,5 @@ class PipeExpert(torch.autograd.Function):
         grad_output = torch.cat(
             [torch.cat((grad_outputs_list_for_each_local_expert[i]), dim=1) for i in range(num_local_experts)], dim=0)
 
+        ctx.input_list_before_expert = None
         return None, grad_output, None, None, None, None, None

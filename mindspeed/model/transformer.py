@@ -26,6 +26,7 @@ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid
 from mindspeed.core.fusions.fused_bias_swiglu import fused_swiglu
 from mindspeed.core.tensor_parallel.random import CheckpointWithoutOutput
 from mindspeed.ops.fusion_attention_v2 import npu_fusion_attention
+from mindspeed.core.tensor_parallel.checkpoint_manager import get_pipeline_checkpoint_manager
 
 
 try:
@@ -389,6 +390,14 @@ def should_recompute_activation(self):
     vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()
     vpp_size = args.virtual_pipeline_model_parallel_size
     pp_size = args.transformer_pipeline_model_parallel_size
+
+    if args.recompute_in_bubble or args.recompute_in_advance:
+        pipeline_checkpoint_manager = get_pipeline_checkpoint_manager(vpp_size)
+        if pipeline_checkpoint_manager.chunk_do_recompute:
+            return False
+        elif args.recompute_in_bubble:
+            return True
+
     if vpp_size is not None:
         layer_per_chunk = args.num_layers_per_virtual_pipeline_stage
     elif pp_size is not None:

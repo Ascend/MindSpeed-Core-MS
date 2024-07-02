@@ -124,7 +124,7 @@ def torch_adaptation(aspm):
 def megatron_core_adaptation(aspm):
     import megatron.core
     megatron.core.jit.jit_fuser = dummy_jit
-    from .core.tensor_parallel.random import _set_cuda_rng_state, checkpoint_function_backward
+    from .core.tensor_parallel.random import _set_cuda_rng_state, checkpoint_function_backward, checkpoint_wrapper
     from .core.tensor_parallel.layers import vocab_parallel_embedding_forward
     from .core.tensor_parallel.cross_entropy import vocab_parallel_cross_entropy_forward
     from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN
@@ -222,6 +222,9 @@ def megatron_core_adaptation(aspm):
     aspm.register_patch('megatron.core.optimizer.distrib_optimizer.DistributedOptimizer.__init__',
                         reuse_fp32_param_distrib_optimizer_init_wrapper)
 
+    # ripipe relative.
+    aspm.register_patch('megatron.core.tensor_parallel.random.checkpoint', checkpoint_wrapper)
+
 
 def megatron_legacy_adaptation(aspm):
     from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN, fused_layer_norm_affine
@@ -236,6 +239,7 @@ def megatron_legacy_adaptation(aspm):
         parallel_transformer_checkpointed_forward_wrapper
     from .model.transformer import switch_mlp_init_wrapper, switch_mlp_forward_wrapper, \
                                     parallel_transformer_layer_init_wrapper
+    from .model.gpt_model import post_language_model_processing_wrapper
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.__init__', parallel_transformer_init_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.forward', parallel_transformer_forward_wrapper)
     aspm.register_patch('megatron.legacy.model.fused_layer_norm.FusedLayerNormAffineFunction',
@@ -272,6 +276,7 @@ def megatron_legacy_adaptation(aspm):
     aspm.register_patch('megatron.legacy.model.transformer.SwitchMLP.forward', switch_mlp_forward_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformerLayer.__init__',
                         parallel_transformer_layer_init_wrapper)
+    aspm.register_patch('megatron.legacy.model.gpt_model.post_language_model_processing', post_language_model_processing_wrapper)
 
 
 def megatron_training_adaptation(aspm):

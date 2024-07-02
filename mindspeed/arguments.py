@@ -191,6 +191,10 @@ def _add_training_args(parser):
     group.add_argument('--recompute-activation-function-num-layers', type=int, default=None,
                        help='Can be used together with "--recompute-method block." '
                        'and "--recompute-num-layers". ')
+    group.add_argument('--recompute-in-bubble', action='store_true',
+                       help='use bubble to do recompute to reduce memory')
+    group.add_argument('--recompute-in-advance', action='store_true',
+                       help='recompute early to reduce bubble and improve training.')
     group.add_argument('--jit-compile', action='store_true', default=False,
                        help='Setting jit compile mode to True')
     group.add_argument('--prefetch', action='store_true', default=False,
@@ -423,6 +427,32 @@ def validate_args_wrapper(validate_args):
                 args.optimize_recomp_communication_level = 0
         if args.use_ascend_mc2 and args.use_ascend_coc:
             raise AssertionError('--mc2 and coc can not be used together')
+
+        args.reduce_recompute_for_last_chunk = False
+        if args.recompute_in_advance:
+            args.reduce_recompute_for_last_chunk = True
+            if args.recompute_method == "uniform":
+                raise AssertionError('recompute_in_advance does not support uniform recompute_method')
+            if not args.recompute_num_layers:
+                raise AssertionError('recompute_num_layers can not be None or 0 when using recompute_in_advance')
+            if args.pipeline_model_parallel_size <= 1 or args.num_layers_per_virtual_pipeline_stage is None:
+                raise AssertionError('recompute_in_advance only support pipelining with interleaving')
+            if args.num_layers_per_virtual_pipeline_stage != 1:
+                args.recompute_in_advance = False
+        if args.recompute_in_bubble:
+            if args.recompute_num_layers:
+                raise AssertionError('recompute_num_layers must be None or 0 when using recompute_in_bubble')
+            if args.pipeline_model_parallel_size <= 1 or args.num_layers_per_virtual_pipeline_stage is None:
+                raise AssertionError('recompute_in_bubble only support pipelining with interleaving')
+            if not args.prefetch:
+                # Following is a trick to realize bubble recomputation. We first enable all recomputation,
+                # and then disable recomputation for all layers except the ones chosen for bubble recomputation.
+                args.recompute_granularity = "full"
+                args.recompute_method = "block"
+            if args.enable_recompute_layers_per_pp_rank:
+                args.recompute_num_layers = args.num_layers // args.pipeline_model_parallel_size
+            else:
+                args.recompute_num_layers = args.num_layers_per_virtual_pipeline_stage
 
         from megatron.training.arguments import _print_args
         _print_args('arguments', args, True)

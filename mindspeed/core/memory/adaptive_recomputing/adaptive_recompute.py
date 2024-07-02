@@ -278,9 +278,12 @@ class AdaptiveRecomputePolicy:
     def granular_module_allocation(self, vpp_size, recompute_num_layers):
         swap_list = []
         recompute_list = []
+        args = get_args()
         if self.num_prefetch <= vpp_size:
             swap_list = [['0'] if i < self.num_prefetch else [''] for i in range(vpp_size)]
             recompute_list = [['0'] if i < recompute_num_layers else [''] for i in range(vpp_size)]
+            if parallel_state.is_pipeline_last_stage(ignore_virtual=True) and args.reduce_recompute_for_last_chunk:
+                recompute_list[-1] = ['']
         else:
             for chunk in range(vpp_size):
                 chunk_swap_layer = ['0']
@@ -293,6 +296,11 @@ class AdaptiveRecomputePolicy:
                     if layer_id % vpp_size == chunk:
                         chunk_recompute_layer.append(f'{layer_id // vpp_size}')
                 recompute_list.append(chunk_recompute_layer)
+            if parallel_state.is_pipeline_last_stage(ignore_virtual=True) and args.reduce_recompute_for_last_chunk:
+                if recompute_list[-1][-1] == str(args.num_layers_per_virtual_pipeline_stage - 1):
+                    recompute_list[-1].pop()
+                    if len(recompute_list[-1]) == 0:
+                        recompute_list[-1].append('')
         prefetch_list = swap_list
         interval = 0
         prefetch_recompute_group = [swap_list, prefetch_list, recompute_list]

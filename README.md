@@ -111,6 +111,7 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 | Ascend flash attention 适配      | [link](docs/features/flash-attention.md) |
 | Ascend nano-pipe流水线并行      | [link](docs/features/nanopipe-pipeline-parallel.md) |
 | Ascend MLP 通信隐藏               | [link](docs/features/pipeline-experts.md) |
+| Ascend 重计算流水线独立调度               | [link](docs/features/recompute_independent_pipelining.md) |
 | Ulysses 长序列并行               | [link](docs/features/ulysses-context-parallel.md) |
 | Ring Attention 长序列并行        | [link](docs/features/ring-attention-context-parallel.md) |
 | 【Prototype】混合长序列并行       | [link](docs/features/hybrid-context-parallel.md) |
