@@ -9,7 +9,7 @@ if sys.version_info < (3,):
     raise Exception("Python 2 is not supported by MindSpeed.")
 
 __description__ = 'MindSpeed for LLMs of Ascend'
-__version__ = '0.0.1'
+__version__ = '1.1.0'
 __author__ = 'Ascend'
 __long_description__ = 'MindSpeed for LLMs of Ascend'
 __url__ = 'https://gitee.com/ascend/MindSpeed'

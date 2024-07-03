@@ -319,7 +319,10 @@ def validate_args_wrapper(validate_args):
             raise AssertionError('ADAPTIVE_RECOMPUTING and MEMORY_FRAGMENTATION all open is not supported')
 
         if args.use_fused_rotary_pos_emb and int(os.getenv('MEMORY_FRAGMENTATION', '0')):
-            raise AssertionError('use_fused_rotary_pos_emb and MEMORY_FRAGMENTATION all open is not supported yet')
+            raise AssertionError(
+                'use_fused_rotary_pos_emb and MEMORY_FRAGMENTATION all open is not supported yet.'
+                'It is recommended to set MEMORY_FRAGMENTATION to 0 when using fused rotary position embedding.'
+            )
 
         if args.use_fused_rmsnorm:
             if args.normalization != "RMSNorm":
