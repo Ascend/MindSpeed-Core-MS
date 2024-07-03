@@ -25,4 +25,5 @@ Rotary Position Embedding（RoPE）是一种大模型文本位置信息编码（
 
 
 ## 注意事项
-暂不支持同时开启内存碎片优化与rope融合算子`--use-fused-rotary-pos-emb`
+
+暂不支持同时开启内存碎片优化与rope融合算子`-use-fused-rotary-pos-emb`。torch_npu中已有内存碎片优化且默认开启，冲突时建议关闭内存碎片优化特性`MEMORY_FRAGMENTATION`。
