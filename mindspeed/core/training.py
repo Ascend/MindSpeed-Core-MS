@@ -55,3 +55,15 @@ def setup_model_and_optimizer_decorator(setup_model_and_optimizer):
             apply_autopipeline(model)
         return model, optimizer, opt_param_scheduler
     return wrapper
+
+
+def save_checkpoint_and_time_decorator(save_checkpoint_and_time):
+    @wraps(save_checkpoint_and_time)
+    def wrapper(*args, **kwargs):
+        global_args = get_args()
+        if global_args.use_distributed_optimizer and global_args.overlap_param_gather:
+            optimizer.disable_pre_hook()
+        save_checkpoint_and_time(*args, **kwargs)
+        if global_args.use_distributed_optimizer and global_args.overlap_param_gather:
+            optimizer.enable_pre_hook()
+    return wrapper
