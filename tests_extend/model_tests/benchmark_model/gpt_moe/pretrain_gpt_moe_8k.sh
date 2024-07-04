@@ -102,7 +102,7 @@ torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \
     --distributed-timeout-minutes 10 \
     --seed 1234 \
     --save $CHECKPOINT_PATH \
-    --no-save-optiom \
+    --no-save-optim \
     --no-save-rng
 
 set +x
