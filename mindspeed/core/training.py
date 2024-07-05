@@ -61,6 +61,7 @@ def save_checkpoint_and_time_decorator(save_checkpoint_and_time):
     @wraps(save_checkpoint_and_time)
     def wrapper(*args, **kwargs):
         global_args = get_args()
+        optimizer = args[2]
         if global_args.use_distributed_optimizer and global_args.overlap_param_gather:
             optimizer.disable_pre_hook()
         save_checkpoint_and_time(*args, **kwargs)
