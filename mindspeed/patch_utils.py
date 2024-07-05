@@ -72,6 +72,7 @@ class Patch:
 
     @staticmethod
     def parse_path(module_path, function_name, create_dummy):
+        from importlib.machinery import ModuleSpec
         modules = module_path.split('.')
         for i in range(1, len(modules) + 1):
             parent = '.'.join(modules[:i - 1])
@@ -84,6 +85,7 @@ class Patch:
                         raise ModuleNotFoundError(e) from e
                     sys.modules[path] = types.ModuleType(path)
                     sys.modules[path].__file__ = 'mindspeed.dummy_module.py'
+                    sys.modules[path].__spec__ = ModuleSpec(path, None)
                     if parent:
                         setattr(importlib.import_module(parent), modules[i - 1], sys.modules[path])
                 else:
