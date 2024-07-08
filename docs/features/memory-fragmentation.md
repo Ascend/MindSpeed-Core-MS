@@ -35,7 +35,7 @@ activate; 1.59 GiB free;
 
 ## 使用方法
 
-设置环境变量`MEMORY_FRAGMENTATION=1`，即开启内存碎片优化特性。
+脚本中设置参数`--memory-fragmentation`，即开启内存碎片优化特性。
 
 ## 使用效果
 
@@ -64,4 +64,4 @@ activate; 1.59 GiB free;
 
 **注**：由于内存碎片优化与自适应选择重计算两个特性都修改了PyTorch内存管理模块，这两个特性都打开会存在冲突，mindspeed进行了assert判断。
 
-**注**：暂不支持同时开启内存碎片优化与rope融合算子`-use-fused-rotary-pos-emb`。torch_npu中已有内存碎片优化且默认开启，冲突时建议关闭此特性。
+**注**：暂不支持同时开启内存碎片优化与rope融合算子`-use-fused-rotary-pos-emb`。torch_npu中已有内存碎片优化且默认开启，冲突时建议关闭此特性。暂不支持同时开启内存碎片优化和虚拟内存expandable_segments.

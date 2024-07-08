@@ -205,35 +205,13 @@ class GraphSolver:
             result[parent_name]["child_module"].update({name: True, sub_name: True})
         return result
 
-    def update_peak_memory(self, module, idx):
-        peak_memory_info = self.layers_combination[idx].peak_memory
-        cur_layer_name = module["prefix_name"] + "." + module["name"]
-        SwapManager().policy_peak_memory[cur_layer_name] = peak_memory_info["layers_peak_memory"]
-        for layer in module["layers"]:
-            name = layer["name"]
-            layer_name = cur_layer_name + "." + name
-            if name in peak_memory_info.keys():
-                SwapManager().policy_peak_memory[layer_name] = peak_memory_info[name]
-            if "layers" not in layer:
-                continue
-            for sub_layer in layer["layers"]:
-                sub_name = sub_layer["name"]
-                if "." not in sub_name:
-                    sub_name = name + "." + sub_layer["name"]
-                sub_layer_name = cur_layer_name + "." + sub_name
-                if sub_name in peak_memory_info.keys():
-                    SwapManager().policy_peak_memory[sub_layer_name] = peak_memory_info[sub_name]
-
     def set_to_module(self, module, recompute_nodes, idx):
         if len(recompute_nodes) == 0:
             module["recompute"] = True
-            self.update_peak_memory(module, idx)
             return
         recompute_nodes_info = self.covert_recompute_node_idx_to_name(recompute_nodes)
         if len(recompute_nodes_info) == 0:
             return
-        if recompute_nodes[0] != self.layer_without_recompute_combination.broadcast_value:
-            self.update_peak_memory(module, idx)
         self.set_recompute_info_to_module(module["layers"], recompute_nodes_info)
 
     def apply_policy_to_model(self, recompute_policy_list):
@@ -280,12 +258,13 @@ class GraphSolver:
 
         return subtotal_cost + memory_cost, subtotal_compute_cost + compute_cost
 
-    def cal_non_transformer_memory(self, model):
+    def cal_non_transformer_memory(self, model_context, num_model_chunks):
         # total memory used
         model_memory = 0
-        for layer in model['layers']:
+        for layer in model_context['layers']:
             model_memory += layer['memory']
-        non_size = model_memory - self.transformer_module_memory
+            break
+        non_size = (model_memory - self.transformer_module_memory) * num_model_chunks
         return non_size
 
     def reset_cost(self, g: nx.DiGraph, idx, reset_node_name):
@@ -322,54 +301,6 @@ class GraphSolver:
         self.reset_cost(dg_copy, 0, reset_node_name)
         return dg_copy
 
-    def get_layers_combination_peak_memory(self, recompute_node, recompute):
-        layer_peak_memory = self.first_layer_module["peak_memory"]
-        layers_peak_memory_info = {}
-        total_drop_memory = 0
-        layer_module = self.first_layer_module['layers']
-        if len(layer_module) == 0 or not recompute:
-            return layers_peak_memory_info
-        full_recompute = False
-        if len(recompute_node) == 0:
-            full_recompute = True
-        last_parent_layer_name = layer_module[-1]["name"]
-        for layer in layer_module:
-            if "peak_memory" not in layer:
-                continue
-            name = layer["name"]
-            peak_memory = layer["peak_memory"]
-            parent_recompute = False
-            layers_peak_memory_info[name] = peak_memory
-            # sub_module recompute, like input layer nom, self_attention
-            if (name in recompute_node or full_recompute) and last_parent_layer_name not in name:
-                total_drop_memory += layer["memory_bytes"]
-                layers_peak_memory_info[name] = max(0, peak_memory - layer["memory_bytes"])
-                parent_recompute = True
-            if "layers" not in layer:
-                continue
-            drop_memory = 0
-            last_sub_layer_name = layer["layers"][-1]["name"]
-            for sub_layer in layer["layers"]:
-                sub_layer_name = sub_layer["name"]
-                if "peak_memory" not in sub_layer:
-                    continue
-                sub_peak_memory = sub_layer["peak_memory"]
-                layers_peak_memory_info[sub_layer_name] = sub_peak_memory
-                # sub_module son recompute, like self_attention.core_attention
-                if (sub_layer_name in recompute_node or parent_recompute) and last_sub_layer_name not in sub_layer_name:
-                    drop_memory += sub_layer["memory_bytes"]
-                    layers_peak_memory_info[sub_layer_name] = max(0, sub_peak_memory - sub_layer["memory_bytes"])
-
-            if not parent_recompute:
-                layers_peak_memory_info[name] = max(0, peak_memory - drop_memory)
-                total_drop_memory += drop_memory
-
-        layers_peak_memory_info["layers_peak_memory"] = max(0, layer_peak_memory - total_drop_memory)
-        if full_recompute:
-            layers_peak_memory_info["layers_peak_memory"] = max(0, layer_peak_memory - self.first_layer_module[
-                "memory_bytes"])
-        return layers_peak_memory_info
-
     def layers_combination_init(self, g, idx):
         if idx == 0:
             self.layer_full_recompute_combination = LayerCombination({
@@ -378,8 +309,7 @@ class GraphSolver:
                 "memory": self.chp_input,
                 "cost": self.chp_time,
                 "broadcast_value": 0,
-                "policy_name": "n_full",
-                "peak_memory": self.get_layers_combination_peak_memory(recompute_node=[], recompute=True)
+                "policy_name": "n_full"
             })
             self.layers_combination.append(self.layer_full_recompute_combination)
             self.layer_without_recompute_combination = LayerCombination({
@@ -388,8 +318,7 @@ class GraphSolver:
                 "memory": self.full_activation,
                 "cost": 0,
                 "broadcast_value": 2,
-                "policy_name": "n_without",
-                "peak_memory": self.get_layers_combination_peak_memory(recompute_node=[], recompute=False)
+                "policy_name": "n_without"
             })
             self.layers_combination.append(self.layer_without_recompute_combination)
         try:
@@ -405,16 +334,16 @@ class GraphSolver:
                     "memory": stash_mem_per_layer,
                     "cost": recompute_cost,
                     "broadcast_value": 1,
-                    "policy_name": "n_selective",
-                    "peak_memory": self.get_layers_combination_peak_memory(recompute_nodes, recompute=True)
+                    "policy_name": "n_selective"
                 })
                 self.layers_combination.append(self.layer_recompute_one_combination)
                 return
         except KeyError:
             print_rank_0("[ERROR] The key \"module_layers\" doesn't exist.")
+        if g.nodes[idx]['mem'] >= g.nodes[idx]['input']:
+            g.nodes[idx]['recompute'] = True
+            self.layers_combination_init(g, idx + 1)            
         g.nodes[idx]['recompute'] = False
-        self.layers_combination_init(g, idx + 1)
-        g.nodes[idx]['recompute'] = True
         self.layers_combination_init(g, idx + 1)
 
     def get_max_goods_value(self, idx, ans, device_memory):
@@ -587,18 +516,19 @@ class GraphSolver:
         for sub_model in model["layers"]:
             self.get_layers_module(sub_model, model)
 
-    def build_solver_info(self, model, pp):
+    def build_solver_info(self, model_context, pp, num_model_chunks):
         self.pp = max(self.pp, pp)
-        self.get_layers_module(model, "")
+        self.get_layers_module(model_context, "")
         self.total_recompute_cost = sys.maxsize
         # first layer is not recompute
         self.get_no_recompute_layer()
         self.chp_input = self.first_layer_module['input']
         self.chp_time = self.first_layer_module['time']
         self.full_activation = self.first_layer_module['memory']
-        self.module_chunk = len(model['layers'])
+        self.module_chunk = len(model_context['layers'])
         self.total_forward_cost = self.chp_time * self.layers_num
-        self.static_memory = model['used_mem'] + self.cal_non_transformer_memory(model)
+        self.static_memory = model_context['used_mem'] + self.cal_non_transformer_memory(model_context,
+                                                                                         num_model_chunks)
 
         parent_dg = self.get_dg(self.module_layers["parent_layers"])
         stash_mem_per_layer, _ = self.calculate_cost_mem(parent_dg, 0)
@@ -636,7 +566,6 @@ class LayerCombination:
         self.cost = config["cost"]
         self.broadcast_value = config["broadcast_value"]
         self.policy_name = config["policy_name"]
-        self.peak_memory = config["peak_memory"]
 
 
 class GoodsValue:

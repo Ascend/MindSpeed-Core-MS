@@ -1,7 +1,5 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
 import sys
-import json
-import time
 from copy import deepcopy
 from functools import wraps
 from collections.abc import Iterable
@@ -248,7 +246,6 @@ class AdaptiveRecomputePolicy:
 
     def set_tag_to_context(self, recompute_policy_list):
         context = deepcopy(self.context_copy)
-        SwapManager().reset_policy_peak_memory()
         solver = GraphSolver()
         solver.layer_full_recompute_combination = get_graph_solver().layer_full_recompute_combination
         solver.layer_without_recompute_combination = get_graph_solver().layer_without_recompute_combination
@@ -326,73 +323,6 @@ def get_adaptive_recomputing_policy():
     return AdaptiveRecomputePolicy.adaptive_recomputing_policy
 
 
-class MemoryPeakPrediction:
-    memory_peak_prediction = None
-
-    def __init__(self):
-        self.previous_layer_info = {}
-        self.record_max_memory_allocated = {}
-        self.memory_fragment = 0
-
-    def get_peak_memory(self, layer_name, memory_info, is_update_peak):
-        _max_memory_allocated = 0
-        for k, v in self.record_max_memory_allocated.items():
-            _name = k[:str.rfind(k, ".")]
-            if _name == layer_name:
-                _max_memory_allocated = max(_max_memory_allocated, v)
-        if _max_memory_allocated == 0:
-            _max_memory_allocated = memory_info["max_memory_allocated"]
-        self.record_max_memory_allocated[layer_name] = _max_memory_allocated
-        peak_memory = _max_memory_allocated - memory_info['memory']
-        if not is_update_peak:
-            return peak_memory
-        origin_peak = 0
-        if layer_name in SwapManager().origin_layers_peak_memory.keys():
-            origin_peak = SwapManager().origin_layers_peak_memory[layer_name]
-        SwapManager().origin_layers_peak_memory.update({layer_name: max(origin_peak, peak_memory)})
-        return peak_memory
-
-    @staticmethod
-    def check_forward_mem_info(state, layer_name, memory_info, is_pre_hook=True):
-        process_free = memory_info["reserved_memory"] - memory_info["used_memory"]
-        state["free"] = memory_info["free"]
-        state["process_free"] = process_free
-        peak_memory = 0
-        memory_fragment = get_memory_peak_prediction().memory_fragment
-        if is_pre_hook and layer_name in SwapManager().policy_peak_memory.keys():
-            peak_memory = SwapManager().policy_peak_memory[layer_name]
-        if not is_pre_hook and layer_name in SwapManager().layers_interval_peak_memory.keys():
-            peak_memory = SwapManager().layers_interval_peak_memory[layer_name]
-        if peak_memory <= 0:
-            return
-        supple_size = peak_memory + memory_fragment - process_free - memory_info["free"]
-        if SwapManager().swap_status and supple_size > 0:
-            SwapManager().swap_out_by_size(peak_memory, is_prediction=True)
-
-    def record_interval_peak_memory(self, current_ctx, memory_info):
-        if not self.previous_layer_info or 'is_recomputing_layer' in current_ctx:
-            return
-        pre_layer_name = self.previous_layer_info['layer_name']
-        interval_peak_memory = memory_info['max_memory_allocated'] - self.previous_layer_info['memory_info'][
-            'used_memory']
-        module_interval_peak_memory = SwapManager().layers_interval_peak_memory
-        old_interval_peak_memory = 0
-        if pre_layer_name in module_interval_peak_memory.keys():
-            old_interval_peak_memory = module_interval_peak_memory[pre_layer_name]
-        interval_peak_memory = max(interval_peak_memory, old_interval_peak_memory)
-        module_interval_peak_memory.update({pre_layer_name: interval_peak_memory})
-
-    def record_interval_memory_info(self, layer_name, memory_info):
-        self.previous_layer_info["layer_name"] = layer_name
-        self.previous_layer_info["memory_info"] = memory_info
-
-
-def get_memory_peak_prediction():
-    if MemoryPeakPrediction.memory_peak_prediction is None:
-        MemoryPeakPrediction.memory_peak_prediction = MemoryPeakPrediction()
-    return MemoryPeakPrediction.memory_peak_prediction
-
-
 class AdaptiveRecompute:
     adaptive_recomputing = None
 
@@ -413,14 +343,16 @@ class AdaptiveRecompute:
         self.profiling_step = 0
         # step for stop profiling, default is 10
         self.stop_profiling_step = 10
-        # min step for stop profiling
-        self.min_profiling_step = 5
+        # skip step for profiling
+        self.skip_profiling_step = 3
         # step for solve graph by adaptive recompute, after step for stop profiling
         self.solve_graph_at_step = 11
         # unit for device memory size(MB)
         self.unit_mb = 1024 * 1024
         # pp or vpp
         self.num_warmup_micro_batches = 1
+        # store all module event
+        self.event_list = []
 
     @staticmethod
     def get_memory_status():
@@ -448,62 +380,38 @@ class AdaptiveRecompute:
             num_warmup_micro_batches = (pipeline_parallel_size - pipeline_parallel_rank - 1) * 2
             num_warmup_micro_batches += (num_model_chunks - 1) * pipeline_parallel_size
         num_warmup_micro_batches += 1
-        self.num_warmup_micro_batches = min(num_warmup_micro_batches, total_num_micro_batches)
+        if num_model_chunks >= 1:
+            self.num_warmup_micro_batches = min(num_warmup_micro_batches, total_num_micro_batches) / num_model_chunks
 
     def pre_hook_func(self, state, prefix, name, *args, **kargs):
-        torch.npu.synchronize()
-        layer_name = prefix + "." + name if prefix != "" else name
-        SwapManager().cur_pre_hook_layer_name = layer_name
-        SwapManager().cur_post_hook_layer_name = ""
-        memory_info = self.get_memory_status()
-        get_memory_peak_prediction().record_interval_peak_memory(state, memory_info)
-        torch.npu.reset_max_memory_allocated()
-        state['memory'] = memory_info['used_memory']
-        state['time'] = time.time()
+        if self.profiling_step < self.skip_profiling_step:
+            return
+        state['memory'] = 0
         state['input'] = self._cal_input_output_size(args)
-        if self.profiling_step >= self.solve_graph_at_step \
-                and not get_adaptive_recomputing_policy().is_find_target_device_memory:
-            get_memory_peak_prediction().check_forward_mem_info(state, layer_name, memory_info)
+        if self.profiling_step == self.stop_profiling_step:
+            state['memory'] = torch.npu.memory_allocated() - state['input'] * self.unit_mb
+        # The memory and time information is obtained separately. The average time is calculated when the step in
+        # [skip_profiling_step, stop_profiling_step). The memory information is obtained only for the last time.
+        if self.profiling_step < self.stop_profiling_step:
+            start_event = torch.npu.Event(enable_timing=True)
+            self.event_list.append([start_event])
+            start_event.record()
 
     def post_hook_func(self, state, prefix, name, args, output):
-        torch.npu.synchronize()
-        layer_name = prefix + "." + name if prefix != "" else name
-        SwapManager().cur_pre_hook_layer_name = ""
-        SwapManager().cur_post_hook_layer_name = layer_name
-        memory_info = self.get_memory_status()
-        get_memory_peak_prediction().record_interval_peak_memory(state, memory_info)
-        get_memory_peak_prediction().record_interval_memory_info(layer_name, memory_info)
-        torch.npu.reset_max_memory_allocated()
-        memory_info['memory'] = state['memory']
-        state['peak_memory'] = get_memory_peak_prediction().get_peak_memory(layer_name, memory_info,
-                                                                            self.profiling_step <= self.solve_graph_at_step)
-        output_memory = self._cal_input_output_size(output)
-        state['memory_bytes'] = memory_info['used_memory'] - state['memory'] - output_memory
-        state['input'] += output_memory
-        state['memory'] = state['memory_bytes'] // self.unit_mb
-        if 'pre_total_time' in state:
-            state['forward_cnt'] += 1
-            state['time'] = (time.time() - state['time']) * 1000
-            state['pre_total_time'] += state['time']
-            try:
-                state['time'] = state['pre_total_time'] / state['forward_cnt']
-            except ZeroDivisionError:
-                state['time'] = 0
-        else:
-            state['forward_cnt'] = 0
-            state['time'] = (time.time() - state['time']) * 1000
-            state['pre_total_time'] = 0
-        if self.profiling_step < self.solve_graph_at_step:
-            return
-        peak_memory = state['peak_memory']
-        if layer_name in SwapManager().policy_peak_memory.keys():
-            peak_memory = SwapManager().policy_peak_memory[layer_name]
-        # record fragment
-        fragment = max(0, state["process_free"] + (state["free"] - memory_info["free"]) - peak_memory)
-        if fragment != 0 and memory_info["free"] < state["free"] and state["process_free"] >= peak_memory:
-            get_memory_peak_prediction().memory_fragment = fragment
-        if not get_adaptive_recomputing_policy().is_find_target_device_memory:
-            get_memory_peak_prediction().check_forward_mem_info(state, layer_name, memory_info, is_pre_hook=False)
+        if self.profiling_step < self.skip_profiling_step:
+            return        
+        if self.profiling_step < self.stop_profiling_step:
+            end_event = torch.npu.Event(enable_timing=True)
+            end_event.record()
+            # add end_event to corresponding position of list
+            for item in reversed(self.event_list):
+                if len(item) == 1:
+                    item.append(end_event)
+                    break
+        if self.profiling_step == self.stop_profiling_step:
+            output_memory = self._cal_input_output_size(output)
+            state['memory'] = (torch.npu.memory_allocated() - state['memory']) // self.unit_mb
+            state['input'] += output_memory
 
     def forward_pre_hook(self, prefix, name, ctx):
         def hook(module, *args, **kargs):
@@ -547,8 +455,8 @@ class AdaptiveRecompute:
                         next_have_allowed_recomputing = False
             self.construct_context_recursive(next_name, module, current_ctx, next_have_allowed_recomputing)
 
-    def register_recursive_hook(self, model, ctx, profiling_prefix, layer_index=0, prefetch=False):
-        index = layer_index or 0
+    def register_recursive_hook(self, model, ctx, profiling_prefix, first_chunk=False, layer_index=0, prefetch=False):
+        index = layer_index
         for module in model.children():
             if 'layers' not in ctx:
                 continue
@@ -561,7 +469,8 @@ class AdaptiveRecompute:
                     self.checkpointed_modules.append(module)
             else:
                 # only has allowed_recomputing Tag can set recomputing hook
-                if 'is_module_list' in ctx and 'allowed_recomputing' in current_ctx and index != 0:
+                recompute_layer_condition = index != 0 or index == 0 and not first_chunk
+                if 'is_module_list' in ctx and 'allowed_recomputing' in current_ctx and recompute_layer_condition:
                     # transformer layer
                     module.no_checkpoint_forward = module.forward
                     module.forward = get_recompute_hook().hook_checkpoint_forward(module.forward)
@@ -570,19 +479,19 @@ class AdaptiveRecompute:
                 name = current_ctx['name']
 
                 # profiling entire module
-                if "module" == prefix_name:
+                if "module" == prefix_name or 'module0' == prefix_name:
                     pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
                     post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
                     self.modules_hooks.append(pre_hook)
                     self.modules_hooks.append(post_hook)
 
                 # profiling transformer Layers
-                if isinstance(module, torch.nn.ModuleList) and 'is_recomputing_layer' in current_ctx:
+                if isinstance(module, torch.nn.ModuleList) and 'is_recomputing_layer' in current_ctx and first_chunk:
                     pre_hook = model.register_forward_pre_hook(self.forward_pre_hook(ctx['prefix_name'], ctx['name'], ctx))
                     post_hook = model.register_forward_hook(self.forward_post_hook(ctx['prefix_name'], ctx['name'], ctx))
                     self.modules_hooks.append(pre_hook)
                     self.modules_hooks.append(post_hook)
-                elif 'is_recomputing_layer' in current_ctx:
+                elif 'is_recomputing_layer' in current_ctx and first_chunk:
                     profiling_prefix = prefix_name + "." + name
                     pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
                     post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
@@ -590,18 +499,18 @@ class AdaptiveRecompute:
                     self.modules_hooks.append(post_hook)
 
                 # only has allowed_recomputing Tag and its submodule can set profiling hook
-                if ('allowed_recomputing' in current_ctx and index == 0):
+                if 'allowed_recomputing' in current_ctx and index == 0 and first_chunk:
                     profiling_prefix = prefix_name + "." + name
                     pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
                     post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
                     self.modules_hooks.append(pre_hook)
                     self.modules_hooks.append(post_hook)
-                elif profiling_prefix and prefix_name.startswith(profiling_prefix):
+                elif profiling_prefix and prefix_name.startswith(profiling_prefix) and first_chunk:
                     pre_hook = module.register_forward_pre_hook(self.forward_pre_hook(prefix_name, name, current_ctx))
                     post_hook = module.register_forward_hook(self.forward_post_hook(prefix_name, name, current_ctx))
                     self.modules_hooks.append(pre_hook)
                     self.modules_hooks.append(post_hook)
-            self.register_recursive_hook(module, current_ctx, profiling_prefix, prefetch=prefetch)
+            self.register_recursive_hook(module, current_ctx, profiling_prefix, first_chunk, prefetch=prefetch)
             index += 1
 
     def reset_modules(self):
@@ -625,10 +534,12 @@ class AdaptiveRecompute:
             SwapManager().reset_swap_manager_tensors()
             get_swap_hook().reset_swap_manager_modules()
             return
-
+        if self.profiling_step >= self.solve_graph_at_step:
+            for hook_handle in self.modules_hooks:
+                hook_handle.remove()
+            self.modules_hooks.clear()            
         if not get_adaptive_recomputing_policy().is_find_target_device_memory or self.profiling_step > step + 1:
             return
-        get_memory_peak_prediction().memory_fragment = 0
         if self.profiling_step == step + 1:
             title = (f"===== finish to check policy, search policy memory size is: "
                      f"{get_adaptive_recomputing_policy().cur_device_memory} =====")
@@ -636,9 +547,6 @@ class AdaptiveRecompute:
         if self.profiling_step == step:
             get_swap_hook().reset_swap_manager_modules()
         if get_adaptive_recomputing_policy().is_find_target_device_memory:
-            for hook_handle in self.modules_hooks:
-                hook_handle.remove()
-            self.modules_hooks.clear()
             SwapManager().reset_swap_manager_tensors()
 
     def prefetch_hook(self, models):
@@ -662,11 +570,10 @@ class AdaptiveRecompute:
 
     def step_hook(self, models):
         torch.npu.synchronize()
-        all_args = get_args()
+        while self.event_list:
+            record_time(self.context, self.event_list)
         self.reset_all_hook_args()
-        if (self.profiling_step < self.solve_graph_at_step
-                or (self.profiling_step > self.solve_graph_at_step and get_adaptive_recomputing_policy().is_stable_policy(
-                    self.profiling_step))):
+        if self.profiling_step < self.solve_graph_at_step:
             return
 
         if get_adaptive_recomputing_policy().context_copy is None:
@@ -675,7 +582,7 @@ class AdaptiveRecompute:
                 get_adaptive_recomputing_policy().get_default_device_memory(self.context["max_device_memory"])
             except KeyError:
                 print_rank_0("[ERROR] Some of these keys don't exist.")
-            get_graph_solver().build_solver_info(self.context, self.num_warmup_micro_batches)
+            get_graph_solver().build_solver_info(self.context, self.num_warmup_micro_batches, len(models))
 
         get_adaptive_recomputing_policy().check_cur_recompute_policy()
         print_rank_0("==================== ADAPTIVE-RECOMPUTE Report ====================")
@@ -686,7 +593,6 @@ class AdaptiveRecompute:
             self.reset_modules()
             print_rank_0("ADAPTIVE-RECOMPUTE: Start applying policy to the model")
             config = {
-                "pre_layer_full_name": "",
                 "pre_layer_ctx": {},
                 "cur_layer_name": "module",
             }
@@ -697,6 +603,9 @@ class AdaptiveRecompute:
     def hook_step_func(self, step_func, models):
         def custom_step_func(*args, **kargs):
             result = step_func(*args, **kargs)
+            if (self.profiling_step > self.solve_graph_at_step and \
+                get_adaptive_recomputing_policy().is_stable_policy(self.profiling_step)):
+                return result
             memory_info = self.get_memory_status()
             try:
                 hccl_memory = (memory_info["all_memory"] - memory_info["free"] - memory_info[
@@ -749,6 +658,30 @@ def get_adaptive_recomputing():
     return AdaptiveRecompute.adaptive_recomputing
 
 
+def record_time(context, remaining_event_list):
+    if "memory" in context:
+        cur_level_event_list = remaining_event_list.pop(0)
+        start_event = cur_level_event_list[0]
+        end_event = cur_level_event_list[1]
+        total_time = start_event.elapsed_time(end_event)
+        if 'pre_total_time' in context:
+            context['forward_cnt'] += 1
+            context['time'] = total_time
+            context['pre_total_time'] += total_time
+            try:
+                context['time'] = context['pre_total_time'] / context['forward_cnt']
+            except ZeroDivisionError:
+                context['time'] = 0
+        else:
+            context['forward_cnt'] = 1
+            context['time'] = total_time
+            context['pre_total_time'] = total_time
+    if "layers" not in context:
+        return
+    for sub_layer_context in context["layers"]:
+        record_time(sub_layer_context, remaining_event_list)
+
+
 def is_activate_adaptive_recompute():
     all_args = get_args()
     profiling_step = 0
@@ -786,15 +719,15 @@ def setup_model_and_optimizer_wrapper(setup_model_and_optimizer):
             optimizer.step = recomputing.hook_step_func(optimizer.step, models)
         if isinstance(models, list):
             for index, model in enumerate(models):
-                recomputing.construct_context_recursive("module", model, recomputing.context, True)
+                recomputing.construct_context_recursive("module" + str(index), model, recomputing.context, True)
                 if not args.prefetch:
                     recomputing.register_recursive_hook(model, recomputing.context, recomputing.profiling_prefix,
-                                                        index, prefetch=args.prefetch)
+                                                        index == 0, index, prefetch=args.prefetch)
         else:
             recomputing.construct_context_recursive("module", models, recomputing.context, True)
             if not args.prefetch:
-                recomputing.register_recursive_hook(models, recomputing.context, recomputing.profiling_prefix,
-                                                    prefetch=args.prefetch)
+                recomputing.register_recursive_hook(models, recomputing.context, recomputing.profiling_prefix, \
+                                                    True, prefetch=args.prefetch)
         if args.prefetch:
             recomputing.prefetch_hook(models)
         print_rank_0("ADAPTIVE-RECOMPUTE: successfully hooking module")

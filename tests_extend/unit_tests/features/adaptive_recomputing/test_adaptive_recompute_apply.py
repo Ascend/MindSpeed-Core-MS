@@ -63,7 +63,7 @@ class TestRecomputing(DistributedTest):
                                    return_value=0):
                 with mock.patch.object(parallel_state, 'get_data_parallel_world_size',
                                        return_value=0):
-                    models = None
+                    models = []
                     recomputing = get_adaptive_recomputing()
 
                     # 初始化context
@@ -77,10 +77,6 @@ class TestRecomputing(DistributedTest):
                     recomputing.set_profiling_step(10)
 
                     recomputing.profiling_step = 0
-                    recomputing.step_hook(models)
-                    assert get_adaptive_recomputing_policy().context_copy is None
-
-                    recomputing.profiling_step = 12
                     recomputing.step_hook(models)
                     assert get_adaptive_recomputing_policy().context_copy is None
 

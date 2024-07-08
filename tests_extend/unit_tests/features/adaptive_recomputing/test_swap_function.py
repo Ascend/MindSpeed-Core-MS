@@ -41,7 +41,7 @@ class TestSwapTensor(DistributedTest):
         assert second_mem == 0
         assert wrapped_tensor.get_location() == "cpu"
 
-        wrapped_tensor.trans_to_device()
+        wrapped_tensor.trans_to_device(resize_flag=True)
         third_mem = torch.npu.memory_allocated()
 
         assert third_mem == first_mem
