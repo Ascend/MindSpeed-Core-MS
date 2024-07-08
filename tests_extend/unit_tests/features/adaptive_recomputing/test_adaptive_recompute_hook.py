@@ -70,7 +70,7 @@ class TestRecursiveHook(DistributedTest):
         recomputing = get_adaptive_recomputing()
         recomputing.set_profiling_step(10)
         assert len(recomputing.modules_hooks) == 0
-        recomputing.register_recursive_hook(model, ctx, recomputing.profiling_prefix)
+        recomputing.register_recursive_hook(model, ctx, recomputing.profiling_prefix, first_chunk=True)
 
         assert len(recomputing.modules_hooks) != 0
 
@@ -79,6 +79,7 @@ class TestRecursiveHook(DistributedTest):
         ctx = {}
         recomputing = get_adaptive_recomputing()
         recomputing.set_profiling_step(10)
+        recomputing.profiling_step = 4
         prefix_name = "module"
 
         for name, module in model.named_children():
@@ -107,6 +108,7 @@ class TestRecursiveHook(DistributedTest):
         ctx = {}
         recomputing = get_adaptive_recomputing()
         recomputing.set_profiling_step(10)
+        recomputing.profiling_step = 10
         prefix_name = "module"
 
         for name, module in model.named_children():
@@ -127,8 +129,8 @@ class TestRecursiveHook(DistributedTest):
                 recomputing.context['module'].append(current_ctx)
             recomputing.pre_hook_func(current_ctx, prefix_name, name)
 
-            assert 'peak_memory' not in current_ctx
+            assert current_ctx.get('input') == 0, "'input' not in current_ctx or current_ctx['input'] != 0"
             args_tensor = torch.rand((10, 10, 10), dtype=torch.float16, requires_grad=True, device=torch.npu.current_device())
-            output_tensor = torch.rand((10, 10, 10), dtype=torch.float16, requires_grad=True, device=torch.npu.current_device())
+            output_tensor = torch.rand((200, 200, 200), dtype=torch.float16, requires_grad=True, device=torch.npu.current_device())
             recomputing.post_hook_func(current_ctx, prefix_name, name, args_tensor, output_tensor)
-            assert current_ctx['peak_memory'] is not None
+            assert current_ctx.get('input') != 0, "'input' not in current_ctx or current_ctx['input'] == 0"

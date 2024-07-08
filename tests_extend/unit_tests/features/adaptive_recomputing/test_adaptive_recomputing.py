@@ -316,7 +316,7 @@ class TestAdaptiveRecomputing(DistributedTest):
     def do_solve_graph(self, layer_num, pp, device_memory):
         module = self.get_module(layer_num)
         solver = GraphSolver()
-        solver.build_solver_info(module, pp)
+        solver.build_solver_info(module, pp, num_model_chunks=1)
         recompute_policy_list = solver.get_policy(device_memory)
         solver.apply_policy_to_model(recompute_policy_list)
         solver.print_list_to_policy(recompute_policy_list)
@@ -374,17 +374,12 @@ class TestAdaptiveRecomputing(DistributedTest):
         print("=== start to test solve graph: module 32 layer, pp 2, memory 52GB ===")
         module = self.do_solve_graph(32, 2, 52 * 1024)
         policy = {
-            "n_full": 11,
+            "n_full": 12,
             "n_selective": [
                 {
-                    "n": 19,
+                    "n": 20,
                     "recompute_nodes": ["input_layernorm", "attention.triangle_attn", "post_attention_layernorm",
                                         "mlp.up_proj"]
-                },
-                {
-                    "n": 2,
-                    "recompute_nodes": ["input_layernorm", "attention.query_key_value", "attention.triangle_attn",
-                                        "post_attention_layernorm", "mlp.gate_proj", "mlp.up_proj"]
                 },
             ]
         }
@@ -394,17 +389,12 @@ class TestAdaptiveRecomputing(DistributedTest):
         print("=== start to test solve graph: module 32 layer, pp 2, memory 54GB ===")
         module = self.do_solve_graph(32, 2, 54 * 1024)
         policy = {
-            "n_full": 10,
+            "n_full": 7,
             "n_selective": [
                 {
-                    "n": 20,
-                    "recompute_nodes": ["input_layernorm", "attention.triangle_attn", "post_attention_layernorm",
-                                        "mlp.up_proj"]
-                },
-                {
-                    "n": 2,
+                    "n": 25,
                     "recompute_nodes": ["input_layernorm", "attention.query_key_value", "attention.triangle_attn",
-                                        "post_attention_layernorm", "mlp.gate_proj", "mlp.up_proj"]
+                                        "post_attention_layernorm", "mlp.up_proj"]
                 },
             ]
         }
@@ -423,7 +413,7 @@ class TestAdaptiveRecomputing(DistributedTest):
                 },
                 {
                     "n": 1,
-                    "recompute_nodes": ["input_layernorm", "attention.rotary_emb", "attention.triangle_attn"]
+                    "recompute_nodes": ["attention.triangle_attn", "post_attention_layernorm"]
                 },
             ]
         }

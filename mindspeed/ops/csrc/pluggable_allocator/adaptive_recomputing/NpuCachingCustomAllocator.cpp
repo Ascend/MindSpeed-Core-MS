@@ -157,32 +157,39 @@ size_t CachingAllocatorConfig::parseExpandableSegments(const std::vector<std::st
 }
 
 void CachingAllocatorConfig::parseArgs(const char *env) {
-  // If empty, set the default values
-  m_max_split_size = std::numeric_limits<size_t>::max();
-  m_garbage_collection_threshold = 0;
+    // If empty, set the default values
+    m_max_split_size = std::numeric_limits<size_t>::max();
+    m_garbage_collection_threshold = 0;
 
-  if (env == nullptr) {
-    return;
-  }
-
-  std::vector<std::string> config;
-  lexArgs(env, config);
-
-  for (size_t i = 0; i < config.size(); i++) {
-    if (config[i].compare("max_split_size_mb") == 0) {
-      i = parseMaxSplitSize(config, i);
-    } else if (config[i].compare("garbage_collection_threshold") == 0) {
-      i = parseGarbageCollectionThreshold(config, i);
-    } else if (config[i] == "expandable_segments") {
-      i = parseExpandableSegments(config, i);
-    } else {
-      TORCH_CHECK(false, "Unrecognized CachingAllocator option: ", config[i]);
+    if (env == nullptr) {
+        return;
     }
 
-    if (i + 1 < config.size()) {
-      consumeToken(config, ++i, ',');
+    std::vector<std::string> config;
+    lexArgs(env, config);
+
+    for (size_t i = 0; i < config.size(); i++) {
+        if (config[i].compare("max_split_size_mb") == 0) {
+            i = parseMaxSplitSize(config, i);
+        } else if (config[i].compare("garbage_collection_threshold") == 0) {
+            i = parseGarbageCollectionThreshold(config, i);
+        } else if (config[i] == "expandable_segments") {
+            set_expandable_segments_flag = true;
+            i = parseExpandableSegments(config, i);
+        } else {
+            TORCH_CHECK(false, "Unrecognized CachingAllocator option: ", config[i]);
+        }
+
+        if (i + 1 < config.size()) {
+            consumeToken(config, ++i, ',');
+        }
     }
-  }
+    if (m_expandable_segments) {
+        if (set_expandable_segments_flag) {
+        } else if (m_max_split_size != std::numeric_limits<size_t>::max() || m_garbage_collection_threshold != 0) {
+            m_expandable_segments = false;
+        }
+    }
 }
 
 NpuCachingCustomAllocator my_allocator;

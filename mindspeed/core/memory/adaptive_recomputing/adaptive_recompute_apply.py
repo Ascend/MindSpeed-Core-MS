@@ -79,7 +79,6 @@ def get_swap_hook():
 
 
 def register_recursive_apply(config, models, ctx):
-    pre_layer_full_name = config["pre_layer_full_name"]
     pre_layer_ctx = config["pre_layer_ctx"]
     cur_layer_name = config["cur_layer_name"]
     if cur_layer_name == "module" and isinstance(models, list):
@@ -97,15 +96,13 @@ def register_recursive_apply(config, models, ctx):
 
     if 'allowed_recomputing' in pre_layer_ctx:
         models.no_checkpoint_swap_forward = models.forward
-        models.forward = get_swap_hook().hook_swap_manager_forward(models.forward, pre_layer_full_name)
+        models.forward = get_swap_hook().hook_swap_manager_forward(models.forward, ctx["prefix_name"])
         get_swap_hook().swap_manager_modules.append(models)
         return
 
-    pre_layer_full_name += "." + cur_layer_name if pre_layer_full_name != "" else cur_layer_name
     idx = 0
     for name, module in models.named_children():
         config = {
-            "pre_layer_full_name": pre_layer_full_name,
             "pre_layer_ctx": ctx,
             "cur_layer_name": name,
         }

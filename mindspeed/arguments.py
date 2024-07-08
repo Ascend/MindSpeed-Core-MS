@@ -245,6 +245,9 @@ def _add_automated_pipeline_args(parser):
                        help='To store the recompute type of automated pipeline, 0 for mlp block '
                        '1 for attention block and 2 for transformer layer'
                        )
+    group.add_argument('--memory-fragmentation',
+                       action='store_true', default=False,
+                       help='Enable the memory fragmentation feature.')
     return parser
 
 
@@ -412,11 +415,21 @@ def validate_args_wrapper(validate_args):
         if args.recompute_activation_function and args.recompute_granularity == "selective":
             raise AssertionError('--recompute-activation-function is not compatible with selective recomputation')
         adaptive_recompute_enable = args.adaptive_recompute_device_size > 0 or args.adaptive_recompute_device_swap
-        if adaptive_recompute_enable and (args.recompute_granularity is not None or args.recompute_method is not None):
-            print("[WARNING] if activate adaptive selective recompute, recomputing args switch "
-                        "\"recompute_granularity\" and \"recompute_method\" will be turned off.")
-            args.recompute_granularity = None
-            args.recompute_method = None
+        if adaptive_recompute_enable:
+            assert args.recompute_granularity is None and args.recompute_method is None, \
+                'adaptive selective recompute is not compatible with ' \
+                'recompute_granularity and recompute_method. '
+            assert not args.recompute_activation_function, \
+                'adaptive selective recompute is not compatible ' \
+                'with activation function recomputation '
+            assert not args.prefetch, 'adaptive selective recompute is not compatible with prefetch feature'
+            assert not args.recompute_in_advance and not args.recompute_in_bubble, 'adaptive selective recompute ' \
+                'is not compatible with ripipe schedule'
+            assert not args.memory_fragmentation, \
+                'adaptive selective recompute is not compatible with memory fragmentation'
+        if args.memory_fragmentation:
+            assert not args.use_fused_rotary_pos_emb, \
+                'memory fragmentation is not compatible with use_fused_rotary_pos_emb'
         if args.use_flash_attn:
             assert args.sparse_mode == 0 or args.sparse_mode == 2, f"Only supports sparse modes 0 and 2"
         args.create_attention_mask_in_dataloader = False

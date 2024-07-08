@@ -310,9 +310,9 @@ def megatron_training_adaptation(aspm):
     aspm.register_patch('megatron.training.tokenizer.tokenizer.build_tokenizer', build_tokenizer_wrapper)
 
 
-def ascend_adaptation(aspm):
+def ascend_adaptation(aspm, args):
     from megatron.legacy.model.transformer import ParallelTransformerLayer
-    if int(os.getenv('MEMORY_FRAGMENTATION', '0')):
+    if args.memory_fragmentation:
         from .core.memory.memory_fragmentation.pluggable_allocator_adpator import change_allocator
         change_allocator()
 
@@ -329,8 +329,8 @@ def ascend_adaptation(aspm):
         allowed_recomputing_module_wrapper(ParallelTransformerLayer)
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
         aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
-
-    if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) and not int(os.getenv('MEMORY_FRAGMENTATION', '0')):
+    adaptive_recompute_enable = args.adaptive_recompute_device_size > 0 or args.adaptive_recompute_device_swap
+    if adaptive_recompute_enable and not args.memory_fragmentation:
         from .core.memory.adaptive_recomputing.pluggable_allocator_adpator import change_allocator
         if os.getenv('ENABLE_PREFETCH', '0') == '0':
             change_allocator()
@@ -339,7 +339,7 @@ def ascend_adaptation(aspm):
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
         aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
 
-    if int(os.getenv('ADAPTIVE_RECOMPUTING', '0')) or int(os.getenv('MEMORY_FRAGMENTATION', '0')):
+    if adaptive_recompute_enable or args.memory_fragmentation:
         import megatron.training.initialize
         aspm.register_patch('megatron.training.initialize_megatron', megatron.training.initialize.initialize_megatron)
 
@@ -396,7 +396,7 @@ def exe_adaptation():
     megatron_core_adaptation(aspm)
     megatron_legacy_adaptation(aspm)
     megatron_training_adaptation(aspm)
-    ascend_adaptation(aspm)
+    ascend_adaptation(aspm, mindspeed_args)
     coc_adaptation(aspm, mindspeed_args)
     mcore_moe_adaptation(aspm, mindspeed_args)
     deepspeed_moe_adaptation(aspm, mindspeed_args)
