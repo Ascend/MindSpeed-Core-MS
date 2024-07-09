@@ -60,6 +60,7 @@ gelu函数重计算->后续模块A的反向
 
 此处提供一个示例，可以灵活使用 CheckpointWithoutOutput 来对自定义的函数进行重计算：
 
+（注意：如要使用register_hook，需要确保张量有梯度）
 ```python
 from mindspeed.core.tensor_parallel.random import CheckpointWithoutOutput
 
@@ -73,7 +74,8 @@ class Custom_module(torch.nn.Module):
         function_output = self.activation_checkpoint_manager.checkpoint(self.custom_function, False, function_input1, function_input2, ...)
         ...(after used output)
         self.activation_checkpoint_manager.discard_output()
-        module_output.register_hook(self.activation_checkpoint_manager.recompute)
+        if module_output.requires_grad:
+            module_output.register_hook(self.activation_checkpoint_manager.recompute)
 
         return module_output
 ```

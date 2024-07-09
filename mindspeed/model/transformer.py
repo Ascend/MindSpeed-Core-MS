@@ -538,7 +538,8 @@ def parallel_mlp_forward_wrapper(fn):
 
             # when backward to output of dense_4h_to_h,
             # recompute and restore the output of activation function.
-            output.register_hook(self.activation_checkpoint_manager.recompute)
+            if output.requires_grad:
+                output.register_hook(self.activation_checkpoint_manager.recompute)
         return output, output_bias
     return wrapper
 
