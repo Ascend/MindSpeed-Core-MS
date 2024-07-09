@@ -362,6 +362,10 @@ def mcore_moe_adaptation(pm, args):
         megatron.core.models.gpt.gpt_layer_specs._get_mlp_module_spec = get_mlp_module_spec_wrapper(
             megatron.core.models.gpt.gpt_layer_specs._get_mlp_module_spec, ColumnParallelLinear.forward,
             RowParallelLinear.forward)
+    from .core.transformer.moe.grouped_gemm_util import Ops, grouped_gemm_is_available, get_device_capability
+    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.ops', Ops)
+    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.grouped_gemm_is_available', grouped_gemm_is_available)
+    pm.register_patch('torch.cuda.get_device_capability', get_device_capability)
 
 
 def deepspeed_moe_adaptation(pm, args):

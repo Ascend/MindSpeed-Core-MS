@@ -106,8 +106,9 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 | Ascend swiglu 融合算子             | [link](docs/features/swiglu.md) |
 | Ascend rotary_embedding 融合算子   | [link](docs/features/rotary-embedding.md) |
 | Ascend MoE token重排性能优化         | [link](docs/features/token-rearrange.md) |
-| Ascend MoE dropless性能优化         | [link](docs/features/efficient-moe.md) |
-| Ascend MoE 负载感知内存均衡         | [link](docs/features/efficient-moe.md) |
+| Ascend MoE dropless性能优化         | [link](docs/features/efficient-moe-deepspeed-moe.md) |
+| Ascend MoE 负载感知内存均衡         | [link](docs/features/efficient-moe-megatron-moe.md) |
+| Ascend MoE Grouped GEMM         | [link](docs/features/efficient-moe-megatron-moe.md) |
 | Ascend flash attention 适配      | [link](docs/features/flash-attention.md) |
 | Ascend nano-pipe流水线并行      | [link](docs/features/nanopipe-pipeline-parallel.md) |
 | Ascend MLP 通信隐藏               | [link](docs/features/pipeline-experts.md) |
