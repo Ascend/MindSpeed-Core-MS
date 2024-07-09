@@ -78,7 +78,8 @@ class MixtralParallelMLPBM(torch.nn.Module):
             current_hidden_states = act_intermediate_parallel * self.w3(hidden_states)[0]
             self.activation_checkpoint_manager.discard_output()
             current_hidden_states = self.w2(current_hidden_states)[0]
-            current_hidden_states.register_hook(self.activation_checkpoint_manager.recompute)
+            if current_hidden_states.requires_grad:
+                current_hidden_states.register_hook(self.activation_checkpoint_manager.recompute)
         else:
             current_hidden_states = self.act_fn(self.w1(hidden_states)[0]) * self.w3(hidden_states)[0]
             current_hidden_states = self.w2(current_hidden_states)[0]
