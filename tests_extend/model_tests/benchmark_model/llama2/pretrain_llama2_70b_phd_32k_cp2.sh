@@ -40,7 +40,7 @@ GPT_ARGS="
     --use-ascend-mc2 \
     --recompute-granularity full \
     --recompute-method block \
-    --recompute-num-layers 13 \
+    --recompute-num-layers 10 \
     --overlap-grad-reduce \
     --overlap-param-gather \
     --num-layers-per-virtual-pipeline-stage 2 \

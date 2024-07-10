@@ -32,3 +32,7 @@ MC2算子接口参见[link](https://www.hiascend.com/document/detail/zh/Pytorch/
 ## 使用效果
 
 在开启TP和SP的训练场景下，使用MC2可以减少内存开销并提高计算效率。
+
+## 注意事项
+
+mcore场景下（开启`--use-mcore-models`），MoE MLP不使用MC2
