@@ -61,12 +61,8 @@ class PipeExpertUtil:
     def deal_data(cls, origin_data, output_data):
         for i in range(cls.num_local_experts):
             for j in range(cls.multi_data):
-                if j != cls.multi_data - 1:
-                    output_data.append(origin_data[i * cls.ep_size: (i + 1) * cls.ep_size,
-                                       j * cls.slice_seq_size: (j + 1) * cls.slice_seq_size].clone().contiguous())
-                else:
-                    output_data.append(origin_data[i * cls.ep_size: (i + 1) * cls.ep_size,
-                                       j * cls.slice_seq_size:].clone().contiguous())
+                output_data.append(origin_data[i * cls.ep_size: (i + 1) * cls.ep_size,
+                                   j * cls.slice_seq_size: (j + 1) * cls.slice_seq_size].clone().contiguous())
 
     @classmethod
     def first_a2a_when_not_multi_stream(cls, input_data_list):
@@ -79,109 +75,80 @@ class PipeExpertUtil:
     @classmethod
     def fw_bw_ag_after_first_a2a_when_not_multi_stream(cls, input_data_list, num_local_experts_index, multi_data_index,
                                                        is_fw_ag):
-        if (num_local_experts_index * cls.multi_data + multi_data_index) == 0:
-            cls.first_a2a_event[num_local_experts_index * cls.multi_data + multi_data_index].wait()
+        index = num_local_experts_index * cls.multi_data + multi_data_index
+        if index == 0:
+            cls.first_a2a_event[index].wait()
             if is_fw_ag:
-                input_data_list[
-                    num_local_experts_index * cls.multi_data + multi_data_index], handle = async_fw_all_gather(
-                    input_data_list[num_local_experts_index * cls.multi_data + multi_data_index])
+                input_data_list[index], handle = async_fw_all_gather(input_data_list[index])
                 cls.fw_ag_event.append(handle)
             else:
                 if get_args().use_nanopipe and not is_pipeline_first_stage(True):
                     WeightGradStore.save_grad_output(input_data_list[num_local_experts_index * cls.multi_data + multi_data_index].clone().detach())
-                input_data_list[
-                    num_local_experts_index * cls.multi_data + multi_data_index], handle = async_bw_all_gather(
-                    input_data_list[num_local_experts_index * cls.multi_data + multi_data_index])
+                input_data_list[index], handle = async_bw_all_gather(input_data_list[index])
                 cls.bw_ag_event.append(handle)
-        if (num_local_experts_index * cls.multi_data + multi_data_index) < (cls.num_local_experts * cls.multi_data - 1):
-            cls.first_a2a_event[num_local_experts_index * cls.multi_data + multi_data_index + 1].wait()
+        if index < (cls.num_local_experts * cls.multi_data - 1):
+            cls.first_a2a_event[index + 1].wait()
             if is_fw_ag:
-                if num_local_experts_index * cls.multi_data + multi_data_index == 0:
-                    input_data_list[
-                        num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_fw_all_gather(
-                        input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1], None, True)
+                if index == 0:
+                    input_data_list[index + 1], handle = async_fw_all_gather(input_data_list[index + 1], None, True)
                 else:
-                    input_data_list[
-                        num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_fw_all_gather(
-                        input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1])
+                    input_data_list[index + 1], handle = async_fw_all_gather(input_data_list[index + 1])
                 cls.fw_ag_event.append(handle)
             else:
                 if get_args().use_nanopipe and not is_pipeline_first_stage(True):
                     WeightGradStore.save_grad_output(input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1].clone().detach())
-                if num_local_experts_index * cls.multi_data + multi_data_index == 0:
-                    input_data_list[
-                        num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_bw_all_gather(
-                        input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1], None, True)
+                if index == 0:
+                    input_data_list[index + 1], handle = async_bw_all_gather(input_data_list[index + 1], None, True)
                 else:
-                    input_data_list[
-                        num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_bw_all_gather(
-                        input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1])
+                    input_data_list[index + 1], handle = async_bw_all_gather(input_data_list[index + 1])
                 cls.bw_ag_event.append(handle)
 
     @classmethod
     def fw_bw_ag_after_first_a2a_when_multi_stream(cls, input_data_list, num_local_experts_index, multi_data_index,
                                                    is_fw_ag):
-        if num_local_experts_index * cls.multi_data + multi_data_index == 0:
-            input_data_list[num_local_experts_index * cls.multi_data + multi_data_index], handle = async_all_to_all(
-                input_data_list[num_local_experts_index * cls.multi_data + multi_data_index])
+        index = num_local_experts_index * cls.multi_data + multi_data_index
+        if index == 0:
+            input_data_list[index], handle = async_all_to_all(input_data_list[index])
             cls.first_a2a_event.append(handle)
             if is_fw_ag:
-                input_data_list[
-                    num_local_experts_index * cls.multi_data + multi_data_index], handle = async_fw_all_gather(
-                    input_data_list[num_local_experts_index * cls.multi_data + multi_data_index],
-                    cls.first_a2a_event[num_local_experts_index * cls.multi_data + multi_data_index])
+                input_data_list[index], handle = async_fw_all_gather(
+                    input_data_list[index], cls.first_a2a_event[index])
                 cls.fw_ag_event.append(handle)
             else:
                 if get_args().use_nanopipe and not is_pipeline_first_stage(True):
                     WeightGradStore.save_grad_output(input_data_list[num_local_experts_index * cls.multi_data + multi_data_index].clone().detach())
-                input_data_list[
-                    num_local_experts_index * cls.multi_data + multi_data_index], handle = async_bw_all_gather(
-                    input_data_list[num_local_experts_index * cls.multi_data + multi_data_index],
-                    cls.first_a2a_event[num_local_experts_index * cls.multi_data + multi_data_index])
+                input_data_list[index], handle = async_bw_all_gather(
+                    input_data_list[index], cls.first_a2a_event[index])
                 cls.bw_ag_event.append(handle)
-        if num_local_experts_index * cls.multi_data + multi_data_index < (cls.num_local_experts * cls.multi_data - 1):
+        if index < (cls.num_local_experts * cls.multi_data - 1):
             if is_fw_ag:
-                input_data_list[
-                    num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_all_to_all(
-                    input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1],
-                    cls.fw_ag_event[num_local_experts_index * cls.multi_data + multi_data_index])
+                input_data_list[index + 1], handle = async_all_to_all(
+                    input_data_list[index + 1], cls.fw_ag_event[index])
                 cls.first_a2a_event.append(handle)
-                if num_local_experts_index * cls.multi_data + multi_data_index == 0:
-                    input_data_list[
-                        num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_fw_all_gather(
-                        input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1],
-                        cls.first_a2a_event[num_local_experts_index * cls.multi_data + multi_data_index + 1],
-                        True)
+                if index == 0:
+                    input_data_list[index + 1], handle = async_fw_all_gather(
+                        input_data_list[index + 1], cls.first_a2a_event[index + 1], True)
                 else:
-                    input_data_list[
-                        num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_fw_all_gather(
-                        input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1],
-                        cls.first_a2a_event[num_local_experts_index * cls.multi_data + multi_data_index + 1])
+                    input_data_list[index + 1], handle = async_fw_all_gather(
+                        input_data_list[index + 1], cls.first_a2a_event[index + 1])
                 cls.fw_ag_event.append(handle)
             else:
                 if get_args().use_nanopipe and not is_pipeline_first_stage(True):
                     WeightGradStore.save_grad_output(input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1].clone().detach())
-                input_data_list[
-                    num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_all_to_all(
-                    input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1],
-                    cls.bw_ag_event[num_local_experts_index * cls.multi_data + multi_data_index])
+                input_data_list[index + 1], handle = async_all_to_all(
+                    input_data_list[index + 1], cls.bw_ag_event[index])
                 cls.first_a2a_event.append(handle)
-                if num_local_experts_index * cls.multi_data + multi_data_index == 0:
-                    input_data_list[
-                        num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_bw_all_gather(
-                        input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1],
-                        cls.first_a2a_event[num_local_experts_index * cls.multi_data + multi_data_index + 1],
-                        True)
+                if index == 0:
+                    input_data_list[index + 1], handle = async_bw_all_gather(
+                        input_data_list[index + 1], cls.first_a2a_event[index + 1], True)
                 else:
-                    input_data_list[
-                        num_local_experts_index * cls.multi_data + multi_data_index + 1], handle = async_bw_all_gather(
-                        input_data_list[num_local_experts_index * cls.multi_data + multi_data_index + 1],
-                        cls.first_a2a_event[num_local_experts_index * cls.multi_data + multi_data_index + 1])
+                    input_data_list[index + 1], handle = async_bw_all_gather(
+                        input_data_list[index + 1], cls.first_a2a_event[index + 1])
                 cls.bw_ag_event.append(handle)
 
     @classmethod
-    def a2a_after_ar_rs(cls, num_local_experts_index, multi_data_index, output_list_for_each_multi_data,
-                        outputs_list_for_each_local_expert):
+    def fw_a2a_after_ar_rs_when_not_multi_stream(cls, num_local_experts_index, multi_data_index,
+                                                 output_list_for_each_multi_data, outputs_list_for_each_local_expert):
         if cls.multi_data == 1:
             if num_local_experts_index > 0:
                 cls.ar_rs_event[num_local_experts_index - 1].wait()
@@ -203,18 +170,12 @@ class PipeExpertUtil:
                     cls.second_a2a_event.append(handle)
 
     @classmethod
-    def a2a_for_final_data(cls, outputs_list_for_each_local_expert):
-        if cls.multi_data == 1:
-            cls.ar_rs_event[cls.num_local_experts - 1].wait()
-            outputs_list_for_each_local_expert[cls.num_local_experts - 1][0], handle = async_all_to_all(
-                outputs_list_for_each_local_expert[cls.num_local_experts - 1][0])
-            cls.second_a2a_event.append(handle)
-        else:
-            cls.ar_rs_event[cls.num_local_experts * cls.multi_data - 1].wait()
-            outputs_list_for_each_local_expert[cls.num_local_experts - 1][
-                cls.multi_data - 1], handle = async_all_to_all(
-                outputs_list_for_each_local_expert[cls.num_local_experts - 1][cls.multi_data - 1])
-            cls.second_a2a_event.append(handle)
+    def fw_a2a_for_final_data_when_not_multi_stream(cls, outputs_list_for_each_local_expert):
+        cls.ar_rs_event[cls.num_local_experts * cls.multi_data - 1].wait()
+        outputs_list_for_each_local_expert[cls.num_local_experts - 1][
+            cls.multi_data - 1], handle = async_all_to_all(
+            outputs_list_for_each_local_expert[cls.num_local_experts - 1][cls.multi_data - 1])
+        cls.second_a2a_event.append(handle)
 
 
 class PipeExpert(torch.autograd.Function):
@@ -229,6 +190,8 @@ class PipeExpert(torch.autograd.Function):
 
         input_shape = list(inputs.size())
         slice_seq_size = input_shape[1] // multi_data
+        if input_shape[1] % multi_data != 0:
+            slice_seq_size += 1
 
         ctx.num_local_experts = num_local_experts
         ctx.sequence_parallel = sequence_parallel
@@ -278,8 +241,8 @@ class PipeExpert(torch.autograd.Function):
                 output_detach_after_expert = output_expert.detach()
 
                 if not multi_stream:
-                    PipeExpertUtil.a2a_after_ar_rs(i, j, output_list_for_each_multi_data,
-                                                   outputs_list_for_each_local_expert)
+                    PipeExpertUtil.fw_a2a_after_ar_rs_when_not_multi_stream(i, j, output_list_for_each_multi_data,
+                                                                            outputs_list_for_each_local_expert)
 
                     output_detach_after_expert, handle = async_fw_ar_rs(output_detach_after_expert, sequence_parallel)
                     output_list_for_each_multi_data.append(output_detach_after_expert)
@@ -300,7 +263,7 @@ class PipeExpert(torch.autograd.Function):
             outputs_list_for_each_local_expert.append(output_list_for_each_multi_data)
 
         if not multi_stream:
-            PipeExpertUtil.a2a_for_final_data(outputs_list_for_each_local_expert)
+            PipeExpertUtil.fw_a2a_for_final_data_when_not_multi_stream(outputs_list_for_each_local_expert)
 
         for i in range(num_local_experts):
             for j in range(multi_data):

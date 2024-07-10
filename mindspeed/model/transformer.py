@@ -386,9 +386,6 @@ def parallel_mlp_init_wrapper(fn):
         fn(self, *args, **kwargs)
         self.layer_number = None
         _args = get_args()
-        if not _args.swiglu:
-            self.dense_h_to_4h.pipe_experts = _args.use_pipe_experts
-            self.dense_4h_to_h.pipe_experts = _args.use_pipe_experts
         if _args.swiglu and _args.use_fused_swiglu:
             self.activation_func = fused_swiglu
 
@@ -446,6 +443,10 @@ def parallel_mlp_init_wrapper(fn):
                     and parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None:
             setattr(self.dense_h_to_4h, "in_nano", True)
             setattr(self.dense_4h_to_h, "in_nano", True)
+        # use dynamic property assignment to ADD pipe_experts attribution
+        if not _args.swiglu:
+            self.dense_h_to_4h.pipe_experts = _args.use_pipe_experts
+            self.dense_4h_to_h.pipe_experts = _args.use_pipe_experts
     return wrapper
 
 
