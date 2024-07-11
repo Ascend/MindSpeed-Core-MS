@@ -336,7 +336,7 @@ def set_attention_mask(attn_mask):
 def generate_attention_mask():
     global _GLOBAL_ATTN_MASK
     args = get_args()
-    if args.use_flash_attn and (args.seq_length > 2048 or args.context_parallel_algo == 'megatron_cp_algo'):
+    if args.use_flash_attn and (args.seq_length > 2048 or args.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']):
         args.sparse_mode = 2
         _GLOBAL_ATTN_MASK = torch.triu(torch.ones([2048, 2048], dtype=bool, device=torch.cuda.current_device()), diagonal=1)
     else:
