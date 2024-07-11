@@ -34,9 +34,10 @@ GPT_ARGS="
     --use-fused-rotary-pos-emb \
     --use-cp-send-recv-overlap \
     --context-parallel-algo megatron_cp_algo \
+    --enable-recompute-layers-per-pp-rank \
     --recompute-activation-function \
     --prefetch \
-    --recompute-num-layers 4 \
+    --recompute-num-layers 5 \
     --num-layers-per-virtual-pipeline-stage 2 \
     --use-distributed-optimizer \
     --overlap-grad-reduce \

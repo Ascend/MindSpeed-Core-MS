@@ -19,3 +19,5 @@ export DYNAMIC_OP="ADD#MUL"
 export HCCL_WHITELIST_DISABLE=1
 #设置HCCL超时时间
 export HCCL_CONNECT_TIMEOUT=1200
+#内存碎片优化开关
+export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
