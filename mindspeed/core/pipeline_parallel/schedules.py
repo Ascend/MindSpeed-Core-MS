@@ -27,6 +27,9 @@ def get_forward_backward_func_wrapper(get_forward_backward_func):
         if arguments.optimize_send_recv_comm and arguments.num_layers_per_virtual_pipeline_stage is None:
             return flexible_schedules.forward_backward_pipelining_without_interleaving
 
+        if arguments.automated_pipeline_perf and arguments.pp_schedule_list:
+            return flexible_schedules.forward_backward_pipelining_without_interleaving
+
         if arguments.recompute_in_bubble or arguments.recompute_in_advance:
             return forward_backward_ripipe_pipelining
 

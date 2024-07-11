@@ -226,8 +226,12 @@ def _add_automated_pipeline_args(parser):
     group = parser.add_argument_group(title='automated_pipeline_allocation')
     group.add_argument('--automated-pipeline',
                        action='store_true',
-                       help='To enable automated pipeline process'
+                       help='To enable automated pipeline memory saving process'
                       )
+    group.add_argument('--automated-pipeline-perf',
+                       action='store_true',
+                       help='To enable automated pipeline performance acceleration process'
+                       )
     group.add_argument('--save-memory-ratio',
                        type=float, default=0.20,
                        help='To set memory saving rate in automated pipeline'
@@ -242,6 +246,22 @@ def _add_automated_pipeline_args(parser):
                        type=int, default=2,
                        help='To store the recompute type of automated pipeline, 0 for mlp block '
                        '1 for attention block and 2 for transformer layer'
+                       )
+    group.add_argument('--optimized-mbs-list',
+                       type=str,
+                       help='To store the optimized mbs policy of automated pipeline performance'
+                       )
+    group.add_argument('--mbs-idx',
+                       type=int,
+                       help='To store the index of mbs list'
+                       )
+    group.add_argument('--pp-schedule-list',
+                       type=str,
+                       help='To store the pipeline schedule policy of automated pipeline performance'
+                       )
+    group.add_argument('--optimized-mbs-mode',
+                       action='store_false',
+                       help='To store the status of optimized mbs in automated pipeline performance'
                        )
     group.add_argument('--memory-fragmentation',
                        action='store_true', default=False,
@@ -442,6 +462,12 @@ def validate_args_wrapper(validate_args):
             if args.optimize_recomp_communication_level > 0:
                 print("[WARNING] disable optimize recomp communication level when enabling automated pipeline")
                 args.optimize_recomp_communication_level = 0
+        if args.automated_pipeline_perf:
+            if args.automated_pipeline:
+                print("[WARNING] disable automated pipeline when enabling automated pipeline performance version")
+                args.automated_pipeline = False
+            if args.num_layers_per_virtual_pipeline_stage is not None:
+                raise AssertionError('automated pipeline performance is temporarily incompatible with virtual pipeline')
         if args.use_ascend_mc2 and args.use_ascend_coc:
             raise AssertionError('--mc2 and coc can not be used together')
         if args.use_nd_matmul:

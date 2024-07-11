@@ -41,6 +41,7 @@ from megatron.core.pipeline_parallel.p2p_communication import (
 from megatron.core.parallel_state import get_pipeline_model_parallel_group
 from mindspeed.core.parallel_state import get_pipeline_parallel_group_for_new_stream
 from mindspeed.core.weight_grad_store import WeightGradStore
+from megatron.training import get_args
 
 
 forward_comm_stream = None
@@ -436,10 +437,13 @@ def forward_backward_pipelining_without_interleaving(
         default_stream = torch.cuda.default_stream()
 
     global scheduler_plan
-    if scheduler_plan is None:
+    arguments = get_args()
+    key = 'stage{}'.format(parallel_state.get_pipeline_model_parallel_rank())
+    if scheduler_plan is None and arguments.pp_schedule_list:
+        scheduler_plan = arguments.pp_schedule_list.get(key)
+    elif scheduler_plan is None and arguments.pp_schedule_list is None:
         scheduler_plan = generate_1f1b_scheduler_plan(parallel_state.get_pipeline_model_parallel_world_size(),
                                                       num_microbatches)
-        key = 'stage{}'.format(parallel_state.get_pipeline_model_parallel_rank())
         scheduler_plan = scheduler_plan.get(key)
 
     config.batch_p2p_comm = False

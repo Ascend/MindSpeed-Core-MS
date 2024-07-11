@@ -146,6 +146,7 @@ def megatron_core_adaptation(aspm):
     from .optimizer.optimizer import (mixed_precision_optimizer_step, \
                                       reuse_fp32_param_init_wrapper, optimizer_config_init_wrapper)
     from .core.pipeline_parallel.schedules import get_forward_backward_func_wrapper
+    from .core.performance.auto_pipeline_perf.schedules import get_forward_backward_func_decorator, backward_step_decorator, forward_step_decorator
     from .core.pipeline_parallel.p2p_communication import _communicate_shapes
     from .optimizer.distrib_optimizer import reuse_fp32_param_distrib_optimizer_init_wrapper
     from .core.models.common.embeddings.rotary_pos_embedding import get_pos_emb_on_this_cp_rank
@@ -195,6 +196,12 @@ def megatron_core_adaptation(aspm):
                         dot_product_attention_forward_wrapper)
     aspm.register_patch('megatron.core.pipeline_parallel.schedules.get_forward_backward_func',
                         get_forward_backward_func_wrapper)
+    aspm.register_patch('megatron.core.pipeline_parallel.schedules.get_forward_backward_func',
+                        get_forward_backward_func_decorator)
+    aspm.register_patch('megatron.core.pipeline_parallel.schedules.backward_step',
+                        backward_step_decorator)
+    aspm.register_patch('megatron.core.pipeline_parallel.schedules.forward_step',
+                        forward_step_decorator)
     aspm.register_patch('megatron.core.pipeline_parallel.p2p_communication._communicate_shapes',
                         _communicate_shapes)
 
@@ -240,6 +247,10 @@ def megatron_legacy_adaptation(aspm):
     from .model.transformer import switch_mlp_init_wrapper, switch_mlp_forward_wrapper, \
                                     parallel_transformer_layer_init_wrapper
     from .model.language_model import parallel_lm_logits, embedding_forward_wrapper
+    from .core.performance.auto_pipeline_perf.data_samplers import build_pretraining_data_loader_decorator
+    from .core.performance.auto_pipeline_perf.transformer import get_attention_mask_wrapper
+    aspm.register_patch('mindspeed.model.transformer.get_attention_mask', get_attention_mask_wrapper)
+    aspm.register_patch('megatron.legacy.data.data_samplers.build_pretraining_data_loader', build_pretraining_data_loader_decorator)
     aspm.register_patch('megatron.legacy.model.language_model.parallel_lm_logits', parallel_lm_logits)
     aspm.register_patch('megatron.legacy.model.language_model.Embedding.forward', embedding_forward_wrapper)
     from .model.gpt_model import post_language_model_processing_wrapper
@@ -284,6 +295,7 @@ def megatron_legacy_adaptation(aspm):
 
 
 def megatron_training_adaptation(aspm):
+    from .core.performance.auto_pipeline_perf.global_vars import get_num_microbatches_wrapper
     from .initialize import _compile_dependencies, set_jit_fusion_options_wrapper
     from .utils import get_batch_on_this_cp_rank
     from .training import pretrain
@@ -291,6 +303,7 @@ def megatron_training_adaptation(aspm):
     from .tokenizer import build_tokenizer_wrapper
     from .yaml_arguments import core_transformer_config_from_yaml_wrapper, print_args_wrapper
     from .core.training import pretrain_decorator, setup_model_and_optimizer_decorator, save_checkpoint_and_time_decorator
+    aspm.register_patch('megatron.training.global_vars.get_num_microbatches', get_num_microbatches_wrapper)
     aspm.register_patch('megatron.training.training.pretrain', pretrain_decorator)
     aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_decorator)
     aspm.register_patch('megatron.training.training.save_checkpoint_and_time', save_checkpoint_and_time_decorator)

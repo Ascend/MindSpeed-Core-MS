@@ -432,7 +432,9 @@ def destroy_model_parallel_profiling_wrapper(destroy_model_parallel):
     @wraps(destroy_model_parallel)
     def wrapper(*args, **kwargs):
         argument = get_args()
-        if argument.automated_pipeline and not argument.num_layer_list:
+        enable_profiling_destroy = (argument.automated_pipeline and not argument.num_layer_list) \
+                                   or (argument.automated_pipeline_perf and not argument.optimized_mbs_list)
+        if enable_profiling_destroy:
             destroy_global_parallel_group()
         else:
             destroy_model_parallel(*args, **kwargs)
