@@ -33,6 +33,7 @@ GPT_ARGS="
     --context-parallel-size ${CP} \
     --context-parallel-algo megatron_cp_algo \
     --use-ascend-mc2 \
+    --enable-recompute-layers-per-pp-rank \
     --recompute-activation-function \
     --prefetch \
     --recompute-num-layers 1 \

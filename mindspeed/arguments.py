@@ -103,8 +103,6 @@ def _add_cp_args(parser):
                        choices=['causal', 'general'], help='context parallel attention mask type')
     group.add_argument('--use-cp-send-recv-overlap', action='store_true',
                        help='use this flag to enable cp send-recv-overlap.')
-    group.add_argument('--use-laser-attn', action='store_true',
-                       help='use this flag to enable laser attention')
     return parser
 
 

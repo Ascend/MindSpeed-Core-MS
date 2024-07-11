@@ -36,6 +36,7 @@ GPT_ARGS="
     --use-pipe-experts \
     --pipe-experts-multi-stream \
     --pipe-experts-multi-data 4 \
+    --enable-recompute-layers-per-pp-rank \
     --recompute-activation-function \
     --prefetch \
     --recompute-num-layers 0 \

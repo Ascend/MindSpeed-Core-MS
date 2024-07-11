@@ -33,7 +33,6 @@ from megatron.legacy.model.fused_bias_gelu import bias_gelu_impl
 
 from mindspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
-from mindspeed.core.context_parallel.ring_context_parallel_la import ringattn_context_parallel_la
 from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid_ulysses,
                                              get_context_parallel_group_for_hybrid_ring,
                                              get_context_parallel_for_hybrid_ring_world_size,
@@ -583,6 +582,8 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
     args = get_args()
     seq_length, _, head_num, head_dim = q.shape[0], q.shape[1], q.shape[2], q.shape[3]
 
+    q, k, v = [rearrange(x, 's b h d -> s b (h d)') for x in [q, k, v]]
+
     try:
         scale = 1.0 / math.sqrt(head_dim) if self.softmax_scale is None else self.softmax_scale
     except Exception as e:
@@ -612,28 +613,10 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
         cp_para['cp_global_ranks'] = cp_global_ranks
         cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
             if args.use_cp_send_recv_overlap else None
-        if args.use_laser_attn:
-            output = ringattn_context_parallel_la(q, k, v, head_num, cp_para, scale, attention_mask)
-        else:
-            q, k, v = [rearrange(x, 's b h d -> s b (h d)') for x in [q, k, v]]
-            output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask, self.dropout_p)
+
+        output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask, self.dropout_p)
     else:
-        if args.use_laser_attn:
-            q, k, v = [rearrange(x, 's b h d -> b h s d').contiguous() for x in [q, k, v]]
-            output = torch_npu.ascend_laser_attention(
-                q, k, v,
-                atten_mask=attention_mask,
-                alibi_mask=None,
-                scale=scale,
-                head_num=head_num,
-                input_layout="BNSD",
-                keep_prob=1,
-                pre_tokens=args.pre_tockens,
-                next_tokens=1,
-            )[0]
-            output = rearrange(output, 'b h s d -> s b (h d)').contiguous().to(q.dtype)
-        elif args.use_fusion_attn_v2:
-            q, k, v = [rearrange(x, 's b h d -> s b (h d)') for x in [q, k, v]]
+        if args.use_fusion_attn_v2:
             output = npu_fusion_attention(
                 q, k, v, head_num, args.shape_order,
                 pse=self.pse,
@@ -648,7 +631,6 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
                 sparse_mode=args.sparse_mode
             )[0]
         else:
-            q, k, v = [rearrange(x, 's b h d -> s b (h d)') for x in [q, k, v]]
             output = torch_npu.npu_fusion_attention(
                 q, k, v, head_num, args.shape_order,
                 pse=None,
