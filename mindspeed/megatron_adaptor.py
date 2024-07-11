@@ -330,9 +330,9 @@ def ascend_adaptation(aspm, args):
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
         aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
     adaptive_recompute_enable = args.adaptive_recompute_device_size > 0 or args.adaptive_recompute_device_swap
-    if adaptive_recompute_enable and not args.memory_fragmentation:
+    if (adaptive_recompute_enable and not args.memory_fragmentation) or args.prefetch:
         from .core.memory.adaptive_recomputing.pluggable_allocator_adpator import change_allocator
-        if os.getenv('ENABLE_PREFETCH', '0') == '0':
+        if not args.prefetch:
             change_allocator()
         from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
         allowed_recomputing_module_wrapper(ParallelTransformerLayer)

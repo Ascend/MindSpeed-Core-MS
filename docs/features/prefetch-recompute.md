@@ -21,8 +21,6 @@
 
 ## 使用方法
 
-预取重计算总开关：`export ADAPTIVE_RECOMPUTING=1`和`export ENABLE_PREFETCH=1`
-
 ### a. 仅开启预取功能：`--prefetch`
 
 开启后，将对每一层的attention层的激活值进行预取，提高计算效率。
