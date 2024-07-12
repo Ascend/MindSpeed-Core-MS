@@ -48,9 +48,9 @@ def reuse_fp32_param_distrib_optimizer_init_wrapper(init_func):
                         model_param.data = self.shard_main_param_res_buffers[gbuf_index][data_start_index + data_end_index: 2 * data_end_index].view(old_param_data.shape)
                         model_param.data.detach().copy_(old_param_data)
                         self.shard_fp32_param_fp16_view_group.append(self.shard_main_param_res_buffers[gbuf_index][2 * data_start_index: 2 * data_end_index])
-                for buffer in self.buffers:
+                for i, buffer in enumerate(self.buffers):
                     buffer_numel = buffer.param_data.numel()
-                    reuse_data_ptr(buffer.param_data, shard_res_and_buffer_model_param, buffer_numel)
+                    reuse_data_ptr(buffer.param_data, self.shard_main_param_res_buffers[i], buffer_numel)
             else:
                 for buffer in self.buffers:
                     self.bucket_num_group = []
