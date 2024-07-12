@@ -11,12 +11,6 @@ class GMMFunction(torch.autograd.Function):
     def forward(ctx, x, weight, bias, group_list, group_type):
         if bias is not None and bias.requires_grad:
             raise ValueError("Bias is not supported to compute gradient!")
-        if (x.requires_grad or weight.requires_grad) and not (
-            isinstance(group_list, list) and all(isinstance(x, int) for x in group_list)
-        ):
-            raise TypeError(
-                f"group_list must be a List of int to compute gradients of x and weight, got {type(group_list)}.!"
-            )
         if (x.requires_grad or weight.requires_grad) and group_type != 0:
             raise ValueError("group_type must be zero to compute gradients of x and weight!")
         bias = [] if bias is None else [bias]

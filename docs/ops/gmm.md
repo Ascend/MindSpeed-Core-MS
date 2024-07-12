@@ -28,8 +28,8 @@ npu_gmm(x, weight, bias=None, group_list=None, group_type=0)
 - grad：必选输入，为tensor，数据类型float16, bfloat16, float32
 - x：必选输入，为tensor，数据类型float16, bfloat16, float32
 - weight：必选输入，为tensor，数据类型float16, bfloat16, float32
-- group_list：可选输入，数据类型list[int64]，默认值为none。数据来自正向输入
-  
+- group_list：可选输入，数据类型list[int64]、tensor，默认值为none。数据来自正向输入
+
 输出：
 - grad_x：必选输出，数据类型float16, bfloat16, float32
 - grad_weight：必选输出，数据类型float16, bfloat16, float32

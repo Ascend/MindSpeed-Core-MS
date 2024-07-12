@@ -72,6 +72,19 @@ void _foreach_transpose(const at::TensorList &tensorList, std::vector<at::Tensor
     }
 }
 
+bool _is_transposed(at::Tensor &tensors)
+{
+    int dim_sum = tensors.dim();
+    TORCH_CHECK(dim_sum >= 2 && dim_sum <= 3, // 2/3: gmm weight only support 2- or 3-dimensional
+        "input tensor of is_tensor_transposed should be either 2- or 3-dimensional.");
+    int shape_dim = tensors.sizes().size() - 2;
+    if (tensors.stride(dim_sum - 2) == 1 && tensors.stride(dim_sum - 1) == tensors.sizes().at(shape_dim)) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 std::vector<at::Tensor> npu_gmm(const std::vector<at::Tensor>& x,
                                 const std::vector<at::Tensor>& weight,
                                 const std::vector<at::Tensor>& bias,
@@ -153,16 +166,14 @@ std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>, std::vector<at::Ten
     const std::vector<at::Tensor>& grad,
     const std::vector<at::Tensor>& x,
     const std::vector<at::Tensor>& weight,
-    c10::optional<std::vector<int64_t>> group_list)
+    const c10::optional<std::vector<int64_t>> group_list)
 {
-    auto num_x = x.size();
     auto num_w = weight.size();
     auto group_list_real = group_list.value_or(std::vector<int64_t>{});
-    auto num_group_list = group_list_real.size();
 
     const at::TensorList x_(x);
     const at::TensorList weight_(weight);
-    
+
     std::vector<at::Tensor> xt;
     std::vector<at::Tensor> wt;
 
@@ -173,7 +184,7 @@ std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>, std::vector<at::Ten
 
     std::vector<at::Tensor> dx = npu_gmm(grad, wt, bias_real, group_list_real, 0);
     std::vector<at::Tensor> dw = npu_gmm(xt, grad, bias_real, group_list_real, 2);
-    std::vector<at::Tensor> db;
+    std::vector<at::Tensor> dbias;
 
     std::vector<at::Tensor> dw_output;
     for (int i = 0; i < num_w; i++) {
@@ -181,13 +192,60 @@ std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>, std::vector<at::Ten
         dw_output.emplace_back(dw_tensor);
     }
 
-    return std::make_tuple(dx, dw_output, db);
+    return std::make_tuple(dx, dw_output, dbias);
+}
+
+std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>, std::vector<at::Tensor>> npu_gmm_backward(
+    const std::vector<at::Tensor>& grad,
+    const std::vector<at::Tensor>& x,
+    const std::vector<at::Tensor>& weight,
+    const c10::optional<at::Tensor>& group_list)
+{
+    auto num_w = weight.size();
+    auto group_list_real = group_list.value_or(at::Tensor());
+
+    std::vector<at::Tensor> bias_real;
+    at::TensorList weight_(weight);
+    std::vector<at::Tensor> wt;
+    _foreach_transpose(weight_, wt);
+    std::vector<at::Tensor> dx = npu_gmm(grad, wt, bias_real, group_list_real, 0);
+
+    at::Tensor weight_tensor = weight.at(0);
+    bool is_weight_transposed = _is_transposed(weight_tensor);
+
+    std::vector<at::Tensor> dw;
+    if (is_weight_transposed == true) {
+        at::TensorList grad_(grad);
+        std::vector<at::Tensor> gradt;
+        _foreach_transpose(grad_, gradt);
+        std::vector<at::Tensor> dwt = npu_gmm(gradt, x, bias_real, group_list_real, 2);
+        at::TensorList dwt_(dwt);
+        _foreach_transpose(dwt_, dw);
+    } else {
+        at::TensorList x_(x);
+        std::vector<at::Tensor> xt;
+        _foreach_transpose(x_, xt);
+        dw = npu_gmm(xt, grad, bias_real, group_list_real, 2);
+    }
+
+    std::vector<at::Tensor> dbias;
+    std::vector<at::Tensor> dw_output;
+    for (int i = 0; i < num_w; i++) {
+        at::Tensor dw_tensor = dw[i].reshape(weight[i].sizes());
+        dw_output.emplace_back(dw_tensor);
+    }
+
+    return std::make_tuple(dx, dw_output, dbias);
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     using gmmv1 = std::vector<at::Tensor>(*)(const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, c10::optional<std::vector<int64_t>>, c10::optional<int64_t>);
     using gmmv2 = std::vector<at::Tensor>(*)(const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, const c10::optional<at::Tensor>&, c10::optional<int64_t>);
+    using gmmv1_backward = std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>, std::vector<at::Tensor>>(*)(const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, const c10::optional<std::vector<int64_t>>);
+    using gmmv2_backward = std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>, std::vector<at::Tensor>>(*)(const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, const std::vector<at::Tensor>&, const c10::optional<at::Tensor>&);
+
     m.def("npu_gmm", (gmmv1)&npu_gmm, "grouped matmul forward with group_list type List[int]");
-    m.def("npu_gmm_backward", &npu_gmm_backward, "grouped matmul backward");
+    m.def("npu_gmm_backward", (gmmv1_backward)&npu_gmm_backward, "grouped matmul backward with group_list type List[int]");
     m.def("npu_gmm", (gmmv2)&npu_gmm, "grouped matmul forward with group_list type Tensor");
+    m.def("npu_gmm_backward", (gmmv2_backward)&npu_gmm_backward, "grouped matmul backward with group_list type Tensor");
 }
