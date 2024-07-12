@@ -67,7 +67,7 @@ GPT_ARGS="
     --no-bias-dropout-fusion \
     --recompute-granularity full \
     --recompute-method block \
-    --recompute-num-layers 12 \
+    --recompute-num-layers 9 \
     --expert-model-parallel-size ${EP} \
     --moe-model-type deepspeed_moe \
     --moe-router-topk 2 \

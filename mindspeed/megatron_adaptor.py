@@ -346,11 +346,10 @@ def mcore_moe_adaptation(pm, args):
 
     if args.use_ascend_mc2:
         # MoE MLP not use mc2 linear
-        from .core.models.gpt.gpt_layer_specs import get_mlp_module_spec_wrapper
+        from .core.models.gpt.gpt_layer_specs import build_layers_wrapper
         from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
-        import megatron.core.models.gpt.gpt_layer_specs
-        megatron.core.models.gpt.gpt_layer_specs._get_mlp_module_spec = get_mlp_module_spec_wrapper(
-            megatron.core.models.gpt.gpt_layer_specs._get_mlp_module_spec, ColumnParallelLinear.forward,
+        from megatron.core.transformer.transformer_block import TransformerBlock
+        TransformerBlock._build_layers = build_layers_wrapper(TransformerBlock._build_layers, ColumnParallelLinear.forward,
             RowParallelLinear.forward)
 
 
