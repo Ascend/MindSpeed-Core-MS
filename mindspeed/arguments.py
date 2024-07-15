@@ -392,8 +392,6 @@ def validate_args_wrapper(validate_args):
             raise AssertionError('`--moe-dynamic-padding` only support for `--moe-no-drop`.')
         if args.moe_permutation_async_comm and args.moe_model_type != 'megatron_moe':
             raise AssertionError('`--moe-permutation-async-comm` only support for megatron core moe.')
-        if args.moe_permutation_async_comm and args.moe_token_dispatcher_type != 'allgather':
-            raise AssertionError('`--moe-permutation-async-comm` only support for allgather token dispatcher type.')
 
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'ulysses_cp_algo':
             assert args.seq_length % args.context_parallel_size == 0, f"sequence length must be divisible by context_parallel_size"
