@@ -9,11 +9,39 @@ from .arguments import process_args
 _ARGS = None
 
 
+def add_args(args, key, value):
+    if key is not None:
+        key = key[2:].replace('-', '_')
+        if value is None:
+            value = True
+        elif len(value) == 1:
+            value = value[0]
+        setattr(args, key, value)
+
+
+def parser_unknown_args(args, unknown):
+    i = 0
+    key = value = None
+    while i < len(unknown):
+        if unknown[i].startswith("--"):
+            add_args(args, key, value)
+            key = unknown[i]
+            value = None
+        else:
+            if value is None:
+                value = [unknown[i]]
+            else:
+                value.append(unknown[i])
+        i += 1
+    add_args(args, key, value)
+
+
 def get_mindspeed_args():
     global _ARGS
     if _ARGS is None:
         parser = argparse.ArgumentParser(description='MindSpeed Arguments', allow_abbrev=False)
-        _ARGS, _ = process_args(parser).parse_known_args()
+        _ARGS, unknown = process_args(parser).parse_known_args()
+        parser_unknown_args(_ARGS, unknown)
     return _ARGS
 
 
@@ -338,11 +366,22 @@ def ascend_adaptation(aspm, args):
 
 def mcore_moe_adaptation(pm, args):
     if args.moe_permutation_async_comm:
-        from .core.transformer.moe.router import aux_loss_load_balancing
-        from .core.transformer.moe.token_dispatcher import token_permutation, token_unpermutation
-        pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_permutation', token_permutation)
-        pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_unpermutation', token_unpermutation)
-        pm.register_patch('megatron.core.transformer.moe.router.TopKRouter.aux_loss_load_balancing', aux_loss_load_balancing)
+        if hasattr(args, 'moe_token_dispatcher_type') and args.moe_token_dispatcher_type == 'allgather':
+            from .core.transformer.moe.router import aux_loss_load_balancing
+            from .core.transformer.moe.token_dispatcher import allgather_token_permutation, allgather_token_unpermutation
+            pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_permutation', allgather_token_permutation)
+            pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_unpermutation', allgather_token_unpermutation)
+            pm.register_patch('megatron.core.transformer.moe.router.TopKRouter.aux_loss_load_balancing', aux_loss_load_balancing)
+
+        if hasattr(args, 'moe_token_dispatcher_type') and args.moe_token_dispatcher_type == 'alltoall':
+            from .core.transformer.moe.token_dispatcher import preprocess, alltoall_token_permutation
+            from .core.transformer.moe.experts import sequential_mlp_forward
+            from .core.transformer.moe.moe_utils import permute
+            pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.preprocess', preprocess)
+            pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
+                              alltoall_token_permutation)
+            pm.register_patch('megatron.core.transformer.moe.experts.SequentialMLP.forward', sequential_mlp_forward)
+            pm.register_patch('megatron.core.transformer.moe.moe_utils.permute', permute)
 
     if args.use_ascend_mc2:
         # MoE MLP not use mc2 linear

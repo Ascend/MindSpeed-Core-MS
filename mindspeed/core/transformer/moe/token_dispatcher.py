@@ -2,10 +2,12 @@
 # Copyright (c) 2024, Huawei Technologies Co., Ltd.  All rights reserved.
 import torch
 from megatron.core import parallel_state, tensor_parallel
+from megatron.core.transformer.moe.moe_utils import permute
+from megatron.core.tensor_parallel.mappings import _gather_along_first_dim_expert_parallel
 from mindspeed.core.transformer.moe.router import gather_from_sequence_parallel_region_to_moe_async
 
 
-def token_permutation(self, hidden_states: torch.Tensor, max_prob: torch.Tensor, max_ind):
+def allgather_token_permutation(self, hidden_states: torch.Tensor, max_prob: torch.Tensor, max_ind):
     self.hidden_shape = hidden_states.shape
     # [S/TP, B, H] -> [S*B/TP, H]
     hidden_states = hidden_states.view(-1, self.hidden_shape[-1])
@@ -72,7 +74,7 @@ def token_permutation(self, hidden_states: torch.Tensor, max_prob: torch.Tensor,
     )
 
 
-def token_unpermutation(self, hidden_states: torch.Tensor, bias: torch.Tensor = None,):
+def allgather_token_unpermutation(self, hidden_states: torch.Tensor, bias: torch.Tensor = None, ):
     # Stage1: unpermute the tokens and bias locally respectively.w
     scores = self.local_probs.to(dtype=hidden_states.dtype)
     unpermuted_local_hidden = torch.zeros_like(hidden_states)
@@ -152,3 +154,111 @@ def token_unpermutation(self, hidden_states: torch.Tensor, bias: torch.Tensor = 
         output_bias_total = None
 
     return output_total, output_bias_total
+
+
+def preprocess(self, indices: torch.Tensor) -> torch.Tensor:
+    num_local_tokens_per_expert = torch.histc(
+        indices, bins=self.num_experts, min=0, max=self.num_experts
+    )
+    # num_local_tokens_per_expert: [num_experts]
+
+    ep_size = self.config.expert_model_parallel_size
+    if ep_size > 1:
+        # ===================================================
+        # Calculate input_splits, output_splits for alltoall-v.
+        # ===================================================
+        self.input_splits = (
+            num_local_tokens_per_expert.reshape(ep_size, self.num_local_experts)
+            .sum(axis=1)
+            .to(torch.device("cpu"))
+            .numpy()
+        )
+        num_global_tokens_per_expert = _gather_along_first_dim_expert_parallel(
+            num_local_tokens_per_expert
+        ).reshape(ep_size, self.num_experts)
+        self.num_global_tokens_per_local_expert = num_global_tokens_per_expert[
+            :, self.local_expert_indices
+        ]
+        self.output_splits = (
+            self.num_global_tokens_per_local_expert.sum(axis=-1).to(torch.device("cpu")).numpy()
+        )
+        num_tokens_per_local_expert = self.num_global_tokens_per_local_expert.sum(axis=0).to(
+            torch.device("cpu"), non_blocking=True
+        )
+        # ===================================================
+        # num_global_tokens_per_expert: [ep_size, num_experts]
+        # num_global_tokens_per_local_expert: [ep_size, num_local_experts]
+        # num_tokens_per_local_expert: [num_local_experts]
+        # ===================================================
+    else:
+        self.num_global_tokens_per_local_expert = num_local_tokens_per_expert.reshape(
+            -1, self.num_experts
+        )
+        num_tokens_per_local_expert = num_local_tokens_per_expert.to(
+            torch.device("cpu"), non_blocking=True
+        )
+
+    if self.num_local_experts > 1:
+        if not hasattr(self, 'comm_stream'):
+            self.comm_stream = torch.cuda.Stream()
+        self.comm_stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(self.comm_stream):
+            expert_ids_per_ep_rank = torch.tensor(
+                [i % self.num_local_experts for i in range(self.config.num_moe_experts)],
+                dtype=torch.int32,
+                device=torch.cuda.current_device(),
+            )
+            self.global_input_tokens_local_experts_indices = torch.repeat_interleave(
+                expert_ids_per_ep_rank, self.num_global_tokens_per_local_expert.ravel()
+            )
+
+    return num_tokens_per_local_expert
+
+
+def alltoall_token_permutation(
+    self, hidden_states: torch.Tensor, scores: torch.Tensor, indices: torch.Tensor,
+):
+    self.hidden_shape = hidden_states.shape
+    self.scores = scores
+    assert scores.dim() == 2, "Expected 2D tensor for scores"
+    assert indices.dim() == 2, "Expected 2D tensor for indices"
+    tokens_per_expert = self.preprocess(indices)
+
+    # Flatten the input tensor
+    # hidden_states: [S/TP, B, H] -> [S*B/TP, H]
+    hidden_states = hidden_states.view(-1, self.hidden_shape[-1])
+
+    # Perform tensor parallel AlltoAll communication
+    # hidden_states: [S*B/TP, H] -> [S*B, H/TP]
+    if parallel_state.get_tensor_model_parallel_world_size() > 1:
+        hidden_states = tensor_parallel.all_to_all_sp2hp(hidden_states)
+
+    # Permutation 1: input to AlltoAll input
+    self.local_input_tokens_global_experts_indices = indices
+    permutated_local_input_tokens, self.reversed_local_input_permutation_mapping = permute(
+        hidden_states, self.local_input_tokens_global_experts_indices, topk=self.router_topk,
+    )
+
+    # Perform expert parallel AlltoAll communication
+    global_input_tokens = tensor_parallel.all_to_all(
+        parallel_state.get_expert_model_parallel_group(),
+        permutated_local_input_tokens,
+        self.output_splits,
+        self.input_splits,
+    )
+
+    # Permutation 2: AlltoAll output to expert input if num_local_experts > 1
+    if self.num_local_experts > 1:
+        torch.cuda.current_stream().wait_stream(self.comm_stream)
+        global_input_tokens, self.reversed_global_input_permutation_mapping = permute(
+            global_input_tokens, self.global_input_tokens_local_experts_indices
+        )
+
+    # Perform tensor parallel All-Gather
+    # global_input_tokens: [SEQL, H/TP] -> [SEQL, H]
+    if parallel_state.get_tensor_model_parallel_world_size() > 1 and self.config.moe_grouped_gemm:
+        global_input_tokens = tensor_parallel.all_gather_last_dim_from_tensor_parallel_region(
+            global_input_tokens
+        )
+
+    return global_input_tokens, tokens_per_expert
