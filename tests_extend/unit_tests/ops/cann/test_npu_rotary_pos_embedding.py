@@ -21,7 +21,8 @@ def create_test_args(use_fused_rotary_pos_emb=False):
 class TestNpuRotaryEmbedding(DistributedTest):
     world_size = 1
 
-    @pytest.mark.skipif(DEVICE_NAME != 'Ascend910B', reason='device type is not supported, skip this UT!')
+    # @pytest.mark.skipif(DEVICE_NAME != 'Ascend910B', reason='device type is not supported, skip this UT!')
+    @pytest.mark.skip(reason="Not found RotaryPositionEmbedding operator in the environment.")
     @pytest.mark.parametrize('dtype', [torch.float16, torch.bfloat16])
     def test_npu_rotary_pos_embedding(self, dtype):
         t_ori = torch.rand(2, 2, 5, 128).npu().to(dtype)

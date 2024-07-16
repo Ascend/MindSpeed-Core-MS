@@ -34,6 +34,7 @@ GPT_ARGS="
     --context-parallel-algo megatron_cp_algo \
     --use-ascend-mc2 \
     --reuse-fp32-param \
+    --recompute-activation-function \
     --use-fused-rotary-pos-emb \
     --use-fused-swiglu \
     --use-fused-rmsnorm \

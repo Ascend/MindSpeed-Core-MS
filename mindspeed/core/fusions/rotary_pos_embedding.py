@@ -3,6 +3,7 @@ import torch_npu
 from torch import Tensor
 from functools import wraps
 from megatron.training import get_args
+from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embedding
 
 
 def apply_fused_rotary_pos_emb_bshd_wrapper(fn):
@@ -14,7 +15,7 @@ def apply_fused_rotary_pos_emb_bshd_wrapper(fn):
             t, t_pass = t[..., :rot_dim], t[..., rot_dim:]
             cos_ = torch.cos(freqs).to(t.dtype)
             sin_ = torch.sin(freqs).to(t.dtype)
-            t = torch_npu.npu_rotary_mul(t, cos_, sin_).to(t.dtype)
+            t = npu_rotary_position_embedding(t.contiguous(), cos_, sin_).to(t.dtype)
             return torch.cat((t, t_pass), dim=-1)
         return fn(t, freqs, rotary_interleaved)
 
