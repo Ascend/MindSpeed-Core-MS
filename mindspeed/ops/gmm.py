@@ -32,6 +32,15 @@ class GMMFunction(torch.autograd.Function):
         dx, dw, dbias = GMMFunction.mindspeed_ops.npu_gmm_backward([grad_outputs], [x], [weight], ctx.group_list)
         dbias = None if len(dbias) == 0 else dbias[0]
 
+        # for values with 0 in GMM tensorlist, they cannot be processed on the kernel side currently, and the result should be reset to zero
+        for i, _ in enumerate(ctx.group_list):
+            if i == 0:
+                if ctx.group_list[0] == 0:
+                    dw[0][0].fill_(0)
+                continue
+            if ctx.group_list[i] == ctx.group_list[i - 1]:
+                dw[0][i].fill_(0)
+
         return dx[0], dw[0], dbias, None, None
 
 
