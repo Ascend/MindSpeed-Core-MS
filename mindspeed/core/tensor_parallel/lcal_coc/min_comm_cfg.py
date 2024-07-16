@@ -7,12 +7,12 @@ import torch.nn.functional as F
 from megatron.training import get_args
 
 
-def column_forward(self, input_, column_parallel_function=None, check_fcn=None):
+def column_forward(self, input_, weight, column_parallel_function=None, check_fcn=None):
     if check_fcn is not None:
         check_fcn()
     bias = self.bias if not self.skip_bias_add else None
     input_parallel = input_
-    use_weight = self.weight
+    use_weight = self.weight if weight is None else weight
     if hasattr(self, "norm") and self.norm:
         use_weight = F.normalize(self.weight)
     output_parallel = column_parallel_function.apply(
@@ -147,8 +147,8 @@ class MinCommConfig:
         self.gather_along_first_dim = _gather_along_first_dim
 
     def replace_forward_functions_by_autograd_class(self, column_autograd_class, row_autograd_class):
-        def column_parallel_forward(x, y):
-            return column_forward(x, y, column_parallel_function=column_autograd_class,
+        def column_parallel_forward(x, input_, weight=None):
+            return column_forward(x, input_, weight, column_parallel_function=column_autograd_class,
                                   check_fcn=self.check_fcn)
 
         def row_parallel_forward(x, y):
