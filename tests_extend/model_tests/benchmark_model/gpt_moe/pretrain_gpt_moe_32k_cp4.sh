@@ -41,7 +41,6 @@ GPT_ARGS="
     --use-ascend-mc2 \
     --overlap-grad-reduce \
     --overlap-param-gather \
-    --optimizer-recomp-communication-level 0 \
     --sequence-parallel \
     --num-layers 24 \
     --hidden-size 12288 \
