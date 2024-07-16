@@ -96,7 +96,6 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 | Megatron 异步DDP                 | [link](docs/features/async-ddp.md) |
 | Megatron 权重更新通信隐藏              | [link](docs/features/async-ddp-param-gather.md) |
 | Ascend DeepSpeed MoE                | [link](docs/features/moe.md) |
-| Ascend TP 重计算通信优化              | [link](docs/features/recomputation-communication.md) |
 | Ascend Mask归一                      | [link](docs/features/generate-mask.md) |
 | Ascend 内存碎片优化                  | [link](docs/features/memory-fragmentation.md) |
 | Ascend 自适应选择重计算                | [link](docs/features/adaptive-recompute.md) |

@@ -38,7 +38,6 @@ GPT_ARGS="
     --use-fused-rotary-pos-emb \
     --overlap-grad-reduce \
     --overlap-param-gather \
-    --optimizer-recomp-communication-level 0 \
     --sequence-parallel \
     --num-layers 24 \
     --hidden-size 12288 \
