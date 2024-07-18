@@ -34,7 +34,7 @@
 
 当前计算通信并行有两种实现方法：python脚本使能、融合算子使能，两者选其一即可。两个方式都需要替换原Megatron框架中的ColumnParallelLinear和RowParallelLinear这两个class的forward函数，替换脚本已经根据MindSpeed指定Megatron版本进行编码和适配，位于mindspeed/core/tensor_parallel/lcal_coc/目录下。
 
-请根据需要选择下列三种场景中的一个进行使用。（注意：计算通信并行融合算子需要安装ATB后才能使用！）
+请根据需要选择下列两种场景中的一个进行使用。
 
 设置--use-ascend-coc使能计算通信并行功能，使用方式通过如下变量进行设置：
 
@@ -46,7 +46,12 @@
 ```
 
 ### 2. 使用通过融合算子使能的计算通信并行特性
+注意：计算通信并行融合算子需要安装ATB后才能使用！
 
+ATB安装方法：
+
+- 自动安装：export ENABLE_ATB=1之后进入MindSpeed目录之行pip install -e . ；
+- 手动安装：ATB编译完成之后将ATB目录下的output文件夹拷贝到MindSpeed/mindspeed/目录下，将output目录重命名为atb；
 ```shell
 --use-ascend-coc
 --coc-fused-kernel # 注意：当前只支持TP=8的场景！
