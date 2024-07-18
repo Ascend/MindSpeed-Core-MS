@@ -3,6 +3,7 @@
 import os
 from functools import wraps
 import argparse
+import os
 
 
 def extra_args_provider_decorator(extra_args_provider):
@@ -282,6 +283,8 @@ def _add_algorithm_args(parser):
                        help='The algorithm optimize the status of tp communication in the recompute stage.')
     group.add_argument('--optimize-send-recv-comm', action='store_true', 
                        help='optimize send_recv communication in pipeline without interleaving.')
+    group.add_argument('--enable-zero3', action='store_true', default=False,
+                       help='Use this flag to enable zero3, including the segmentation of the parameters, gradients, and optimizers of the row-parallel and column-parallel models, as well as the overlap optimization of the gradient reduce sactter and weight all gather.')
     return parser
 
 
@@ -316,6 +319,13 @@ def validate_args_wrapper(validate_args):
                 flag_overlap_p2p_comm = True
 
         args = validate_args(args, defaults)
+        if args.enable_zero3:
+            print("[WARNING] zero3 currently does not support model save and load")
+            if args.use_ascend_mc2 or args.reuse_fp32_param or args.recompute_granularity is not None or args.use_pipe_experts:
+                raise AssertionError('zero3 cannot be used together with MC2(--use-ascend-mc2), '
+                                    'parameter copy reuse(--reuse-fp32-param),'
+                                    'recompute(--recompute-granularity)'
+                                    'and pipe_experts(use-pipe-experts)')
 
         # for vpp assert pp should > 2
         if flag_num_layers_per_virtual_pipeline_stage is not None and args.pipeline_model_parallel_size == 2:

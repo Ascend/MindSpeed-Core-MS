@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from functools import wraps
-
+from pickle import FALSE
+from webbrowser import get
 import os
 import warnings
 from typing import List, Optional, Callable
@@ -23,6 +24,7 @@ import torch
 import torch_npu
 import torch.distributed
 import torch.nn.functional as F
+from torch.nn.parameter import Parameter
 from torch.cuda.amp import custom_bwd, custom_fwd
 from torch.nn.parameter import Parameter
 import megatron.core.parallel_state as ps
@@ -44,6 +46,7 @@ from megatron.core.tensor_parallel.mappings import (
     _gather_along_first_dim,
 )
 from megatron.core.tensor_parallel.layers import (
+    LinearWithGradAccumulationAndAsyncCommunication,
     linear_with_grad_accumulation_and_async_allreduce,
     linear_with_frozen_weight,
 )
@@ -52,7 +55,9 @@ from megatron.core.parallel_state import (
     get_tensor_model_parallel_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
-    is_pipeline_first_stage
+    is_pipeline_first_stage,
+    get_data_parallel_world_size,
+    get_data_parallel_rank,
 )
 from megatron.core.tensor_parallel.layers import set_tensor_model_parallel_attributes
 from megatron.core.parallel_state import get_tensor_model_parallel_world_size
@@ -74,6 +79,238 @@ from mindspeed.core.parallel_state import (
 )
 from mindspeed.core.weight_grad_store import WeightGradStore
 from .ascend_turbo.mc2_linears_seq_parallel import RowSeqParallelLinear
+
+
+def linear_with_grad_accumulation_and_async_allreduce_zero3(
+    input,
+    weight,
+    bias,
+    gradient_accumulation_fusion: bool,
+    async_grad_allreduce: bool,
+    sequence_parallel: bool,
+    grad_output_buffer=None,
+    need_gather_param_in_bw=False):
+
+    args = [
+        input,
+        weight,
+        bias,
+        gradient_accumulation_fusion,
+        async_grad_allreduce,
+        sequence_parallel,
+        grad_output_buffer,
+        need_gather_param_in_bw,
+    ]
+
+    if not linear_with_grad_accumulation_and_async_allreduce_zero3.warned:
+        if os.environ.get('CUDA_DEVICE_MAX_CONNECTIONS') != "1":
+            if sequence_parallel:
+                warnings.warn(
+                    "When using sequence parallelism it is recommended to set the "
+                    "environment variable CUDA_DEVICE_MAX_CONNECTIONS to 1 for "
+                    "maximum speedup"
+                )
+                linear_with_grad_accumulation_and_async_allreduce_zero3.warned = True
+
+            if async_grad_allreduce:
+                warnings.warn(
+                    "When using async grad allreduce it is recommended to set the "
+                    "environment variable CUDA_DEVICE_MAX_CONNECTIONS to 1 for "
+                    "maximum speedup"
+                )
+                linear_with_grad_accumulation_and_async_allreduce_zero3.warned = True
+
+    return LinearWithGradAccumulationAndAsyncCommunication.apply(*args)
+linear_with_grad_accumulation_and_async_allreduce_zero3.warned = False
+
+
+def linear_forward_zero3_wrapper(forward_func):
+    @wraps(forward_func)
+    def linear_forward_zero3(
+        ctx,
+        input,
+        weight,
+        bias,
+        gradient_accumulation_fusion,
+        async_grad_allreduce,
+        sequence_parallel,
+        grad_output_buffer, 
+        need_gather_param_in_bw=False):
+        
+        ctx.need_gather_param_in_bw = need_gather_param_in_bw
+
+        return forward_func(
+            ctx,
+            input,
+            weight,
+            bias,
+            gradient_accumulation_fusion,
+            async_grad_allreduce,
+            sequence_parallel,
+            grad_output_buffer)
+        
+    return linear_forward_zero3
+
+
+def linear_backward_zero3_wrapper(func):
+    @wraps(func)
+    def linear_backward_zero3(ctx, grad_output):
+        ctx.gradient_accumulation_fusion = (ctx.gradient_accumulation_fusion and not ctx.need_gather_param_in_bw)
+        grad_input, grad_weight, grad_bias, _, _, _, _ = func(ctx, grad_output)
+        if ctx.need_gather_param_in_bw:
+            _, weight = ctx.saved_tensors
+            weight.full_grad = grad_weight
+            grad_weight = None
+        return grad_input, grad_weight, grad_bias, None, None, None, None, None
+        
+    return linear_backward_zero3
+
+
+def parallel_linear_init_zero3_wrapper(func):
+    @wraps(func)
+    def parallel_linear_init(self, *args, **kwargs):
+        global_args = get_args()
+        self.enable_zero3 = global_args.enable_zero3
+        func(self, *args, **kwargs)
+        if self.enable_zero3:
+            dp_size = get_data_parallel_world_size()
+            dp_rank = get_data_parallel_rank()
+            tmp_tensor = self.weight.chunk(dp_size, dim=0)[dp_rank]
+            self.weight = Parameter(
+                torch.empty(
+                    tmp_tensor.shape, dtype=self.config.params_dtype
+                )
+            )
+            self.weight.data.copy_(tmp_tensor)
+        setattr(self.weight, 'enable_zero3', self.enable_zero3)
+        
+    return parallel_linear_init
+
+
+def column_parallel_linear_forward_zero3(self, input_, weight=None):
+    """Forward of ColumnParallelLinear
+
+    Args:
+        input_: 3D tensor whose order of dimension is [sequence, batch, hidden]
+
+        weight (optional): weight tensor to use, compulsory when
+            skip_weight_param_allocation is True.
+
+    Returns:
+        - output
+        - bias
+
+    """
+    if weight is None:
+        if self.weight is None:
+            raise RuntimeError(
+                "weight was not supplied to ColumnParallelLinear forward pass "
+                "and skip_weight_param_allocation is True."
+            )
+        weight = self.weight
+    else:
+        # Check the weight passed in is the correct shape
+        expected_shape = (self.output_size_per_partition, self.input_size)
+        if weight.shape != expected_shape:
+            raise RuntimeError(
+                f"supplied weight's shape is {tuple(weight.shape)}, "
+                f"not {expected_shape} as expected"
+            )
+
+    if self.config._cpu_offloading_context is not None:
+        if self.config._cpu_offloading_context.inside_context == True:
+            assert (
+                self.config.cpu_offloading == False
+            ), "CPU Offloading cannot be enabled while using non-TE modules"
+
+    bias = self.bias if not self.skip_bias_add else None
+
+    if (
+        self.async_tensor_model_parallel_allreduce
+        or self.sequence_parallel
+        or self.explicit_expert_comm
+    ):
+        input_parallel = input_
+    else:
+        input_parallel = copy_to_tensor_model_parallel_region(input_)
+
+    if self.config.defer_embedding_wgrad_compute:
+        self.embedding_activation_buffer.append(input_parallel)
+
+    # Matrix multiply.
+    if not weight.requires_grad:
+        self._forward_impl = linear_with_frozen_weight
+    else:
+        self._forward_impl = linear_with_grad_accumulation_and_async_allreduce
+
+    output_parallel = self._forward_impl(
+        input=input_parallel,
+        weight=weight,
+        bias=bias,
+        gradient_accumulation_fusion=self.gradient_accumulation_fusion,
+        async_grad_allreduce=False
+        if self.explicit_expert_comm
+        else self.async_tensor_model_parallel_allreduce,
+        sequence_parallel=False if self.explicit_expert_comm else self.sequence_parallel,
+        grad_output_buffer=self.grad_output_buffer
+        if self.config.defer_embedding_wgrad_compute
+        else None,
+        need_gather_param_in_bw=self.enable_zero3
+    )
+    if self.gather_output:
+        # All-gather across the partitions.
+        assert not self.sequence_parallel
+        output = gather_from_tensor_model_parallel_region(output_parallel)
+    else:
+        output = output_parallel
+    output_bias = self.bias if self.skip_bias_add else None
+    return output, output_bias
+
+
+def row_parallel_linear_forward_zero3(self, input_):
+
+    if self.config._cpu_offloading_context is not None:
+        if self.config._cpu_offloading_context.inside_context == True:
+            assert (
+                self.config.cpu_offloading == False
+            ), "CPU Offloading cannot be enabled while using non-TE modules"
+
+    # Set up backprop all-reduce.
+    if self.input_is_parallel:
+        input_parallel = input_
+    else:
+        assert not self.sequence_parallel
+        input_parallel = scatter_to_tensor_model_parallel_region(input_)
+    # Matrix multiply.
+    if not self.weight.requires_grad:
+        self._forward_impl = linear_with_frozen_weight
+    else:
+        self._forward_impl = linear_with_grad_accumulation_and_async_allreduce
+    output_parallel = self._forward_impl(
+        input=input_parallel,
+        weight=self.weight,
+        bias=None,
+        gradient_accumulation_fusion=self.gradient_accumulation_fusion,
+        async_grad_allreduce=False,
+        sequence_parallel=False,
+        need_gather_param_in_bw=self.enable_zero3
+    )
+
+    # All-reduce across all the partitions.
+    if self.explicit_expert_comm:
+        assert self.skip_bias_add
+        output_ = output_parallel
+    elif self.sequence_parallel:
+        output_ = reduce_scatter_to_sequence_parallel_region(output_parallel)
+    else:
+        output_ = reduce_from_tensor_model_parallel_region(output_parallel)
+    if not self.skip_bias_add:
+        output = (output_ + self.bias) if self.bias is not None else output_
+        output_bias = None
+    else:
+        output = output_
+        output_bias = self.bias
+    return output, output_bias
 
 
 def vocab_parallel_embedding_forward(self, input_):

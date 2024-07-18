@@ -431,6 +431,7 @@ def deepspeed_moe_adaptation(pm, args):
         from .core.distributed.param_and_grad_buffer import pipe_register_grad_ready
         pm.register_patch('megatron.core.distributed.ParamAndGradBuffer.register_grad_ready', pipe_register_grad_ready)
 
+
 def coc_adaptation(aspm, args):
     from .initialize import coc_registration_wrapper, mc2_wrapper
     if args.use_ascend_mc2:
@@ -441,6 +442,45 @@ def coc_adaptation(aspm, args):
         aspm.register_patch('megatron.training.initialize.initialize_megatron', coc_registration_wrapper)
 
 
+def zero3_adaptation(aspm, args):
+    if args.enable_zero3:
+        from .core.data_parallel.distributed_data_parallel import distributed_data_parallel_init_zero3, distributed_data_parallel_zero_grad_wrapper
+        from .core.tensor_parallel.layers import (parallel_linear_init_zero3_wrapper, column_parallel_linear_forward_zero3, 
+                                                linear_forward_zero3_wrapper, linear_backward_zero3_wrapper, 
+                                                row_parallel_linear_forward_zero3, linear_with_grad_accumulation_and_async_allreduce_zero3)
+        from .optimizer.distrib_optimizer import (build_optimizer_group_ranges_zero3_wrapper, _copy_main_params_to_model_params_zero3, 
+                                                _copy_model_grads_to_main_grads_zero3, build_model_and_main_param_groups_zero3_wrapper, 
+                                                distributed_optimizer_zero3_init)
+        aspm.register_patch('megatron.core.tensor_parallel.layers.linear_with_grad_accumulation_and_async_allreduce',
+                            linear_with_grad_accumulation_and_async_allreduce_zero3)
+        aspm.register_patch('megatron.core.tensor_parallel.layers.RowParallelLinear.__init__',
+                            parallel_linear_init_zero3_wrapper)
+        aspm.register_patch('megatron.core.tensor_parallel.layers.ColumnParallelLinear.__init__',
+                            parallel_linear_init_zero3_wrapper)
+        aspm.register_patch('megatron.core.tensor_parallel.layers.ColumnParallelLinear.forward',
+                            column_parallel_linear_forward_zero3)   
+        aspm.register_patch('megatron.core.tensor_parallel.layers.RowParallelLinear.forward',
+                            row_parallel_linear_forward_zero3)
+        aspm.register_patch('megatron.core.optimizer.distrib_optimizer.DistributedOptimizer._build_optimizer_group_ranges',
+                            build_optimizer_group_ranges_zero3_wrapper)
+        aspm.register_patch('megatron.core.optimizer.distrib_optimizer.DistributedOptimizer._copy_main_params_to_model_params',
+                            _copy_main_params_to_model_params_zero3)
+        aspm.register_patch('megatron.core.optimizer.distrib_optimizer.DistributedOptimizer._copy_model_grads_to_main_grads',
+                            _copy_model_grads_to_main_grads_zero3)
+        aspm.register_patch('megatron.core.optimizer.distrib_optimizer.DistributedOptimizer._build_model_and_main_param_groups',
+                            build_model_and_main_param_groups_zero3_wrapper)
+        aspm.register_patch('megatron.core.optimizer.distrib_optimizer.DistributedOptimizer.__init__',
+                            distributed_optimizer_zero3_init)
+        aspm.register_patch('megatron.core.tensor_parallel.layers.LinearWithGradAccumulationAndAsyncCommunication.forward',
+                            linear_forward_zero3_wrapper)
+        aspm.register_patch('megatron.core.tensor_parallel.layers.LinearWithGradAccumulationAndAsyncCommunication.backward',
+                            linear_backward_zero3_wrapper)
+        aspm.register_patch('megatron.core.distributed.distributed_data_parallel.DistributedDataParallel.__init__',
+                            distributed_data_parallel_init_zero3)
+        aspm.register_patch('megatron.core.distributed.distributed_data_parallel.DistributedDataParallel.zero_grad_buffer',
+                            distributed_data_parallel_zero_grad_wrapper)
+                                       
+        
 def exe_adaptation():
     mindspeed_args = get_mindspeed_args()
     from .patch_utils import MindSpeedPatchesManager as aspm
@@ -455,6 +495,7 @@ def exe_adaptation():
     coc_adaptation(aspm, mindspeed_args)
     mcore_moe_adaptation(aspm, mindspeed_args)
     deepspeed_moe_adaptation(aspm, mindspeed_args)
+    zero3_adaptation(aspm, mindspeed_args)
     aspm.apply_patches()
 
     # accelerate package will check TE on sys.modules，so we need remove this patch
