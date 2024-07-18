@@ -399,13 +399,12 @@ def mcore_moe_adaptation(pm, args):
         if hasattr(args, 'moe_token_dispatcher_type') and args.moe_token_dispatcher_type == 'alltoall':
             from .core.transformer.moe.token_dispatcher import preprocess, alltoall_token_permutation
             from .core.transformer.moe.experts import sequential_mlp_forward
-            from .core.transformer.moe.moe_utils import permute, unpermute
+            from .core.transformer.moe.moe_utils import permute
             pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.preprocess', preprocess)
             pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
                               alltoall_token_permutation)
             pm.register_patch('megatron.core.transformer.moe.experts.SequentialMLP.forward', sequential_mlp_forward)
             pm.register_patch('megatron.core.transformer.moe.moe_utils.permute', permute)
-            pm.register_patch('megatron.core.transformer.moe.moe_utils.unpermute', unpermute)
 
     if args.use_ascend_mc2:
         # MoE MLP not use mc2 linear
