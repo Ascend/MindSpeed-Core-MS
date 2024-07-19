@@ -215,7 +215,8 @@ std::tuple<std::vector<at::Tensor>, std::vector<at::Tensor>, std::vector<at::Ten
 
     std::vector<at::Tensor> dw;
     if (is_weight_transposed == true) {
-        at::TensorList grad_(grad);
+        at::Tensor grad_tensor = grad.at(0).contiguous();
+        at::TensorList grad_(grad_tensor);
         std::vector<at::Tensor> gradt;
         _foreach_transpose(grad_, gradt);
         std::vector<at::Tensor> dwt = npu_gmm(gradt, x, bias_real, group_list_real, 2);
