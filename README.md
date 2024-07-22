@@ -84,42 +84,39 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 
 # 特性介绍
 
-| 特性                             | 介绍 |
-|--------------------------------| ----- |
-| Megatron 数据并行                  | [link](docs/features/data-parallel.md) |
-| Megatron 张量并行                  | [link](docs/features/tensor-parallel.md) |
-| Megatron 流水并行                  | [link](docs/features/pipeline-parallel.md) |
-| Megatron 虚拟流水并行                | [link](docs/features/virtual-pipeline-parallel.md) |
-| Megatron 序列并行                  | [link](docs/features/sequence-parallel.md) |
-| Megatron 重计算                   | [link](docs/features/recomputation.md) |
-| Megatron 分布式优化器                | [link](docs/features/distributed-optimizer.md) |
-| Megatron 异步DDP                 | [link](docs/features/async-ddp.md) |
-| Megatron 权重更新通信隐藏              | [link](docs/features/async-ddp-param-gather.md) |
-| Ascend DeepSpeed MoE                | [link](docs/features/moe.md) |
-| Ascend Mask归一                      | [link](docs/features/generate-mask.md) |
-| Ascend 内存碎片优化                  | [link](docs/features/memory-fragmentation.md) |
-| Ascend 自适应选择重计算                | [link](docs/features/adaptive-recompute.md) |
-| Ascend 激活函数重计算                 | [link](docs/features/activation-function-recompute.md) |
-| Ascend 计算通信并行优化                | [link](docs/features/communication-over-computation.md) |
-| Ascend BF16 参数副本复用             | [link](docs/features/reuse-fp32-param.md) |
-| Ascend rms_norm 融合算子           | [link](docs/features/rms_norm.md) |
-| Ascend swiglu 融合算子             | [link](docs/features/swiglu.md) |
-| Ascend rotary_embedding 融合算子   | [link](docs/features/rotary-embedding.md) |
-| Ascend MoE token重排性能优化         | [link](docs/features/token-rearrange.md) |
-| Ascend MoE dropless性能优化         | [link](docs/features/efficient-moe-deepspeed-moe.md) |
-| Ascend MoE 负载感知内存均衡         | [link](docs/features/efficient-moe-megatron-moe.md) |
-| Ascend MoE Grouped GEMM         | [link](docs/features/efficient-moe-megatron-moe.md) |
-| Ascend flash attention 适配      | [link](docs/features/flash-attention.md) |
-| Ascend nano-pipe流水线并行      | [link](docs/features/nanopipe-pipeline-parallel.md) |
-| Ascend MLP 通信隐藏               | [link](docs/features/pipeline-experts.md) |
-| Ascend 重计算流水线独立调度               | [link](docs/features/recompute_independent_pipelining.md) |
-| Ulysses 长序列并行               | [link](docs/features/ulysses-context-parallel.md) |
-| Ring Attention 长序列并行        | [link](docs/features/ring-attention-context-parallel.md) |
-| 【Prototype】混合长序列并行       | [link](docs/features/hybrid-context-parallel.md) |
-| 【Prototype】Ascend MC2          | [link](docs/features/mc2.md) |
-| 【Prototype】alibi               | [link](docs/features/alibi.md) |
-| 【Prototype】PP自动并行              | [link](docs/features/automated-pipeline.md) |
-| 【Prototype】其他昇腾亲和优化            | 暂无 |
+| 特性                           | 介绍                                                        |
+|------------------------------|-----------------------------------------------------------|
+| Megatron 数据并行                | [link](docs/features/data-parallel.md)                    |
+| Megatron 张量并行                | [link](docs/features/tensor-parallel.md)                  |
+| Megatron 流水并行                | [link](docs/features/pipeline-parallel.md)                |
+| Megatron 虚拟流水并行              | [link](docs/features/virtual-pipeline-parallel.md)        |
+| Megatron 序列并行                | [link](docs/features/sequence-parallel.md)                |
+| Megatron 重计算                 | [link](docs/features/recomputation.md)                    |
+| Megatron 分布式优化器              | [link](docs/features/distributed-optimizer.md)            |
+| Megatron 异步DDP               | [link](docs/features/async-ddp.md)                        |
+| Megatron 权重更新通信隐藏            | [link](docs/features/async-ddp-param-gather.md)           |
+| Megatron Mcore MoE           | [link](docs/features/megatron_moe/megatron-moe.md)                                    |
+| Ascend DeepSpeed MoE         | [link](docs/features/deepspeed_moe/deepspeed-moe.md)      |
+| Ascend Mask归一                | [link](docs/features/generate-mask.md)                    |
+| Ascend 内存碎片优化                | [link](docs/features/memory-fragmentation.md)             |
+| Ascend 自适应选择重计算              | [link](docs/features/adaptive-recompute.md)               |
+| Ascend 激活函数重计算               | [link](docs/features/activation-function-recompute.md)    |
+| Ascend 计算通信并行优化              | [link](docs/features/communication-over-computation.md)   |
+| Ascend BF16 参数副本复用           | [link](docs/features/reuse-fp32-param.md)                 |
+| Ascend rms_norm 融合算子         | [link](docs/features/rms_norm.md)                         |
+| Ascend swiglu 融合算子           | [link](docs/features/swiglu.md)                           |
+| Ascend rotary_embedding 融合算子 | [link](docs/features/rotary-embedding.md)                 |
+| Ascend flash attention 适配    | [link](docs/features/flash-attention.md)                  |
+| Ascend nano-pipe流水线并行        | [link](docs/features/nanopipe-pipeline-parallel.md)       |
+| Ascend MLP 通信隐藏              | [link](docs/features/pipeline-experts.md)                 |
+| Ascend 重计算流水线独立调度            | [link](docs/features/recompute_independent_pipelining.md) |
+| Ulysses 长序列并行                | [link](docs/features/ulysses-context-parallel.md)         |
+| Ring Attention 长序列并行         | [link](docs/features/ring-attention-context-parallel.md)  |
+| 【Prototype】混合长序列并行           | [link](docs/features/hybrid-context-parallel.md)          |
+| 【Prototype】Ascend MC2        | [link](docs/features/mc2.md)                              |
+| 【Prototype】alibi             | [link](docs/features/alibi.md)                            |
+| 【Prototype】PP自动并行            | [link](docs/features/automated-pipeline.md)               |
+| 【Prototype】其他昇腾亲和优化          | 暂无                                                        |
 
 # 自定义算子
 

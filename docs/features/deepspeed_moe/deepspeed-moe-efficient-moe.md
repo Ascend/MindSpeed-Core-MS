@@ -1,5 +1,4 @@
-# Efficient-MOE-DeepSpeed-MOE
-## 1. MOE token dropless性能优化
+# MoE token dropless性能优化
 
 ### 问题分析
 
@@ -13,7 +12,7 @@
 
 1. MoE模型训练过程中capacity具有一定的连续性，维护一个滑动窗口来保存近几次统计的capacity来预估下一个窗口的capacity。
 2. 在Gate中不再每一个step都直接进行all reduce统计全局最大capacity，而是各个进程先判断当前的capacity能否满足不丢弃token，通过reduce统计全局的判断信息，若都能满足则无需进行all reduce通信，否则进行all reduce通信取得实际max capacity.
-<p align="center"> <img src="../../sources/images/moe_dynamic_padding_a.png" height="300px" width="600px"></p>
+<p align="center"> <img src="../../../sources/images/moe_dynamic_padding_a.png" height="300px" width="600px"></p>
 
 ### 使用场景
 
@@ -36,16 +35,16 @@
 训练模型：Mixtral(4层)
 
 精度对比图如下：
-<p align="center"> <img src="../../sources/images/moe_dynamic_padding_b.png" height="300px" width="800px"></p>
+<p align="center"> <img src="../../../sources/images/moe_dynamic_padding_b.png" height="300px" width="800px"></p>
 
 top2 多种并行方式 提速效果：
-<p align="center"> <img src="../../sources/images/moe_dynamic_padding_c.png" height="400px" width="800px"></p>
+<p align="center"> <img src="../../../sources/images/moe_dynamic_padding_c.png" height="400px" width="800px"></p>
 
 top1 多种并行方式 提速效果：
-<p align="center"> <img src="../../sources/images/moe_dynamic_padding_d.png" height="400px" width="800px"></p>
+<p align="center"> <img src="../../../sources/images/moe_dynamic_padding_d.png" height="400px" width="800px"></p>
 
 同时开启此优化减少显存占用3%：
-<p align="center"> <img src="../../sources/images/moe_dynamic_padding_e.png" height="500px" width="800px"></p>
+<p align="center"> <img src="../../../sources/images/moe_dynamic_padding_e.png" height="500px" width="800px"></p>
 
 
 
