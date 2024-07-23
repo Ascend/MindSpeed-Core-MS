@@ -15,13 +15,11 @@
 
 from typing import List, Optional
 import torch
+import torchair
+from torchair import ge
 from torch.library import Library, impl
-from torchair.ge_concrete_graph import ge_apis as ge
-from torchair.ge_concrete_graph.fx2ge_converter import declare_supported, register_fx_node_ge_converter
-from torchair.ge_concrete_graph.ge_graph import Tensor, TensorSpec
-from torchair.ge_concrete_graph.ge_graph import get_default_ge_graph, next_unique_name
-from torchair.ge_concrete_graph.ge_graph import compat_as_bytes
-from torchair.ge_concrete_graph.ge_graph import get_invalid_desc
+from torchair import register_fx_node_ge_converter
+from torchair.ge import Tensor, TensorSpec
 from mindspeed.op_builder.builder import MindSpeedOpBuilder, AS_LIBRARY
 
 DataType = dict(
@@ -174,9 +172,7 @@ def MatmulAllReduceAddRmsNorm(x1: Tensor,
                               is_trans_b: bool = False,
                               comm_turn: int = 0,
                               antiquant_group_size: int = 0,
-                              epsilon: float = 0.000001,
-                              dependencies=None,
-                              node_name=None):
+                              epsilon: float = 0.000001):
     """REG_OP(MatmulAllReduceAddRmsNorm)\n
     .INPUT(x1, TensorType({DT_FLOAT16, DT_BF16, DT_INT8, DT_FLOAT16, DT_BF16, DT_FLOAT16, DT_BF16}))\n
     .INPUT(x2, TensorType({DT_FLOAT16, DT_BF16, DT_INT8, DT_INT8, DT_INT8, DT_INT4, DT_INT4}))\n
@@ -198,78 +194,30 @@ def MatmulAllReduceAddRmsNorm(x1: Tensor,
     .OP_END_FACTORY_REG(MatmulAllReduceAddRmsNorm)
     """
 
-    op = get_default_ge_graph().op.add()
-    op.type = "MatmulAllReduceAddRmsNorm"
-    op.name = next_unique_name(node_name, "MatmulAllReduceAddRmsNorm")
-
-    # process dependices
-    if dependencies is not None:
-        for dependency in dependencies:
-            op.input.append(dependency.controller)
-
-    # process inputs
-    op.input.append(x1.tensor)
-    op.input_desc.add().CopyFrom(x1.desc)
-    op.input_desc[-1].name = "x1"
-    op.input.append(x2.tensor)
-    op.input_desc.add().CopyFrom(x2.desc)
-    op.input_desc[-1].name = "x2"
-    if bias is not None:
-        op.input.append(bias.tensor)
-        op.input_desc.add().CopyFrom(bias.desc)
-        op.input_desc[-1].name = "bias"
-    else:
-        op.input.append('')
-        op.input_desc.add().CopyFrom(get_invalid_desc())
-        op.input_desc[-1].name = "bias"
-    op.input.append(residual.tensor)
-    op.input_desc.add().CopyFrom(residual.desc)
-    op.input_desc[-1].name = "residual"
-    op.input.append(gamma.tensor)
-    op.input_desc.add().CopyFrom(gamma.desc)
-    op.input_desc[-1].name = "gamma"
-    if antiquant_scale is not None:
-        op.input.append(antiquant_scale.tensor)
-        op.input_desc.add().CopyFrom(antiquant_scale.desc)
-        op.input_desc[-1].name = "antiquant_scale"
-    else:
-        op.input.append('')
-        op.input_desc.add().CopyFrom(get_invalid_desc())
-        op.input_desc[-1].name = "antiquant_scale"
-    if antiquant_offset is not None:
-        op.input.append(antiquant_offset.tensor)
-        op.input_desc.add().CopyFrom(antiquant_offset.desc)
-        op.input_desc[-1].name = "antiquant_offset"
-    else:
-        op.input.append('')
-        op.input_desc.add().CopyFrom(get_invalid_desc())
-        op.input_desc[-1].name = "antiquant_offset"
-    if dequant_scale is not None:
-        op.input.append(dequant_scale.tensor)
-        op.input_desc.add().CopyFrom(dequant_scale.desc)
-        op.input_desc[-1].name = "dequant_scale"
-    else:
-        op.input.append('')
-        op.input_desc.add().CopyFrom(get_invalid_desc())
-        op.input_desc[-1].name = "dequant_scale"
-
-    # process attrs
-    op.attr["group"].s = compat_as_bytes(group)
-    op.attr["reduce_op"].s = compat_as_bytes(reduce_op)
-    op.attr["is_trans_a"].b = is_trans_a
-    op.attr["is_trans_b"].b = is_trans_b
-    op.attr["comm_turn"].i = comm_turn
-    op.attr["antiquant_group_size"].i = antiquant_group_size
-    op.attr["epsilon"].f = epsilon
-
-    # process outputs
-    output_index = 0
-    op.output_desc.add().name = "y"
-    y = Tensor(op, output_index)
-    output_index += 1
-    op.output_desc.add().name = "norm_out"
-    norm_out = Tensor(op, output_index)
-    output_index += 1
-
-    # return outputs
+    y, norm_out = torchair.ge.custom_op(
+        "MatmulAllReduceAddRmsNorm",
+        inputs={
+            "x1" : x1,
+            "x2" : x2,
+            "bias" : bias,
+            "residual" : residual,
+            "gamma" : gamma,
+            "antiquant_scale" : antiquant_scale,
+            "antiquant_offset" : antiquant_offset,
+            "dequant_scale" : dequant_scale,
+            },
+        attrs={
+            "group" : ge.attr.Str(group),
+            "reduce_op" : ge.attr.Str(reduce_op),
+            "is_trans_a" : ge.attr.Bool(is_trans_a),
+            "is_trans_b" : ge.attr.Bool(is_trans_b),
+            "comm_turn" : ge.attr.Int(comm_turn),
+            "antiquant_group_size" : ge.attr.Int(antiquant_group_size),
+            "epsilon" : ge.attr.Float(epsilon),
+        },
+        outputs=[
+            "y",
+            "norm_out"
+        ]
+    )
     return y, norm_out

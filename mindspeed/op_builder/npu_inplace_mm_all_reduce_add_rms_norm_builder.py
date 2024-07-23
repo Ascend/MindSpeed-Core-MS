@@ -16,13 +16,10 @@
 from typing import List, Optional
 import torch
 import torchair
+from torchair import ge
 from torch.library import Library, impl
-from torchair.ge_concrete_graph import ge_apis as ge
-from torchair.ge_concrete_graph.fx2ge_converter import declare_supported, register_fx_node_ge_converter
-from torchair.ge_concrete_graph.ge_graph import Tensor, TensorSpec
-from torchair.ge_concrete_graph.ge_graph import get_default_ge_graph, next_unique_name
-from torchair.ge_concrete_graph.ge_graph import compat_as_bytes
-from torchair.ge_concrete_graph.ge_graph import get_invalid_desc
+from torchair import register_fx_node_ge_converter
+from torchair.ge import Tensor, TensorSpec
 from mindspeed.op_builder.builder import MindSpeedOpBuilder, AS_LIBRARY
 from mindspeed.op_builder.npu_mm_all_reduce_add_rms_norm_builder import MatmulAllReduceAddRmsNorm, CheckDtype
 
