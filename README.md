@@ -134,6 +134,23 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 | 【Prototype】npu_grouped_mat_mul             | [link](docs/ops/gmm.md)  |
 | 【Prototype】npu_grouped_mat_mul_all_reduce  | [link](docs/ops/npu_grouped_mat_mul_all_reduce.md)  |
 
+# MindSpeed中采集Profile数据
+
+MindSpeed支持命令式开启Profile采集数据，命令配置介绍如下：
+
+| 配置命令                      | 默认值                                  | 命令含义           | 
+|---------------------------|--------------------------------------|----------------|
+| --profile                 | False                                | profile数据采集开关  |
+| --profile-step-start      | 10                                   | 开始采集步骤         |
+| --profile-step-end        | 12                                   | 结束采集步骤         |
+| --profile-level           | level0 (可选：level0, level1, level2)   | 数据信息采集等级       |
+| --profile-with-cpu        | False                                | 是否采集cpu信息      |
+| --profile-with-stack      | False                                | 是否采集stack信息    |
+| --profile-with-memory     | False                                | 是否采集memory信息   |
+| --profile-record-shapes   | False                                | 是否采集shapes信息   |
+| --profile-save-path       | ./profile_dir                        | 采集信息保存路径       |
+| --profile-ranks           | 0 (可选配置举例：0 1 2 3 4 5 6 7)           | 被采集的ranks      |
+
 # 版本配套表
 
 **PyTorch Extension**版本号采用`{PyTorch版本}-{昇腾版本}`命名规则，前者为**PyTorch Extension**匹配的PyTorch版本，后者用于匹配CANN版本，详细匹配如下：

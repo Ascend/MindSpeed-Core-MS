@@ -40,7 +40,26 @@ def process_args(parser):
     parser = _add_alibi_args(parser)
     parser = _add_ndmm_args(parser)
     parser = _add_coc_args(parser)
+    parser = _add_profile_args(parser)
 
+    return parser
+
+
+def _add_profile_args(parser):
+    group = parser.add_argument_group(title='profile')
+    group.add_argument("--profile-level", type=str, default='level0',
+                       choices=['level0', 'level1', 'level2'],
+                       help="Profile level default level0.")
+    group.add_argument("--profile-with-cpu", action='store_true', default=False,
+                       help="Profile with cpu info.")
+    group.add_argument("--profile-with-stack", action='store_true', default=False,
+                       help="Profile without stack info.")
+    group.add_argument("--profile-with-memory", action='store_true', default=False,
+                       help="Profile without memory info.")
+    group.add_argument("--profile-record-shapes", action='store_true', default=False,
+                       help="Profile record shape info.")
+    group.add_argument("--profile-save-path", type=str, default='./profile_dir',
+                       help="Profile save path.")
     return parser
 
 

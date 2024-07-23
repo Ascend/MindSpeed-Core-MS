@@ -330,9 +330,12 @@ def megatron_training_adaptation(aspm):
     from .arguments import parse_args_wrapper, validate_args_wrapper, core_transformer_config_from_args_wrapper
     from .tokenizer import build_tokenizer_wrapper
     from .yaml_arguments import core_transformer_config_from_yaml_wrapper, print_args_wrapper
-    from .core.training import pretrain_decorator, setup_model_and_optimizer_decorator, save_checkpoint_and_time_decorator
+    from .core.training import pretrain_decorator, train_decorator, train_step_decorator, \
+                               setup_model_and_optimizer_decorator, save_checkpoint_and_time_decorator
     aspm.register_patch('megatron.training.global_vars.get_num_microbatches', get_num_microbatches_wrapper)
     aspm.register_patch('megatron.training.training.pretrain', pretrain_decorator)
+    aspm.register_patch('megatron.training.training.train', train_decorator)
+    aspm.register_patch('megatron.training.training.train_step', train_step_decorator)
     aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_decorator)
     aspm.register_patch('megatron.training.training.save_checkpoint_and_time', save_checkpoint_and_time_decorator)
     aspm.register_patch('megatron.training.yaml_arguments.core_transformer_config_from_yaml',

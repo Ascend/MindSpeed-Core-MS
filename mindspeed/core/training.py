@@ -33,6 +33,68 @@ DATA_PARALLEL_SIZE = 1
 ENABLE_SCHEDULER = False
 
 
+def train_decorator(train):
+    @wraps(train)
+    def wrapper(*args, **kwargs):
+        args_ = get_args()
+        if args_.profile:
+            args_.profile_npu = True
+            args_.profile = False
+        else:
+            args_.profile_npu = False
+
+        if args_.profile_npu and (torch.distributed.get_rank() in args_.profile_ranks):
+            active = args_.profile_step_end - args_.profile_step_start
+            skip_first = args_.profile_step_start
+
+            if args_.profile_with_cpu:
+                activities = [torch_npu.profiler.ProfilerActivity.NPU, torch_npu.profiler.ProfilerActivity.CPU]
+            else:
+                activities = [torch_npu.profiler.ProfilerActivity.NPU]
+
+            if args_.profile_level == 'level0':
+                profiler_level = torch_npu.profiler.ProfilerLevel.Level0
+            elif args_.profile_level == 'level1':
+                profiler_level = torch_npu.profiler.ProfilerLevel.Level1
+            elif args_.profile_level == 'level2':
+                profiler_level = torch_npu.profiler.ProfilerLevel.Level2
+            else:
+                raise ValueError(f"profiler_level only support level0, level1, level2, but gets {args_.profile_level}")
+
+            experimental_config = torch_npu.profiler._ExperimentalConfig(
+                aic_metrics=torch_npu.profiler.AiCMetrics.PipeUtilization,
+                profiler_level=profiler_level,
+                l2_cache=False
+            )
+
+            with torch_npu.profiler.profile(
+                activities=activities,
+                record_shapes=args_.profile_record_shapes,
+                profile_memory=args_.profile_with_memory,
+                with_stack=args_.profile_with_stack,
+                experimental_config=experimental_config,
+                schedule=torch_npu.profiler.schedule(wait=0, warmup=0, active=active, repeat=1, skip_first=skip_first),
+                on_trace_ready=torch_npu.profiler.tensorboard_trace_handler(args_.profile_save_path)
+            ) as prof:
+                args_.prof = prof
+                return train(*args, **kwargs)
+        else:
+            return train(*args, **kwargs)
+
+    return wrapper
+
+
+def train_step_decorator(train_step):
+    @wraps(train_step)
+    def wrapper(*args, **kwargs):
+        ret = train_step(*args, **kwargs)
+        args_ = get_args()
+        if args_.profile_npu and (torch.distributed.get_rank() in args_.profile_ranks):
+            args_.prof.step()
+        return ret
+    return wrapper
+
+
 def pretrain_decorator(pretrain):
     @wraps(pretrain)
     def wrapper(*args, **kwargs):
