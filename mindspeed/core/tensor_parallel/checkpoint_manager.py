@@ -25,6 +25,9 @@ class PipelineCheckpointManager:
                     raise RuntimeError(
                         f"{torch.distributed.get_rank()} batch recompute list is not empty, got {layer_list_for_batch[0]} in index 0")
             batch_list_for_chunk.clear()
+        self.open_ri_pipe = False
+        self.do_pre_recompute = False
+        self.chunk_do_recompute = True
 
     def add_recompute(self, recompute_func):
         self.checkpoint_list.append(recompute_func)

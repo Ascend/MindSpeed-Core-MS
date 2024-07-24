@@ -2,6 +2,8 @@
 
 import contextlib
 import functools
+import types
+import sys
 
 import mindtorch
 import mindtorch.torch as torch
@@ -125,6 +127,7 @@ def fused_layer_norm_affine(input_, weight, bias, normalized_shape, eps):
 
 def apex_adaptation(mspm):
     import math
+    sys.modules['apex'] = types.ModuleType('apex')
     mspm.register_patch('amp_C.multi_tensor_l2norm', multi_tensor_l2norm, create_dummy=True)
     mspm.register_patch('amp_C.multi_tensor_scale', multi_tensor_scale, create_dummy=True)
     mspm.register_patch('fused_layer_norm_cuda', create_dummy=True)
@@ -139,6 +142,7 @@ def te_adaptation(mspm):
     mspm.register_patch('transformer_engine.pytorch.LayerNormLinear', torch.nn.Module, create_dummy=True)
     mspm.register_patch('transformer_engine.pytorch.DotProductAttention', torch.nn.Module, create_dummy=True)
     mspm.register_patch('transformer_engine.pytorch.Linear', torch.nn.Module, create_dummy=True)
+    mspm.register_patch('transformer_engine.common.recipe.DelayedScaling', torch.nn.Module, create_dummy=True)
     mspm.register_patch('flash_attn.flash_attn_interface.flash_attn_unpadded_func', create_dummy=True)
 
 
@@ -152,14 +156,16 @@ def megatron_torch_adaptation(mspm):
 
 def megatron_training_adaptation(mspm):
     from mindspeed.arguments import parse_args_wrapper, validate_args_wrapper
-    from mindspeed.mindspore.training.initialize import _initialize_distributed
+    from mindspeed.mindspore.training.initialize import _initialize_distributed, _compile_dependencies
     from mindspeed.mindspore.model.transformer import parallel_transformer_forward_wrapper
+    from mindspeed.yaml_arguments import print_args_wrapper
     mspm.register_patch('megatron.training.initialize.parse_args', parse_args_wrapper)
     mspm.register_patch('megatron.training.initialize.validate_args', validate_args_wrapper)
-    mspm.register_patch('megatron.training.initialize._compile_dependencies', dummy_function)
+    mspm.register_patch('megatron.training.initialize._compile_dependencies', _compile_dependencies)
     mspm.register_patch('megatron.training.initialize.set_jit_fusion_options', dummy_function)
     mspm.register_patch('megatron.training.utils.report_memory', dummy_function)
     mspm.register_patch('megatron.training.arguments.parse_args', parse_args_wrapper)
+    mspm.register_patch('megatron.training.arguments._print_args', print_args_wrapper)
     mspm.register_patch('megatron.training.initialize._initialize_distributed', _initialize_distributed)
     mspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.forward',
                         parallel_transformer_forward_wrapper)
@@ -231,6 +237,8 @@ def megatron_core_adaptation(mspm):
     mspm.register_patch('megatron.core.tensor_parallel.layers.LinearWithGradAccumulationAndAsyncCommunication.bprop',
                         linear_with_grad_accumulation_and_async_communication_bprop, create_dummy=True)
     mspm.register_patch('megatron.core.tensor_parallel.random._CUDA_RNG_STATE_TRACKER', DummyTracker(),
+                        create_dummy=True)
+    mspm.register_patch('megatron.core.tensor_parallel.random.CudaRNGStatesTracker', DummyTracker,
                         create_dummy=True)
 
 

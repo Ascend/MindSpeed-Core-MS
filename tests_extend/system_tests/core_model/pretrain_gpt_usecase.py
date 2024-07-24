@@ -71,7 +71,7 @@ def run_result_report(log_dir):
     flags = os.O_RDWR | os.O_CREAT
     modes = stat.S_IWUSR | stat.S_IRUSR | stat.S_IWGRP | stat.S_IRGRP
     with os.fdopen(os.open(os.path.join(log_dir, "report.csv"), flags, modes), 'a') as f:
-        logs_list = [file for file in os.listdir(log_dir) if str(file).endswith(".log")]
+        logs_list = sorted([file for file in os.listdir(log_dir) if str(file).endswith(".log")])
         failed_num = 0
         for file in logs_list:
             log_file = os.path.join(log_dir, file)

@@ -42,10 +42,10 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 ### 3. 获取 Megatron-LM 并指定 commit id
 
  ```shell
- # 目前版本基于core_r0.6.0的release版本
+ # 目前版本基于core_r0.7.0的release版本
  git clone https://github.com/NVIDIA/Megatron-LM.git
  cd Megatron-LM
- git checkout core_r0.6.0
+ git checkout core_r0.7.0
  ```
 
 # 快速上手

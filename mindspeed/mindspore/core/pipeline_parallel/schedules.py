@@ -27,7 +27,6 @@ def ms_forward_and_backward(
         collect_non_loss_data,
         checkpoint_activations_microbatch
     )
-    import numpy as np
 
     params = model.trainable_params()
 
@@ -58,7 +57,7 @@ def forward_wrapper(fn):
         if parallel_state.is_pipeline_last_stage():
             if not collect_non_loss_data:
                 output_tensor = loss_func(output_tensor)
-                loss, loss_reduced = output_tensor
+                loss, _, loss_reduced = output_tensor
                 if num_microbatches != 0:
                     output_tensor = loss / num_microbatches
                 forward_data = loss_reduced
@@ -114,19 +113,21 @@ def forward_backward_no_pipelining(
         return loss
 
     grad_fn_global = mindspore.grad(new_forward_step_func, 2, model.trainable_params(), has_aux=False)
-
+    total_num_tokens = mindtorch.torch.tensor(0, dtype=mindtorch.torch.int).cuda()
     with no_sync_func():
         for i in range(num_microbatches - 1):
             if forward_only:
-                output_tensor = forward_step(
+                output_tenso, num_tokensr = forward_step(
                     forward_step_func,
                     data_iterator,
                     model,
                     num_microbatches,
                     input_tensor,
+                    forward_data_store,
                     config,
                     collect_non_loss_data,
                     is_first_microbatch=check_first_val_step(first_val_step, forward_only, i == 0),
+                    current_microbatch=i,
                 )
             else:
                 output_tensor, params_gradient = ms_forward_and_backward(
@@ -140,15 +141,17 @@ def forward_backward_no_pipelining(
                     None,
                 )
     if forward_only:
-        output_tensor = forward_step(
+        output_tensor, num_tokens = forward_step(
             forward_step_func,
             data_iterator,
             model,
             num_microbatches,
             input_tensor,
+            forward_data_store,
             config,
             collect_non_loss_data,
             is_first_microbatch=check_first_val_step(first_val_step, forward_only, num_microbatches == 1),
+            current_microbatch=num_microbatches - 1,
         )
     else:
         output_tensor, params_gradient = ms_forward_and_backward(
@@ -160,6 +163,13 @@ def forward_backward_no_pipelining(
             config,
             collect_non_loss_data,
             None
+        )
+
+    if config.finalize_model_grads_func is not None and not forward_only:
+        # Finalize model grads (perform full grad all-reduce / reduce-scatter for
+        # data parallelism and layernorm all-reduce for sequence parallelism).
+        config.finalize_model_grads_func(
+            [model], total_num_tokens if config.calculate_per_token_loss else None
         )
     if config.timers is not None:
         config.timers('forward-backward').stop()

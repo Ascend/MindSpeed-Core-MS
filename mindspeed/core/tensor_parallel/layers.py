@@ -955,6 +955,7 @@ def linear_with_grad_accumulation_and_async_allreduce_moe(
     sequence_parallel: bool,
     pipe_experts=False,
     grad_output_buffer: Optional[List[torch.Tensor]] = None,
+    allreduce_dgrad: bool = None,
     matmul_id: int = 1,
     is_nano_row: bool = False,
     is_nano_column: bool = False,
@@ -1015,12 +1016,18 @@ def linear_with_grad_accumulation_and_async_allreduce_moe(
             output gradients when embedding table wgrad compute is deferred.
             Defaults to None.
     """
+    if allreduce_dgrad is None:
+        warnings.warn(
+            "async_grad_allreduce is deprecated and will be removed in a future release. use allreduce_dgrad instead."
+        )
+        allreduce_dgrad = async_grad_allreduce
+
     args = [
         input,
         weight,
         bias,
         gradient_accumulation_fusion,
-        async_grad_allreduce,
+        allreduce_dgrad,
         sequence_parallel,
         grad_output_buffer,
         pipe_experts
@@ -1036,7 +1043,7 @@ def linear_with_grad_accumulation_and_async_allreduce_moe(
                 )
                 linear_with_grad_accumulation_and_async_allreduce_moe.warned = True
 
-            if async_grad_allreduce:
+            if allreduce_dgrad:
                 warnings.warn(
                     "When using async grad allreduce it is recommended to set the "
                     "environment variable CUDA_DEVICE_MAX_CONNECTIONS to 1 for "
@@ -1194,7 +1201,7 @@ def column_parallel_moe(self, input_: torch.Tensor, weight: Optional[torch.Tenso
     bias = self.bias if not self.skip_bias_add else None
 
     if (
-        self.async_tensor_model_parallel_allreduce
+        self.allreduce_dgrad
         or self.sequence_parallel
         or self.explicit_expert_comm
     ):
@@ -1218,7 +1225,7 @@ def column_parallel_moe(self, input_: torch.Tensor, weight: Optional[torch.Tenso
         gradient_accumulation_fusion=self.gradient_accumulation_fusion,
         async_grad_allreduce=False
         if self.explicit_expert_comm
-        else self.async_tensor_model_parallel_allreduce,
+        else self.allreduce_dgrad,
         sequence_parallel=False if self.explicit_expert_comm else self.sequence_parallel,
         grad_output_buffer=self.grad_output_buffer
         if self.config.defer_embedding_wgrad_compute

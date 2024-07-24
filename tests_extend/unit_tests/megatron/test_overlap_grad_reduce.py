@@ -1,13 +1,16 @@
 import os
+
 import pytest
 import torch
 import mindspeed.megatron_adaptor
-from megatron.core.distributed.param_and_grad_buffer import Bucket
-from megatron.core import parallel_state
-from megatron.training.global_vars import set_args
-from megatron.training.arguments import parse_args
-from unit_tests.common import DistributedTest
 from commons import initialize_model_parallel
+from unit_tests.common import DistributedTest
+
+from megatron.core import parallel_state
+from megatron.core.distributed import DistributedDataParallelConfig
+from megatron.core.distributed.param_and_grad_buffer import Bucket
+from megatron.training.arguments import parse_args
+from megatron.training.global_vars import set_args
 
 
 @pytest.mark.parametrize('dtype', [torch.float, torch.float16])
@@ -37,7 +40,15 @@ class TestOverlapGradReduce(DistributedTest):
         data_overlap = data.clone()
         grad_data_overlap = grad_data.clone()
 
+        ddp_config = DistributedDataParallelConfig(
+            grad_reduce_in_fp32=True,
+            overlap_grad_reduce=False,
+            use_distributed_optimizer=use_distributed_optimizer,
+            check_for_nan_in_grad=False,
+        )
+
         ref = Bucket(
+            ddp_config=ddp_config,
             params=params,
             param_data=data,
             grad_data=grad_data,
@@ -45,13 +56,13 @@ class TestOverlapGradReduce(DistributedTest):
             numel_unpadded=count,
             data_parallel_group=parallel_state.get_data_parallel_group(),
             data_parallel_world_size=parallel_state.get_data_parallel_world_size(),
-            overlap_grad_reduce=False,
-            use_distributed_optimizer=use_distributed_optimizer,
             gradient_scaling_factor=1.0,
-            check_for_nan_in_grad=False,
         )
 
+        # test overlap_grad_reduce
+        ddp_config.overlap_grad_reduce = True
         overlap = Bucket(
+            ddp_config=ddp_config,
             params=params_overlap,
             param_data=data_overlap,
             grad_data=grad_data_overlap,
@@ -59,10 +70,7 @@ class TestOverlapGradReduce(DistributedTest):
             numel_unpadded=count,
             data_parallel_group=parallel_state.get_data_parallel_group(),
             data_parallel_world_size=parallel_state.get_data_parallel_world_size(),
-            overlap_grad_reduce=True,
-            use_distributed_optimizer=use_distributed_optimizer,
             gradient_scaling_factor=1.0,
-            check_for_nan_in_grad=False,
         )
 
         ref.start_grad_sync()
@@ -74,4 +82,5 @@ class TestOverlapGradReduce(DistributedTest):
             ref.param_data = ref.param_data.float()
             overlap.param_data = overlap.param_data.float()
 
-        assert torch.allclose(ref.param_data, overlap.param_data, rtol=0.0001, atol=0.0001), '{}\n{}'.format(ref.param_data, overlap.param_data)
+        assert torch.allclose(ref.param_data, overlap.param_data, rtol=0.0001, atol=0.0001), '{}\n{}'.format(
+            ref.param_data, overlap.param_data)

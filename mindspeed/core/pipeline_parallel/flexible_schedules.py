@@ -39,9 +39,9 @@ from megatron.core.pipeline_parallel.p2p_communication import (
     _p2p_ops
 )
 from megatron.core.parallel_state import get_pipeline_model_parallel_group
+from megatron.training import get_args
 from mindspeed.core.parallel_state import get_pipeline_parallel_group_for_new_stream
 from mindspeed.core.weight_grad_store import WeightGradStore
-from megatron.training import get_args
 
 
 forward_comm_stream = None
@@ -58,8 +58,6 @@ def recv_forward(tensor_shapes, config, group):
             input_tensor = None
             wait_handle = None
         else:
-            if config.timers is not None:
-                config.timers('forward-recv', log_level=2).start()
             input_tensor, _, wait_handle = _communicate(
                 tensor_send_next=None,
                 tensor_send_prev=None,
@@ -70,8 +68,6 @@ def recv_forward(tensor_shapes, config, group):
                 group=group,
                 wait_on_reqs=False
             )
-            if config.timers is not None:
-                config.timers('forward-recv').stop()
         input_tensors.append(input_tensor)
         wait_handles.append(wait_handle)
     return input_tensors, wait_handles
@@ -85,8 +81,6 @@ def recv_backward(tensor_shapes, config, group):
             output_tensor_grad = None
             wait_handle = None
         else:
-            if config.timers is not None:
-                config.timers('backward-recv', log_level=2).start()
             _, output_tensor_grad, wait_handle = _communicate(
                 tensor_send_next=None,
                 tensor_send_prev=None,
@@ -97,8 +91,6 @@ def recv_backward(tensor_shapes, config, group):
                 group=group,
                 wait_on_reqs=False
             )
-            if config.timers is not None:
-                config.timers('backward-recv').stop()
         output_tensor_grads.append(output_tensor_grad)
         wait_handlers.append(wait_handle)
     return output_tensor_grads, wait_handlers
@@ -111,8 +103,6 @@ def send_forward(output_tensors, tensor_shapes, config, group):
         if tensor_shape is None or core.parallel_state.is_pipeline_last_stage():
             continue
 
-        if config.timers is not None:
-            config.timers('forward-send', log_level=2).start()
         _communicate(
             tensor_send_next=output_tensor,
             tensor_send_prev=None,
@@ -123,8 +113,6 @@ def send_forward(output_tensors, tensor_shapes, config, group):
             group=group,
             wait_on_reqs=False
         )
-        if config.timers is not None:
-            config.timers('forward-send').stop()
 
 
 def send_backward(input_tensor_grads, tensor_shapes, config, group):
@@ -135,8 +123,6 @@ def send_backward(input_tensor_grads, tensor_shapes, config, group):
         if tensor_shape is None or core.parallel_state.is_pipeline_first_stage():
             continue
 
-        if config.timers is not None:
-            config.timers('backward-send', log_level=2).start()
         _communicate(
             tensor_send_next=None,
             tensor_send_prev=input_tensor_grad,
@@ -147,8 +133,6 @@ def send_backward(input_tensor_grads, tensor_shapes, config, group):
             group=group,
             wait_on_reqs=False
         )
-        if config.timers is not None:
-            config.timers('backward-send').stop()
 
 
 def _communicate(
@@ -466,7 +450,7 @@ def forward_backward_pipelining_without_interleaving(
                 )
 
             wait_helper(fwd_wait_handles)
-            output_tensor = forward_step(
+            output_tensor, _ = forward_step(
                 forward_step_func,
                 data_iterator,
                 model,
@@ -491,11 +475,16 @@ def forward_backward_pipelining_without_interleaving(
                     if tensor is not None:
                         tensor.record_stream(forward_comm_stream)
 
+
             if not forward_only:
                 input_tensors.append(input_tensor)
                 output_tensors.append(output_tensor)
                 deallocate_output_tensor(output_tensor[0], config.deallocate_pipeline_outputs)
+
         else:
+            if forward_only:
+                continue
+
             if current_tag_id == len(scheduler_plan) - 1:
                 if config.grad_sync_func is None or rank == 0:
                     enable_grad_sync()
@@ -747,7 +736,7 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
                 input_tensors[model_chunk_id].append(None)
         input_tensor = input_tensors[model_chunk_id][-1]
 
-        output_tensor = forward_step(
+        output_tensor, _ = forward_step(
             forward_step_func,
             data_iterator[model_chunk_id],
             model[model_chunk_id],

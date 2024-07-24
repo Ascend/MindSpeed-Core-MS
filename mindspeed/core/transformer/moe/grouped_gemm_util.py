@@ -12,6 +12,11 @@ def grouped_gemm_is_available():
         return False
 
 
+def assert_grouped_gemm_is_available():
+    if not grouped_gemm_is_available():
+        raise ImportError("from mindspeed.ops.gmm import npu_gmm failed.")
+
+
 class Ops:
     @staticmethod
     def gmm(a, b, batch_sizes, trans_b=False):

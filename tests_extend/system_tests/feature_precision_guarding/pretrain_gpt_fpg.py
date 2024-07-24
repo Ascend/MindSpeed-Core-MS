@@ -47,10 +47,10 @@ def run_script_instance(script_conf: dict, spec_param: dict, logs_dir: str, log_
 
     # Create a log directory.
     os.makedirs(logs_dir, exist_ok=True)
-    log_save_path = os.path.join(logs_dir, f"{log_name}-{time.time_ns()}.log")
+    log_save_path = os.path.join(logs_dir, f"{log_name}.log")
 
     # run usecase
-    cmd = f"sh {script_path} {param_str} {sepc_param} >>{log_save_path}"
+    cmd = f"sh {script_path} {param_str} {sepc_param} 2>&1 | tee {log_save_path}"
     os.system(cmd)
     print("==================== ENDING =======================")
 

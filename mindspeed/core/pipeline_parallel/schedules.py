@@ -14,6 +14,9 @@
 # limitations under the License.
 # Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
 from functools import wraps
+
+import torch
+
 from megatron.training import get_args
 from megatron.core import parallel_state
 from mindspeed.core.pipeline_parallel import flexible_schedules
@@ -30,7 +33,7 @@ def get_forward_backward_func_wrapper(get_forward_backward_func):
         if arguments.automated_pipeline_perf and arguments.pp_schedule_list:
             return flexible_schedules.forward_backward_pipelining_without_interleaving
 
-        if arguments.recompute_in_bubble or arguments.recompute_in_advance:
+        if (arguments.recompute_in_bubble or arguments.recompute_in_advance) and torch.is_grad_enabled():
             return forward_backward_ripipe_pipelining
 
         if parallel_state.get_pipeline_model_parallel_world_size() > 1 \

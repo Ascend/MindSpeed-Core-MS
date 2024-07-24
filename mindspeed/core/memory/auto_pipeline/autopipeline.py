@@ -323,8 +323,9 @@ def autopipeline_profiling(model_provider, model_type, forward_step_func, train_
             pipelining.register_recursive_hook("module", models, pipelining.context)
         pipelining.get_modules_params_by_stages(init_memory, sync=True)
         set_recompute_mode(models)
+        checkpointing_context = {}
         training.train(forward_step_func, models, optimizer, lr_scheduler, train_data_iterator, valid_data_iterator,
-                       process_non_loss_data_func, config)
+                       process_non_loss_data_func, config, checkpointing_context)
         pipelining.get_comm_time(config, sync=True)
 
         timers = get_timers()

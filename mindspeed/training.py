@@ -117,6 +117,9 @@ def pretrain(train_valid_test_dataset_provider,
     timers.log(['model-and-optimizer-setup',
                 'train/valid/test-data-iterators-setup'], barrier=True)
 
+    # Context used for persisting some state between checkpoint saves.
+    checkpointing_context = {}
+
     if not args.skip_train:
         print_rank_0('training ...')
 
@@ -131,13 +134,13 @@ def pretrain(train_valid_test_dataset_provider,
                 forward_step_func,
                 model, optimizer, opt_param_scheduler,
                 train_data_iterator, valid_data_iterator,
-                process_non_loss_data_func, config)
+                process_non_loss_data_func, config, checkpointing_context)
 
         print_datetime('after training is done')
 
         if args.save and iteration != 0 and iteration % args.save_interval != 0:
             save_checkpoint(iteration, model, optimizer, opt_param_scheduler,
-                            num_floating_point_operations_so_far)
+                            num_floating_point_operations_so_far, checkpointing_context)
     else:
         print_rank_0('skipping training (--skip-train is on) ...')
 

@@ -27,7 +27,7 @@ def _initialize_distributed():
         # mindtorch.torch.distributed.init_process_group not support pass in world_size and rank.
         # 'world_size' is set by msrun by '--worker_num', and 'rank' is set automatically by msrun.
         torch.distributed.init_process_group(
-            backend=args.distributed_backend,        
+            backend=args.distributed_backend,
         )
 
     # Set the tensor model-parallel, pipeline model-parallel, and
@@ -54,3 +54,14 @@ def _initialize_distributed():
                     f"> initialized pipeline model parallel with size "
                     f"{mpu.get_pipeline_model_parallel_world_size()}"
                 )
+
+
+def _compile_dependencies():
+    import time
+    if torch.distributed.get_rank() == 0:
+        start_time = time.time()
+        print('> compiling dataset index builder ...')
+        from megatron.core.datasets.utils import compile_helpers
+        compile_helpers()
+        print('>>> done with dataset index builder. Compilation time: {:.3f} '
+              'seconds'.format(time.time() - start_time), flush=True)

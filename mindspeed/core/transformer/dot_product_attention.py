@@ -132,7 +132,7 @@ def dot_product_attention_forward(
                 pse_type=self.pse_type,
                 pre_tokens=args.pre_tockens,
                 next_tokens=args.next_tockens,
-                keep_prob=1 - self.dropout_p,
+                keep_prob=1 - self.attention_dropout.p,
                 inner_precise=0,
                 sparse_mode=args.sparse_mode
             )[0]

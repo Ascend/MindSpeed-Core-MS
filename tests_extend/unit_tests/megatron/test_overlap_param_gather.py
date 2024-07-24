@@ -6,6 +6,7 @@ from apex.optimizers import FusedAdam as Adam
 
 from types import SimpleNamespace
 from megatron.core import DistributedDataParallel as DDP
+from megatron.core.distributed import DistributedDataParallelConfig
 from megatron.core.transformer import TransformerConfig, MegatronModule
 from megatron.training.global_vars import set_args, get_timers, set_global_variables
 from megatron.training.arguments import parse_args
@@ -44,22 +45,20 @@ def create_test_args():
     args.overlap_grad_reduce = True
     args.barrier_with_L1_time = False
     args.reuse_fp32_param = False
+    args.accumulation_allreudce_grads_in_fp32 = True
     return args
 
 
-def step_optimizer(model, optimizer_config, seed: int = None):
-
+def step_optimizer(model, optimizer_config, ddp_config, seed: int = None):
     set_random_seed(seed)
 
     model = torch.nn.ModuleList(
         [
             DDP(
                 model_chunk.config,
+                ddp_config,
                 model_chunk,
                 data_parallel_group=mpu.get_data_parallel_group(with_context_parallel=True),
-                accumulate_allreduce_grads_in_fp32=True,
-                overlap_grad_reduce=True,
-                use_distributed_optimizer=True,
             )
             for model_chunk in model
         ]
@@ -136,6 +135,13 @@ class TestOverlapParamGather(DistributedTest):
         )
         model = [Model(config)]
 
+        ddp_config = DistributedDataParallelConfig(
+            grad_reduce_in_fp32=args.accumulation_allreudce_grads_in_fp32,
+            overlap_grad_reduce=args.overlap_grad_reduce,
+            use_distributed_optimizer=args.use_distributed_optimizer,
+            check_for_nan_in_grad=False,
+        )
+
         optimizer_config = OptimizerConfig(
             clip_grad=1,
             fp16=fp16,
@@ -146,11 +152,11 @@ class TestOverlapParamGather(DistributedTest):
         timers = Timers()
         optimizer_config.timers = timers
 
-        params = step_optimizer(model, optimizer_config, seed=123)
+        params = step_optimizer(model, optimizer_config, ddp_config, seed=123)
 
         optimizer_config.overlap_param_gather = True
 
-        dist_params = step_optimizer(model, optimizer_config, seed=123)
+        dist_params = step_optimizer(model, optimizer_config, ddp_config, seed=123)
 
         for p, dist_p in zip(params, dist_params):
             assert torch.allclose(p.data, dist_p.data)

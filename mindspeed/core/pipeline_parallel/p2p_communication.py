@@ -2,7 +2,13 @@
 # Copyright (c) 2024, Huawei Technologies Co., Ltd.  All rights reserved.
 
 from typing import List, Union
+
 import torch
+
+from megatron.core.parallel_state import get_pipeline_model_parallel_rank, \
+    get_pipeline_model_parallel_group, \
+    get_pipeline_model_parallel_next_rank, \
+    get_pipeline_model_parallel_prev_rank
 
 # Types
 Shape = Union[List[int], torch.Size]
