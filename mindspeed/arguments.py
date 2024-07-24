@@ -328,6 +328,10 @@ def validate_args_wrapper(validate_args):
             args.use_mcore_models = True
             overlap_param_gather_without_mcore_models = True
 
+        # alibi type [2, 3] is only support FA2
+        if args.alibi_fusion_attn_type in [2, 3]:
+            args.use_fusion_attn_v2 = True
+
         # for vpp assert pp should > 2
         flag_num_layers_per_virtual_pipeline_stage = None
         flag_overlap_p2p_comm = False
@@ -422,6 +426,8 @@ def validate_args_wrapper(validate_args):
         if args.moe_permutation_async_comm and args.moe_model_type != 'megatron_moe':
             raise AssertionError('`--moe-permutation-async-comm` only support for megatron core moe.')
 
+        if args.context_parallel_size > 1 and args.position_embedding_type == 'alibi':
+            assert args.context_parallel_algo == 'megatron_cp_algo', f"alibi only support megatron_cp_algo"
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'ulysses_cp_algo':
             assert args.seq_length % args.context_parallel_size == 0, f"sequence length must be divisible by context_parallel_size"
             head, remainder = divmod(args.num_attention_heads, args.context_parallel_size * args.tensor_model_parallel_size)
@@ -429,6 +435,8 @@ def validate_args_wrapper(validate_args):
             args.use_flash_attn = True
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'megatron_cp_algo':
             assert args.seq_length % (2 * args.context_parallel_size) == 0, f"sequence length must be divisible by 2 * context_parallel_size"
+            if args.position_embedding_type == 'alibi':
+                assert args.alibi_fusion_attn_type in [2, 3] and args.cp_attention_mask_type == 'causal', f"megatron_cp_algo only support alibi type in [2, 3] and cp_attention_mask_type is causal"
             args.use_flash_attn = True
         if args.context_parallel_size > 1 and args.context_parallel_algo == 'hybrid_cp_algo':
             assert args.ulysses_degree_in_cp is not None, "--ulysses-degree-in-cp must be specified in hybrid_cp_algo"

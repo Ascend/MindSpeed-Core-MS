@@ -120,6 +120,8 @@ def dot_product_attention_forward(
         cp_para['cp_global_ranks'] = cp_global_ranks
         cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
             if args.use_cp_send_recv_overlap else None
+        cp_para['pse'] = self.pse
+        cp_para['pse_type'] = self.pse_type
         output = ringattn_context_parallel(query, key, value, n_head, cp_para, scale, attention_mask, self.attention_dropout.p)
     else:
         if args.use_fusion_attn_v2:

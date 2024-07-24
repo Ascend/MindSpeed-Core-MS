@@ -613,6 +613,8 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
         cp_para['cp_global_ranks'] = cp_global_ranks
         cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
             if args.use_cp_send_recv_overlap else None
+        cp_para['pse'] = self.pse
+        cp_para['pse_type'] = self.pse_type
 
         output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask, self.dropout_p)
     else:
