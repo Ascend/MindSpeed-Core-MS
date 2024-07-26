@@ -416,9 +416,9 @@ def memory_fragmentation_adaptation(aspm, args):
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
         aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
     adaptive_recompute_enable = args.adaptive_recompute_device_size > 0 or args.adaptive_recompute_device_swap
-    if (adaptive_recompute_enable and not args.memory_fragmentation) or args.prefetch:
+    if (adaptive_recompute_enable and not args.memory_fragmentation) or args.swap_attention:
         from .core.memory.adaptive_recomputing.pluggable_allocator_adpator import change_allocator
-        if not args.prefetch:
+        if not args.swap_attention:
             change_allocator()
         from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
         allowed_recomputing_module_wrapper(ParallelTransformerLayer)

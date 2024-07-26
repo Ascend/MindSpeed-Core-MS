@@ -37,7 +37,7 @@ GPT_ARGS="
     --pipe-experts-multi-data 4 \
     --enable-recompute-layers-per-pp-rank \
     --recompute-activation-function \
-    --prefetch \
+    --swap-attention \
     --recompute-num-layers 0 \
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \

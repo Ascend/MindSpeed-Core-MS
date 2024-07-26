@@ -216,8 +216,8 @@ def _add_training_args(parser):
                        help='recompute early to reduce bubble and improve training.')
     group.add_argument('--jit-compile', action='store_true', default=False,
                        help='Setting jit compile mode to True')
-    group.add_argument('--prefetch', action='store_true', default=False,
-                       help='switch to open prefetch feature.'
+    group.add_argument('--swap-attention', action='store_true', default=False,
+                       help='switch to open swap-attention feature.'
                             'The default is False.')
     group.add_argument('--use-fusion-attn-v2', action='store_true', default=False,
                        help='use fusion_attention ops version 2')
@@ -470,7 +470,7 @@ def validate_args_wrapper(validate_args):
             assert not args.recompute_activation_function, \
                 'adaptive selective recompute is not compatible ' \
                 'with activation function recomputation '
-            assert not args.prefetch, 'adaptive selective recompute is not compatible with prefetch feature'
+            assert not args.swap_attention, 'adaptive selective recompute is not compatible with swap_attention feature'
             assert not args.recompute_in_advance and not args.recompute_in_bubble, 'adaptive selective recompute ' \
                 'is not compatible with ripipe schedule'
             assert not args.memory_fragmentation, \
@@ -526,7 +526,7 @@ def validate_args_wrapper(validate_args):
                 raise AssertionError('recompute_num_layers must be None or 0 when using recompute_in_bubble')
             if args.pipeline_model_parallel_size <= 1 or args.num_layers_per_virtual_pipeline_stage is None:
                 raise AssertionError('recompute_in_bubble only support pipelining with interleaving')
-            if not args.prefetch:
+            if not args.swap_attention:
                 # Following is a trick to realize bubble recomputation. We first enable all recomputation,
                 # and then disable recomputation for all layers except the ones chosen for bubble recomputation.
                 args.recompute_granularity = "full"
