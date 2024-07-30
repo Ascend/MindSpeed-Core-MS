@@ -11,6 +11,9 @@ from megatron.training import get_timers
 from megatron.core import parallel_state
 from megatron.training import print_rank_0
 from megatron.training.arguments import parse_args
+from megatron.training.global_vars import set_args
+from mindspeed.core.auto_parallel.auto_parallel_apply import search_optimal_configuration
+from mindspeed.core.auto_parallel.auto_parallel_profiling import Profiling, OperateProfile
 from mindspeed.core.memory.auto_pipeline.autopipeline import autopipeline_profiling
 from mindspeed.core.performance.auto_pipeline_perf.autopipeline_perf import (autopipelineperf_profiling, check_out_of_memory,
                                                                              calculate_num_of_activations, check_skip_profiling,
@@ -87,10 +90,22 @@ def train_decorator(train):
 def train_step_decorator(train_step):
     @wraps(train_step)
     def wrapper(*args, **kwargs):
-        ret = train_step(*args, **kwargs)
+        nonlocal train_step
         args_ = get_args()
         if args_.profile_npu and (torch.distributed.get_rank() in args_.profile_ranks):
+            ret = train_step(*args, **kwargs)
             args_.prof.step()
+
+        if args_.profile_operator:
+            op_profile = OperateProfile(args_)
+            ret = train_step(*args, **kwargs)
+            op_profile.step()
+        elif args_.prof_file:
+            profiling = Profiling(args_)
+            train_step = profiling.hook_train_step(train_step)
+            ret = train_step(*args, **kwargs)
+        else:
+            ret = train_step(*args, **kwargs)
         return ret
     return wrapper
 
@@ -107,6 +122,11 @@ def pretrain_decorator(pretrain):
         global ENABLE_SCHEDULER
         new_parse_args = parse_args_wrapper(parse_args)
         argument = new_parse_args(None, False)
+        if argument.auto_parallel:
+            set_args(argument)
+            search_optimal_configuration(argument)
+            return
+        
         if argument.automated_pipeline and not argument.num_layer_list:
             context, POLICY = autopipeline_profiling(args[1], args[2], args[3],
                                                      args[0], None, argument)
@@ -197,6 +217,9 @@ def setup_model_and_optimizer_decorator(setup_model_and_optimizer):
         model, optimizer, opt_param_scheduler = setup_model_and_optimizer(*args, **kwargs)
         if argument.recompute_module_list:
             apply_autopipeline(model)
+        if argument.profile_memory and torch.distributed.get_rank() in argument.profile_ranks:
+            profiling = Profiling(argument)
+            profiling.register_recursive_hook("", model)
         return model, optimizer, opt_param_scheduler
     return wrapper
 

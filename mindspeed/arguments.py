@@ -41,6 +41,7 @@ def process_args(parser):
     parser = _add_ndmm_args(parser)
     parser = _add_coc_args(parser)
     parser = _add_profile_args(parser)
+    parser = _add_auto_parallel_args(parser)
 
     return parser
 
@@ -585,4 +586,20 @@ def _add_ndmm_args(parser):
                        help='Dim1 of the first nd matmul when use-3d-matmul is True')
     group.add_argument('--nd2-dim1-size', type=int, default=1,
                        help='Dim1 of the second nd matmul when use-3d-matmul is True')
+    return parser
+
+
+def _add_auto_parallel_args(parser):
+    group = parser.add_argument_group(title='auto_parallel')
+    group.add_argument('--auto-parallel', action='store_true', 
+                       help='enable automatic parallelism with auto-parallel')
+    group.add_argument('--nnodes', type=int, default=1, help='the number of node in the cluster')
+    group.add_argument('--nproc-per-node', type=int, default=8, help='the number of NPU on each node')
+    group.add_argument('--master-addr', type=str, default=None, help='the ip-address of master node')
+    group.add_argument('--master-port', type=str, default=None, help='the ip-port of master node')
+    group.add_argument('--node-rank', type=int, default=0, 
+                       help='the rank of nodes in the cluster, starting from 0 and increment by 1')
+    group.add_argument('--profile-operator', action='store_true', help='')
+    group.add_argument('--profile-memory', action='store_true', help='')
+    group.add_argument('--prof-file', type=str, default=None, help='')
     return parser
