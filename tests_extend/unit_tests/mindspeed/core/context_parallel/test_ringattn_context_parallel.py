@@ -13,7 +13,7 @@ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid
                                              get_context_parallel_for_hybrid_ring_world_size,
                                              get_context_parallel_for_hybrid_ring_rank,
                                              get_context_parallel_for_hybrid_ring_global_ranks)
-from mindspeed.core.transformer.dot_product_attention import get_alibi_slopes_for_fusion_attn
+from mindspeed.model.alibi_mask import AlibiForFusionAttnSingleton
 from mindspeed.ops.fusion_attention_v2 import npu_fusion_attention
 from commons import set_random_seed, initialize_model_parallel
 from unit_tests.common import DistributedTest
@@ -67,7 +67,7 @@ def run_ringattn_cp(cp_size, bs, seq_len, dtype, cp_args):
 
     pse = None
     if pse_type == 2 or pse_type == 3:
-        pse = get_alibi_slopes_for_fusion_attn(n)
+        pse = AlibiForFusionAttnSingleton.get_alibi_slopes_for_fusion_attn(n)
 
     if causal:
         attn_mask = ~torch.tril(torch.ones((2048, 2048), dtype=torch.bool, device=q.device))
