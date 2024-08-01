@@ -56,11 +56,15 @@ def initialize_model_parallel_wrapper(initialize_model_parallel):
     ):
         from megatron.training.utils import print_rank_0
 
+        if virtual_pipeline_model_parallel_size is not None:
+            megatron.core.parallel_state._VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = 0
+            megatron.core.parallel_state._VIRTUAL_PIPELINE_MODEL_PARALLEL_WORLD_SIZE = virtual_pipeline_model_parallel_size
+
         # Megatron doesn't allow ep & cp combination, set ep to 1 to bypass that, ep related groups will be regenerated
         initialize_model_parallel(
             tensor_model_parallel_size,
             pipeline_model_parallel_size,
-            virtual_pipeline_model_parallel_size,
+            None,
             pipeline_model_parallel_split_rank,
             use_sharp,
             context_parallel_size,

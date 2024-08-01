@@ -30,7 +30,7 @@ DISTRIBUTED_ARGS="
 RECOMPUTE_ARGS="
     --enable-recompute-layers-per-pp-rank \
     --recompute-activation-function \
-    --prefetch \
+    --swap-attention \
     --recompute-num-layers 1 \
 "
 

@@ -56,7 +56,7 @@ MOE_ARGS_3="
 
 RECOMPUTE_ARGS="
     --recompute-activation-function \
-    --prefetch \
+    --swap-attention \
     --recompute-num-layers 1 \
 "
 
