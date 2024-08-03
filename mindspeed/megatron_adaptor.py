@@ -189,12 +189,15 @@ def mcore_transformer_adaptation(aspm):
     from .core.transformer.custom_layers.transformer_engine import PTNorm
     from .core.transformer.dot_product_attention import dot_product_attention_forward_wrapper, \
         dot_product_attention_init_wrapper
+    from .core.transformer.transformer_block import transformer_block_checkpointed_forward_wrapper
     aspm.register_patch('megatron.core.transformer.attention.Attention.__init__', attention_init_wrapper)
     aspm.register_patch('megatron.core.transformer.custom_layers.transformer_engine.TENorm', PTNorm)
     aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.__init__',
                         dot_product_attention_init_wrapper)
     aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.forward',
                         dot_product_attention_forward_wrapper)
+    aspm.register_patch('megatron.core.transformer.transformer_block.TransformerBlock._checkpointed_forward',
+                        transformer_block_checkpointed_forward_wrapper)
 
 
 def mcore_parallel_state_adaptation(aspm):
