@@ -185,12 +185,15 @@ def mcore_models_adaptation(aspm):
 
 
 def mcore_transformer_adaptation(aspm):
-    from .core.transformer.attention import attention_init_wrapper
+    from .core.transformer.attention import attention_init_wrapper, self_attention_init_wrapper
+    from .core.transformer.module import megatron_module_init_wrapper
     from .core.transformer.custom_layers.transformer_engine import PTNorm
     from .core.transformer.dot_product_attention import dot_product_attention_forward_wrapper, \
         dot_product_attention_init_wrapper
     from .core.transformer.transformer_block import transformer_block_checkpointed_forward_wrapper
     aspm.register_patch('megatron.core.transformer.attention.Attention.__init__', attention_init_wrapper)
+    aspm.register_patch('megatron.core.transformer.attention.SelfAttention.__init__', self_attention_init_wrapper)
+    aspm.register_patch('megatron.core.transformer.module.MegatronModule.__init__', megatron_module_init_wrapper)
     aspm.register_patch('megatron.core.transformer.custom_layers.transformer_engine.TENorm', PTNorm)
     aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.__init__',
                         dot_product_attention_init_wrapper)
