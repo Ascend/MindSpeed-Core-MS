@@ -186,6 +186,7 @@ MindSpeed版本分支的维护阶段如下：
 
 # 常见问题
 
-| 现象                   | 介绍                               |
-|----------------------|----------------------------------|
-| Data helpers 数据预处理出错 | [link](docs/faq/data_helpers.md) |
+| 现象                    | 介绍                                    |
+|-----------------------|---------------------------------------|
+| Data helpers 数据预处理出错  | [link](docs/faq/data_helpers.md)      |
+| Torch extensions 编译卡住 | [link](docs/faq/torch_extensions.md)  |
