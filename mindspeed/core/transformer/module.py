@@ -1,4 +1,5 @@
 from functools import wraps
+import torch
 from megatron.core.transformer.spec_utils import build_module
 
 

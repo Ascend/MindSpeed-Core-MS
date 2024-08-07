@@ -191,6 +191,7 @@ def mcore_transformer_adaptation(aspm):
     from .core.transformer.dot_product_attention import dot_product_attention_forward_wrapper, \
         dot_product_attention_init_wrapper
     from .core.transformer.transformer_block import transformer_block_checkpointed_forward_wrapper
+    from .core.transformer.transformer import parallel_transformer_layer_init_wrapper
     aspm.register_patch('megatron.core.transformer.attention.Attention.__init__', attention_init_wrapper)
     aspm.register_patch('megatron.core.transformer.attention.SelfAttention.__init__', self_attention_init_wrapper)
     aspm.register_patch('megatron.core.transformer.module.MegatronModule.__init__', megatron_module_init_wrapper)
@@ -201,6 +202,9 @@ def mcore_transformer_adaptation(aspm):
                         dot_product_attention_forward_wrapper)
     aspm.register_patch('megatron.core.transformer.transformer_block.TransformerBlock._checkpointed_forward',
                         transformer_block_checkpointed_forward_wrapper)
+
+    aspm.register_patch('megatron.core.transformer.transformer_layer.TransformerLayer.__init__', \
+                        parallel_transformer_layer_init_wrapper)
 
 
 def mcore_parallel_state_adaptation(aspm):
@@ -456,6 +460,10 @@ def mcore_moe_adaptation(pm, args):
             pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_unpermutation', allgather_token_unpermutation)
             pm.register_patch('megatron.core.transformer.moe.router.TopKRouter.aux_loss_load_balancing', aux_loss_load_balancing)
             pm.register_patch('megatron.core.transformer.moe.moe_layer.MoELayer.__init__', moe_layer_init_wrapper)
+
+    from .core.transformer.moe.experts import groupedmlp_init_wrapper, groupedmlp_forward_wrapper
+    pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.__init__', groupedmlp_init_wrapper)
+    pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.forward', groupedmlp_forward_wrapper)
 
     if args.use_ascend_mc2 and not hasattr(args, 'moe_grouped_gemm'):
         # MoE MLP not use mc2 linear
