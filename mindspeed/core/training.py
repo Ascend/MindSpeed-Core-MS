@@ -92,10 +92,6 @@ def train_step_decorator(train_step):
     def wrapper(*args, **kwargs):
         nonlocal train_step
         args_ = get_args()
-        if args_.profile_npu and (torch.distributed.get_rank() in args_.profile_ranks):
-            ret = train_step(*args, **kwargs)
-            args_.prof.step()
-
         if args_.profile_operator:
             op_profile = OperateProfile(args_)
             ret = train_step(*args, **kwargs)
@@ -106,6 +102,8 @@ def train_step_decorator(train_step):
             ret = train_step(*args, **kwargs)
         else:
             ret = train_step(*args, **kwargs)
+            if args_.profile_npu and (torch.distributed.get_rank() in args_.profile_ranks):
+                args_.prof.step()
         return ret
     return wrapper
 

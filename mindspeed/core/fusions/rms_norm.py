@@ -5,7 +5,8 @@ import torch_npu
 from torch import nn
 from megatron.legacy.model.rms_norm import RMSNorm
 from megatron.training import get_args
-from megatron.core.tensor_parallel.mappings import reduce_from_tensor_model_parallel_region
+
+from mindspeed.core.tensor_parallel.mapping import reduce_from_tensor_model_parallel_region_nd
 
 
 def rms_norm_init_wrapper(fn):
@@ -43,7 +44,7 @@ def rms_norm_norm_wrapper(fn):
     def wrapper(self, x):
         if self.use_nd_matmul:
             pow_mean = x.pow(2).mean(-1, keepdim=True)
-            all_pow_mean = reduce_from_tensor_model_parallel_region(pow_mean)
+            all_pow_mean = reduce_from_tensor_model_parallel_region_nd(pow_mean)
             pow_mean = torch.div(all_pow_mean, self.tensor_model_parallel_size)
             return x * torch.rsqrt(pow_mean + self.eps)
         return fn(self, x)

@@ -45,9 +45,9 @@ class Linear(torch.nn.Module):
         return torch.matmul(x, y.t())
 
 
-class LayerNormV3(torch.nn.Module):
+class LayerNorm(torch.nn.Module):
     def __init__(self, hidden_size, eps=1e-5):
-        super(LayerNormV3, self).__init__()
+        super(LayerNorm, self).__init__()
         self.layer_norm = torch.nn.LayerNorm(normalized_shape=hidden_size, eps=eps)
 
     def forward(self, x):
@@ -299,13 +299,13 @@ class OperatorNoiseSampler:
         return ftime_uncertainty, btime1_uncertainty + btime2_uncertainty
 
     def layernorm(self, input_shape, output_shape, hidden_size, eps=1e-5):
-        layernorm = LayerNormV3(hidden_size, eps)
-        ftime, btime, from_cache = operator_cache.find('LayerNormV3', input_shape)
+        layernorm = LayerNorm(hidden_size, eps)
+        ftime, btime, from_cache = operator_cache.find('LayerNorm', input_shape)
         if not from_cache:
             ftime, btime = TimeCostModel.profile(layernorm, [input_shape])
-        ftime_uncertainty = self.sampling.run('LayerNormV3', ftime, output_shape, input_shape)
+        ftime_uncertainty = self.sampling.run('LayerNorm', ftime, output_shape, input_shape)
         btime_uncertainty = self.sampling.run('LayerNormGrad', btime, input_shape, output_shape)
-        operator_cache.record('LayerNormV3', input_shape, output_shape, ftime, btime)
+        operator_cache.record('LayerNorm', input_shape, output_shape, ftime, btime)
         return ftime_uncertainty, btime_uncertainty
 
     def fused_rms_norm(self, input_shape, output_shape, hidden_size, eps=1e-6):

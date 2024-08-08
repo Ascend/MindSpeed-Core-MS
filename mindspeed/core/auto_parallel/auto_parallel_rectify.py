@@ -154,16 +154,16 @@ class Sampler:
             return sample
         # load model
         model = model_manager.get_cached_model(operator)
-        if model is None:
-            raise AssertionError("Can't find {operator} model")
-
         # predict
         input_shape_np = np.array(input_shape).reshape(1, -1)
         fixed_shape = np.concatenate([input_shape_np, input_shape_np], axis=0)
         x = torch.tensor(fixed_shape, dtype=torch.float64).log()
-        with torch.no_grad(), gpytorch.settings.fast_pred_var():
-            pred = model(x / model.x_train_std)
-        pred = pred * model.y_train_std.item() + model.y_train_mean.item()
+        if model is None:
+            relative_error = np.zeros(self.num_sample)
+        else:
+            with torch.no_grad(), gpytorch.settings.fast_pred_var():
+                pred = model(x / model.x_train_std)
+            pred = pred * model.y_train_std.item() + model.y_train_mean.item()
         relative_error = pred.sample(self.num_sample).cpu().numpy()[:, 0]
         sample = direct_time * (relative_error + 1.).flatten()
         negative_indices = np.where(sample <= self.pre_thd)[0]
@@ -178,7 +178,7 @@ class Sampler:
     def reduce_dim(operator, output_shape, input_shapes):
         input_shapes = copy.deepcopy(input_shapes)
         output_shape = copy.deepcopy(output_shape)
-        if operator in ['LayerNorm', 'LayerNormGrad', 'LayerNormV3']:
+        if operator in ['LayerNorm', 'LayerNormGrad']:
             input_shape = input_shapes[0]
         elif operator in ['FastGelu', 'FastGeluGrad']:
             input_shape = output_shape
@@ -248,7 +248,13 @@ class DataHandler:
         data.loc[data['Type'].str.startswith('MatMul'), 'Type'] = 'MatMul'
         data.loc[data['Type'].str.startswith('BatchMatMul'), 'Type'] = 'BatchMatMul'
         data.loc[
-            (data['Type'].str.startswith('Softmax') & ~(data['Type'].str.endswith('Grad'))), 'Type'] = 'Softmax'
+            (data['Type'].str.startswith('LayerNorm') & 
+            ~(data['Type'].str.contains('Back') | data['Type'].str.contains('Grad'))), 'Type'
+        ] = 'LayerNorm'
+        data.loc[
+            (data['Type'].str.startswith('LayerNorm') & 
+            (data['Type'].str.contains('Back') | data['Type'].str.contains('Grad'))), 'Type'
+        ] = 'LayerNormGrad'
         # filter
         data = data[(data[KeyField.Duration] > 5) & (data[KeyField.InputShapes].str.len() > 4)].reset_index(drop=True)
         return data
@@ -259,7 +265,7 @@ class DataHandler:
         for index, tmp_data in data[[KeyField.OpType, KeyField.InputShapes, KeyField.OutputShapes]].iterrows():
             op, input_shape, output_shape = tmp_data.tolist()
             input_shape, output_shape = eval(input_shape), eval(output_shape)
-            if op == 'LayerNormV3' or op == 'LayerNormGrad':
+            if op == 'LayerNorm' or op == 'LayerNormGrad':
                 input_shape = input_shape.split(';')[0]
             elif op == 'Add' or op == 'Mul':
                 dims = input_shape.split(';')
@@ -337,10 +343,7 @@ class DataHandler:
         self.current_profiling_operator.loc[:, KeyField.InputShapes] = input_shapes
 
     def handle_layer_norm_backward(self, operator):
-        v2 = self.profiling[KeyField.OpType] == operator[1]
-        v3 = self.profiling[KeyField.OpType] == operator[0]
-        profiling = self.profiling[v2 | v3].reset_index(drop=True)
-        # 一个前向layer_norm对应layer_norm_v2和layer_norm_v3，时间做合并
+        profiling = self.profiling[self.profiling[KeyField.OpType] == operator].reset_index(drop=True)
         back_grad_data = pd.DataFrame()
         for index in range(0, profiling.shape[0], 2):
             sum_duration = profiling.loc[index, KeyField.Duration] + profiling.loc[

@@ -141,12 +141,12 @@ def search_optimal_configuration(args):
     )
 
     if args.node_rank == 0:
+        start_time = time.time()
         search_space = build_initial_spaces(args)
         search_space = filter_unvalid_configs(search_space)
         print(f"filter search_space: {len(search_space)}")
         print("\n".join(str(item) for item in search_space), flush=True)
-
-        start_time = time.time()
+        
         config, _ = SearchByGreyBox().search(get_args(), search_space)
         torch.distributed.broadcast(torch.tensor([-1 for _ in range(7)], dtype=torch.int), 0)
 

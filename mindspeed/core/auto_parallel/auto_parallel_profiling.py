@@ -87,8 +87,8 @@ class BaseLaunch:
         update_or_append_param(argv, '--tensor-model-parallel-size', str(args.tensor_model_parallel_size))
         update_or_append_param(argv, '--micro-batch-size', str(args.micro_batch_size))
         update_or_append_param(argv, '--sequence-parallel')
-        if args.profile:
-            update_or_append_param(argv, '--profile')
+        if args.profile_operator:
+            update_or_append_param(argv, '--profile-operator')
         if args.profile_memory:
             update_or_append_param(argv, '--profile-memory')
         if args.module_profile_path:
@@ -198,7 +198,7 @@ class DistributedOperateProfiler(BaseLaunch):
         operator_profile_path = args.operator_profile_path
         if os.path.exists(operator_profile_path):
             super().recover_args()
-            return operator_profile_path
+            return operator_profile_path, None
 
         buffer = config + [1]
         torch.distributed.broadcast(torch.tensor(buffer, dtype=torch.int), 0)
@@ -213,7 +213,7 @@ class DistributedOperateProfiler(BaseLaunch):
         )
         analyse_thread.daemon = True
         analyse_thread.start()
-        return operator_profile_path
+        return operator_profile_path, analyse_thread
 
 
 class DistributedPerformanceProfiler(BaseLaunch):
@@ -256,14 +256,13 @@ class OperateProfile(metaclass=SingletonType):
             experimental_config=experimental_config,
         )
         self.op_profiler.start()
-        self.node_rank = torch.distributed.get_rank() // args.nproc_per_node
 
     def step(self):
-        if self.node_rank in (0,):
+        if torch.distributed.get_rank() in (0,):
             self.op_profiler.step()
 
     def stop(self):
-        if self.node_rank in (0,):
+        if torch.distributed.get_rank() in (0,):
             self.op_profiler.stop()
 
 
@@ -278,7 +277,7 @@ class Profiling(metaclass=SingletonType):
         self.pattern = r'^module.module.language_model.encoder.layers.\d+$'
         self.context = {
             'step_time': 0,
-            'tranformer_act_mem': 0
+            'transformer_act_mem': 0
         }
 
     def should_profiling(self):
@@ -301,8 +300,8 @@ class Profiling(metaclass=SingletonType):
             if torch.distributed.get_rank() in self.args.profile_ranks:
                 torch.npu.synchronize()
                 self.end_memory = torch.npu.max_memory_allocated()
-                tranformer_act_mem = (self.end_memory - self.start_memory) / Profiling.MEMORY_UNIT
-                self.context['tranformer_act_mem'] = tranformer_act_mem
+                transformer_act_mem = (self.end_memory - self.start_memory) / Profiling.MEMORY_UNIT
+                self.context['transformer_act_mem'] = transformer_act_mem
         return hook
 
     def register_recursive_hook(self, prefix_name, model):

@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 import gpytorch
+from megatron.training.global_vars import get_args
 
 from mindspeed.core.auto_parallel import (
     model_manager,
@@ -42,9 +43,20 @@ class SearchByGreyBox:
             'MatMul', 
             'RmsNorm', 
             'RmsNormGrad', 
+            'LayerNorm',
+            'LayerNormGrad',
             'FlashAttentionScore', 
             'FlashAttentionScoreGrad'
         ]
+
+        args = get_args()
+        if args.normalization == 'RMSNorm':
+            self.operators.remove('LayerNorm')
+            self.operators.remove('LayerNormGrad')
+        else:
+            self.operators.remove('RmsNorm')
+            self.operators.remove('RmsNormGrad')
+
         self.stop_threshold = stop_threshold
         self.config_performances = {}
         self.exist_config = []
@@ -86,13 +98,22 @@ class SearchByGreyBox:
     def train(self, train_profiling_file, train_operator_data):
         for operator in self.operators:
             model = model_manager.get_cached_model(operator)
+            if model is None:
+                likelihood = gpytorch.likelihoods.GaussianLikelihood(
+                    gpytorch.priors.NormalPrior(1e-3, 0.02)
+                )
+                model = ExactGPModel(operator=operator, likelihood=likelihood)
+                model_manager.cache_model(model, operator)
             model.fit(train_profiling_file, train_operator_data)
 
     def load_base_model(self, model_dir):
         for operator in self.operators:
             likelihood = gpytorch.likelihoods.GaussianLikelihood(gpytorch.priors.NormalPrior(1e-3, 0.02))
             model = ExactGPModel(operator=operator, likelihood=likelihood)
-            model_manager.load_model(model, operator, model_dir)
+            try:
+                model_manager.load_model(model, operator, model_dir)
+            except Exception:
+                print(f"{operator} load error")
 
     def search(self, args, search_spaces):
         start_time = time.time()
@@ -102,18 +123,20 @@ class SearchByGreyBox:
             for config in search_spaces:
                 cost_time = SearchByGreyBox.theory_modeling(config)
                 self.save(config, cost_time)
-                print(f"complete model config: {config}")
+                print(f"complete model config: {config}", flush=True)
 
             next_config = self.generate_config()
             if next_config is None:
                 break
-            print(f"next_config={next_config}")
+            print(f"next_config={next_config}", flush=True)
 
-            operator_profile_path = DistributedOperateProfiler().launch(next_config)
+            operator_profile_path, analyse_thread = DistributedOperateProfiler().launch(next_config)
             duration_time = DistributedPerformanceProfiler().launch(next_config)
             self.config_performances[duration_time] = str(next_config)
             if math.isinf(duration_time):
                 search_spaces.remove(next_config)
+            if analyse_thread is not None:
+                analyse_thread.join()
             
             operator_data = operator_cache.data_frame
             operator_profile = SearchByGreyBox.find_csv(operator_profile_path)

@@ -40,6 +40,8 @@ ARD_NUM_DIMS = {
     'SoftmaxGrad': 4,
     'RmsNorm': 3,
     'RmsNormGrad': 3,
+    'LayerNorm': 3,
+    'LayerNormGrad': 3,
     'FlashAttentionScore': 3,
     'FlashAttentionScoreGrad': 3
 }
