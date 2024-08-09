@@ -18,6 +18,7 @@ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid
                                            get_context_parallel_for_hybrid_ring_rank,
                                            get_context_parallel_for_hybrid_ring_global_ranks)
 from mindspeed.model.transformer import get_attention_mask
+from mindspeed.utils import get_actual_seq_len
 
 try:
     from einops import rearrange
@@ -76,6 +77,7 @@ def dot_product_attention_forward(
 ):
     assert packed_seq_params is None
     args = get_args()
+    actual_seq_len = get_actual_seq_len()
 
     if self.num_attention_heads_per_partition // self.num_query_groups_per_partition > 1:
         key = key.repeat_interleave(
@@ -85,7 +87,7 @@ def dot_product_attention_forward(
             self.num_attention_heads_per_partition // self.num_query_groups_per_partition, dim=2
         )
 
-    seq_length, _, n_head, head_dim = query.shape[0], query.shape[1], query.shape[2], query.shape[3]
+    seq_length, bsz, n_head, head_dim = query.shape[0], query.shape[1], query.shape[2], query.shape[3]
     
     query, key, value = [rearrange(x, 's b h d -> s b (h d)') for x in [query, key, value]]
 
@@ -117,7 +119,8 @@ def dot_product_attention_forward(
             if args.use_cp_send_recv_overlap else None
         cp_para['pse'] = self.pse
         cp_para['pse_type'] = self.pse_type
-        output = ringattn_context_parallel(query, key, value, n_head, cp_para, scale, attention_mask, self.attention_dropout.p)
+        output = ringattn_context_parallel(query, key, value, n_head, cp_para, scale, attention_mask, self.attention_dropout.p,
+                                           actual_seq_len, actual_seq_len)
     else:
         if args.use_fusion_attn_v2:
             output = npu_fusion_attention(
