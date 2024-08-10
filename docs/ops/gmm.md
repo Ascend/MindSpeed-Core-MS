@@ -62,4 +62,10 @@ result = gmm.npu_gmm(x.npu(), weight.npu(), bias=None, group_list=group_list, gr
 
 # 反向接口案例
 result.backward(torch.ones(result.shape).npu())
+
+# weight转置案例
+weight_shape_trans = (num_expert, seq_len, hidden_dim)
+weight_trans = (torch.rand(weight_shape_trans).to(dtype) - 0.5)
+weight_trans.requires_grad = True
+result = gmm.npu_gmm(x.npu(), weight_trans.transpose(-1,-2).npu(), bias=None, group_list=group_list, group_type=group_type)
 ```
