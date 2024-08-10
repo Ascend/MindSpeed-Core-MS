@@ -4,6 +4,7 @@ import time
 import torch
 
 from megatron.core import mpu
+from megatron.core.pipeline_parallel import get_forward_backward_func
 from megatron.core.utils import get_model_config
 
 from megatron.training.checkpointing import save_checkpoint
@@ -17,6 +18,7 @@ from megatron.training.training import build_train_valid_test_data_iterators
 from megatron.training.training import train
 from megatron.training.training import evaluate_and_print_results
 from megatron.training.training import print_datetime
+
 
 from megatron.training.utils import (
     calc_params_l2_norm,
@@ -39,6 +41,111 @@ from megatron.training.global_vars import (
 _TRAIN_START_TIME = time.time()
 
 
+@torch.no_grad()
+def update_ema(
+    ema_model: torch.nn.Module, model: torch.nn.Module, optimizer=None, decay: float = 0.9999
+) -> None:
+    """
+    Step the EMA model towards the current model.
+    """
+    from collections import OrderedDict
+    ema_params = OrderedDict(ema_model.named_parameters())
+    model_params = OrderedDict(model.named_parameters())
+
+    for name, param in model_params.items():
+        if name == "pos_embed":
+            continue
+        if param.requires_grad == False:
+            continue
+        param_data = param.data
+        ema_params[name].mul_(decay).add_(param_data, alpha=1 - decay)
+
+
+def train_step(forward_step_func, data_iterator,
+               model, optimizer, opt_param_scheduler, config):
+    """Single training step."""
+    args = get_args()
+    timers = get_timers()
+
+    # Set grad to zero.
+    for model_chunk in model:
+        model_chunk.zero_grad_buffer()
+    optimizer.zero_grad()
+
+    # Forward pass.
+    forward_backward_func = get_forward_backward_func()
+    losses_reduced = forward_backward_func(
+        forward_step_func=forward_step_func,
+        data_iterator=data_iterator,
+        model=model,
+        num_microbatches=get_num_microbatches(),
+        seq_length=args.seq_length,
+        micro_batch_size=args.micro_batch_size,
+        decoder_seq_length=args.decoder_seq_length,
+        forward_only=False)
+
+    # Empty unused memory.
+    if args.empty_unused_memory_level >= 1:
+        torch.cuda.empty_cache()
+
+    # Vision gradients.
+    if getattr(args, 'vision_pretraining', False) and args.vision_pretraining_type == "dino":
+        unwrapped_model = unwrap_model(model[0])
+        unwrapped_model.cancel_gradients_last_layer(args.curr_iteration)
+
+    # Update parameters.
+    timers('optimizer', log_level=1).start(barrier=args.barrier_with_L1_time)
+    update_successful, grad_norm, num_zeros_in_grad = optimizer.step()
+    timers('optimizer').stop()
+
+    if args.use_ema:
+        unwrapped_model = unwrap_model(model)
+        for model_chunk in unwrapped_model:
+            update_ema(model_chunk.ema, model_chunk, optimizer=optimizer)
+
+
+    # Vision momentum.
+    if getattr(args, 'vision_pretraining', False) and args.vision_pretraining_type == "dino":
+        unwrapped_model = unwrap_model(model[0])
+        unwrapped_model.update_momentum(args.curr_iteration)
+
+    # Update learning rate.
+    if update_successful:
+        increment = get_num_microbatches() * \
+                    args.micro_batch_size * \
+                    args.data_parallel_size
+        opt_param_scheduler.step(increment=increment)
+        skipped_iter = 0
+    else:
+        skipped_iter = 1
+
+    # Empty unused memory.
+    if args.empty_unused_memory_level >= 2:
+        torch.cuda.empty_cache()
+
+    if mpu.is_pipeline_last_stage(ignore_virtual=True):
+        # Average loss across microbatches.
+        loss_reduced = {}
+        for key in losses_reduced[0].keys():
+            numerator = 0
+            denominator = 0
+            for x in losses_reduced:
+                val = x[key]
+                # there is one dict per microbatch. in new reporting, we average
+                # over the total number of tokens across the global batch.
+                if isinstance(val, tuple) or isinstance(val, list):
+                    numerator += val[0]
+                    denominator += val[1]
+                else:
+                    # legacy behavior. we average over the number of microbatches,
+                    # and so the denominator is 1.
+                    numerator += val
+                    denominator += 1
+            loss_reduced[key] = numerator / denominator
+        return loss_reduced, skipped_iter, grad_norm, num_zeros_in_grad
+    return {}, skipped_iter, grad_norm, num_zeros_in_grad
+
+
 def pretrain(train_valid_test_dataset_provider,
              model_provider,
              model_type,
@@ -50,6 +157,10 @@ def pretrain(train_valid_test_dataset_provider,
     # Initalize and get arguments, timers, and Tensorboard writer.
     initialize_megatron(extra_args_provider=extra_args_provider,
                         args_defaults=args_defaults)
+
+    if 'init_func' in args_defaults:
+        init_func = args_defaults['init_func']
+        init_func()
 
     args = get_args()
     timers = get_timers()

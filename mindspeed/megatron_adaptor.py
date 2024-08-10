@@ -277,6 +277,32 @@ def mcore_pipeline_parallel_adaptation(aspm):
                         _communicate_shapes)
 
 
+def mcore_multiparam_pipeline_parallel_adaptation(aspm, mindspeed_args):
+    if mindspeed_args.use_multiparameter_pipeline_model_parallel:
+        from .core.pipeline_parallel.multiparameter_schedules import get_tensor_shapes_wrapper, forward_step_wrapper, \
+            recv_forward_wrapper, recv_backward_wrapper, send_forward_wrapper, send_backward_wrapper, \
+            send_forward_recv_backward_wrapper, send_backward_recv_forward_wrapper, backward_step_wrapper
+
+        aspm.register_patch('megatron.core.pipeline_parallel.schedules.get_tensor_shapes',
+                            get_tensor_shapes_wrapper)
+        aspm.register_patch('megatron.core.pipeline_parallel.schedules.forward_step',
+                            forward_step_wrapper)
+        aspm.register_patch('megatron.core.pipeline_parallel.schedules.backward_step',
+                            backward_step_wrapper)
+        aspm.register_patch('megatron.core.pipeline_parallel.schedules.recv_forward',
+                            recv_forward_wrapper)
+        aspm.register_patch('megatron.core.pipeline_parallel.schedules.recv_backward',
+                            recv_backward_wrapper)
+        aspm.register_patch('megatron.core.pipeline_parallel.schedules.send_forward',
+                            send_forward_wrapper)
+        aspm.register_patch('megatron.core.pipeline_parallel.schedules.send_backward',
+                            send_backward_wrapper)
+        aspm.register_patch('megatron.core.pipeline_parallel.schedules.send_forward_recv_backward',
+                            send_forward_recv_backward_wrapper)
+        aspm.register_patch('megatron.core.pipeline_parallel.schedules.send_backward_recv_forward',
+                            send_backward_recv_forward_wrapper)
+
+
 def mcore_tensor_parallel_adaptation(aspm):
     from .core.tensor_parallel.random import checkpoint_wrapper
     from .core.tensor_parallel.random import _set_cuda_rng_state, checkpoint_function_backward
@@ -382,8 +408,9 @@ def megatron_training_adaptation(aspm):
     from .arguments import parse_args_wrapper, validate_args_wrapper, core_transformer_config_from_args_wrapper
     from .tokenizer import build_tokenizer_wrapper
     from .yaml_arguments import core_transformer_config_from_yaml_wrapper, print_args_wrapper
+
     from .core.training import pretrain_decorator, train_decorator, train_step_decorator, \
-                               setup_model_and_optimizer_decorator, save_checkpoint_and_time_decorator
+        setup_model_and_optimizer_decorator, save_checkpoint_and_time_decorator
     aspm.register_patch('megatron.training.global_vars.get_num_microbatches', get_num_microbatches_wrapper)
     aspm.register_patch('megatron.training.training.pretrain', pretrain_decorator)
     aspm.register_patch('megatron.training.training.train', train_decorator)
@@ -404,6 +431,15 @@ def megatron_training_adaptation(aspm):
     aspm.register_patch('megatron.training.initialize.set_jit_fusion_options', set_jit_fusion_options_wrapper)
     aspm.register_patch('megatron.training.training.pretrain', pretrain)
     aspm.register_patch('megatron.training.tokenizer.tokenizer.build_tokenizer', build_tokenizer_wrapper)
+
+
+def megatron_training_ema_adaptation(aspm, mindspeed_args):
+    if mindspeed_args.use_ema:
+        from .training import pretrain, train_step
+        from .checkpointing import save_checkpoint, _load_base_checkpoint
+        aspm.register_patch('megatron.training.training.train_step', train_step)
+        aspm.register_patch('megatron.training.checkpointing.save_checkpoint', save_checkpoint)
+        aspm.register_patch('megatron.training.checkpointing._load_base_checkpoint', _load_base_checkpoint)
 
 
 def memory_fragmentation_adaptation(aspm, args):
@@ -446,9 +482,11 @@ def mcore_moe_adaptation(pm, args):
             from .core.transformer.moe.token_dispatcher import preprocess, alltoall_token_permutation
             from .core.transformer.moe.experts import sequential_mlp_forward
             from .core.transformer.moe.moe_utils import permute, unpermute
-            pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.preprocess', preprocess)
-            pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
-                              alltoall_token_permutation)
+            pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.preprocess',
+                              preprocess)
+            pm.register_patch(
+                'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
+                alltoall_token_permutation)
             pm.register_patch('megatron.core.transformer.moe.experts.SequentialMLP.forward', sequential_mlp_forward)
             pm.register_patch('megatron.core.transformer.moe.moe_utils.permute', permute)
             pm.register_patch('megatron.core.transformer.moe.moe_utils.unpermute', unpermute)
@@ -465,7 +503,7 @@ def mcore_moe_adaptation(pm, args):
     pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.__init__', groupedmlp_init_wrapper)
     pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.forward', groupedmlp_forward_wrapper)
 
-    if args.use_ascend_mc2 and not hasattr(args, 'moe_grouped_gemm'):
+    if args.use_ascend_mc2:
         # MoE MLP not use mc2 linear
         from .core.models.gpt.gpt_layer_specs import build_layers_wrapper
         from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
@@ -571,6 +609,7 @@ def exe_adaptation():
     mcore_fusions_adaptation(aspm)
     mcore_optimizer_adapation(aspm)
     mcore_pipeline_parallel_adaptation(aspm)
+    mcore_multiparam_pipeline_parallel_adaptation(aspm, mindspeed_args)
     mcore_tensor_parallel_adaptation(aspm)
     mcore_transformer_adaptation(aspm)
 
@@ -580,6 +619,7 @@ def exe_adaptation():
     legacy_model_rms_norm_adaptation(aspm)
 
     megatron_training_adaptation(aspm)
+    megatron_training_ema_adaptation(aspm, mindspeed_args)
     memory_fragmentation_adaptation(aspm, mindspeed_args)
     coc_adaptation(aspm, mindspeed_args)
     mcore_moe_adaptation(aspm, mindspeed_args)

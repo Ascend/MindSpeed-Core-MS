@@ -21,6 +21,7 @@ from megatron.training import get_args
 from megatron.core import parallel_state
 from mindspeed.core.pipeline_parallel import flexible_schedules
 from mindspeed.core.pipeline_parallel.ripipe_schedules import forward_backward_ripipe_pipelining
+from mindspeed.core.pipeline_parallel import multiparameter_schedules
 
 
 def get_forward_backward_func_wrapper(get_forward_backward_func):
@@ -40,5 +41,12 @@ def get_forward_backward_func_wrapper(get_forward_backward_func):
             and parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None \
             and arguments.use_nanopipe:
             return flexible_schedules.forward_backward_pipelining_with_interleaving_nano_pipe
+
+        if arguments.use_multiparameter_pipeline_model_parallel:
+            pipeline_model_parallel_size = parallel_state.get_pipeline_model_parallel_world_size()
+            if pipeline_model_parallel_size > 1 \
+            and parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None:
+                return multiparameter_schedules.forward_backward_pipelining_with_interleaving
+
         return get_forward_backward_func(*args, **kwargs)
     return wrapper
