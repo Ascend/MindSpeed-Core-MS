@@ -333,8 +333,9 @@ def autopipelineperf_profiling(mbs_tries, model_provider, model_type, forward_st
             pipelining.register_recursive_hook("module", model, pipelining.context)
     else:
         pipelining.register_recursive_hook("module", models, pipelining.context)
+    checkpointing_context = {}
     training.train(forward_step_func, models, optimizer, lr_scheduler, train_data_iterator, valid_data_iterator,
-                   process_non_loss_data_func, config)
+                   process_non_loss_data_func, config, checkpointing_context)
     pipelining.get_smi_peak_memory(sync=True)
     pipelining.get_smi_left_memory(sync=True)
     pipelining.get_comm_time(config, sync=True)
