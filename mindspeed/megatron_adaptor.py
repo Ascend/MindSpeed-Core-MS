@@ -192,6 +192,7 @@ def mcore_transformer_adaptation(aspm):
         dot_product_attention_init_wrapper
     from .core.transformer.transformer_block import transformer_block_checkpointed_forward_wrapper
     from .core.transformer.transformer import parallel_transformer_layer_init_wrapper
+    from .core.transformer.transformer import core_mlp_forward_wrapper
     aspm.register_patch('megatron.core.transformer.attention.Attention.__init__', attention_init_wrapper)
     aspm.register_patch('megatron.core.transformer.attention.SelfAttention.__init__', self_attention_init_wrapper)
     aspm.register_patch('megatron.core.transformer.module.MegatronModule.__init__', megatron_module_init_wrapper)
@@ -202,9 +203,10 @@ def mcore_transformer_adaptation(aspm):
                         dot_product_attention_forward_wrapper)
     aspm.register_patch('megatron.core.transformer.transformer_block.TransformerBlock._checkpointed_forward',
                         transformer_block_checkpointed_forward_wrapper)
-
-    aspm.register_patch('megatron.core.transformer.transformer_layer.TransformerLayer.__init__', \
+    aspm.register_patch('megatron.core.transformer.transformer_layer.TransformerLayer.__init__',
                         parallel_transformer_layer_init_wrapper)
+    aspm.register_patch('megatron.core.transformer.mlp.MLP.forward',
+                        core_mlp_forward_wrapper)
 
 
 def mcore_parallel_state_adaptation(aspm):
@@ -467,7 +469,11 @@ def memory_fragmentation_adaptation(aspm, args):
         if not args.swap_attention:
             change_allocator()
         from .core.memory.adaptive_recomputing.adaptive_recompute import allowed_recomputing_module_wrapper
-        allowed_recomputing_module_wrapper(ParallelTransformerLayer)
+        if hasattr(args, "use_mcore_models") and args.use_mcore_models:
+            from megatron.core.transformer.transformer_layer import TransformerLayer
+            allowed_recomputing_module_wrapper(TransformerLayer)
+        else:
+            allowed_recomputing_module_wrapper(ParallelTransformerLayer)
         from .core.memory.adaptive_recomputing.adaptive_recompute import setup_model_and_optimizer_wrapper
         aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_wrapper)
 
