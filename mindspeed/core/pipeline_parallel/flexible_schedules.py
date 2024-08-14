@@ -560,7 +560,7 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
         raise AssertionError("invalid model chunking")
     if not isinstance(data_iterator, list):
         raise AssertionError("interleaved pipeline parallelism expected each model chunk to have a data iterator")
-
+    args = get_args()
     config = get_model_config(model[0])
     if config.overlap_p2p_comm and config.batch_p2p_comm:
         raise ValueError("Can not use both overlap_p2p_comm and batch_p2p_comm")
@@ -657,7 +657,10 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
             num_warmup_microbatches = (pipeline_parallel_size - pipeline_parallel_rank - 1) * 2
             num_warmup_microbatches += (num_model_chunks - 1) * pipeline_parallel_size
             num_warmup_microbatches = min(num_warmup_microbatches, total_num_microbatches)
+
+    num_fwd = min((pipeline_parallel_size - 1) * 2 + (num_model_chunks - 1) * pipeline_parallel_size, total_num_microbatches)
     num_microbatches_remaining = total_num_microbatches - num_warmup_microbatches
+    num_dx = num_fwd - num_warmup_microbatches
 
     # Checkpoint the activations of partial Transformer layers in a number of micro-batches
     # within the maximum outstanding micro-batch backpropagations.
@@ -735,7 +738,6 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
             if len(input_tensors[model_chunk_id]) == len(output_tensors[model_chunk_id]):
                 input_tensors[model_chunk_id].append(None)
         input_tensor = input_tensors[model_chunk_id][-1]
-
         output_tensor, _ = forward_step(
             forward_step_func,
             data_iterator[model_chunk_id],
@@ -747,7 +749,7 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
             collect_non_loss_data,
             checkpoint_activations_microbatch,
             check_first_val_step(
-                first_val_step, forward_only, is_first_microbatch_for_model_chunk(microbatch_id),
+              first_val_step, forward_only, is_first_microbatch_for_model_chunk(microbatch_id),
             ),
         )
         output_tensors[model_chunk_id].append(output_tensor)
@@ -905,7 +907,6 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
     for k in range(num_microbatches_remaining):
         # Forward pass.
         forward_k = k + num_warmup_microbatches
-        warmup_1 = pipeline_parallel_rank
         # Decide to checkpoint all layers' activations of the current micro-batch
         if max_outstanding_backprops is not None:
             checkpoint_activations_microbatch = (
@@ -969,10 +970,19 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
 
             # Backward pass.
             backward_k = k
+            if k < num_dx:
+                WeightGradStore.start_decouple()
+
+            if args.use_nanopipe:
+                WeightGradStore.resize_ori_storage(args.use_nanopipe_swap)
+
             input_tensor_grad = backward_step_helper(backward_k)
-            WeightGradStore.flush()
+            if k == num_dx - 1:
+                WeightGradStore.end_decouple()
             backward_model_chunk_id = get_model_chunk_id(backward_k, forward=False)
+
             parallel_state.set_virtual_pipeline_model_parallel_rank(backward_model_chunk_id)
+
 
             # First virtual stage no activation gradient tensor to send
             if parallel_state.is_pipeline_first_stage():
@@ -998,15 +1008,22 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
                 config=config,
                 overlap_p2p_comm=True,
             )
-            if k >= warmup_1:
-                WeightGradStore.pop()
         else:  # no p2p overlap
             output_tensor = forward_step_helper(forward_k, checkpoint_activations_microbatch)
 
             # Backward pass.
             backward_k = k
+            if k < num_dx:
+                WeightGradStore.start_decouple()
+
+            if args.use_nanopipe:
+                WeightGradStore.resize_ori_storage(args.use_nanopipe_swap)
+
             input_tensor_grad = backward_step_helper(backward_k)
-            WeightGradStore.flush()
+
+            if k == num_dx - 1:
+                WeightGradStore.end_decouple()
+
             # Send output_tensor and input_tensor_grad, receive input_tensor
             # and output_tensor_grad.
 
@@ -1065,8 +1082,6 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
                 tensor_shape=tensor_shape,
                 config=config,
             )
-            if k >= warmup_1:
-                WeightGradStore.pop()
             deallocate_output_tensor(output_tensor, config.deallocate_pipeline_outputs)
 
         # Put input_tensor and output_tensor_grad in data structures in the
@@ -1077,7 +1092,6 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
             output_tensor_grads[next_backward_model_chunk_id].append(output_tensor_grad)
 
     deallocate_output_tensor(output_tensor, config.deallocate_pipeline_outputs)
-
     # Run cooldown backward passes (flush out pipeline).
     if not forward_only:
         if config.overlap_p2p_comm and bwd_wait_handles is not None:
@@ -1090,7 +1104,6 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
             )
         for k in range(num_microbatches_remaining, total_num_microbatches):
             input_tensor_grad = backward_step_helper(k)
-            WeightGradStore.flush()
             next_backward_model_chunk_id = get_model_chunk_id(k + 1, forward=False)
             recv_next = True
             if parallel_state.is_pipeline_last_stage(ignore_virtual=True):
@@ -1103,9 +1116,9 @@ def forward_backward_pipelining_with_interleaving_nano_pipe(
                     input_tensor_grad, recv_next=recv_next, tensor_shape=tensor_shape, config=config
                 )
             )
-            WeightGradStore.pop()
-        for k in range(pipeline_parallel_rank):
-            WeightGradStore.pop()
+            if args.use_nanopipe_swap and k == max(num_microbatches_remaining + 1, (total_num_microbatches + num_microbatches_remaining) // 2):
+                WeightGradStore.swap_tensors()
+        WeightGradStore.pop()
         # Launch any remaining grad reductions.
         enable_grad_sync()
         if config.grad_sync_func is not None:
