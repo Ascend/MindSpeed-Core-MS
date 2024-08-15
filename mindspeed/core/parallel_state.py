@@ -639,6 +639,24 @@ def get_context_parallel_group_for_send_recv_overlap(check_initialized=True):
     return _CONTEXT_PARALLEL_GROUP_FOR_SEND_RECV_OVERLAP
 
 
+def get_context_parallel_next_rank():
+    """Return the global rank that follows the caller in the context parallel"""
+    import megatron.core.parallel_state as ps
+    assert ps._CONTEXT_PARALLEL_GLOBAL_RANKS is not None, "Context parallel group is not initialized"
+    rank_in_context = ps.get_context_parallel_rank()
+    world_size = ps.get_context_parallel_world_size()
+    return ps._CONTEXT_PARALLEL_GLOBAL_RANKS[(rank_in_context + 1) % world_size]
+
+
+def get_context_parallel_prev_rank():
+    """Return the global rank that preceeds the caller in the context parallel"""
+    import megatron.core.parallel_state as ps
+    assert ps._CONTEXT_PARALLEL_GLOBAL_RANKS is not None, "Context parallel group is not initialized"
+    rank_in_context = ps.get_context_parallel_rank()
+    world_size = ps.get_context_parallel_world_size()
+    return ps._CONTEXT_PARALLEL_GLOBAL_RANKS[(rank_in_context - 1) % world_size]
+
+
 def get_pipeline_parallel_group_for_new_stream():
     if _PIPELINE_MODEL_PARALLEL_GROUP_FOR_NEW_STREAM is None:
         raise AttributeError('Pipeline parallel group of backward is not initialized')

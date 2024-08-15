@@ -236,7 +236,11 @@ def _add_training_args(parser):
                        help='use ema when training')
     group.add_argument('--use-multiparameter-pipeline-model-parallel', action='store_true', default=False,
                        help='can transfer multi parameters from stage to stage in pipeline model parallel')
-
+    group.add_argument('--ampipe-degree', type=int, default=1,
+                       help='Set Attention MoE pipe(AMPipe) degree, 1 means not enable '
+                            'AMPipe, greater than 1 means enable this feature.')
+    group.add_argument('--ampipe-tp-sp-comm-overlap', action='store_true', default=False,
+                       help='enable computation and tp or sp communication overlap in ampipe')
     return parser
 
 
@@ -323,8 +327,6 @@ def core_transformer_config_from_args_wrapper(fn):
         config = fn(args)
         config.context_parallel_algo = args.context_parallel_algo
         config.batch_p2p_comm = False
-        if args.use_multiparameter_pipeline_model_parallel:
-            config.deallocate_pipeline_outputs = False
         return config
 
     return wrapper
@@ -546,6 +548,36 @@ def validate_args_wrapper(validate_args):
                 args.recompute_num_layers = args.num_layers // args.pipeline_model_parallel_size
             else:
                 args.recompute_num_layers = args.num_layers_per_virtual_pipeline_stage
+
+        if args.ampipe_degree > 1:
+            assert args.use_flash_attn, "ampipe only supports flash attention, please enable '--use-flash-attn'."
+            assert args.num_experts is not None, "ampipe only supports MoE model."
+            assert args.moe_model_type == 'deepspeed_moe', "ampipe only supports deepspeed_moe."
+            assert not args.use_ascend_mc2, "ampipe does't supports ascend mc2 for now."
+            assert not args.add_bias_linear, "ampipe does't supports bias linear for now."
+            assert not args.overlap_grad_reduce, "ampipe does't supports overlap_grad_reduce for now."
+            assert not args.overlap_param_gather, "ampipe does't supports overlap_param_gather for now."
+            assert not args.use_nanopipe, "ampipe does't supports use_nanopipe for now."
+            assert not args.recompute_in_bubble, "ampipe does't supports ripipe recompute_in_bubble for now."
+            assert not args.recompute_in_advance, "ampipe does't supports ripipe recompute_in_advance for now."
+            assert not args.adaptive_recompute_device_swap, "ampipe does't supports ripipe recompute_in_advance for now."
+            if args.sequence_parallel:
+                assert args.seq_length % (args.ampipe_degree * args.tensor_model_parallel_size) == 0, \
+                    "sequence length must be divisible by ampipe_degree * tensor_model_parallel_size"
+            if args.context_parallel_size > 1:
+                assert args.context_parallel_algo == 'megatron_cp_algo', "ampipe only supports megatron_cp_algo"
+                assert args.ampipe_degree == 2, "ampipe only supports ampipe_degree=2 when context_parallel_size>1"
+                slice_size, remainder = divmod(args.seq_length, 2 * args.ampipe_degree * args.context_parallel_size)
+                assert remainder == 0, \
+                    "sequence length must be divisible by 2 * ampipe_degree * context_parallel_size"
+                if args.sequence_parallel:
+                    assert slice_size % (args.tensor_model_parallel_size) == 0, \
+                        "sequence length must be divisible by 2 * ampipe_degree * context_parallel_size * tensor_model_parallel_size"
+            if args.use_pipe_experts:
+                if args.pipe_experts_multi_data % args.ampipe_degree != 0:
+                    print("[WARNING] if pipe_experts_multi_data isn't divisible by ampipe_degree "
+                          "--use-pipe-experts will be turned off.")
+                    args.use_pipe_experts = False
 
         from megatron.training.arguments import _print_args
         _print_args('arguments', args, True)

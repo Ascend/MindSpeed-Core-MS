@@ -70,13 +70,14 @@ class TopKGate(Module):
 
 def top1gating(logits: Tensor, config: Config) -> Tuple[Tensor, ...]:
     """Implements Top1Gating on logits."""
+    args = get_args()
     if config.noisy_gate_policy == 'RSample':
         logits_w_noise = logits + gumbel_rsample(logits.shape, device=logits.device)
     # everything is in fp32 in this function
     # token_sel_expert_weights: [S, E], 每个token选择每个专家的概率
     token_sel_expert_weights = F.softmax(logits, dim=1)
 
-    if config.reshape_index_select is not None:
+    if config.reshape_index_select is not None and args.ampipe_degree <= 1:
         token_sel_expert_weights = token_sel_expert_weights[:, config.reshape_index_select]
 
     capacity = _capacity(token_sel_expert_weights,
@@ -201,12 +202,13 @@ def apply_z_loss(config, logits):
 def top2gating(logits: Tensor, config: Config) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
     """Implements Top2Gating on logits."""
     # apply z loss
+    args = get_args()
     logits = apply_z_loss(config, logits)
 
     # everything is in fp32 in this function
     token_sel_expert_weights = F.softmax(logits, dim=1)
 
-    if config.reshape_index_select is not None:
+    if config.reshape_index_select is not None and args.ampipe_degree <= 1:
         token_sel_expert_weights = token_sel_expert_weights[:, config.reshape_index_select]
 
     num_experts = int(token_sel_expert_weights.shape[1])

@@ -14,8 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from functools import wraps
+import torch
 from megatron.training import get_args
 from megatron.core import mpu, tensor_parallel
+from mindspeed.moe.utils import get_slice_indices_from_disorder_to_order, get_slice_indices_from_order_to_disorder
 
 
 def parallel_lm_logits(
@@ -63,3 +65,61 @@ def embedding_forward_wrapper(forward):
             encoder_input = tensor_parallel.scatter_to_tensor_model_parallel_region(encoder_input)
         return encoder_input
     return wrapper
+
+
+class AmpipeEmbeddingRearrange(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, embeddings, ampipe_degree):
+        seqlen = embeddings.size(0)
+        new_indices = get_slice_indices_from_disorder_to_order(seqlen, ampipe_degree, device=embeddings.device)
+        embeddings = torch.index_select(embeddings, dim=0, index=new_indices)
+        ctx.ampipe_degree = ampipe_degree
+        return embeddings
+
+    @staticmethod
+    def backward(ctx, grad_input):
+        seqlen = grad_input.size(0)
+        new_indices = get_slice_indices_from_order_to_disorder(seqlen, ctx.ampipe_degree, device=grad_input.device)
+        grad_input = torch.index_select(grad_input, dim=0, index=new_indices)
+        return grad_input, None
+
+
+def embedding_forward_ampipe(self, input_ids, position_ids, tokentype_ids=None):
+    # Embeddings.
+    words_embeddings = self.word_embeddings(input_ids)
+    if self.add_position_embedding:
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings = words_embeddings + position_embeddings
+    else:
+        embeddings = words_embeddings
+
+    if tokentype_ids is not None:
+        assert self.tokentype_embeddings is not None
+        embeddings = embeddings + self.tokentype_embeddings(tokentype_ids)
+    else:
+        assert self.tokentype_embeddings is None
+
+    # Data format change to avoid explicit tranposes : [b s h] --> [s b h].
+    embeddings = embeddings.transpose(0, 1).contiguous()
+
+    # If the input flag for fp32 residual connection is set, convert for float.
+    if self.fp32_residual_connection:
+        embeddings = embeddings.float()
+
+    # Dropout.
+    if self.sequence_parallel:
+        ampipe_degree = get_args().ampipe_degree
+        if ampipe_degree > 1:
+            embeddings = AmpipeEmbeddingRearrange.apply(embeddings, ampipe_degree)
+        embeddings = tensor_parallel.scatter_to_sequence_parallel_region(embeddings)
+        # `scatter_to_sequence_parallel_region` returns a view, which prevents
+        # the original tensor from being garbage collected. Clone to facilitate GC.
+        # Has a small runtime cost (~0.5%).
+        if self.clone_scatter_output_in_embedding:
+            embeddings = embeddings.clone()
+        with tensor_parallel.get_cuda_rng_tracker().fork():
+            embeddings = self.embedding_dropout(embeddings)
+    else:
+        embeddings = self.embedding_dropout(embeddings)
+
+    return embeddings

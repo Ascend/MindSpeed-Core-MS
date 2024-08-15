@@ -17,19 +17,27 @@
 import math
 import threading
 from functools import wraps
+from contextlib import nullcontext
+from typing import Any
 
 import torch
 import torch_npu
 import torch.nn.functional as F
-from megatron.training import get_args, get_tokenizer
+from megatron.training import get_args, get_tokenizer, get_num_microbatches
 from megatron.core import parallel_state, mpu, tensor_parallel
+from megatron.core.utils import make_viewless_tensor
 from megatron.core.models.common.embeddings.rotary_pos_embedding import apply_rotary_pos_emb
 from megatron.legacy.model.utils import openai_gelu, erf_gelu, get_norm
 from megatron.legacy.model.transformer import ParallelMLP, ParallelTransformer, ParallelTransformerLayer
 from megatron.core.enums import ModelType
 from megatron.legacy.model.enums import AttnType, AttnMaskType, LayerType
-from megatron.legacy.model.transformer import _get_num_layers, _get_layer_type
+from megatron.legacy.model.transformer import (_get_num_layers,
+                                               _get_layer_type,
+                                               bias_dropout_add_fused_train,
+                                               bias_dropout_add_fused_inference,
+                                               get_bias_dropout_add)
 from megatron.legacy.model.fused_bias_gelu import bias_gelu_impl
+from megatron.core.tensor_parallel.mappings import _split_along_first_dim
 
 from mindspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
@@ -40,10 +48,17 @@ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid
                                              get_context_parallel_for_hybrid_ring_global_ranks)
 from mindspeed.core.fusions.fused_bias_swiglu import fused_swiglu
 from mindspeed.core.tensor_parallel.random import CheckpointWithoutOutput
+from mindspeed.moe.ampipe.ampipe import AttMoEPipe
 from mindspeed.ops.fusion_attention_v2 import npu_fusion_attention
 from mindspeed.core.tensor_parallel.layers import Nd_ParallelLinear
 from mindspeed.core.tensor_parallel.checkpoint_manager import get_pipeline_checkpoint_manager
 from mindspeed.model.alibi_mask import AlibiForFusionAttnSingleton, get_slopes
+from mindspeed.moe.ampipe.ampipe_args import ForwardArgs
+from mindspeed.moe.utils import (get_slice_indices_from_order_to_disorder,
+                                 get_slice_indices_from_disorder_to_order,
+                                 all_gather_along_first_dim)
+
+
 
 try:
     from einops import rearrange
@@ -306,7 +321,12 @@ def set_attention_mask(attn_mask):
 def generate_attention_mask():
     global _GLOBAL_ATTN_MASK
     args = get_args()
-    if args.use_flash_attn and (args.seq_length > 2048 or args.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']):
+    if args.ampipe_degree > 1 and args.context_parallel_size <= 1 and _GLOBAL_ATTN_MASK is None:
+        args.sparse_mode = 0
+        _GLOBAL_ATTN_MASK = torch.triu(
+            torch.ones((args.seq_length, args.seq_length), device=torch.cuda.current_device(), dtype=torch.bool),
+            diagonal=1)
+    elif args.use_flash_attn and (args.seq_length > 2048 or args.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']):
         args.sparse_mode = 2
         _GLOBAL_ATTN_MASK = torch.triu(torch.ones([2048, 2048], dtype=bool, device=torch.cuda.current_device()), diagonal=1)
     else:
@@ -330,6 +350,138 @@ def parallel_transformer_forward_wrapper(fn):
         attention_mask = get_attention_mask()
         return fn(self, hidden_states, attention_mask, **kwargs)
     return wrapper
+
+
+def parallel_transformer_forward_ampipe(self, hidden_states, attention_mask,
+            encoder_output=None, enc_dec_attn_mask=None,
+            retriever_input=None,
+            retriever_output=None,
+            retriever_attn_mask=None,
+            inference_params=None,
+            rotary_pos_emb=None):
+    # hidden_states: [s, b, h]
+
+    # Checks.
+    if inference_params:
+        assert self.recompute_granularity is None, \
+            'inference does not work with activation checkpointing'
+
+    if not self.pre_process:
+        # See set_input_tensor()
+        hidden_states = self.input_tensor
+
+    # Viewless tensor.
+    # - We only need to create a viewless tensor in the case of micro batch
+    #   size (mbs) == 1, since in this case, 'hidden_states.transpose()'
+    #   above creates a view tensor, and '.contiguous()' is a pass-through.
+    #   For mbs >= 2, '.contiguous()' creates a new tensor, eliminating
+    #   the need to make it viewless.
+    #
+    #   However, we don't explicitly check mbs == 1 here because
+    #   make_viewless_tensor() has negligible overhead when its input
+    #   is already viewless.
+    #
+    # - For the 'else' case above, calling make_viewless_tensor() here is
+    #   likely redundant, since p2p_communication.py (likely originator)
+    #   already creates viewless tensors. That said, make_viewless_tensor()
+    #   is called here to be future-proof and corner-case-proof.
+    hidden_states = make_viewless_tensor(
+        hidden_states,
+        requires_grad=True,
+        keep_graph=True,
+    )
+
+    # RNG context.
+    if self.sequence_parallel:
+        rng_context = tensor_parallel.get_cuda_rng_tracker().fork()
+    else:
+        rng_context = nullcontext()
+
+    # Forward layers.
+    with rng_context:
+        # Determine if the current iteration is first microbatch
+        if self.num_microbatches_in_previous_step != get_num_microbatches():
+            self.microbatch_count = 0 # Reset count on new batch size rampup interval
+        self.num_microbatches_in_previous_step = get_num_microbatches()
+        is_first_microbatch = self.microbatch_count % get_num_microbatches() == 0
+
+        # Forward pass.
+        if self.recompute_granularity == 'full':
+            hidden_states = self._checkpointed_forward(hidden_states,
+                                                       attention_mask,
+                                                       encoder_output,
+                                                       enc_dec_attn_mask,
+                                                       rotary_pos_emb,
+                                                       is_first_microbatch)
+        else:
+            forward_kwargs = {
+                'encoder_output': encoder_output,
+                'enc_dec_attn_mask': enc_dec_attn_mask,
+                'inference_params': inference_params,
+            }
+
+            forward_kwargs['rotary_pos_emb'] = rotary_pos_emb
+            forward_kwargs['retriever_input'] = retriever_input
+            forward_kwargs['retriever_output'] = retriever_output
+            forward_kwargs['retriever_attn_mask'] = retriever_attn_mask
+
+            for index in range(self.num_layers):
+                layer = self._get_layer(index)
+
+                hidden_states = layer(
+                    hidden_states,
+                    attention_mask,
+                    **forward_kwargs)
+
+                # First Retro decoder layer returns both hidden_states
+                # and retriever_output. Make retriever_output available
+                # to subsequence Retro layers.
+                if isinstance(hidden_states, tuple):
+                    assert len(hidden_states) == 2
+                    hidden_states, retriever_output = hidden_states
+                    forward_kwargs["retriever_output"] = retriever_output
+        if self.sequence_parallel:
+            ampipe_degree = get_args().ampipe_degree
+            if ampipe_degree > 1:
+                hidden_states = AmpipeLastTransformerLayerRearrange.apply(hidden_states, ampipe_degree)
+        # Skip counter update for eval and activation checkpointing
+        if torch.is_grad_enabled() and self.training:
+            self.microbatch_count += 1
+
+    # Final layer norm.
+    if self.post_process and self.post_norm:
+        hidden_states = self.final_norm(hidden_states)
+
+    return hidden_states
+
+
+class AmpipeLastTransformerLayerRearrange(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, hidden_states, ampipe_degree) -> Any:
+        ag_hidden_states = all_gather_along_first_dim(hidden_states, True)
+        hidden_states.untyped_storage().resize_(0)
+        seqlen = ag_hidden_states.size(0)
+
+        new_indices = get_slice_indices_from_order_to_disorder(seqlen, ampipe_degree, device=torch.npu.current_device())
+        select_hidden_states = torch.index_select(ag_hidden_states, dim=0, index=new_indices)
+        hidden_states_chunk = _split_along_first_dim(select_hidden_states)
+        hidden_states_chunk = hidden_states_chunk.clone()
+        select_hidden_states.untyped_storage().resize_(0)
+        ctx.ampipe_degree = ampipe_degree
+        return hidden_states_chunk
+
+    @staticmethod
+    def backward(ctx, grad_input) -> Any:
+        ag_grad_input = all_gather_along_first_dim(grad_input, True)
+        grad_input.untyped_storage().resize_(0)
+        seqlen = ag_grad_input.size(0)
+
+        new_indices = get_slice_indices_from_disorder_to_order(seqlen, ctx.ampipe_degree, device=torch.npu.current_device())
+        select_grad_input = torch.index_select(ag_grad_input, dim=0, index=new_indices)
+        grad_output_chunk = _split_along_first_dim(select_grad_input)
+        grad_output_chunk = grad_output_chunk.clone()
+        select_grad_input.untyped_storage().resize_(0)
+        return grad_output_chunk, None
 
 
 def parallel_mlp_init_wrapper(fn):
@@ -399,6 +551,9 @@ def parallel_mlp_init_wrapper(fn):
         if not _args.swiglu:
             self.dense_h_to_4h.pipe_experts = _args.use_pipe_experts
             self.dense_4h_to_h.pipe_experts = _args.use_pipe_experts
+        if _args.ampipe_degree > 1:
+            setattr(self.dense_h_to_4h, "ampipe_degree", _args.ampipe_degree)
+            setattr(self.dense_4h_to_h, "ampipe_degree", _args.ampipe_degree)
     return wrapper
 
 
@@ -454,47 +609,77 @@ def should_recompute_activation(self):
         return recompute_priority < activation_recompute_layers
 
 
-def parallel_mlp_forward_wrapper(fn):
-    @wraps(fn)
-    def wrapper(self, *args, **kwargs):
-        is_recompute_activation = should_recompute_activation(self)
+def parallel_mlp_forward(self, hidden_states):
+    is_recompute_activation = should_recompute_activation(self)
+    args = get_args()
+    
+    def activation_function(*function_args):
+        intermediate, bias = function_args
 
-        def activation_function(*function_args):
-            intermediate, bias = function_args
-
-            if self.bias_gelu_fusion:
-                assert self.add_bias is True
-                assert self.activation_func == F.gelu
-                intermediate = bias_gelu_impl(intermediate, bias)
-            else:
-                if bias is not None:
-                    intermediate = intermediate + bias
-                intermediate = self.activation_func(intermediate)
-            return intermediate
-
-        if not is_recompute_activation:
-            output, output_bias = fn(self, *args, **kwargs)
+        if self.bias_gelu_fusion:
+            assert self.add_bias is True
+            assert self.activation_func == F.gelu
+            intermediate = bias_gelu_impl(intermediate, bias)
         else:
-            hidden_states = args[0]
-            intermediate_parallel, bias_parallel = self.dense_h_to_4h(hidden_states)
-            self.activation_checkpoint_manager = CheckpointWithoutOutput()
-            intermediate_parallel = self.activation_checkpoint_manager.checkpoint(activation_function,
-                                                                                  False,
-                                                                                  intermediate_parallel,
-                                                                                  bias_parallel)
-            # [s, b, h]
-            output, output_bias = self.dense_4h_to_h(intermediate_parallel)
+            if bias is not None:
+                intermediate = intermediate + bias
+            intermediate = self.activation_func(intermediate)
+        return intermediate
 
-            # discard the output of the activation function,
-            # which will be restored by recomputation during backward.
-            self.activation_checkpoint_manager.discard_output()
+    if not is_recompute_activation:
+        # [s, b, 4hp]
+        intermediate_parallel, bias_parallel = self.dense_h_to_4h(hidden_states)
+        if not args.use_pipe_experts and args.ampipe_degree > 1 and args.ampipe_tp_sp_comm_overlap:
+            from mindspeed.moe.async_comm_utils import get_fw_ar_rs_output_ampipe, async_all_to_all
+            last_chunk_output = get_fw_ar_rs_output_ampipe(args.sequence_parallel)
+            if last_chunk_output is not None:
+                a2a_output, handle = async_all_to_all(last_chunk_output)
 
-            # when backward to output of dense_4h_to_h,
-            # recompute and restore the output of activation function.
-            if output.requires_grad:
-                output.register_hook(self.activation_checkpoint_manager.recompute)
-        return output, output_bias
-    return wrapper
+        if self.bias_gelu_fusion:
+            assert self.add_bias is True
+            assert self.activation_func == F.gelu
+            intermediate_parallel = bias_gelu_impl(intermediate_parallel, bias_parallel)
+        else:
+            if bias_parallel is not None:
+                intermediate_parallel = intermediate_parallel + bias_parallel
+            intermediate_parallel = self.activation_func(intermediate_parallel)
+
+        # [s, b, h]
+        output, output_bias = self.dense_4h_to_h(intermediate_parallel)
+        if not args.use_pipe_experts and args.ampipe_degree > 1 and args.ampipe_tp_sp_comm_overlap:
+            if last_chunk_output is not None:
+                handle.wait()
+                return output, output_bias, a2a_output
+    else:
+        if not args.use_pipe_experts and args.ampipe_degree > 1 and args.ampipe_tp_sp_comm_overlap:
+            from mindspeed.moe.async_comm_utils import (get_fw_ar_rs_output_ampipe,
+                                                        async_all_to_all)
+            last_chunk_output = get_fw_ar_rs_output_ampipe(args.sequence_parallel)
+            if last_chunk_output is not None:
+                a2a_output, handle = async_all_to_all(last_chunk_output)
+
+        intermediate_parallel, bias_parallel = self.dense_h_to_4h(hidden_states)
+        self.activation_checkpoint_manager = CheckpointWithoutOutput()
+        intermediate_parallel = self.activation_checkpoint_manager.checkpoint(activation_function,
+                                                                              False,
+                                                                              intermediate_parallel,
+                                                                              bias_parallel)
+        # [s, b, h]
+        output, output_bias = self.dense_4h_to_h(intermediate_parallel)
+
+        # discard the output of the activation function,
+        # which will be restored by recomputation during backward.
+        self.activation_checkpoint_manager.discard_output()
+
+        # when backward to output of dense_4h_to_h,
+        # recompute and restore the output of activation function.
+        if output.requires_grad:
+            output.register_hook(self.activation_checkpoint_manager.recompute)
+        if not args.use_pipe_experts and args.ampipe_degree > 1 and args.ampipe_tp_sp_comm_overlap:
+            if last_chunk_output is not None:
+                handle.wait()
+                return output, output_bias, a2a_output
+    return output, output_bias
 
 
 def flash_self_attention_init_wrapper(fn):
@@ -668,6 +853,9 @@ def parallel_attention_init_wrapper(fn):
                     and parallel_state.get_virtual_pipeline_model_parallel_world_size() is not None:
             setattr(self.query_key_value, "in_nano", True)
             setattr(self.dense, "in_nano", True)
+        if _args.ampipe_degree > 1:
+            setattr(self.query_key_value, 'ampipe_degree', _args.ampipe_degree)
+            setattr(self.query_key_value, 'is_dense_h_to_3h', True)
     return wrapper
 
 
@@ -833,6 +1021,8 @@ def parallel_attention_forward(self, hidden_states, attention_mask,
             context_layer = self.core_attention(
                 query_layer, key_layer, value_layer, attention_mask)
     else:
+        if get_args().ampipe_degree > 1:
+            return query_layer, key_layer, value_layer
         if not self.sequence_parallel:
             with tensor_parallel.get_cuda_rng_tracker().fork():
                 context_layer = self.core_attention_flash(query_layer, key_layer, value_layer, attention_mask)
@@ -928,6 +1118,8 @@ def parallel_transformer_layer_init_wrapper(fn):
         super(ParallelTransformerLayer, self).__init__()
         global_args = get_args()
         fn(self, *args, **kwargs)
+        self.pipe_degree = global_args.ampipe_degree
+        self.ampipe_enabled = global_args.ampipe_degree > 1
         if self.mlp.__class__ is SwitchMLP:
             experts_modules = self.mlp.block.moe_layer.experts.experts if global_args.moe_model_type == 'deepspeed_moe' \
                 else self.mlp.local_experts
@@ -937,3 +1129,171 @@ def parallel_transformer_layer_init_wrapper(fn):
             self.mlp.layer_number = self.layer_number
 
     return wrapper
+
+
+def parallel_transformer_layer_forward_ampipe(self, hidden_states, attention_mask,
+            encoder_output=None, enc_dec_attn_mask=None,
+            retriever_input=None,
+            retriever_output=None,
+            retriever_attn_mask=None,
+            inference_params=None,
+            rotary_pos_emb=None):
+
+    # Update the params in case the retro param changes during inference
+    # TODO: better redesign with inference param
+    args = get_args()
+    if args.retro_add_retriever:
+        self.retro_num_neighbors = args.retro_num_neighbors
+        self.retro_chunk_length = args.retro_chunk_length
+        self.retro_retrieved_length = \
+            args.retro_num_retrieved_chunks * args.retro_chunk_length
+
+    # hidden_states: [s, b, h]
+
+    # Layer norm at the beginning of the transformer layer.
+    norm_output = self.input_norm(hidden_states)
+
+    if self.ampipe_enabled:
+        q, k, v = self.self_attention(
+            norm_output,
+            attention_mask,
+            inference_params=inference_params,
+            rotary_pos_emb=rotary_pos_emb)
+        # release memory to reduce peak memory usage
+        del norm_output
+        dense_layer = self.self_attention.dense
+        ln = self.post_attention_norm
+        k, v = [rearrange(x, 's b n d -> s b (n d)') for x in [k, v]]
+
+        ampipe_forward_args = ForwardArgs(
+            dense_layer, bias_dropout_add_fused_train, ln, self.mlp.block, self.hidden_dropout
+        )
+        out_mlp, residual = AttMoEPipe.apply(q, k, v, hidden_states, attention_mask, ampipe_forward_args)
+
+        with self.bias_dropout_add_exec_handler():
+            output = bias_dropout_add_fused_train(
+                out_mlp,
+                None,
+                residual,
+                self.hidden_dropout)
+
+        output = make_viewless_tensor(inp=output, requires_grad=output.requires_grad, keep_graph=True)
+
+        return output
+
+    # Self attention.
+    attention_output, attention_bias = \
+        self.self_attention(
+            norm_output,
+            attention_mask,
+            inference_params=inference_params,
+            rotary_pos_emb=rotary_pos_emb)
+
+    # Residual connection.
+    if self.apply_residual_connection_post_norm:
+        residual = norm_output
+    else:
+        residual = hidden_states
+
+    if self.drop_path is None:
+        # jit scripting for a nn.module (with dropout) is not
+        # trigerring the fusion kernel. For now, we use two
+        # different nn.functional routines to account for varying
+        # dropout semantics during training and inference phases.
+        if self.bias_dropout_fusion:
+            if self.training:
+                bias_dropout_add_func = bias_dropout_add_fused_train
+            else:
+                bias_dropout_add_func = bias_dropout_add_fused_inference
+        else:
+            bias_dropout_add_func = get_bias_dropout_add(self.training)
+
+        if attention_bias is not None:
+            attention_bias = attention_bias.expand_as(residual)
+        with self.bias_dropout_add_exec_handler():
+            norm_input = bias_dropout_add_func(
+                attention_output,
+                attention_bias,
+                residual,
+                self.hidden_dropout)
+    else:
+        out = torch.nn.functional.dropout(attention_output + attention_bias,
+                                          p=self.hidden_dropout,
+                                          training=self.training)
+        norm_input = residual + self.drop_path(out)
+
+    # Layer norm post the self attention.
+    norm_output = self.post_attention_norm(norm_input)
+
+    # Cross attention.
+    if self.layer_type == LayerType.encoder:
+        pass
+    elif self.layer_type == LayerType.decoder:
+        norm_input, norm_output = \
+            self.default_decoder_cross_attention(
+                encoder_output,
+                enc_dec_attn_mask,
+                norm_input,
+                norm_output,
+                bias_dropout_add_func)
+    elif self.layer_type == LayerType.retro_encoder:
+        norm_input, norm_output = \
+            self.retro_encoder_cross_attention(
+                retriever_output,
+                norm_input,
+                norm_output,
+                bias_dropout_add_func)
+    elif self.layer_type in (LayerType.retro_decoder,
+                             LayerType.retro_decoder_with_retriever):
+        retriever_output, norm_input, norm_output = \
+            self.retro_decoder_cross_attention(
+                retriever_input,
+                retriever_output,
+                retriever_attn_mask,
+                norm_input,
+                norm_output,
+                inference_params,
+                bias_dropout_add_func)
+    else:
+        raise Exception("Unsupported layer type, '%s'." %
+                        self.layer_type.name)
+
+    # MLP.
+    mlp_output, mlp_bias = self.mlp(norm_output)
+
+    # Second residual connection.
+    if self.apply_residual_connection_post_norm:
+        residual = norm_output
+    else:
+        residual = norm_input
+
+    if self.drop_path is None:
+        if mlp_bias is not None:
+            mlp_bias = mlp_bias.expand_as(residual)
+        with self.bias_dropout_add_exec_handler():
+            output = bias_dropout_add_func(
+                mlp_output,
+                mlp_bias,
+                residual,
+                self.hidden_dropout)
+
+        # Jit compiled function creates 'view' tensor. This tensor
+        # potentially gets saved in the MPU checkpoint function context,
+        # which rejects view tensors. While making a viewless tensor here
+        # won't result in memory savings (like the data loader, or
+        # p2p_communication), it serves to document the origin of this
+        # 'view' tensor.
+        output = make_viewless_tensor(inp=output, requires_grad=output.requires_grad, keep_graph=True)
+
+    else:
+        if mlp_bias is not None:
+            mlp_output = mlp_output + mlp_bias
+        out = torch.nn.functional.dropout(mlp_output,
+                                          p=self.hidden_dropout,
+                                          training=self.training)
+        output = residual + self.drop_path(out)
+
+    if self.layer_type == LayerType.retro_decoder_with_retriever:
+        return output, retriever_output
+    else:
+        return output

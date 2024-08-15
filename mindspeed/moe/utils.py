@@ -13,9 +13,20 @@ import torch
 import torch.distributed as dist
 import torch.nn.functional as F
 from torch import Tensor
+from megatron.core import mpu
 
 gumbel_map: Dict[torch.device, Callable] = {}
 USE_EINSUM = False
+ampipe_slices_map = {}
+
+
+def print_rank_0(message):
+    """If distributed is initialized, print only on rank 0."""
+    if torch.distributed.is_initialized():
+        if torch.distributed.get_rank() == 0:
+            print(message, flush=True)
+    else:
+        print(message, flush=True)
 
 
 # Based on https://github.com/pytorch/pytorch/pull/40762
@@ -33,6 +44,22 @@ class _AllToAll(torch.autograd.Function):
         return (None, _AllToAll.apply(ctx.group, *grad_output))
 
 
+def all_gather_along_first_dim(input_, is_use_global_memory_buffer=False):
+    world_size = mpu.get_tensor_model_parallel_world_size()
+    if world_size == 1:
+        return input_
+    dim_size = list(input_.size())
+    dim_size[0] = dim_size[0] * world_size
+    if is_use_global_memory_buffer:
+        ag_out = mpu.get_global_memory_buffer().get_tensor(dim_size, input_.dtype, "mpu")
+    else:
+        ag_out = torch.empty(dim_size, dtype=input_.dtype, device=torch.cuda.current_device())
+    torch.distributed._all_gather_base(
+        ag_out, input_.contiguous(), group=mpu.get_tensor_model_parallel_group()
+    )
+    return ag_out
+
+
 def get_reshape_index_select(num_local_experts, ep_size):
     reshape_index_select = []
     for i in range(num_local_experts):
@@ -41,6 +68,38 @@ def get_reshape_index_select(num_local_experts, ep_size):
             reshape_index_select.append(index)
             index += num_local_experts
     return reshape_index_select
+
+
+def get_slice_indices_from_order_to_disorder(seq_length, pipe_degree, device):
+    if ampipe_slices_map.get('order_to_disorder') is not None:
+        return ampipe_slices_map.get('order_to_disorder')
+    tp_size = mpu.get_tensor_model_parallel_world_size()
+    slice_size = seq_length // tp_size // pipe_degree
+
+    output = []
+    for out_idx in range(0, seq_length // tp_size, slice_size):
+        for i in range(out_idx, seq_length, pipe_degree * slice_size):
+            for j in range(slice_size):
+                output.append(i + j)
+    output = torch.tensor(output, dtype=torch.int32, device=device)
+    ampipe_slices_map['order_to_disorder'] = output
+    return output
+
+
+def get_slice_indices_from_disorder_to_order(seq_length, pipe_degree, device):
+    if ampipe_slices_map.get('disorder_to_order') is not None:
+        return ampipe_slices_map.get('disorder_to_order')
+    tp_size = mpu.get_tensor_model_parallel_world_size()
+    slice_size = seq_length // tp_size // pipe_degree
+
+    output = []
+    for out_idx in range(0, seq_length // pipe_degree, slice_size):
+        for i in range(out_idx, seq_length, tp_size * slice_size):
+            for j in range(slice_size):
+                output.append(i + j)
+    output = torch.tensor(output, dtype=torch.int32, device=device)
+    ampipe_slices_map['disorder_to_order'] = output
+    return output
 
 
 def _one_hot_to_float(x, num_classes):

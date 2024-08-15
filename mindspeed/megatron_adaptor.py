@@ -366,7 +366,7 @@ def legacy_model_rms_norm_adaptation(aspm):
 
 def legacy_model_transformer(aspm):
     from .model.transformer import parallel_mlp_init_wrapper, flash_self_attention_forward, \
-        flash_self_attention_init_wrapper, parallel_mlp_forward_wrapper, parallel_transformer_init_wrapper, \
+        flash_self_attention_init_wrapper, parallel_mlp_forward, parallel_transformer_init_wrapper, \
         parallel_transformer_forward_wrapper
     from .model.transformer import core_attention_init_wrapper, core_attention_forward, parallel_attention_init_wrapper, \
         parallel_attention_forward
@@ -376,11 +376,12 @@ def legacy_model_transformer(aspm):
         parallel_transformer_layer_init_wrapper
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.__init__',
                         parallel_transformer_init_wrapper)
+
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.forward',
                         parallel_transformer_forward_wrapper)
 
     aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.__init__', parallel_mlp_init_wrapper)
-    aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.forward', parallel_mlp_forward_wrapper)
+    aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.forward', parallel_mlp_forward)
     aspm.register_patch('megatron.legacy.model.transformer.FlashSelfAttention.forward', flash_self_attention_forward)
     aspm.register_patch('megatron.legacy.model.transformer.FlashSelfAttention.__init__',
                         flash_self_attention_init_wrapper)
@@ -389,7 +390,6 @@ def legacy_model_transformer(aspm):
                         parallel_attention_forward)
     aspm.register_patch('megatron.legacy.model.transformer.CoreAttention.__init__', core_attention_init_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.CoreAttention.forward', core_attention_forward)
-
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformerLayer.forward',
                         parallel_transformer_layer_forward_wrapper)
 
@@ -528,7 +528,7 @@ def mcore_moe_adaptation(pm, args):
 
 
 def deepspeed_moe_adaptation(pm, args):
-    if args.use_pipe_experts or args.use_nanopipe:
+    if args.use_pipe_experts or args.use_nanopipe or args.ampipe_degree > 1:
         from .core.tensor_parallel.layers import (row_parallel_moe, column_parallel_moe,
                                                   linear_with_grad_accumulation_and_async_allreduce_moe)
         pm.register_patch('megatron.core.tensor_parallel.layers.RowParallelLinear.forward', row_parallel_moe)
@@ -538,6 +538,15 @@ def deepspeed_moe_adaptation(pm, args):
     if args.use_pipe_experts:
         from .core.distributed.param_and_grad_buffer import pipe_register_grad_ready
         pm.register_patch('megatron.core.distributed.ParamAndGradBuffer.register_grad_ready', pipe_register_grad_ready)
+    if args.ampipe_degree > 1:
+        from mindspeed.model.language_model import embedding_forward_ampipe
+        from mindspeed.model.transformer import parallel_transformer_forward_ampipe
+        from mindspeed.model.transformer import parallel_transformer_layer_forward_ampipe
+        pm.register_patch('megatron.legacy.model.language_model.Embedding.forward', embedding_forward_ampipe)
+        pm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.forward',
+                          parallel_transformer_forward_ampipe)
+        pm.register_patch('megatron.legacy.model.transformer.ParallelTransformerLayer.forward',
+                          parallel_transformer_layer_forward_ampipe)
 
 
 def coc_adaptation(aspm, args):
