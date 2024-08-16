@@ -18,7 +18,33 @@ from megatron.training import get_args
 from megatron.core import mpu
 
 from mindspeed.core.parallel_state import get_context_parallel_prev_rank, get_context_parallel_next_rank
-from .ring_context_parallel import flash_attn_p2p_communicate, forward_update
+from .utils import forward_update
+
+
+def flash_attn_p2p_communicate(rank, send_tensor, send_dst,
+                               recv_tensor, recv_src,
+                               cp_group,
+                               cp_group_for_send_recv_overlap,
+                               ):
+    """Point-to-point communications of KV and dKV in Attention with context parallelism"""
+    send_recv_ops = []
+
+    if cp_group_for_send_recv_overlap is None:
+        cp_group_for_send_recv_overlap = cp_group
+
+    if rank % 2 == 0:
+        send_op = torch.distributed.isend(send_tensor, send_dst, cp_group)
+        recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group_for_send_recv_overlap)
+        send_recv_ops.append(send_op)
+        send_recv_ops.append(recv_op)
+    else:
+        recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group)
+        send_op = torch.distributed.isend(send_tensor, send_dst, cp_group_for_send_recv_overlap)
+        send_recv_ops.append(recv_op)
+        send_recv_ops.append(send_op)
+    send_recv_reqs = send_recv_ops
+
+    return send_recv_reqs
 
 
 def flash_attention_backward(qkvn, dy, softmax_max, softmax_sum, atten_out, attn_mask=None, softmax_scale=1.,
