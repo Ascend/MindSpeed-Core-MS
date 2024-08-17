@@ -119,7 +119,7 @@ def pretrain_decorator(pretrain):
         global DATA_PARALLEL_SIZE
         global ENABLE_SCHEDULER
         new_parse_args = parse_args_wrapper(parse_args)
-        argument = new_parse_args(None, False)
+        argument = new_parse_args(kwargs.get('extra_args_provider'), False)
         if argument.auto_parallel:
             set_args(argument)
             search_optimal_configuration(argument)
