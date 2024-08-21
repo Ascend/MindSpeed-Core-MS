@@ -18,33 +18,7 @@ from megatron.training import get_args
 from megatron.core import mpu
 
 from mindspeed.core.parallel_state import get_context_parallel_prev_rank, get_context_parallel_next_rank
-from .utils import forward_update
-
-
-def flash_attn_p2p_communicate(rank, send_tensor, send_dst,
-                               recv_tensor, recv_src,
-                               cp_group,
-                               cp_group_for_send_recv_overlap,
-                               ):
-    """Point-to-point communications of KV and dKV in Attention with context parallelism"""
-    send_recv_ops = []
-
-    if cp_group_for_send_recv_overlap is None:
-        cp_group_for_send_recv_overlap = cp_group
-
-    if rank % 2 == 0:
-        send_op = torch.distributed.isend(send_tensor, send_dst, cp_group)
-        recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group_for_send_recv_overlap)
-        send_recv_ops.append(send_op)
-        send_recv_ops.append(recv_op)
-    else:
-        recv_op = torch.distributed.irecv(recv_tensor, recv_src, cp_group)
-        send_op = torch.distributed.isend(send_tensor, send_dst, cp_group_for_send_recv_overlap)
-        send_recv_ops.append(recv_op)
-        send_recv_ops.append(send_op)
-    send_recv_reqs = send_recv_ops
-
-    return send_recv_reqs
+from .utils import RingP2P, forward_update
 
 
 def flash_attention_backward(qkvn, dy, softmax_max, softmax_sum, atten_out, attn_mask=None, softmax_scale=1.,
@@ -113,16 +87,16 @@ def attn_with_cp_for_ampipe_forward(ctx, fa_cp_fwd_args,
     softmax_scale = head_dim ** (-0.5)
 
     rank = mpu.get_context_parallel_rank()
+    cp_global_ranks = mpu.get_context_parallel_global_ranks()
     prev_rank = get_context_parallel_prev_rank()
     next_rank = get_context_parallel_next_rank()
     cp_size = mpu.get_context_parallel_world_size()
     cp_group = mpu.get_context_parallel_group()
     cp_group_for_send_recv_overlap = mpu.get_context_parallel_group_for_send_recv_overlap() if args.use_cp_send_recv_overlap else cp_group
+    send_recv_comm = RingP2P(cp_global_ranks, cp_group, cp_group_for_send_recv_overlap)
     attn_mask = torch.ones((2048, 2048), dtype=torch.bool, device=q.device)
     attn_mask = torch.triu(attn_mask, diagonal=1)
     if ampipe_idx == 0:
-        send_dst = next_rank
-        recv_src = prev_rank
         # split chunk[i]~chunk[2cp-1-i] into chunk[i] and chunk[2cp-1-i],, [2s, b, h] -> [2, s, b, h]
         q, k, v = [x.view(2, x.shape[0] // 2, *x.shape[1:]) for x in [q, k, v]]
         # (seed, offset, numels) for dropout mask
@@ -131,7 +105,6 @@ def attn_with_cp_for_ampipe_forward(ctx, fa_cp_fwd_args,
         rng_states_qb_kvb = [[0, 0, 0] for _ in range(cp_size)]
         send_kv = torch.cat((k.unsqueeze(0), v.unsqueeze(0)), dim=0)  # [2, 2, s, b, h]
         recv_kv = None
-        send_recv_ops = []
         # chunk[i]
         attn_out_a, softmax_max_a, softmax_sum_a = None, None, None
         # chunk[2cp-1-i]
@@ -139,18 +112,12 @@ def attn_with_cp_for_ampipe_forward(ctx, fa_cp_fwd_args,
 
         for i in range(cp_size):
             # wait until KV is received from recv_src
-            if len(send_recv_ops) > 0:
-
-                for send_recv_op in send_recv_ops:
-                    send_recv_op.wait()
+            if send_recv_comm.wait():
                 send_kv = recv_kv
             kv_list.append(send_kv)  # tmp buffer for next ampipe
             if i < cp_size - 1:
                 recv_kv = torch.empty_like(send_kv)
-
-                send_recv_ops = flash_attn_p2p_communicate(rank, send_kv, send_dst,
-                                                           recv_kv, recv_src,
-                                                           cp_group, cp_group_for_send_recv_overlap)
+                send_recv_comm.async_send_recv(send_kv, recv_kv)
             if i == 0:
                 qa, ka, va = [x[0] for x in [q, k, v]]
                 qb, kb, vb = [x[1] for x in [q, k, v]]
@@ -293,6 +260,7 @@ def attn_with_cp_for_ampipe_backward(ctx, attn_out, saved_tensor_list, dout, fa_
     cp_size = ctx.cp_size
     cp_group = ctx.cp_group
     cp_group_for_send_recv_overlap = ctx.cp_group_for_send_recv_overlap
+    cp_global_ranks = mpu.get_context_parallel_global_ranks()
     keep_prob = ctx.keep_prob
     rng_states_qa_kva = ctx.rng_states_qa_kva
     rng_states_qb_kva = ctx.rng_states_qb_kva
@@ -304,14 +272,11 @@ def attn_with_cp_for_ampipe_backward(ctx, attn_out, saved_tensor_list, dout, fa_
     attn_out_b, softmax_max_b, softmax_sum_b = attn_out[1], softmax_max[1], softmax_sum[1]
 
     if ampipe_idx == 0:
-        send_dst = ctx.prev_rank
-        recv_src = ctx.next_rank
-
+        send_recv_comm = RingP2P(cp_global_ranks, cp_group, cp_group_for_send_recv_overlap, is_backward=True)
         dq, dk, dv = None, None, None
         recv_kv_dkv = None
         recv_kv = None
         recv_dkv = None
-        send_recv_ops = []
         # [s, b, h]
         qa, ka, va = [x[0] for x in [q, k, v]]
         qb, kb, vb = [x[1] for x in [q, k, v]]
@@ -323,9 +288,7 @@ def attn_with_cp_for_ampipe_backward(ctx, attn_out, saved_tensor_list, dout, fa_
 
         for i in range(cp_size):
             # wait until KV is received from recv_src
-            if len(send_recv_ops) > 0:
-                for send_recv_op in send_recv_ops:
-                    send_recv_op.wait()
+            if send_recv_comm.wait():
                 # only received kv in the second loop
                 if i == 1:
                     send_kv = recv_kv
@@ -340,23 +303,19 @@ def attn_with_cp_for_ampipe_backward(ctx, attn_out, saved_tensor_list, dout, fa_
             if i == 0:
                 send_kv = kv
                 recv_kv = torch.empty_like(send_kv)
-                send_recv_ops = flash_attn_p2p_communicate(rank, send_kv, send_dst,
-                                                           recv_kv, recv_src, cp_group, cp_group_for_send_recv_overlap)
+                send_recv_comm.async_send_recv(send_kv, recv_kv)
                 kv_list.append(send_kv)
             # just send-recv dkv in the last loop
             elif i == cp_size - 1:
                 send_dkv = send_kv_dkv[1]
                 recv_dkv = torch.empty_like(send_dkv)
-                send_recv_ops = flash_attn_p2p_communicate(rank, send_dkv, send_dst,
-                                                           recv_dkv, recv_src, cp_group, cp_group_for_send_recv_overlap)
+                send_recv_comm.async_send_recv(send_dkv, recv_dkv)
                 cur_k, cur_v = send_kv_dkv[0][0], send_kv_dkv[0][1]
                 ka, va = cur_k[0], cur_v[0]
                 kv_list.append(send_kv_dkv[0])
             else:
                 recv_kv_dkv = torch.empty_like(send_kv_dkv)
-                send_recv_ops = flash_attn_p2p_communicate(rank, send_kv_dkv, send_dst,
-                                                           recv_kv_dkv, recv_src, cp_group,
-                                                           cp_group_for_send_recv_overlap)
+                send_recv_comm.async_send_recv(send_kv_dkv, recv_kv_dkv)
                 cur_k, cur_v = send_kv_dkv[0][0], send_kv_dkv[0][1]
                 ka, va = cur_k[0], cur_v[0]
                 kv_list.append(send_kv_dkv[0])
@@ -375,8 +334,7 @@ def attn_with_cp_for_ampipe_backward(ctx, attn_out, saved_tensor_list, dout, fa_
                 dv[0].copy_(cur_dv_a)
             else:
                 # wait until dKV is received from recv_src
-                for send_recv_op in send_recv_ops:
-                    send_recv_op.wait()
+                send_recv_comm.wait()
                 # only received dkv in the last loop
                 if i == cp_size - 1:
                     dkv = recv_dkv
@@ -392,13 +350,10 @@ def attn_with_cp_for_ampipe_backward(ctx, attn_out, saved_tensor_list, dout, fa_
         dkv_list.append(dv[0])
         dout_list.append(dout)
     else:
-        send_dst = ctx.next_rank
-        recv_src = ctx.prev_rank
+        send_recv_comm = RingP2P(cp_global_ranks, cp_group, cp_group_for_send_recv_overlap)
         kv_list.reverse()
 
-        dq, dk, dv = None, None, None
         recv_dkv = None
-        send_recv_ops = []
         # [s, b, h]
         qa, ka, va = [x[0] for x in [q, k, v]]
         qb, kb, vb = [x[1] for x in [q, k, v]]
@@ -424,8 +379,7 @@ def attn_with_cp_for_ampipe_backward(ctx, attn_out, saved_tensor_list, dout, fa_
                     send_dkv = dkv
 
                 recv_dkv = torch.empty_like(send_dkv)
-                send_recv_ops = flash_attn_p2p_communicate(rank, send_dkv, send_dst,
-                                                           recv_dkv, recv_src, cp_group, cp_group_for_send_recv_overlap)
+                send_recv_comm.async_send_recv(send_dkv, recv_dkv)
 
             if i == cp_size - 1:
                 cur_kv = kv_list[0]
@@ -473,8 +427,7 @@ def attn_with_cp_for_ampipe_backward(ctx, attn_out, saved_tensor_list, dout, fa_
                     dq_a, dk_a, dv_a = cur_dq_a, cur_dk_a, cur_dv_a
             else:
                 # wait until dKV is received from recv_src
-                for send_recv_op in send_recv_ops:
-                    send_recv_op.wait()
+                send_recv_comm.wait()
 
                 if i < cp_size - 1:
                     if rank == 0:
