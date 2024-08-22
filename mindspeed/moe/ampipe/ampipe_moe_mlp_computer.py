@@ -49,7 +49,7 @@ class MoEMLPComputer:
             second_a2a_event = []
             pipe_expert_args = [mlp_inputs, ep_size, num_local_experts, sequence_parallel, multi_data, multi_stream,
                                 a2a_events, second_a2a_event, ag_events, hidden_size, self.save_tensor_list]
-            mlp_outputs = PipeExpert.forward(mlp_save_for_bwd_args, self.moe.expert, *pipe_expert_args)
+            mlp_outputs = PipeExpert.forward(mlp_save_for_bwd_args, self.moe.moe_layer.experts, *pipe_expert_args)
             ctx.mlp_args = mlp_save_for_bwd_args
         elif global_args.ampipe_tp_sp_comm_overlap:
             mlp_outputs = self.ampipe_experts_forward(mlp_save_for_bwd_args, mlp_inputs, a2a_inputs)
@@ -62,7 +62,7 @@ class MoEMLPComputer:
                 detach_expert_input = expert_input.detach()
                 detach_expert_input.requires_grad = True
                 with torch.enable_grad():
-                    expert_output = self.moe.expert(detach_expert_input)
+                    expert_output = self.moe.moe_layer.experts(detach_expert_input)
                     self.save_tensor_list.extend([detach_expert_input, expert_output])
                 mlp_inputs[c] = expert_output
                 a2a_tokens, a2a_handle = async_all_to_all(expert_output)
@@ -141,7 +141,7 @@ class MoEMLPComputer:
                 detach_input_chunk.requires_grad = True
                 before_exp_input_list.append(detach_input_chunk)
                 with torch.enable_grad():
-                    out = self.moe.expert.experts[i](detach_input_chunk)
+                    out = self.moe.moe_layer.experts.experts[i](detach_input_chunk)
                 if isinstance(out, tuple):
                     if cur_index > 0:
                         out, last_chunk_out = out[0], out[-1]

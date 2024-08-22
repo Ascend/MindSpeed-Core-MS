@@ -72,27 +72,24 @@ class MoE(torch.nn.Module):
         self.ep_group = ep_group
         self.hidden_size = hidden_size
 
-        self.config = Config(hidden_size=hidden_size,
-                             num_experts=num_experts,
-                             ep_size=ep_size,
-                             topk=k,
-                             capacity_factor=capacity_factor,
-                             eval_capacity_factor=eval_capacity_factor,
-                             min_capacity=min_capacity,
-                             aux_loss_coef=aux_loss_coef,
-                             z_loss_coef=z_loss_coef,
-                             noisy_gate_policy=noisy_gate_policy,
-                             no_drop=no_drop,
-                             dynamic_padding=dynamic_padding,
-                             use_sinkhorn=use_sinkhorn,
-                             sequence_parallel=sequence_parallel,
-                             reshape_index_select=reshape_index_select
-                             )
-
-        self.gate = TopKGate(self.config)
-        self.expert = Experts(expert, self.num_local_experts)
-        self.moe_layer = MOELayer(self.gate,
-                                  self.expert,
+        config = Config(hidden_size=hidden_size,
+                        num_experts=num_experts,
+                        ep_size=ep_size,
+                        topk=k,
+                        capacity_factor=capacity_factor,
+                        eval_capacity_factor=eval_capacity_factor,
+                        min_capacity=min_capacity,
+                        aux_loss_coef=aux_loss_coef,
+                        z_loss_coef=z_loss_coef,
+                        noisy_gate_policy=noisy_gate_policy,
+                        no_drop=no_drop,
+                        dynamic_padding=dynamic_padding,
+                        use_sinkhorn=use_sinkhorn,
+                        sequence_parallel=sequence_parallel,
+                        reshape_index_select=reshape_index_select
+                        )
+        self.moe_layer = MOELayer(TopKGate(config),
+                                  Experts(expert, num_local_experts),
                                   ep_size,
                                   num_local_experts,
                                   pipe_experts=pipe_experts,

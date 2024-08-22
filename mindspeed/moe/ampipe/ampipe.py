@@ -125,7 +125,7 @@ class AttMoEPipe(torch.autograd.Function):
         # token反重排
         post_mlp_fwd_args = PostMLPArgs(ln_seq_len // pipe_degree, a2a_events,
                                         moe_output_list, weights_list, token_ec_idx_list)
-        ctx.post_mlp_computer = post_mlp_computer = MoEPostMLPComputer(moe, post_mlp_tensor_list, post_mlp_fwd_args)
+        ctx.post_mlp_computer = post_mlp_computer = MoEPostMLPComputer(post_mlp_tensor_list, post_mlp_fwd_args)
         moe_output_list = post_mlp_computer.forward(ctx, mlp_outputs)
         AttMoEPipe.save_tensors_for_bwd(ctx, [flash_tensor_list, dense_tensor_list, bdal_tensor_list,
                                               gate_tensor_list, mlp_tensor_list, post_mlp_tensor_list])

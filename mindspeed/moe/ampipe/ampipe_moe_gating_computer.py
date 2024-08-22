@@ -29,13 +29,13 @@ class MoEGatingComputer:
             reshaped_input = detach_logits.reshape(-1, d_model)
             global_args = get_args()
             if not global_args.enable_token_rearrange_opt:
-                l_aux, combine_weights, dispatch_mask = self.moe.gate(reshaped_input)
+                l_aux, combine_weights, dispatch_mask = self.moe.moe_layer.gate(reshaped_input)
                 dispatch_mask = dispatch_mask.type_as(logits)
                 dispatched_input = einsum("sec,sm->ecm", dispatch_mask, reshaped_input)
                 self.gate_tensor_list.append(detach_logits)
                 return dispatched_input, l_aux, combine_weights
             else:
-                l_aux, (token_ec_idx, token_weights, expert_select_token_idx) = self.moe.gate(reshaped_input)
+                l_aux, (token_ec_idx, token_weights, expert_select_token_idx) = self.moe.moe_layer.gate(reshaped_input)
                 org_dtype = reshaped_input.dtype
                 if org_dtype == torch.bfloat16:  # 规避算子性能劣化问题, 解决后可删除
                     rearranged_input = torch.index_select(

@@ -13,11 +13,10 @@ from mindspeed.moe.utils import einsum
 
 
 class MoEPostMLPComputer:
-    def __init__(self, moe, save_tensor_list, fwd_args):
+    def __init__(self, save_tensor_list, fwd_args):
         super().__init__()
         self.fwd_args = fwd_args
         self.save_tensor_list = save_tensor_list
-        self.moe = moe
 
     def forward(self, ctx, mlp_outputs):
         global_args = get_args()
