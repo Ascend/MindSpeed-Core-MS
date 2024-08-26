@@ -3,6 +3,7 @@
 import torch
 from megatron.core.parallel_state import get_tensor_and_expert_parallel_group
 from megatron.core.tensor_parallel.mappings import _reduce_scatter_along_first_dim_moe
+from megatron.core.transformer.moe.moe_utils import topk_softmax_with_capacity
 
 
 def _gather_along_first_dim_moe_async(input_, async_op):
@@ -41,13 +42,19 @@ def gather_from_sequence_parallel_region_to_moe_async(input_):
 
 
 def aux_loss_load_balancing(self, logits: torch.Tensor):
-    top_logits, indices = torch.topk(logits, k=self.topk, dim=1)
+    probs, indices, tokens_per_expert = topk_softmax_with_capacity(
+        logits,
+        self.topk,
+        capacity_factor=self.config.moe_expert_capacity_factor,
+        pad_to_capacity=self.config.moe_pad_expert_input_to_capacity,
+        drop_policy=self.config.moe_token_drop_policy,
+    )
+
     if self.config.sequence_parallel or (self.config.expert_model_parallel_size > 1):
         with torch.no_grad():
             global_indices, gi_handle = gather_from_sequence_parallel_region_to_moe_async(indices)
 
-    scores = torch.softmax(top_logits, dim=-1, dtype=torch.float32).type_as(logits)
     # Apply load balancing loss
-    probs = torch.softmax(logits, dim=-1, dtype=torch.float32)
-    scores = self.apply_load_balancing_loss(probs, indices, activation=scores)
-    return scores, (global_indices, gi_handle)
+    scores = torch.softmax(logits, dim=-1, dtype=torch.float32)
+    probs = self.apply_load_balancing_loss(scores, tokens_per_expert, activation=probs)
+    return probs, (global_indices, gi_handle)

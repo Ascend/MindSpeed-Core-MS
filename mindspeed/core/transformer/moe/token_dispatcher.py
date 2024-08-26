@@ -13,7 +13,9 @@ def allgather_token_permutation(self, hidden_states: torch.Tensor, max_prob: tor
     hidden_states = hidden_states.view(-1, self.hidden_shape[-1])
 
     # Permute the tokens across the expert parallel devices.
-    if self.config.sequence_parallel or (self.config.expert_model_parallel_size > 1):
+    if (self.config.tensor_model_parallel_size > 1) or (
+        self.config.expert_model_parallel_size > 1
+    ):
         # [S*B/TP, H] -> [S*B, H]
         with torch.no_grad():
             global_indices, gi_handle = max_ind if isinstance(max_ind, tuple) else gather_from_sequence_parallel_region_to_moe_async(max_ind)
@@ -118,7 +120,9 @@ def allgather_token_unpermutation(self, hidden_states: torch.Tensor, bias: torch
     output_bias_total = unpermuted_local_bias
 
     # Unpermute the tokens across expert parallel devices.
-    if self.config.sequence_parallel or (self.config.expert_model_parallel_size > 1):
+    if (self.config.tensor_model_parallel_size > 1) or (
+            self.config.expert_model_parallel_size > 1
+    ):
         assert (
                 self.global_local_map is not None
         ), "global_local_map is necessary for `AllGather`."

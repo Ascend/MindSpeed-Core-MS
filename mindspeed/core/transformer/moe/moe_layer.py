@@ -33,8 +33,9 @@ def moe_adaptive_forward(self, hidden_states: torch.Tensor):
         return output, mlp_bias
    
     threshold = hidden_states.shape[0] * hidden_states.shape[1] * self.recompute_threshold
-    if self.moe_adaptive_recompute_activation and \
-        (self.token_dispatcher.all_tokens_per_expert is None or torch.max(self.token_dispatcher.all_tokens_per_expert) > threshold):
+    moe_adaptive_recompute_activation_bool = self.moe_adaptive_recompute_activation and \
+        (self.token_dispatcher.all_tokens_per_expert is None or torch.max(self.token_dispatcher.all_tokens_per_expert) > threshold)
+    if self.moe_layer_recompute or moe_adaptive_recompute_activation_bool:
         output, mlp_bias = tensor_parallel.checkpoint(custom_forward, False, hidden_states)
     else:
         output, mlp_bias = custom_forward(hidden_states)
