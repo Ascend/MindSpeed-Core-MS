@@ -125,6 +125,8 @@ def _add_cp_args(parser):
                        choices=['causal', 'general'], help='context parallel attention mask type')
     group.add_argument('--use-cp-send-recv-overlap', action='store_true',
                        help='use this flag to enable cp send-recv-overlap.')
+    group.add_argument("--use-fused-ring-attention-update", action='store_true',
+                       help="Use fused ring attention update.")
     return parser
 
 
