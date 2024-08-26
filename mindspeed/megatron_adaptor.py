@@ -160,7 +160,7 @@ def torch_adaptation(aspm):
         aspm.register_patch('math.lcm', lcm, create_dummy=True)
 
 
-def mcore_models_adaptation(aspm):
+def mcore_models_adaptation(aspm, mindspeed_args):
     import megatron.core
     megatron.core.jit.jit_fuser = dummy_jit
 
@@ -182,6 +182,11 @@ def mcore_models_adaptation(aspm):
                         get_gpt_layer_local_spec)
     aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_local_spec',
                         get_gpt_layer_local_spec_wrapper)
+
+    if mindspeed_args.noop_layers:
+        from .core.transformer.transformer_block import _build_layers
+        from megatron.core.transformer.transformer_block import TransformerBlock
+        TransformerBlock._build_layers = _build_layers
 
 
 def mcore_transformer_adaptation(aspm):
@@ -619,7 +624,7 @@ def exe_adaptation():
     torch_adaptation(aspm)
     aspm.apply_patches()
 
-    mcore_models_adaptation(aspm)
+    mcore_models_adaptation(aspm, mindspeed_args)
     mcore_parallel_state_adaptation(aspm)
     mcore_fusions_adaptation(aspm)
     mcore_optimizer_adapation(aspm)
