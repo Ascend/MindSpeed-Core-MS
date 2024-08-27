@@ -567,6 +567,7 @@ def validate_args_wrapper(validate_args):
         if args.ampipe_degree > 1:
             assert args.use_flash_attn, "ampipe only supports flash attention, please enable '--use-flash-attn'."
             assert args.num_experts is not None, "ampipe only supports MoE model."
+            assert args.expert_model_parallel_size > 1, "ampipe only supports expert_model_parallel_size > 1"
             assert args.moe_model_type == 'deepspeed_moe', "ampipe only supports deepspeed_moe."
             assert not args.use_ascend_mc2, "ampipe does't supports ascend mc2 for now."
             assert not args.add_bias_linear, "ampipe does't supports bias linear for now."
@@ -593,6 +594,8 @@ def validate_args_wrapper(validate_args):
                     print("[WARNING] if pipe_experts_multi_data isn't divisible by ampipe_degree "
                           "--use-pipe-experts will be turned off.")
                     args.use_pipe_experts = False
+                    args.pipe_experts_multi_stream = False
+                    args.pipe_experts_multi_data = 1
 
         from megatron.training.arguments import _print_args
         _print_args('arguments', args, True)

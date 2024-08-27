@@ -114,6 +114,7 @@ class FlashAttentionComputer:
             grad_k = grad_k + d_k if grad_k is not None else d_k
             grad_v = grad_v + d_v if grad_v is not None else d_v
             grad_q.insert(0, d_q)
+            self.fa_bwd_args.grad_q, self.fa_bwd_args.grad_k, self.fa_bwd_args.grad_v = grad_q, grad_k, grad_v
         return grad_q, grad_k, grad_v
 
     def _optimize_attn_memory(self, k, v):
