@@ -3,6 +3,7 @@ import sys
 import argparse
 from functools import wraps
 import torch
+from torch.distributed import all_gather_into_tensor, reduce_scatter_tensor
 from torch_npu.contrib import transfer_to_npu
 from .arguments import process_args
 
@@ -155,6 +156,8 @@ def torch_adaptation(aspm):
     aspm.register_patch('torch.Tensor.type', type_wrapper)
     aspm.register_patch('torch.Tensor.view', ensure_contiguous_wrapper)
     aspm.register_patch('torch.Tensor.repeat_interleave', repeat_interleave)
+    aspm.register_patch('torch.distributed._all_gather_base', all_gather_into_tensor)
+    aspm.register_patch('torch.distributed._reduce_scatter_base', reduce_scatter_tensor)
     # lmc is supported python >=3.9
     if sys.version_info < (3, 9):
         aspm.register_patch('math.lcm', lcm, create_dummy=True)
