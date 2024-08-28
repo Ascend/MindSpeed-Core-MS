@@ -334,6 +334,8 @@ def core_transformer_config_from_args_wrapper(fn):
         config = fn(args)
         config.context_parallel_algo = args.context_parallel_algo
         config.batch_p2p_comm = False
+        if args.use_multiparameter_pipeline_model_parallel:
+            config.deallocate_pipeline_outputs = False
         return config
 
     return wrapper
