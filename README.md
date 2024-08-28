@@ -117,6 +117,7 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 | 【Prototype】Ascend MC2        | [link](docs/features/mc2.md)                              |
 | 【Prototype】alibi             | [link](docs/features/alibi.md)                            |
 | 【Prototype】PP自动并行            | [link](docs/features/automated-pipeline.md)               |
+| 【Prototype】Moe Token Permute and Unpermute 融合算子 | [link](docs/features/moe-token-permute-and-unpermute.md)|
 | 【Prototype】其他昇腾亲和优化          | 暂无                                                        |
 
 # 自定义算子
@@ -134,6 +135,8 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 | 【Prototype】npu_mm_all_reduce_add_rms_norm_ | [link](docs/ops/npu_mm_all_reduce_add_rms_norm_.md) |
 | 【Prototype】npu_grouped_mat_mul             | [link](docs/ops/gmm.md)  |
 | 【Prototype】npu_grouped_mat_mul_all_reduce  | [link](docs/ops/npu_grouped_mat_mul_all_reduce.md)  |
+| 【Prototype】npu_fused_moe_token_permute     | [link](docs/ops/npu_fused_moe_token_permute.md)     |
+| 【Prototype】npu_fused_moe_token_unpermute   | [link](docs/ops/npu_fused_moe_token_unpermute.md)    |
 | 【Prototype】npu_ring_attention_update  | [link](docs/ops/npu_ring_attention_update.md)  |
 
 # MindSpeed中采集Profile数据

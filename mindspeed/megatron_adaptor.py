@@ -504,6 +504,7 @@ def mcore_moe_adaptation(pm, args):
             pm.register_patch('megatron.core.transformer.moe.experts.SequentialMLP.forward', sequential_mlp_forward)
             pm.register_patch('megatron.core.transformer.moe.moe_utils.permute', permute)
             pm.register_patch('megatron.core.transformer.moe.moe_utils.unpermute', unpermute)
+
         else:
             from .core.transformer.moe.router import aux_loss_load_balancing
             from .core.transformer.moe.token_dispatcher import allgather_token_permutation, allgather_token_unpermutation
@@ -533,6 +534,12 @@ def mcore_moe_adaptation(pm, args):
     pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.assert_grouped_gemm_is_available',
                       assert_grouped_gemm_is_available)
     pm.register_patch('torch.cuda.get_device_capability', get_device_capability)
+    if hasattr(args, 'use_fused_moe_token_permute_and_unpermute') and args.use_fused_moe_token_permute_and_unpermute:
+        from mindspeed.ops.npu_moe_token_permute import npu_moe_token_permute
+        from mindspeed.ops.npu_moe_token_unpermute import npu_moe_token_unpermute
+        import megatron
+        megatron.core.transformer.moe.moe_utils.permute = npu_moe_token_permute
+        megatron.core.transformer.moe.moe_utils.unpermute = npu_moe_token_unpermute
 
 
 def deepspeed_moe_adaptation(pm, args):
