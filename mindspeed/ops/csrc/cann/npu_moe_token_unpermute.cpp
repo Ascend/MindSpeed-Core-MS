@@ -103,7 +103,7 @@ namespace {
         {
             at::AutoDispatchBelowADInplaceOrView guard;
             bool padded_mode_vale = padded_mode.value_or(false);
-            auto restore_shape_vale = restore_shape.value_or(at::IntArrayRef{});
+            auto restore_shape_vale = restore_shape.value_or(at::IntArrayRef{1});
             CheckMoeTokenUnpermuteForward(permuted_tokens, sorted_indices, probs, padded_mode_vale);
             int64_t topk = probs.has_value() ? probs.value().size(1) : DEFAULT_TOPK;
             // The sorted_indices actually implemented by the aclnn operator are different from the sorted_indices
@@ -113,10 +113,10 @@ namespace {
             int64_t num_unpermuted_tokens = sorted_indices.size(0) / topk;
             at::Tensor unpermuted_tokens = at::empty({num_unpermuted_tokens, permuted_tokens.size(-1)}, permuted_tokens.options());
             at::Tensor probs_value = probs.has_value() ? probs.value() : at::Tensor();
-            ACLNN_CMD(aclnnMoeTokenUnpermute, permuted_tokens, sorted_indices, probs_value, padded_mode_vale, unpermuted_tokens);
+            ACLNN_CMD(aclnnMoeTokenUnpermute, permuted_tokens, sorted_indices, probs_value, padded_mode_vale, restore_shape_vale, unpermuted_tokens);
             ctx->save_for_backward({permuted_tokens, sorted_indices, probs_value});
             ctx->saved_data["padded_mode"] = padded_mode_vale;
-            ctx->saved_data["restore_shape"] = restore_shape_vale;
+            ctx->saved_data["restore_shape"] = restore_shape;
 
             return unpermuted_tokens;
         }
@@ -132,15 +132,19 @@ namespace {
             auto probs = saved_tensors[2];
             bool padded_mode = ctx->saved_data["padded_mode"].toBool();
             auto restore_shape = ctx->saved_data["restore_shape"];
+            at::IntArrayRef restore_shape_vale{1, 1};
 
             at::Tensor grad_unpermuted_tokens = grad_outputs[0];
             CheckMoeTokenUnpermuteBackward(grad_unpermuted_tokens, sorted_indices, probs);
 
             at::Tensor grad_permuted_tokens = at::empty(permuted_tokens.sizes(), permuted_tokens.options());
-            at::Tensor grad_probs = probs.defined() ? at::empty(probs.sizes(), probs.options()) : at::Tensor();
-            ACLNN_CMD(aclnnMoeTokenUnpermuteGrad, permuted_tokens, grad_unpermuted_tokens, sorted_indices, probs, padded_mode, restore_shape, grad_permuted_tokens, grad_probs);
-
-            return {grad_permuted_tokens, at::Tensor(), grad_probs, at::Tensor(), at::Tensor()};
+            at::Tensor grad_probs = probs.defined() ? at::empty(probs.sizes(), probs.options()) : at::empty({0}, permuted_tokens.options());
+            ACLNN_CMD(aclnnMoeTokenUnpermuteGrad, permuted_tokens, grad_unpermuted_tokens, sorted_indices, probs, padded_mode, restore_shape_vale, grad_permuted_tokens, grad_probs);
+            if (probs.defined()) {
+                return {grad_permuted_tokens, at::Tensor(), grad_probs, at::Tensor(), at::Tensor()};
+            } else {
+                return {grad_permuted_tokens, at::Tensor(), at::Tensor(), at::Tensor(), at::Tensor()};
+            }
         }
     };
 } // namespace

@@ -211,12 +211,14 @@ def mcore_transformer_adaptation(aspm):
 
 def mcore_parallel_state_adaptation(aspm):
     import megatron.core
-    from .core.parallel_state import initialize_model_parallel_wrapper
+    from .core.parallel_state import initialize_model_parallel_wrapper, initialize_model_parallel
     from .core.parallel_state import destroy_model_parallel_wrapper
     from .core.memory.auto_pipeline.autopipeline_solver import destroy_model_parallel_profiling_wrapper
     from .core.parallel_state import get_context_parallel_group_for_send_recv_overlap
     aspm.register_patch('megatron.core.parallel_state.initialize_model_parallel',
                         initialize_model_parallel_wrapper)
+    aspm.register_patch('megatron.core.parallel_state.initialize_model_parallel',
+                        initialize_model_parallel)
     aspm.register_patch('megatron.core.parallel_state.destroy_model_parallel',
                         destroy_model_parallel_wrapper)
     aspm.register_patch('megatron.core.parallel_state.destroy_model_parallel',
