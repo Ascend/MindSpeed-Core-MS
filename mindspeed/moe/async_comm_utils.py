@@ -101,6 +101,8 @@ def async_all_gather(input_, a2a_event=None, is_use_global_memory_buffer=False, 
     dim_size = list(input_.size())
     new_dim_size = dim_size[0] * world_size
     dim_size[0] = new_dim_size
+    if is_bwd:
+        is_save_input = True
 
     if is_use_global_memory_buffer:
         ag_out = get_global_memory_buffer().get_tensor(dim_size, input_.dtype, "mpu")
