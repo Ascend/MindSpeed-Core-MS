@@ -1,21 +1,23 @@
 #!/bin/bash
 
-source "tests_extend/system_tests/env_npu.sh"
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+source "tests_extend/system_tests/env_npu.sh"
 
 # Change for multinode config
 NPUS_PER_NODE=8
-MASTER_ADDR=localhost
-MASTER_PORT=6001
-NNODES=1
-NODE_RANK=0
+MASTER_ADDR=<master_ip_address>
+MASTER_PORT=6000
+NNODES=8
+NODE_RANK=<local_rank>
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 CKPT_DIR=./ckpt_llama
 DATA_PATH="/home/dataset/llama2/alpaca_text_document"
 TOKENIZER_MODEL="/home/dataset/model/llama-2-7b-hf/tokenizer.model"
+
 TP=8
-PP=1
+PP=2
+CP=4
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
@@ -26,62 +28,62 @@ DISTRIBUTED_ARGS="
 "
 
 GPT_ARGS="
+    --reuse-fp32-param \
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
-    --no-overlap-p2p-communication \
-    --no-delay-grad-reduce \
-    --delay-param-gather \
-    --no-scatter-gather-tensors-in-pipeline \
+    --context-parallel-size ${CP} \
+    --context-parallel-algo megatron_cp_algo \
+    --use-fused-rotary-pos-emb \
+    --use-fused-swiglu \
+    --use-fused-rmsnorm \
+    --use-cp-send-recv-overlap \
+    --log-throughput \
+    --use-ascend-mc2 \
+    --recompute-activation-function \
+    --swap-attention \
+    --recompute-num-layers 37 \
+    --overlap-grad-reduce \
+    --overlap-param-gather \
+    --num-layers-per-virtual-pipeline-stage 2 \
     --sequence-parallel \
-    --num-layers 32 \
-    --hidden-size 2560 \
-    --ffn-hidden-size 6832 \
-    --num-attention-heads 32 \
+    --use-distributed-optimizer \
+    --num-layers 80 \
+    --hidden-size 8192 \
+    --ffn-hidden-size 28672 \
+    --num-attention-heads 64 \
     --tokenizer-type Llama2Tokenizer \
     --tokenizer-model ${TOKENIZER_MODEL} \
-    --no-load-optim \
-    --no-load-rng \
-    --seq-length 8192 \
-    --max-position-embeddings 8192 \
-    --micro-batch-size 2 \
-    --global-batch-size 6 \
+    --seq-length 131072 \
+    --max-position-embeddings 131072 \
+    --micro-batch-size 1 \
+    --global-batch-size 4 \
     --make-vocab-size-divisible-by 1 \
-    --lr 0.375e-5 \
-    --train-iters 1000 \
+    --lr 1.0e-6 \
+    --train-iters 5000 \
     --lr-decay-style cosine \
     --untie-embeddings-and-output-weights \
-    --disable-bias-linear \
     --attention-dropout 0.0 \
     --init-method-std 0.01 \
     --hidden-dropout 0.0 \
-    --use-rotary-position-embeddings \
+    --position-embedding-type rope \
     --normalization RMSNorm \
-    --use-fused-rmsnorm \
     --swiglu \
-    --no-position-embedding \
+    --use-flash-attn \
     --no-masked-softmax-fusion \
     --attention-softmax-in-fp32 \
-    --min-lr 0.375e-6 \
+    --min-lr 1.0e-7 \
     --weight-decay 0.1 \
-    --lr-warmup-fraction 0.01 \
     --clip-grad 1.0 \
     --adam-beta1 0.9 \
+    --initial-loss-scale 4096.0 \
     --adam-beta2 0.95 \
-    --adam-eps 1e-8 \
-    --norm-epsilon 1e-5 \
-    --rotary-percent 1 \
-    --hysteresis 2 \
-    --initial-loss-scale 65536 \
-    --min-loss-scale 1
-    --loss-scale-window 1000 \
-    --use-flash-attn \
+    --adam-eps 1e-5 \
     --no-gradient-accumulation-fusion \
-    --lr-decay-iters 320000 \
-    --init-method-std 0.006 \
-    --pre-tockens 65536 \
-    --next-tockens 0 \
-    --shape-order SBH \
-    --fp16
+    --disable-bias-linear \
+    --group-query-attention \
+    --num-query-groups 8 \
+    --lr-warmup-fraction 0.01 \
+    --bf16
 "
 
 DATA_ARGS="
@@ -102,9 +104,5 @@ torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \
     $OUTPUT_ARGS \
     --distributed-backend nccl \
     --save $CKPT_DIR \
-    --load $CKPT_DIR \
-    --finetune \
-    --exit-on-missing-checkpoint \
-    --use-checkpoint-args
 
 set +x
