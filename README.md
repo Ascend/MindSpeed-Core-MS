@@ -66,14 +66,16 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 2. 在 Megatron-LM 目录下修改`pretrain_gpt.py`文件，在model_provider函数中删除`assert(args.context_parallel_size == 1), "Context parallelism is only supported with Megatron Core!"`。
     ```diff
     else:
-    -   assert(args.context_parallel_size == 1), "Context parallelism is only supported with Megatron Core!"
+        assert (
+            args.context_parallel_size == 1
+        ), "Context parallelism is only supported with Megatron Core!"
 
-        model = megatron.model.GPTModel(
+        model = megatron.legacy.model.GPTModel(
             config,
             num_tokentypes=0,
             parallel_output=True,
             pre_process=pre_process,
-            post_process=post_process
+            post_process=post_process,
         )
     ```
 
