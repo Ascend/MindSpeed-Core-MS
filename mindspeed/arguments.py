@@ -42,6 +42,14 @@ def process_args(parser):
     parser = _add_coc_args(parser)
     parser = _add_profile_args(parser)
     parser = _add_auto_parallel_args(parser)
+    parser = _add_deepseek_args(parser)
+
+    return parser
+
+
+def _add_deepseek_args(parser):
+    group = parser.add_argument_group(title='deepseek')
+    group.add_argument('--n-shared-experts', type=int, default=None)
 
     return parser
 
