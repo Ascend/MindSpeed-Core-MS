@@ -3,6 +3,7 @@ import re
 import torch
 import torch_npu
 from megatron.training import print_rank_0
+from megatron.training import get_args
 DEBUG_PRINT = True
 
 
@@ -108,6 +109,7 @@ class SwapPrefetch:
         self.interval = interval
         self.slice_tensor_storage_ptr = {}
         self.slice_tensor_storage_ptr_list = []
+        self.eval_end_flag = False
  
     @staticmethod
     def no_swap_tensor(ori_tensor):
@@ -125,6 +127,16 @@ class SwapPrefetch:
         return False
  
     def pack_hook(self, ori_tensor):
+        args = get_args()
+        if args.eval_interval:
+            if args.curr_iteration % args.eval_interval != 0:
+                self.eval_end_flag = False
+            if args.curr_iteration and args.curr_iteration % args.eval_interval == 0 and not self.eval_end_flag:
+                self.prefetch_data_ptr_list = []
+                self.prefetch_list = []
+                self.slice_tensor_storage_ptr_list = []
+                self.eval_end_flag = True
+
         if self.no_swap_tensor(ori_tensor):
             return ori_tensor
         swap_tensor = SwapTensor(ori_tensor, self.layer_name)
