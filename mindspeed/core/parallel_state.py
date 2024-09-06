@@ -49,6 +49,7 @@ _TENSOR_MODEL_PARALLEL_WORLD_SIZE_FOR_ND2_DIM2 = None
 
 _TENSOR_AND_CONTEXT_PARALLEL_GROUP = None
 _TENSOR_AND_CONTEXT_PARALLEL_GLOBAL_RANKS = None
+_GROBAL_PROCESS_GROUP_GLOO = None
 
 
 def initialize_model_parallel_wrapper(initialize_model_parallel):
@@ -68,6 +69,11 @@ def initialize_model_parallel_wrapper(initialize_model_parallel):
         from megatron.training.utils import print_rank_0
         from megatron.training import get_args
         args = get_args()
+
+        if args.op_cal_tflops:
+            global _GROBAL_PROCESS_GROUP_GLOO
+            ranks = range(0, args.world_size, 1)
+            _GROBAL_PROCESS_GROUP_GLOO = torch.distributed.new_group(ranks, backend='gloo')
 
         if virtual_pipeline_model_parallel_size is not None:
             megatron.core.parallel_state._VIRTUAL_PIPELINE_MODEL_PARALLEL_RANK = 0
@@ -230,6 +236,11 @@ def initialize_model_parallel_wrapper(initialize_model_parallel):
         )
 
     return wrapper
+
+
+def get_global_process_group_gloo():
+    global _GROBAL_PROCESS_GROUP_GLOO
+    return _GROBAL_PROCESS_GROUP_GLOO
 
 
 def get_ring_group_for_intra_window():
@@ -927,6 +938,9 @@ def destroy_model_parallel_wrapper(destroy_model_parallel):
         global _TENSOR_AND_CONTEXT_PARALLEL_GLOBAL_RANKS
         _TENSOR_AND_CONTEXT_PARALLEL_GROUP = None
         _TENSOR_AND_CONTEXT_PARALLEL_GLOBAL_RANKS = None
+
+        global _GROBAL_PROCESS_GROUP_GLOO
+        _GROBAL_PROCESS_GROUP_GLOO = None
 
     return wrapper
 

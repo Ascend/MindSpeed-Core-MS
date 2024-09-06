@@ -407,8 +407,9 @@ def legacy_model_transformer(aspm):
                         parallel_transformer_layer_init_wrapper)
 
 
-def megatron_training_adaptation(aspm):
+def megatron_training_adaptation(aspm, mindspeed_args):
     from .core.performance.auto_pipeline_perf.global_vars import get_num_microbatches_wrapper
+    from .core.training import training_log
     from .initialize import _compile_dependencies, set_jit_fusion_options_wrapper
     from .utils import get_batch_on_this_cp_rank, get_batch_on_this_tp_rank
     from .training import pretrain
@@ -429,6 +430,9 @@ def megatron_training_adaptation(aspm):
     aspm.register_patch('megatron.training.initialize._compile_dependencies', _compile_dependencies)
     aspm.register_patch('megatron.training.utils.get_batch_on_this_cp_rank', get_batch_on_this_cp_rank)
     aspm.register_patch('megatron.training.utils.get_batch_on_this_tp_rank', get_batch_on_this_tp_rank)
+    if mindspeed_args.op_cal_tflops:
+        aspm.register_patch('megatron.training.training.training_log', training_log)
+
     aspm.register_patch('megatron.training.arguments.parse_args', parse_args_wrapper)
     aspm.register_patch('megatron.training.arguments.validate_args', validate_args_wrapper)
     aspm.register_patch('megatron.training.arguments._print_args', print_args_wrapper)
@@ -646,7 +650,7 @@ def exe_adaptation():
     legacy_model_fusions_adaptation(aspm)
     legacy_model_rms_norm_adaptation(aspm)
 
-    megatron_training_adaptation(aspm)
+    megatron_training_adaptation(aspm, mindspeed_args)
     megatron_training_ema_adaptation(aspm, mindspeed_args)
     memory_fragmentation_adaptation(aspm, mindspeed_args)
     coc_adaptation(aspm, mindspeed_args)

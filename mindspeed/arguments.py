@@ -249,6 +249,8 @@ def _add_training_args(parser):
                             'AMPipe, greater than 1 means enable this feature.')
     group.add_argument('--ampipe-tp-sp-comm-overlap', action='store_true', default=False,
                        help='enable computation and tp or sp communication overlap in ampipe')
+    group.add_argument('--op-cal-tflops', action='store_true', default=False,
+                       help='use for cal mfu and hfu')
     return parser
 
 

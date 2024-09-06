@@ -18,6 +18,7 @@
 #include <torch_npu/csrc/core/npu/NPUFormat.h>
 #include <torch_npu/csrc/include/ops.h>
 
+#include "../flopcounter/FlopCounter.h"
 #include "inc/aclnn_common.h"
 
 using npu_preparation = at_npu::native::OpPreparation;
@@ -108,7 +109,9 @@ std::vector<at::Tensor> npu_gmm(const std::vector<at::Tensor>& x,
     auto antiquant_offset_real = at::TensorList();
     ACLNN_CMD(aclnnGroupedMatmulV2, x_, weight_, bias_, scale_real, offset_real, antiquant_scale_real,
               antiquant_offset_real, group_list_real, split_item_value, group_type_value, result);
-
+    #ifdef FLOP_COUNT
+    FLOP_COUNT(FlopCounter::gmm_flop, x_, weight_, group_list, group_type_value);
+    #endif
     return y;
 }
 

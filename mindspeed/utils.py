@@ -2,13 +2,15 @@
 # Copyright (c) 2024, Huawei Technologies Co., Ltd.  All rights reserved.
 
 import functools
-
+import re
 import torch
 from megatron.core import mpu
+from megatron.training.utils import is_last_rank
 from mindspeed.core.parallel_state import (get_context_parallel_for_hybrid_ulysses_world_size,
                                              get_context_parallel_for_hybrid_ulysses_rank,
                                              get_context_parallel_for_hybrid_ring_world_size,
                                              get_context_parallel_for_hybrid_ring_rank)
+from megatron.training.global_vars import get_args
 
 _ACTUAL_SEQ_LEN = None
 _POSITION_IDS = None
@@ -43,6 +45,44 @@ def compute_actual_seq_len(seq):
 def print_rank_0_once(message):
     if torch.distributed.is_initialized():
         if torch.distributed.get_rank() == 0:
+            print(message, flush=True)
+    else:
+        print(message, flush=True)
+
+
+def print_rank_last_flops(message):
+    args = get_args()
+    if args.op_cal_tflops and 'throughput per GPU (TFLOPS/s/GPU)' in message:
+        from mindspeed.core.parallel_state import get_global_process_group_gloo
+        from mindspeed.core.training import get_count
+
+        # get every node tfops info
+        counts_0, counts_1 = get_count()
+
+        counts_0_tensor = torch.tensor([counts_0])
+        counts_1_tensor = torch.tensor([counts_1])
+
+        gloo_group = get_global_process_group_gloo()
+        torch.distributed.all_reduce(
+            counts_0_tensor, op=torch.distributed.ReduceOp.SUM, group=gloo_group
+        )
+        torch.distributed.all_reduce(
+            counts_1_tensor, op=torch.distributed.ReduceOp.SUM, group=gloo_group
+        )
+
+        mfu = counts_0_tensor.item() / (10 ** 12 * elapsed_time_per_iteration * args.world_size)
+        hfu = counts_1_tensor.item() / (10 ** 12 * elapsed_time_per_iteration * args.world_size)
+
+        log_string = f' actual throughput per NPU (TFLOP/s/NPU): {mfu:.1f} |'
+        log_string += f' actual throughput per NPU with recompute (TFLOP/s/NPU): {hfu:.1f} |'
+
+        pattern = r'throughput per GPU \(TFOPS/s/GPU\)'
+        message = re.sub(pattern, 'theoretical throughput per NPU (TFLOP/s/NPU)', message)
+        pattern_place = r'(theoretical throughput per NPU \(TFLOP/s/NPU\))(.*?)\|'
+        message = re.sub(pattern_place, log_string, message)
+
+    if torch.distributed.is_initialized():
+        if is_last_rank():
             print(message, flush=True)
     else:
         print(message, flush=True)

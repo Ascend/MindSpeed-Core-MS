@@ -121,6 +121,7 @@ MindSpeed 是针对华为昇腾设备的大模型加速库。
 | 【Prototype】alibi             | [link](docs/features/alibi.md)                            |
 | 【Prototype】PP自动并行            | [link](docs/features/automated-pipeline.md)               |
 | 【Prototype】Moe Token Permute and Unpermute 融合算子 | [link](docs/features/moe-token-permute-and-unpermute.md)|
+| 【Prototype】TFOPS计算                              | [link](docs/features/ops_flops_cal.md)                    |
 | 【Prototype】其他昇腾亲和优化          | 暂无                                                        |
 
 # 自定义算子
