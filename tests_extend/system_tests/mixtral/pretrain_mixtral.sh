@@ -73,7 +73,7 @@ GPT_ARGS="
     --num-attention-heads 32 \
     --group-query-attention \
     --num-query-groups 8 \
-    --tokenizer-type PretrainedFromHF \
+    --tokenizer-type Llama2Tokenizer \
     --tokenizer-name-or-path ${TOKENIZER_MODEL} \
     --seq-length 4096 \
     --max-position-embeddings 32768 \
