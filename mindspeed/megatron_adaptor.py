@@ -510,11 +510,11 @@ def mcore_moe_adaptation(pm, args):
         else:
             from .core.transformer.moe.router import aux_loss_load_balancing
             from .core.transformer.moe.token_dispatcher import allgather_token_permutation, allgather_token_unpermutation
-            from .core.transformer.moe.moe_layer import moe_layer_init_wrapper
             pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_permutation', allgather_token_permutation)
             pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_unpermutation', allgather_token_unpermutation)
             pm.register_patch('megatron.core.transformer.moe.router.TopKRouter.aux_loss_load_balancing', aux_loss_load_balancing)
-            pm.register_patch('megatron.core.transformer.moe.moe_layer.MoELayer.__init__', moe_layer_init_wrapper)
+        from .core.transformer.moe.moe_layer import moe_layer_init_wrapper
+        pm.register_patch('megatron.core.transformer.moe.moe_layer.MoELayer.__init__', moe_layer_init_wrapper)
 
     from .core.transformer.moe.experts import groupedmlp_init_wrapper, groupedmlp_forward_wrapper
     pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.__init__', groupedmlp_init_wrapper)
