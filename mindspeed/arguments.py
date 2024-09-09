@@ -3,7 +3,6 @@
 import os
 from functools import wraps
 import argparse
-import os
 
 
 def extra_args_provider_decorator(extra_args_provider):
@@ -527,6 +526,9 @@ def validate_args_wrapper(validate_args):
             if args.optimize_recomp_communication_level > 0:
                 print("[WARNING] disable optimize recomp communication level when enabling automated pipeline")
                 args.optimize_recomp_communication_level = 0
+            if args.noop_layers:
+                print("[WARNING] disable noop_layers when enabling automated pipeline")
+                args.noop_layers = None
         if args.automated_pipeline_perf:
             if args.automated_pipeline:
                 print("[WARNING] disable automated pipeline when enabling automated pipeline performance version")
@@ -573,8 +575,8 @@ def validate_args_wrapper(validate_args):
                 args.recompute_num_layers = args.num_layers // args.pipeline_model_parallel_size
             else:
                 args.recompute_num_layers = args.num_layers_per_virtual_pipeline_stage
-        if args.noop_layers:
-            args.noop_layers = set([int(x) for x in args.noop_layers.split(',')])
+        if isinstance(args.noop_layers, str):
+            args.noop_layers = {int(x) for x in args.noop_layers.split(',') if 0 <= int(x) < args.num_layers}
 
         if args.ampipe_degree > 1:
             assert args.use_flash_attn, "ampipe only supports flash attention, please enable '--use-flash-attn'."

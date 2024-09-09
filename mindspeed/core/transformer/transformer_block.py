@@ -169,9 +169,9 @@ def _build_layers(self):
     args = get_args()
 
     def build_layer(layer_spec, layer_number):
-        noop_layers = args.noop_layers
         global_layer_number = _get_layer_offset(args) + layer_number
-        if global_layer_number - 1 in noop_layers:
+        if (hasattr(args, 'noop_layers') and isinstance(args.noop_layers, set)
+                and global_layer_number - 1 in args.noop_layers):
             return NoopTransformerLayer(global_layer_number)
         return build_module(layer_spec, config=self.config, layer_number=layer_number,)
 

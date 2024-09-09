@@ -181,10 +181,12 @@ def mcore_models_adaptation(aspm, mindspeed_args):
     aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_local_spec',
                         get_gpt_layer_local_spec_wrapper)
 
-    if mindspeed_args.noop_layers:
+    if not mindspeed_args.automated_pipeline and mindspeed_args.noop_layers:
         from .core.transformer.transformer_block import _build_layers
         from megatron.core.transformer.transformer_block import TransformerBlock
+        from mindspeed.training import num_floating_point_wrapper
         TransformerBlock._build_layers = _build_layers
+        aspm.register_patch('megatron.training.training.num_floating_point_operations', num_floating_point_wrapper)
 
 
 def mcore_transformer_adaptation(aspm):
@@ -369,19 +371,20 @@ def legacy_model_rms_norm_adaptation(aspm):
     aspm.register_patch('megatron.legacy.model.rms_norm.RMSNorm._norm', rms_norm_norm_wrapper)
 
 
-def legacy_model_transformer(aspm):
+def legacy_model_transformer(aspm, args):
     from .model.transformer import parallel_mlp_init_wrapper, flash_self_attention_forward, \
         flash_self_attention_init_wrapper, parallel_mlp_forward, parallel_transformer_init_wrapper, \
-        parallel_transformer_forward_wrapper
+        parallel_transformer_forward_wrapper, parallel_transformer_init
     from .model.transformer import core_attention_init_wrapper, core_attention_forward, parallel_attention_init_wrapper, \
         parallel_attention_forward
     from .core.transformer.transformer import parallel_transformer_layer_forward_wrapper, \
         parallel_transformer_checkpointed_forward_wrapper
     from .model.transformer import switch_mlp_init_wrapper, switch_mlp_forward_wrapper, \
         parallel_transformer_layer_init_wrapper
+    if not args.automated_pipeline and args.noop_layers:
+        aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.__init__', parallel_transformer_init)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.__init__',
                         parallel_transformer_init_wrapper)
-
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.forward',
                         parallel_transformer_forward_wrapper)
 
@@ -646,7 +649,7 @@ def exe_adaptation():
     mcore_transformer_adaptation(aspm)
 
     megatron_legacy_adaptation(aspm)
-    legacy_model_transformer(aspm)
+    legacy_model_transformer(aspm, mindspeed_args)
     legacy_model_fusions_adaptation(aspm)
     legacy_model_rms_norm_adaptation(aspm)
 
