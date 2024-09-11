@@ -327,7 +327,7 @@ int64_t FlopCounter::gmm_flop(const at::TensorList &x, const at::TensorList &wei
             const at::Tensor &x_ = x_non_const;
             at::Tensor w_non_const = at::empty(w_new_shape, at::kFloat);
             const at::Tensor &w_ = w_non_const;
-            total_flops += FlopCounter::bmm_flop(x_, w_);
+            total_flops += FlopCounter::mm_flop(x_, w_);
             before_i = after_i;
         }
     }
@@ -342,7 +342,7 @@ int64_t FlopCounter::gmm_flop(const at::TensorList &x, const at::TensorList &wei
             const at::Tensor &x_ = x_non_const;
             at::Tensor w_non_const = at::empty(w_new_shape, at::kFloat);
             const at::Tensor &w_ = w_non_const;
-            total_flops += FlopCounter::bmm_flop(x_, w_);
+            total_flops += FlopCounter::mm_flop(x_, w_);
             before_i = after_i;
         }
     }
