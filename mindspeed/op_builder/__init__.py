@@ -9,6 +9,7 @@ from .lcal_builder import LcalOpBuilder
 from .rms_norm_builder import RmsNormOpBuilder
 from .npu_grouped_mat_mul_all_reduce_builder import GroupedMatMulAllReduceOpBuilder
 from .gmm_builder import GMMOpBuilder, GMMV2OpBuilder
+from .quant_gmm_builder import QuantGMMOpBuilder
 from .ffn_builder import FFNOpBuilder
 from .npu_mm_all_reduce_add_rms_norm_builder import MatmulAllReduceAddRmsNormOpBuilder
 from .npu_inplace_mm_all_reduce_add_rms_norm_builder import InplaceMatmulAllReduceAddRmsNormOpBuilder

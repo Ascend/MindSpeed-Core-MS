@@ -1,11 +1,10 @@
 from typing import List, Optional
 from collections import namedtuple
-
-from mindspeed.op_builder.builder import MindSpeedOpBuilder, AS_LIBRARY
-
 import torch
 import torchair
-from torch.library import Library, impl
+from torch.library import impl
+
+from mindspeed.op_builder.builder import MindSpeedOpBuilder, AS_LIBRARY
 
 torch_npu_api_version = None
 try:
@@ -73,6 +72,8 @@ def conveter_npu_gmm_param(
 
 
 class GMMOpBuilderPublic(MindSpeedOpBuilder):
+    TORCH_MAJOR, TORCH_MINOR = map(int, torch.__version__.split('.')[:2])
+
     def sources(self):
         return ['ops/csrc/cann/gmm.cpp', 'ops/csrc/flopcounter/FlopCounter.cpp']
 
@@ -103,7 +104,6 @@ class GMMOpBuilder(GMMOpBuilderPublic):
         "npu_gmm.List(Tensor x, Tensor weight, *, Tensor? bias=None, int[]? group_list=None, int? group_type=0) -> Tensor",
         "npu_gmm.Tensor(Tensor x, Tensor weight, *, Tensor? bias=None, Tensor? group_list=None, int? group_type=0) -> Tensor"
     )
-    TORCH_MAJOR, TORCH_MINOR = map(int, torch.__version__.split('.')[:2])
 
     def __init__(self):
         super(GMMOpBuilder, self).__init__(self.OP_NAME)
@@ -133,7 +133,7 @@ class GMMOpBuilder(GMMOpBuilderPublic):
             result = conveter_npu_gmm_param(x, bias, group_type)
 
             return GroupedMatmul([x], [weight], [result.bias], result.scale, result.offset, result.antiquant_scale,
-                                 result.antiquant_offset, group_list, size_of_y=1, split_item=3, group_type=group_type,
+                                 result.antiquant_offset, group_list, split_item=3, group_type=group_type,
                                  dtype=-1, transpose_weight=False, group_list_type=0)[0]
 
 
@@ -142,7 +142,6 @@ class GMMV2OpBuilder(GMMOpBuilderPublic):
     OP_PROTO = (
         "npu_gmm_v2.Tensor(Tensor x, Tensor weight, *, Tensor? bias=None, Tensor? group_list=None, int? group_type=0) -> Tensor"
     )
-    TORCH_MAJOR, TORCH_MINOR = map(int, torch.__version__.split('.')[:2])
 
     def __init__(self):
         super(GMMV2OpBuilder, self).__init__(self.OP_NAME)
@@ -172,7 +171,7 @@ class GMMV2OpBuilder(GMMOpBuilderPublic):
             result = conveter_npu_gmm_param(x, bias, group_type)
 
             return GroupedMatmul([x], [weight], [result.bias], result.scale, result.offset, result.antiquant_scale,
-                                 result.antiquant_offset, group_list, size_of_y=1, split_item=3, group_type=group_type,
+                                 result.antiquant_offset, group_list, split_item=3, group_type=group_type,
                                  dtype=-1, transpose_weight=False, group_list_type=1)[0]
 
 if torch_npu_api_version == 2:
@@ -198,8 +197,9 @@ GroupedMatmul = None
 if torch_npu_api_version == 2:
     def GroupedMatmulV2(x: List[Tensor], weight: List[Tensor], bias: List[Tensor], scale: List[Tensor],
                         offset: List[Tensor], antiquant_scale: List[Tensor], antiquant_offset: List[Tensor],
-                        group_list: Optional[Tensor], *, size_of_y: int, split_item: int = 0, group_type: int = -1,
-                        dtype: int = 0, transpose_weight: bool = False, group_list_type: int = 0):
+                        group_list: Optional[Tensor] = None, per_token_scale: Optional[Tensor] = None, *,
+                        split_item: int = 0, dtype: int = 0, transpose_weight: bool = False, transpose_x: bool = False,
+                        group_type: int = -1, group_list_type: int = 0, act_type: int = 0):
         """REG_OP(GroupedMatmul)\n
         .DYNAMIC_INPUT(x, TensorType({DT_FLOAT16, DT_BF16, DT_INT8}))\n
         .DYNAMIC_INPUT(weight, TensorType({DT_FLOAT16, DT_BF16, DT_INT8}))\n
@@ -209,12 +209,15 @@ if torch_npu_api_version == 2:
         .DYNAMIC_INPUT(antiquant_scale, TensorType({DT_FLOAT16, DT_BF16}))\n
         .DYNAMIC_INPUT(antiquant_offset, TensorType({DT_FLOAT16, DT_BF16}))\n
         .OPTIONAL_INPUT(group_list, TensorType({DT_INT64}))\n
-        .DYNAMIC_OUTPUT(y, TensorType({DT_FLOAT16, DT_BF16}))\n
+        .OPTIONAL_INPUT(per_token_scale, TensorType({DT_FLOAT}))\n
+        .DYNAMIC_OUTPUT(y, TensorType({DT_FLOAT16, DT_BF16, DT_INT8, DT_FLOAT}))\n
         .ATTR(split_item, Int, 0)\n
-        .ATTR(group_type, Int, -1)\n
         .ATTR(dtype, Int, 0)\n
         .ATTR(transpose_weight, Bool, false)\n
+        .ATTR(transpose_x, Bool, false)\n
+        .ATTR(group_type, Int, -1)\n
         .ATTR(group_list_type, Int, 0)\n
+        .ATTR(act_type, Int, 0)\n
         """
 
         y = torchair.ge.custom_op("GroupedMatmul",
@@ -226,14 +229,17 @@ if torch_npu_api_version == 2:
                 "offset":offset,
                 "antiquant_scale":antiquant_scale,
                 "antiquant_offset":antiquant_offset,
-                "group_list":group_list
+                "group_list":group_list,
+                "per_token_scale": per_token_scale
             },
             attrs={
                 "split_item":ge.attr.Int(split_item),
-                "group_type":ge.attr.Int(group_type),
                 "dtype":ge.attr.Int(dtype),
                 "transpose_weight":ge.attr.Bool(transpose_weight),
-                "group_list_type":ge.attr.Int(group_list_type)
+                "transpose_x":ge.attr.Bool(transpose_x),
+                "group_type":ge.attr.Int(group_type),
+                "group_list_type":ge.attr.Int(group_list_type),
+                "act_type":ge.attr.Int(act_type)
             },
             outputs=[("y", 1)]
         )
@@ -244,9 +250,10 @@ if torch_npu_api_version == 2:
 elif torch_npu_api_version == 1:
     def GroupedMatmulV1(x: List[Tensor], weight: List[Tensor], bias: List[Tensor], scale: List[Tensor],
                         offset: List[Tensor], antiquant_scale: List[Tensor], antiquant_offset: List[Tensor],
-                        group_list: Optional[Tensor], *, size_of_y: int, split_item: int = 0, group_type: int = -1,
-                        dtype: int = 0, transpose_weight: bool = False, group_list_type: int = 0, dependencies=[],
-                        node_name=None):
+                        group_list: Optional[Tensor] = None, per_token_scale: Optional[Tensor] = None, *,
+                        split_item: int = 0, dtype: int = 0, transpose_weight: bool = False, transpose_x: bool = False,
+                        group_type: int = -1, group_list_type: int = 0, act_type: int = 0,
+                        dependencies=None, node_name=None):
         """REG_OP(GroupedMatmul)\n
         .DYNAMIC_INPUT(x, TensorType({DT_FLOAT16, DT_BF16, DT_INT8}))\n
         .DYNAMIC_INPUT(weight, TensorType({DT_FLOAT16, DT_BF16, DT_INT8}))\n
@@ -256,12 +263,15 @@ elif torch_npu_api_version == 1:
         .DYNAMIC_INPUT(antiquant_scale, TensorType({DT_FLOAT16, DT_BF16}))\n
         .DYNAMIC_INPUT(antiquant_offset, TensorType({DT_FLOAT16, DT_BF16}))\n
         .OPTIONAL_INPUT(group_list, TensorType({DT_INT64}))\n
-        .DYNAMIC_OUTPUT(y, TensorType({DT_FLOAT16, DT_BF16}))\n
+        .OPTIONAL_INPUT(per_token_scale, TensorType({DT_FLOAT}))\n
+        .DYNAMIC_OUTPUT(y, TensorType({DT_FLOAT16, DT_BF16, DT_INT8, DT_FLOAT}))\n
         .ATTR(split_item, Int, 0)\n
-        .ATTR(group_type, Int, -1)\n
         .ATTR(dtype, Int, 0)\n
         .ATTR(transpose_weight, Bool, false)\n
+        .ATTR(transpose_x, Bool, false)\n
+        .ATTR(group_type, Int, -1)\n
         .ATTR(group_list_type, Int, 0)\n
+        .ATTR(act_type, Int, 0)\n
         """
 
         op = get_default_ge_graph().op.add()
@@ -269,8 +279,9 @@ elif torch_npu_api_version == 1:
         op.name = next_unique_name(node_name, "GroupedMatmul")
 
         # process dependices
-        for dependency in dependencies:
-            op.input.append(dependency.controller)
+        if dependencies is not None:
+            for dependency in dependencies:
+                op.input.append(dependency.controller)
 
         # process inputs
         if not isinstance(x, (tuple, list)):
@@ -323,21 +334,28 @@ elif torch_npu_api_version == 1:
             op.input.append("")
             op.input_desc.add().CopyFrom(get_invalid_desc())
             op.input_desc[-1].name = "group_list"
+        if per_token_scale is not None:
+            op.input.append(per_token_scale.tensor)
+            op.input_desc.add().CopyFrom(per_token_scale.desc)
+            op.input_desc[-1].name = "per_token_scale"
+        else:
+            op.input.append("")
+            op.input_desc.add().CopyFrom(get_invalid_desc())
+            op.input_desc[-1].name = "per_token_scale"
 
         # process attrs
         op.attr["split_item"].i = split_item
-        op.attr["group_type"].i = group_type
         op.attr["dtype"].i = dtype
         op.attr["transpose_weight"].b = transpose_weight
+        op.attr["transpose_x"].b = transpose_x
+        op.attr["group_type"].i = group_type
         op.attr["group_list_type"].i = group_list_type
+        op.attr["act_type"].i = act_type
 
         # process outputs
         output_index = 0
-        y = []
-        for i in range(output_index, output_index + size_of_y):
-            op.output_desc.add().name = "y" + str(i - output_index)
-            y.append(Tensor(op, i))
-        output_index += size_of_y
+        op.output_desc.add().name = "y" + str(output_index)
+        y = [Tensor(op, output_index)]
 
         # return outputs
         return y
