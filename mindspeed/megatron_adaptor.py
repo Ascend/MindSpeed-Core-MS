@@ -162,24 +162,26 @@ def mcore_models_adaptation(aspm, mindspeed_args):
     import megatron.core
     megatron.core.jit.jit_fuser = dummy_jit
 
-    from .core.fusions.rotary_pos_embedding import apply_fused_rotary_pos_emb_bshd_wrapper, \
-        rotary_embedding_init_wrapper
-
     from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
     from .core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec_wrapper
-
-    from .core.models.common.embeddings.rotary_pos_embedding import get_pos_emb_on_this_cp_rank
+    from .core.models.common.embeddings.rotary_pos_embedding import get_pos_emb_on_this_cp_rank, \
+        rotary_embedding_init_wrapper, apply_rotary_pos_emb_bshd
+    from .core.transformer.attention import SelfAttentionSubmodules, self_attention_init_wrapper, \
+        attention_forward_wrapper
 
     aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.get_pos_emb_on_this_cp_rank',
                         get_pos_emb_on_this_cp_rank)
-    aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.apply_rotary_pos_emb_bshd',
-                        apply_fused_rotary_pos_emb_bshd_wrapper)
-    aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.__init__',
-                        rotary_embedding_init_wrapper)
     aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_with_transformer_engine_spec',
                         get_gpt_layer_local_spec)
     aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_local_spec',
                         get_gpt_layer_local_spec_wrapper)
+    aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.__init__',
+                        rotary_embedding_init_wrapper)
+    aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.apply_rotary_pos_emb_bshd',
+                        apply_rotary_pos_emb_bshd)
+    aspm.register_patch('megatron.core.transformer.attention.SelfAttentionSubmodules', SelfAttentionSubmodules)
+    aspm.register_patch('megatron.core.transformer.attention.SelfAttention.__init__', self_attention_init_wrapper)
+    aspm.register_patch("megatron.core.transformer.attention.Attention.forward", attention_forward_wrapper)
 
     if not mindspeed_args.automated_pipeline and mindspeed_args.noop_layers:
         from .core.transformer.transformer_block import _build_layers
