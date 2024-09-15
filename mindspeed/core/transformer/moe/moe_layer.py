@@ -16,8 +16,9 @@ def moe_layer_init_wrapper(init_func):
         self = args[0]
         global_args = get_args()
         if global_args.n_shared_experts:
-            self.config.ffn_hidden_size = global_args.n_shared_experts * self.config.ffn_hidden_size
-            self.shared_experts = MLP(self.config, MLPSubmodules(linear_fc1=ColumnParallelLinear,
+            config = deepcopy(self.config)
+            config.ffn_hidden_size = global_args.n_shared_experts * self.config.ffn_hidden_size
+            self.shared_experts = MLP(config, MLPSubmodules(linear_fc1=ColumnParallelLinear,
                                                                  linear_fc2=RowParallelLinear,))
         if hasattr(global_args, 'moe_token_dispatcher_type') and global_args.moe_token_dispatcher_type == 'allgather':
             self.moe_adaptive_recompute_activation = global_args.moe_adaptive_recompute_activation
