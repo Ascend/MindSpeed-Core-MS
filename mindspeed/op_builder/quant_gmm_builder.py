@@ -68,7 +68,7 @@ class QuantGMMOpBuilder(GMMOpBuilderPublic):
             elif output_dtype == torch.bfloat16:
                 y_dtype = 1
             elif output_dtype == torch.int8:
-                raise ValueError("output_dtype not sopport int8 yet for graph mode")
+                raise ValueError("output_dtype not support int8 yet for graph mode")
             else:
                 raise ValueError(f"output_dtype should be int8, float16 or bfloat16, "
                                  f"otherwise it should be None, but got {output_dtype}")
