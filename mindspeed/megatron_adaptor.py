@@ -190,6 +190,10 @@ def mcore_models_adaptation(aspm, mindspeed_args):
         TransformerBlock._build_layers = _build_layers
         aspm.register_patch('megatron.training.training.num_floating_point_operations', num_floating_point_wrapper)
 
+    if mindspeed_args.recompute_norm:
+        from .core.models.gpt.gpt_layer_specs import build_norm_recompute_layer_wrapper
+        aspm.register_patch('megatron.core.transformer.transformer_block.TransformerBlock._build_layers', build_norm_recompute_layer_wrapper)
+
 
 def mcore_transformer_adaptation(aspm):
     from .core.transformer.attention import attention_init_wrapper, self_attention_init_wrapper

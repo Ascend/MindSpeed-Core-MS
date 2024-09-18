@@ -797,22 +797,10 @@ def parallel_mlp_init_wrapper(fn):
     return wrapper
 
 
-def should_recompute_activation(self):
-    args = get_args()
-    if not args.recompute_activation_function or self.layer_number is None:
-        return False
-
-    activation_recompute_layers = args.recompute_activation_function_num_layers
+def should_recompute(args, layer_number, num_recompute):
     vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()
     vpp_size = args.virtual_pipeline_model_parallel_size
     pp_size = args.transformer_pipeline_model_parallel_size
-
-    if args.recompute_in_bubble or args.recompute_in_advance:
-        pipeline_checkpoint_manager = get_pipeline_checkpoint_manager(vpp_size)
-        if pipeline_checkpoint_manager.chunk_do_recompute:
-            return False
-        elif args.recompute_in_bubble:
-            return True
 
     if vpp_size is not None:
         layer_per_chunk = args.num_layers_per_virtual_pipeline_stage
@@ -825,28 +813,46 @@ def should_recompute_activation(self):
         vpp_rank = 0
     if vpp_size is None or not args.enable_recompute_layers_per_pp_rank:
         vpp_size = 1
-    recompute_priority = ((self.layer_number - 1) % layer_per_chunk) * vpp_size + vpp_rank
+    recompute_priority = ((layer_number - 1) % layer_per_chunk) * vpp_size + vpp_rank
     full_recompute_layers = args.recompute_num_layers
 
     if full_recompute_layers:
         if recompute_priority < full_recompute_layers:
             # Do full recomputation
             return False
-        elif activation_recompute_layers is None:
-            # Do activation function recomputation
+        elif num_recompute is None:
             return True
-        elif recompute_priority < full_recompute_layers + activation_recompute_layers:
-            # Do activation function recomputation
+        elif recompute_priority < full_recompute_layers + num_recompute:
             return True
         else:
-            # No recomputation
             return False
 
-    if activation_recompute_layers is None:
-        # Do activation function recomputation
+    if num_recompute is None:
         return True
     else:
-        return recompute_priority < activation_recompute_layers
+        return recompute_priority < num_recompute
+
+
+def should_recompute_activation(self):
+    args = get_args()
+    if not args.recompute_activation_function or self.layer_number is None:
+        return False
+
+    if args.recompute_in_bubble or args.recompute_in_advance:
+        pipeline_checkpoint_manager = get_pipeline_checkpoint_manager(args.vpp_size)
+        if pipeline_checkpoint_manager.chunk_do_recompute:
+            return False
+        elif args.recompute_in_bubble:
+            return True
+    
+    return should_recompute(args, self.layer_number, args.recompute_activation_function_num_layers)
+
+
+def should_recompute_norm(self):
+    args = get_args()
+    if not args.recompute_norm or self.layer_number is None:
+        return False
+    return should_recompute(args, self.layer_number, args.recompute_norm_num_layers)
 
 
 def parallel_mlp_forward(self, hidden_states):
