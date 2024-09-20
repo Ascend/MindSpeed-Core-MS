@@ -134,8 +134,8 @@ std::vector<std::tuple<std::vector<int64_t>, std::vector<int64_t>, std::vector<i
         }
         result.emplace_back(new_query_shape, new_key_shape, new_value_shape, new_grad_out_shape);
     } else if (input_layer_str == "TND") {
-        TORCH_CHECK(cum_seq_q.empty(), "The actual_seq_qlen is not empty when TND");
-        TORCH_CHECK(cum_seq_k.empty(), "The actual_seq_kvlen is not empty when TND");
+        TORCH_CHECK(!cum_seq_q.empty(), "The actual_seq_qlen is not empty when TND");
+        TORCH_CHECK(!cum_seq_k.empty(), "The actual_seq_kvlen is not empty when TND");
         TORCH_CHECK(cum_seq_q.size() == cum_seq_k.size(), "The size of actual_seq_qlen is equal actual_seq_kvlen when TND");
 
         int64_t b = cum_seq_q.size();

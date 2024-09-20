@@ -24,3 +24,8 @@
 
 通过打印值`actual throughput per NPU (TFLOP/s/NPU)`和`actual throughput per NPU with recompute (TFLOP/s/NPU)`可以方便计算MFU
 和HFU。
+
+## 注意事项
+
+由于在Ring Attention长序列并行方案中，在causal场景下，由于算法优化缘故，会有部分计算减少，因此会导致理论值和实际统计值不符合的现象，理论计算上FA
+的计算减少值为`(CP-1)/2CP`
