@@ -74,7 +74,7 @@ GPT_ARGS="
     --group-query-attention \
     --num-query-groups 8 \
     --tokenizer-type Llama2Tokenizer \
-    --tokenizer-name-or-path ${TOKENIZER_MODEL} \
+    --tokenizer-model ${TOKENIZER_MODEL} \
     --seq-length 4096 \
     --max-position-embeddings 32768 \
     --micro-batch-size 1 \
@@ -127,7 +127,6 @@ torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \
   $GPT_ARGS \
   $DATA_ARGS \
   $OUTPUT_ARGS \
-  --distributed-backend nccl \
-  | tee logs/train_mixtral.log
+  --distributed-backend nccl
 
 set +x
