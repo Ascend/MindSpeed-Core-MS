@@ -1,4 +1,3 @@
-import os
 import sys
 import argparse
 from functools import wraps
@@ -135,7 +134,6 @@ def te_adaptation(aspm):
 def apex_adaptation(aspm):
     from .optimizer.adamw import AdamW
     from .core.fusions.fused_layer_norm import fused_layer_norm_affine
-    from .ops.npu_matmul_add import npu_matmul_add_fp32, npu_matmul_add_fp16
     aspm.register_patch('apex.optimizers.FusedAdam', AdamW, create_dummy=True)
     aspm.register_patch('amp_C.multi_tensor_l2norm', multi_tensor_l2norm, create_dummy=True)
     aspm.register_patch('amp_C.multi_tensor_scale', multi_tensor_scale, create_dummy=True)
@@ -143,8 +141,6 @@ def apex_adaptation(aspm):
     aspm.register_patch('apex.multi_tensor_apply.multi_tensor_applier', multi_tensor_applier, create_dummy=True)
     aspm.register_patch('apex.normalization.fused_layer_norm.fused_layer_norm_affine', fused_layer_norm_affine,
                         create_dummy=True)
-    aspm.register_patch('fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp32', npu_matmul_add_fp32, create_dummy=True)
-    aspm.register_patch('fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp16', npu_matmul_add_fp16, create_dummy=True)
 
 
 def torch_adaptation(aspm):
@@ -158,30 +154,26 @@ def torch_adaptation(aspm):
         aspm.register_patch('math.lcm', lcm, create_dummy=True)
 
 
+def mcore_models_adaptation_l0(aspm):
+    from .core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec_wrapper
+    # Replace FusedLayerNorm with MindSpeed's PTNorm operator in get_gpt-layer
+    aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_local_spec',
+                        get_gpt_layer_local_spec_wrapper)
+
+
 def mcore_models_adaptation(aspm, mindspeed_args):
     import megatron.core
     megatron.core.jit.jit_fuser = dummy_jit
 
     from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
-    from .core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec_wrapper
     from .core.models.common.embeddings.rotary_pos_embedding import get_pos_emb_on_this_cp_rank, \
-        rotary_embedding_init_wrapper, apply_rotary_pos_emb_bshd
-    from .core.transformer.attention import SelfAttentionSubmodules, self_attention_init_wrapper, \
-        attention_forward_wrapper
-
+        rotary_embedding_init_wrapper
     aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.get_pos_emb_on_this_cp_rank',
                         get_pos_emb_on_this_cp_rank)
     aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_with_transformer_engine_spec',
                         get_gpt_layer_local_spec)
-    aspm.register_patch('megatron.core.models.gpt.gpt_layer_specs.get_gpt_layer_local_spec',
-                        get_gpt_layer_local_spec_wrapper)
     aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.__init__',
                         rotary_embedding_init_wrapper)
-    aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.apply_rotary_pos_emb_bshd',
-                        apply_rotary_pos_emb_bshd)
-    aspm.register_patch('megatron.core.transformer.attention.SelfAttentionSubmodules', SelfAttentionSubmodules)
-    aspm.register_patch('megatron.core.transformer.attention.SelfAttention.__init__', self_attention_init_wrapper)
-    aspm.register_patch("megatron.core.transformer.attention.Attention.forward", attention_forward_wrapper)
 
     if not mindspeed_args.automated_pipeline and mindspeed_args.noop_layers:
         from .core.transformer.transformer_block import _build_layers
@@ -195,23 +187,31 @@ def mcore_models_adaptation(aspm, mindspeed_args):
         aspm.register_patch('megatron.core.transformer.transformer_block.TransformerBlock._build_layers', build_norm_recompute_layer_wrapper)
 
 
-def mcore_transformer_adaptation(aspm):
-    from .core.transformer.attention import attention_init_wrapper, self_attention_init_wrapper
-    from .core.transformer.module import megatron_module_init_wrapper
+def mcore_transformer_adaptation_l0(aspm):
     from .core.transformer.custom_layers.transformer_engine import PTNorm
     from .core.transformer.dot_product_attention import dot_product_attention_forward_wrapper, \
         dot_product_attention_init_wrapper
-    from .core.transformer.transformer_block import transformer_block_checkpointed_forward_wrapper
-    from .core.transformer.transformer import parallel_transformer_layer_init_wrapper
-    from .core.transformer.transformer import core_mlp_forward_wrapper
-    aspm.register_patch('megatron.core.transformer.attention.Attention.__init__', attention_init_wrapper)
-    aspm.register_patch('megatron.core.transformer.attention.SelfAttention.__init__', self_attention_init_wrapper)
-    aspm.register_patch('megatron.core.transformer.module.MegatronModule.__init__', megatron_module_init_wrapper)
     aspm.register_patch('megatron.core.transformer.custom_layers.transformer_engine.TENorm', PTNorm)
+    # Add cp parameters to dot_deduct_mattention init, and add fusion attention support for alibi in non cp situations
     aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.__init__',
                         dot_product_attention_init_wrapper)
     aspm.register_patch('megatron.core.transformer.dot_product_attention.DotProductAttention.forward',
                         dot_product_attention_forward_wrapper)
+
+
+def mcore_transformer_adaptation(aspm):
+    from .core.transformer.module import megatron_module_init_wrapper
+    from .core.transformer.attention import (attention_init_wrapper, SelfAttentionSubmodules,
+                                             self_attention_init_wrapper, attention_forward_wrapper)
+    from .core.transformer.transformer_block import transformer_block_checkpointed_forward_wrapper
+    from .core.transformer.transformer import parallel_transformer_layer_init_wrapper
+    from .core.transformer.transformer import core_mlp_forward_wrapper
+    aspm.register_patch('megatron.core.transformer.attention.SelfAttentionSubmodules', SelfAttentionSubmodules)
+    aspm.register_patch('megatron.core.transformer.attention.SelfAttention.__init__', self_attention_init_wrapper)
+    aspm.register_patch("megatron.core.transformer.attention.Attention.forward", attention_forward_wrapper)
+    aspm.register_patch('megatron.core.transformer.attention.Attention.__init__', attention_init_wrapper)
+    aspm.register_patch('megatron.core.transformer.attention.SelfAttention.__init__', self_attention_init_wrapper)
+    aspm.register_patch('megatron.core.transformer.module.MegatronModule.__init__', megatron_module_init_wrapper)
     aspm.register_patch('megatron.core.transformer.transformer_block.TransformerBlock._checkpointed_forward',
                         transformer_block_checkpointed_forward_wrapper)
     aspm.register_patch('megatron.core.transformer.transformer_layer.TransformerLayer.__init__',
@@ -239,11 +239,13 @@ def mcore_parallel_state_adaptation(aspm):
     aspm.register_patch('megatron.core.mpu', megatron.core.parallel_state)
 
 
-def mcore_fusions_adaptation(aspm):
+def mcore_fusions_adaptation(aspm, args):
     from .core.fusions.fused_bias_swiglu import SwiGLUFunction, BiasSwiGLUFunction
     from .core.fusions.fused_layer_norm import FusedLayerNormAffineFunction, FastLayerNormFN
     from .core.fusions.fused_softmax import is_kernel_available, ScaledUpperTriangMaskedSoftmax, ScaledMaskedSoftmax, \
         ScaledSoftmax, forward_fused_softmax
+    from .ops.npu_matmul_add import npu_matmul_add_fp32, npu_matmul_add_fp16
+    from .core.models.common.embeddings.rotary_pos_embedding import apply_rotary_pos_emb_bshd
     aspm.register_patch('megatron.core.fusions.fused_layer_norm.FusedLayerNormAffineFunction',
                         FusedLayerNormAffineFunction)
     aspm.register_patch('megatron.core.fusions.fused_layer_norm.FastLayerNormFN', FastLayerNormFN)
@@ -257,11 +259,20 @@ def mcore_fusions_adaptation(aspm):
                         forward_fused_softmax)
     aspm.register_patch('megatron.core.fusions.fused_bias_swiglu.SwiGLUFunction', SwiGLUFunction)
     aspm.register_patch('megatron.core.fusions.fused_bias_swiglu.BiasSwiGLUFunction', BiasSwiGLUFunction)
+    aspm.register_patch('fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp32', npu_matmul_add_fp32, create_dummy=True)
+    aspm.register_patch('fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp16', npu_matmul_add_fp16, create_dummy=True)
+    aspm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.apply_rotary_pos_emb_bshd',
+                        apply_rotary_pos_emb_bshd)
+    if hasattr(args, 'use_fused_moe_token_permute_and_unpermute') and args.use_fused_moe_token_permute_and_unpermute:
+        from .ops.npu_moe_token_permute import npu_moe_token_permute
+        from .ops.npu_moe_token_unpermute import npu_moe_token_unpermute
+        aspm.register_patch('megatron.core.transformer.moe.moe_utils.permute', npu_moe_token_permute)
+        aspm.register_patch('megatron.core.transformer.moe.moe_utils.unpermute', npu_moe_token_unpermute)
 
 
 def mcore_optimizer_adapation(aspm):
     from .optimizer.distrib_optimizer import reuse_fp32_param_distrib_optimizer_init_wrapper
-    from .optimizer.optimizer import (mixed_precision_optimizer_step, \
+    from .optimizer.optimizer import (mixed_precision_optimizer_step,
                                       reuse_fp32_param_init_wrapper, optimizer_config_init_wrapper)
     # optim relative.
     aspm.register_patch('megatron.core.optimizer.optimizer.MixedPrecisionOptimizer.step',
@@ -318,16 +329,24 @@ def mcore_multiparam_pipeline_parallel_adaptation(aspm, mindspeed_args):
                             send_backward_recv_forward_wrapper)
 
 
-def mcore_tensor_parallel_adaptation(aspm):
-    from .core.tensor_parallel.random import checkpoint_wrapper
-    from .core.tensor_parallel.random import _set_cuda_rng_state, checkpoint_function_backward
-    from .core.tensor_parallel.layers import vocab_parallel_embedding_forward
+def mcore_tensor_parallel_adaptation_l0(aspm):
+    from .core.tensor_parallel.random import _set_cuda_rng_state
+    aspm.register_patch('megatron.core.tensor_parallel.random._set_cuda_rng_state', _set_cuda_rng_state)
+
+
+def mcore_tensor_parallel_adaptation_l1(aspm):
     from .core.tensor_parallel.cross_entropy import vocab_parallel_cross_entropy_forward
-    from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
-    from .core.tensor_parallel.layers import parallel_linear_init_wrapper
+    # use logical negation followed by multiplication to achieve the same effect as setting selected elements to zero
     aspm.register_patch('megatron.core.tensor_parallel.cross_entropy._VocabParallelCrossEntropy.forward',
                         vocab_parallel_cross_entropy_forward)
-    aspm.register_patch('megatron.core.tensor_parallel.random._set_cuda_rng_state', _set_cuda_rng_state)
+
+
+def mcore_tensor_parallel_adaptation(aspm):
+    from .core.tensor_parallel.random import checkpoint_wrapper
+    from .core.tensor_parallel.random import checkpoint_function_backward
+    from .core.tensor_parallel.layers import vocab_parallel_embedding_forward
+    from .core.tensor_parallel.layers import row_parallel_nocomm_optimizer_wrapper
+    from .core.tensor_parallel.layers import parallel_linear_init_wrapper
     aspm.register_patch('megatron.core.tensor_parallel.random.CheckpointFunction.backward',
                         checkpoint_function_backward)
     aspm.register_patch('megatron.core.tensor_parallel.layers.VocabParallelEmbedding.forward',
@@ -377,12 +396,25 @@ def legacy_model_rms_norm_adaptation(aspm):
     aspm.register_patch('megatron.legacy.model.rms_norm.RMSNorm._norm', rms_norm_norm_wrapper)
 
 
-def legacy_model_transformer(aspm, args):
+def legacy_model_transformer_l0(aspm):
     from .model.transformer import parallel_mlp_init_wrapper, flash_self_attention_forward, \
-        flash_self_attention_init_wrapper, parallel_mlp_forward, parallel_transformer_init_wrapper, \
-        parallel_transformer_forward_wrapper, parallel_transformer_init
-    from .model.transformer import core_attention_init_wrapper, core_attention_forward, parallel_attention_init_wrapper, \
-        parallel_attention_forward
+        flash_self_attention_init_wrapper, parallel_transformer_forward_wrapper
+    from .model.transformer import parallel_attention_init_wrapper, parallel_attention_forward
+    aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.forward',
+                        parallel_transformer_forward_wrapper)
+    aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.__init__', parallel_mlp_init_wrapper)
+    aspm.register_patch('megatron.legacy.model.transformer.FlashSelfAttention.forward', flash_self_attention_forward)
+    aspm.register_patch('megatron.legacy.model.transformer.FlashSelfAttention.__init__',
+                        flash_self_attention_init_wrapper)
+    aspm.register_patch('megatron.legacy.model.transformer.ParallelAttention.__init__', parallel_attention_init_wrapper)
+    aspm.register_patch('megatron.legacy.model.transformer.ParallelAttention.forward',
+                        parallel_attention_forward)
+
+
+def legacy_model_transformer(aspm, args):
+    from .model.transformer import parallel_mlp_forward, parallel_transformer_init_wrapper, \
+        parallel_transformer_init
+    from .model.transformer import core_attention_init_wrapper, core_attention_forward
     from .core.transformer.transformer import parallel_transformer_layer_forward_wrapper, \
         parallel_transformer_checkpointed_forward_wrapper
     from .model.transformer import switch_mlp_init_wrapper, switch_mlp_forward_wrapper, \
@@ -391,57 +423,34 @@ def legacy_model_transformer(aspm, args):
         aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.__init__', parallel_transformer_init)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.__init__',
                         parallel_transformer_init_wrapper)
-    aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer.forward',
-                        parallel_transformer_forward_wrapper)
-
-    aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.__init__', parallel_mlp_init_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelMLP.forward', parallel_mlp_forward)
-    aspm.register_patch('megatron.legacy.model.transformer.FlashSelfAttention.forward', flash_self_attention_forward)
-    aspm.register_patch('megatron.legacy.model.transformer.FlashSelfAttention.__init__',
-                        flash_self_attention_init_wrapper)
-    aspm.register_patch('megatron.legacy.model.transformer.ParallelAttention.__init__', parallel_attention_init_wrapper)
-    aspm.register_patch('megatron.legacy.model.transformer.ParallelAttention.forward',
-                        parallel_attention_forward)
     aspm.register_patch('megatron.legacy.model.transformer.CoreAttention.__init__', core_attention_init_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.CoreAttention.forward', core_attention_forward)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformerLayer.forward',
                         parallel_transformer_layer_forward_wrapper)
-
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformer._checkpointed_forward',
                         parallel_transformer_checkpointed_forward_wrapper)
-
     aspm.register_patch('megatron.legacy.model.transformer.SwitchMLP.__init__', switch_mlp_init_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.SwitchMLP.forward', switch_mlp_forward_wrapper)
     aspm.register_patch('megatron.legacy.model.transformer.ParallelTransformerLayer.__init__',
                         parallel_transformer_layer_init_wrapper)
 
 
-def megatron_training_adaptation(aspm, mindspeed_args):
-    from .core.performance.auto_pipeline_perf.global_vars import get_num_microbatches_wrapper
-    from .core.training import training_log
+def megatron_training_adaptation_l0(aspm):
     from .initialize import _compile_dependencies, set_jit_fusion_options_wrapper
-    from .utils import get_batch_on_this_cp_rank, get_batch_on_this_tp_rank
+    from .utils import get_batch_on_this_cp_rank
     from .training import pretrain
     from .arguments import parse_args_wrapper, validate_args_wrapper, core_transformer_config_from_args_wrapper
-    from .tokenizer import build_tokenizer_wrapper
     from .yaml_arguments import core_transformer_config_from_yaml_wrapper, print_args_wrapper
 
-    from .core.training import pretrain_decorator, train_decorator, train_step_decorator, \
-        setup_model_and_optimizer_decorator, save_checkpoint_and_time_decorator
-    aspm.register_patch('megatron.training.global_vars.get_num_microbatches', get_num_microbatches_wrapper)
-    aspm.register_patch('megatron.training.training.pretrain', pretrain_decorator)
+    from .core.training import train_decorator, train_step_decorator, save_checkpoint_and_time_decorator
     aspm.register_patch('megatron.training.training.train', train_decorator)
     aspm.register_patch('megatron.training.training.train_step', train_step_decorator)
-    aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_decorator)
     aspm.register_patch('megatron.training.training.save_checkpoint_and_time', save_checkpoint_and_time_decorator)
     aspm.register_patch('megatron.training.yaml_arguments.core_transformer_config_from_yaml',
                         core_transformer_config_from_yaml_wrapper)
     aspm.register_patch('megatron.training.initialize._compile_dependencies', _compile_dependencies)
     aspm.register_patch('megatron.training.utils.get_batch_on_this_cp_rank', get_batch_on_this_cp_rank)
-    aspm.register_patch('megatron.training.utils.get_batch_on_this_tp_rank', get_batch_on_this_tp_rank)
-    if mindspeed_args.op_cal_tflops:
-        aspm.register_patch('megatron.training.training.training_log', training_log)
-
     aspm.register_patch('megatron.training.arguments.parse_args', parse_args_wrapper)
     aspm.register_patch('megatron.training.arguments.validate_args', validate_args_wrapper)
     aspm.register_patch('megatron.training.arguments._print_args', print_args_wrapper)
@@ -451,6 +460,20 @@ def megatron_training_adaptation(aspm, mindspeed_args):
                         core_transformer_config_from_args_wrapper)
     aspm.register_patch('megatron.training.initialize.set_jit_fusion_options', set_jit_fusion_options_wrapper)
     aspm.register_patch('megatron.training.training.pretrain', pretrain)
+
+
+def megatron_training_adaptation(aspm, mindspeed_args):
+    from .core.performance.auto_pipeline_perf.global_vars import get_num_microbatches_wrapper
+    from .core.training import training_log
+    from .utils import get_batch_on_this_tp_rank
+    from .tokenizer import build_tokenizer_wrapper
+    from .core.training import pretrain_decorator, setup_model_and_optimizer_decorator
+    aspm.register_patch('megatron.training.global_vars.get_num_microbatches', get_num_microbatches_wrapper)
+    aspm.register_patch('megatron.training.training.pretrain', pretrain_decorator)
+    aspm.register_patch('megatron.training.training.setup_model_and_optimizer', setup_model_and_optimizer_decorator)
+    aspm.register_patch('megatron.training.utils.get_batch_on_this_tp_rank', get_batch_on_this_tp_rank)
+    if mindspeed_args.op_cal_tflops:
+        aspm.register_patch('megatron.training.training.training_log', training_log)
     aspm.register_patch('megatron.training.tokenizer.tokenizer.build_tokenizer', build_tokenizer_wrapper)
 
 
@@ -501,6 +524,17 @@ def memory_fragmentation_adaptation(aspm, args):
         aspm.register_patch('megatron.training.initialize_megatron', megatron.training.initialize.initialize_megatron)
 
 
+def mcore_moe_adaptation_l0(pm):
+    from .core.transformer.moe.grouped_gemm_util import Ops, grouped_gemm_is_available, get_device_capability, \
+        assert_grouped_gemm_is_available
+    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.ops', Ops)
+    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.grouped_gemm_is_available',
+                      grouped_gemm_is_available)
+    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.assert_grouped_gemm_is_available',
+                      assert_grouped_gemm_is_available)
+    pm.register_patch('torch.cuda.get_device_capability', get_device_capability)
+
+
 def mcore_moe_adaptation(pm, args):
     if args.moe_permutation_async_comm:
         if hasattr(args, 'moe_token_dispatcher_type') and args.moe_token_dispatcher_type == 'alltoall':
@@ -537,20 +571,7 @@ def mcore_moe_adaptation(pm, args):
         TransformerBlock._build_layers = build_layers_wrapper(TransformerBlock._build_layers,
                                                               ColumnParallelLinear.forward,
                                                               RowParallelLinear.forward)
-    from .core.transformer.moe.grouped_gemm_util import Ops, grouped_gemm_is_available, get_device_capability, \
-        assert_grouped_gemm_is_available
-    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.ops', Ops)
-    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.grouped_gemm_is_available',
-                      grouped_gemm_is_available)
-    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.assert_grouped_gemm_is_available',
-                      assert_grouped_gemm_is_available)
-    pm.register_patch('torch.cuda.get_device_capability', get_device_capability)
-    if hasattr(args, 'use_fused_moe_token_permute_and_unpermute') and args.use_fused_moe_token_permute_and_unpermute:
-        from mindspeed.ops.npu_moe_token_permute import npu_moe_token_permute
-        from mindspeed.ops.npu_moe_token_unpermute import npu_moe_token_unpermute
-        import megatron
-        megatron.core.transformer.moe.moe_utils.permute = npu_moe_token_permute
-        megatron.core.transformer.moe.moe_utils.unpermute = npu_moe_token_unpermute
+
 
 
 def deepspeed_moe_adaptation(pm, args):
@@ -637,26 +658,52 @@ def zero3_adaptation(aspm, args):
             distributed_data_parallel_zero_grad_wrapper)
 
 
-def exe_adaptation():
-    mindspeed_args = get_mindspeed_args()
-    from .patch_utils import MindSpeedPatchesManager as aspm
+def adaptation_l0(aspm):
+    """
+    The minimum patch set for megatron to adapt to NPU
+    """
+    # transformer_engine
     te_adaptation(aspm)
     apex_adaptation(aspm)
     torch_adaptation(aspm)
+    # Need replace transformer_engine modules before import megatron
     aspm.apply_patches()
 
-    mcore_models_adaptation(aspm, mindspeed_args)
+    mcore_models_adaptation_l0(aspm)
+    mcore_tensor_parallel_adaptation_l0(aspm)
+    mcore_transformer_adaptation_l0(aspm)
+    mcore_moe_adaptation_l0(aspm)
+    legacy_model_transformer_l0(aspm)
+    megatron_training_adaptation_l0(aspm)
+    # context parallel(ring attention) requires mcore parallel state patch
     mcore_parallel_state_adaptation(aspm)
-    mcore_fusions_adaptation(aspm)
+
+
+def adaptation_l1(aspm, mindspeed_args):
+    """
+    Affinity optimization (fusion operators, etc.)
+    """
+    # fusion operators
+    mcore_fusions_adaptation(aspm, mindspeed_args)
+    legacy_model_fusions_adaptation(aspm)
+    # affinity optimization
+    mcore_tensor_parallel_adaptation_l1(aspm)
+
+
+def adaptation_l2(aspm, mindspeed_args):
+    """
+    Advanced acceleration algorithm
+    """
+    mcore_models_adaptation(aspm, mindspeed_args)
     mcore_optimizer_adapation(aspm)
     mcore_pipeline_parallel_adaptation(aspm)
     mcore_multiparam_pipeline_parallel_adaptation(aspm, mindspeed_args)
     mcore_tensor_parallel_adaptation(aspm)
     mcore_transformer_adaptation(aspm)
 
+    # megatron legacy
     megatron_legacy_adaptation(aspm)
     legacy_model_transformer(aspm, mindspeed_args)
-    legacy_model_fusions_adaptation(aspm)
     legacy_model_rms_norm_adaptation(aspm)
 
     megatron_training_adaptation(aspm, mindspeed_args)
@@ -666,6 +713,24 @@ def exe_adaptation():
     mcore_moe_adaptation(aspm, mindspeed_args)
     deepspeed_moe_adaptation(aspm, mindspeed_args)
     zero3_adaptation(aspm, mindspeed_args)
+
+
+def exe_adaptation():
+    mindspeed_args = get_mindspeed_args()
+    from .patch_utils import MindSpeedPatchesManager as aspm
+
+    if mindspeed_args.optimization_level >= 0:
+        # The minimum patch set for megatron to adapt to NPU
+        adaptation_l0(aspm)
+
+    if mindspeed_args.optimization_level >= 1:
+        # Affinity optimization (fusion operators, etc.)
+        adaptation_l1(aspm, mindspeed_args)
+
+    if mindspeed_args.optimization_level >= 2:
+        # Advanced acceleration algorithm
+        adaptation_l2(aspm, mindspeed_args)
+
     aspm.apply_patches()
 
     # accelerate package will check TE on sys.modules，so we need remove this patch
