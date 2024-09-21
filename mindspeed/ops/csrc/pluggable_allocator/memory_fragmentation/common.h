@@ -11,7 +11,6 @@
 #include "acl_rt.h"
 
 #include "torch_npu/csrc/core/npu/NPUStream.h"
-#include <torch_npu/csrc/core/npu/NPUException.h>
 
 #define MEMORY_RECORDER_DEBUG
 
