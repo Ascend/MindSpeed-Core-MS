@@ -6,7 +6,7 @@
 
 ## 解决方案
 
-新增swap-attention功能，利用NPU内存和CPU内存来存放激活值，在梯度反传的同时从CPU内存预取激活值来减少重计算，适用于H2D高带宽设备，提升MFU，加速大模型的训练。
+新增swap-attention功能，利用NPU内存和CPU内存来存放激活值，在梯度反传的同时从CPU内存预取激活值来减少重计算，充分利用H2D高带宽的优势以网补存、以网强算，提升MFU，加速大模型的训练。
 
 ![输入图片说明](../../sources/images/swap_attention.png)
 
@@ -22,6 +22,8 @@
 
 
 ## 使用方法
+
+`--swap-modules`：参数类型为string，默认值为"input_norm,self_attention,post_attention_norm"，可根据模型自行配置module，需要结合`--swap-attention`使用
 
 ### a. 仅开启预取功能：`--swap-attention`
 
