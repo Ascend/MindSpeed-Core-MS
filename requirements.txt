@@ -13,6 +13,4 @@ einops
 scipy
 sentencepiece
 pytest
-transformers>=4.43.2
-gpytorch
 pandas
