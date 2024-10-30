@@ -19,7 +19,7 @@
 import inspect
 from enum import Enum
 from collections import defaultdict
-from mindformers.tools import logger
+from mindspeed_ms.tools import logger
 
 
 class ModuleType(Enum):

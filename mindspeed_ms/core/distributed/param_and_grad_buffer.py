@@ -23,7 +23,7 @@ from mindspore.common.initializer import Zero
 from mindspore.communication.management import get_rank, get_group_size
 import mindspore.communication.comm_func as comm_func
 
-from mindformers.experimental.parallel_core.pynative.utils import divide
+from mindspeed_ms.core.utils import divide
 
 
 __all__ = ['Bucket', 'ParamAndGradBuffer']

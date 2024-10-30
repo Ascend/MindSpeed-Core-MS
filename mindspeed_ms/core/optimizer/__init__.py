@@ -13,7 +13,7 @@
 # limitations under the License.
 # ============================================================================
 
-"""mindformers init"""
+"""optimizer init"""
 import os
 from mindspore import mint, ops
 from mindspore.common import dtype as mstype
@@ -21,13 +21,11 @@ from mindspore.nn import Adam, SGD
 from mindspore.nn.optim.optimizer import Optimizer
 from mindspore.experimental.optim.adamw import SpeedAdamW
 
-from mindformers.core.optim import Came
-from mindformers.core.optim import AdamW as mf_AdamW
-from mindformers.experimental.parallel_core.pynative.register import ModuleType, ModuleRegistry
-from mindformers.experimental.parallel_core.pynative.distributed import DistributedDataParallel
-from mindformers.experimental.parallel_core.pynative.parallel_state import get_data_parallel_group
-from mindformers.experimental.parallel_core.pynative.dist_checkpointing import get_checkpoint_name
-from mindformers.experimental.parallel_core.pynative.optimizer.lr_scheduler import get_learning_rate_scheduler
+from mindspeed_ms.core.register import ModuleType, ModuleRegistry
+from mindspeed_ms.core.distributed import DistributedDataParallel
+from mindspeed_ms.core.parallel_state import get_data_parallel_group
+from mindspeed_ms.core.dist_checkpointing import get_checkpoint_name
+from mindspeed_ms.core.optimizer.lr_scheduler import get_learning_rate_scheduler
 
 from . import zero
 from . import lr_scheduler
@@ -42,10 +40,8 @@ __all__.extend(zero.__all__)
 __all__.extend(lr_scheduler.__all__)
 
 
-ModuleRegistry.register(mf_AdamW, ModuleType.OPTIMIZER)
 ModuleRegistry.register(Adam, ModuleType.OPTIMIZER)
 ModuleRegistry.register(SGD, ModuleType.OPTIMIZER)
-ModuleRegistry.register(Came, ModuleType.OPTIMIZER)
 ModuleRegistry.register(mint.optim.AdamW, ModuleType.OPTIMIZER, item_name='mint.AdamW')
 ModuleRegistry.register(SpeedAdamW, ModuleType.OPTIMIZER, item_name='SpeedAdamW')
 

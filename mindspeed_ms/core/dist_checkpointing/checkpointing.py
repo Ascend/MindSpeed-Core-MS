@@ -40,20 +40,20 @@ try:
 except ImportError:
     from mindspore.nn.generator import default_generator, set_rng_state
 from mindspore.communication import get_rank
-from mindformers.tools import logger
-from mindformers.experimental.parallel_core.pynative.utils import generate_state_dict, save_strategy_file
-from mindformers.experimental.parallel_core.pynative.parallel_state import (
+from mindspeed_ms.tools import logger
+from mindspeed_ms.core.utils import generate_state_dict, save_strategy_file
+from mindspeed_ms.core.parallel_state import (
     get_data_parallel_group,
     get_data_parallel_rank,
     get_data_parallel_world_size,
     get_pipeline_model_parallel_world_size,
     get_expert_model_parallel_world_size
 )
-from mindformers.experimental.parallel_core.pynative.tensor_parallel.random import (
+from mindspeed_ms.core.tensor_parallel.random import (
     get_rng_tracer,
     CANDIDATE_MODES
 )
-from mindformers.experimental.parallel_core.pynative.optimizer.optimizer import MixedPrecisionOptimizer
+from mindspeed_ms.core.optimizer.optimizer import MixedPrecisionOptimizer
 
 # Distribution configurations.
 _STRATEGY_DIR = "strategy"

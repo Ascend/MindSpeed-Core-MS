@@ -16,13 +16,12 @@
 import mindspore as ms
 from mindspore import mint, nn, ops, Tensor
 
-from mindformers.experimental.parallel_core.pynative.config import TransformerConfig
-from mindformers.experimental.parallel_core.pynative.parallel_state import (
+from mindspeed_ms.core.config import TransformerConfig
+from mindspeed_ms.core.parallel_state import (
     get_tensor_and_context_parallel_world_size,
     get_tensor_model_parallel_world_size
 )
-from mindformers.experimental.parallel_core.pynative.tensor_parallel import GatherFromSequenceParallelRegion
-from mindformers.modules.layers import Linear
+from mindspeed_ms.core.tensor_parallel import GatherFromSequenceParallelRegion
 
 from .utils import MoEAuxLossAutoScaler, switch_load_balancing_loss_func, topk_softmax_with_capacity, z_loss_func
 
@@ -53,11 +52,10 @@ class TopKRouter(nn.Cell):
         self.moe_config = config.moe_config
         self.param_init_dtype = config.params_dtype
         self.compute_dtype = config.compute_dtype
-        self.gating = Linear(config.hidden_size,
-                             self.moe_config.num_experts,
-                             has_bias=False,
-                             param_init_type=self.param_init_dtype,
-                             compute_dtype=self.compute_dtype)
+        self.gating = mint.nn.Linear(config.hidden_size,
+                                     self.moe_config.num_experts,
+                                     bias=False,
+                                     dtype=self.param_init_dtype)
         self.topk = self.moe_config.moe_router_topk
         self.routing_type = self.moe_config.moe_router_load_balancing_type
         self.num_experts = self.moe_config.num_experts

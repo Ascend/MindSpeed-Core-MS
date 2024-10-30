@@ -19,10 +19,9 @@ from mindspore import ops as P
 from mindspore.ops import ReduceOp
 from mindspore.common.api import _pynative_executor
 import mindspore.communication.comm_func as comm_func
-from mindformers.experimental.parallel_core.pynative.parallel_state import get_tensor_model_parallel_group, \
+from mindspeed_ms.core.parallel_state import get_tensor_model_parallel_group, \
     get_tensor_model_parallel_rank, get_tensor_model_parallel_world_size
-
-from mindformers.experimental.parallel_core.pynative.register import ModuleType, ModuleRegistry
+from mindspeed_ms.core.register import ModuleType, ModuleRegistry
 
 __all__ = ['VocabParallelCrossEntropy']
 
@@ -52,11 +51,11 @@ class VocabParallelCrossEntropy(nn.Cell):
 
         >>> from mindspore import dtype as mstype
         >>> from mindspore import Tensor
-        >>> from mindformers.experimental.parallel_core.pynative.tensor_parallel.cross_entropy import (
+        >>> from mindspeed_ms.core.tensor_parallel.cross_entropy import (
         ...     VocabParallelCrossEntropy
         ... )
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import (
+        >>> from mindspeed_ms.core.parallel_state import (
         ...     initialize_model_parallel,
         ...     get_tensor_model_parallel_world_size,
         ...     get_data_parallel_world_size

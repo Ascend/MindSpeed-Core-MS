@@ -13,7 +13,7 @@
 # limitations under the License.
 # ============================================================================
 
-"""mindformers init"""
+"""lr scheduler init"""
 
 from .lr_scheduler import LearningRateScheduler, get_learning_rate_scheduler
 

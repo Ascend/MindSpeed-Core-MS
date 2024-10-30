@@ -32,7 +32,7 @@ import mindspore.common.dtype as mstype
 from mindspore import nn, ops, mint, Parameter
 import mindspore.ops.functional as F
 
-from mindformers.experimental.parallel_core.pynative.parallel_state import (
+from mindspeed_ms.core.parallel_state import (
     get_pipeline_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_pipeline_model_parallel_world_size,
@@ -41,42 +41,42 @@ from mindformers.experimental.parallel_core.pynative.parallel_state import (
     get_virtual_pipeline_model_parallel_rank,
     get_virtual_pipeline_model_parallel_world_size
 )
-from mindformers.experimental.parallel_core.pynative.tensor_parallel.random import get_rng_tracer
-from mindformers.experimental.parallel_core.pynative.tensor_parallel import (
+from mindspeed_ms.core.tensor_parallel.random import get_rng_tracer
+from mindspeed_ms.core.tensor_parallel import (
     ColumnParallelLinear,
     RowParallelLinear,
     CopyToModelParallelRegion,
     GatherFromModelParallelRegion,
     LinearWithGradAccumulationAndAsyncCommunication
 )
-from mindformers.experimental.parallel_core.pynative.tensor_parallel.lora_layers import (
+from mindspeed_ms.core.tensor_parallel.lora_layers import (
     ColumnParallelLoRA,
     RowParallelLoRA
 )
-from mindformers.experimental.parallel_core.pynative.transformer.utils import get_attn_mask_func
-from mindformers.experimental.parallel_core.pynative.transformer.norm import get_norm
-from mindformers.experimental.parallel_core.pynative.transformer.moe.moe_layer import MoELayer
+from mindspeed_ms.legacy.model.utils import get_attn_mask_func
+from mindspeed_ms.legacy.model.norm import get_norm
+from mindspeed_ms.legacy.model.moe.moe_layer import MoELayer
 
-from mindformers.experimental.parallel_core.pynative.transformer.rotary_pos_embedding import (
+from mindspeed_ms.legacy.model.rotary_pos_embedding import (
     apply_rotary_pos_emb,
 )
-from mindformers.experimental.parallel_core.pynative.transformer.scale_mask_softmax import (
+from mindspeed_ms.legacy.model.scale_mask_softmax import (
     ScaleMaskSoftmax,
 )
-from mindformers.experimental.parallel_core.pynative.transformer.enums import (
+from mindspeed_ms.legacy.model.enums import (
     AttnType, AttnMaskType, LayerType, ModelType
 )
-from mindformers.experimental.parallel_core.pynative.context_parallel.ring_attention import (
+from mindspeed_ms.core.context_parallel.ring_attention import (
     RingAttention,
 )
-from mindformers.experimental.parallel_core.pynative.context_parallel.flash_sp import FlashSP
+from mindspeed_ms.core.context_parallel.flash_sp import FlashSP
 
-from mindformers.experimental.parallel_core.pynative.recompute import (
+from mindspeed_ms.core.recompute import (
     CheckpointedRecomputeOrientedCell,
 )
 
-from mindformers.experimental.parallel_core.pynative.utils import divide
-from mindformers.tools import logger
+from mindspeed_ms.core.utils import divide
+from mindspeed_ms.tools import logger
 
 from .module import Module
 from .mlp import ParallelMLP
@@ -154,9 +154,9 @@ class CoreAttention(nn.Cell):
         >>> import mindspore.nn as nn
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.transformer import CoreAttention
-        >>> from mindformers.experimental.parallel_core.pynative.config import ModelParallelConfig, TransformerConfig
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model import CoreAttention
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> class MyNet(nn.Cell):
         ...     def __init__(self, config):
         ...         super(MyNet, self).__init__()
@@ -335,9 +335,9 @@ class ParallelAttention(Module):
         >>> import mindspore.nn as nn
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.transformer import ParallelAttention
-        >>> from mindformers.experimental.parallel_core.pynative.config import ModelParallelConfig, TransformerConfig
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model import ParallelAttention
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> class MyNet(nn.Cell):
         ...     def __init__(self, config):
         ...         super(MyNet, self).__init__()
@@ -764,9 +764,9 @@ class ParallelTransformerLayer(Module):
         >>> import mindspore.common.dtype as mstype
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.transformer import ParallelTransformerLayer
-        >>> from mindformers.experimental.parallel_core.pynative.config import ModelParallelConfig, TransformerConfig
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model import ParallelTransformerLayer
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> class MyNet(nn.Cell):
         ...     def __init__(self, config):
         ...         super(MyNet, self).__init__()
@@ -1144,9 +1144,9 @@ class ParallelTransformer(Module):
         >>> import mindspore.common.dtype as mstype
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.transformer import ParallelTransformer
-        >>> from mindformers.experimental.parallel_core.pynative.config import ModelParallelConfig, TransformerConfig
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model import ParallelTransformer
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> class MyNet(nn.Cell):
         ...     def __init__(self, config):
         ...         super(MyNet, self).__init__()
@@ -1529,9 +1529,9 @@ class ParallelLMLogits(nn.Cell):
         >>> import mindspore.common.dtype as mstype
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.config import ModelParallelConfig, TransformerConfig
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
-        >>> from mindformers.experimental.parallel_core.pynative.transformer import ParallelLMLogits
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model import ParallelLMLogits
         >>> init()
         >>> initialize_model_parallel()
         >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=tensor_parallel)

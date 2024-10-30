@@ -19,8 +19,8 @@ import mindspore.communication.comm_func as comm_func
 from mindspore import nn, ops
 from mindspore.communication import get_group_size
 
-from mindformers.experimental.parallel_core.pynative.utils import divide
-from mindformers.experimental.parallel_core.pynative.parallel_state import (
+from mindspeed_ms.core.utils import divide
+from mindspeed_ms.core.parallel_state import (
     get_expert_model_parallel_group,
     get_expert_model_parallel_rank,
     get_expert_model_parallel_world_size,

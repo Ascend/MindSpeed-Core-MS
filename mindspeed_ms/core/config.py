@@ -36,8 +36,8 @@ except ImportError:
     import mindspore._checkparam as Rel
 from mindspore.common.initializer import _INITIALIZER_ALIAS
 
-from mindformers.tools import DictConfig, logger
-from mindformers.experimental.parallel_core.pynative.utils import load_yaml, DictWithValueError, divide
+from mindspeed_ms.tools import DictConfig, logger
+from mindspeed_ms.core.utils import load_yaml, DictWithValueError, divide
 
 _SUPPORT_DTYPE_DICT = DictWithValueError(
     {"float16": mstype.float16, "float32": mstype.float32, "bfloat16": mstype.bfloat16}
@@ -1891,7 +1891,7 @@ def validate_no_load_rng(config_instance, no_load_rng):
         config_instance.no_load_rng = False
     Validator.check_bool(no_load_rng, "no_load_rng")
     if not no_load_rng:
-        logger.warning("MindFormers doesn't support load rng state from third-party checkpoint.")
+        logger.warning("mindspeed_ms doesn't support load rng state from third-party checkpoint.")
     return no_load_rng
 
 

@@ -22,7 +22,7 @@ import mindspore.common.dtype as mstype
 from mindspore import nn, Tensor
 from mindspore import ops, mint
 
-from mindformers.experimental.parallel_core.pynative.register import ModuleType, ModuleRegistry
+from mindspeed_ms.core.register import ModuleType, ModuleRegistry
 
 
 @ModuleRegistry.register_decorator(ModuleType.ACTIVATION_FUNC, 'gelu')
@@ -67,7 +67,7 @@ class GELU(nn.Cell):
 
     Examples:
         >>> import mindspore
-        >>> from mindformers.experimental import get_act_func
+        >>> from mindspeed_ms.legacy.model.activation import get_act_func
         >>> from mindspore import Tensor
         >>> import numpy as np
         >>> x = Tensor(np.array([[-1.0, 4.0, -8.0], [2.0, -5.0, 9.0]]), mindspore.float32)
@@ -137,7 +137,7 @@ class FastGelu(nn.Cell):
 
     Examples:
         >>> import mindspore
-        >>> from mindformers.experimental import get_act_func
+        >>> from mindspeed_ms.legacy.model.activation import get_act_func
         >>> from mindspore import Tensor, nn
         >>> import numpy as np
         >>> x = Tensor(np.array([[-1.0, 4.0, -8.0], [2.0, -5.0, 9.0]]), mindspore.float32)

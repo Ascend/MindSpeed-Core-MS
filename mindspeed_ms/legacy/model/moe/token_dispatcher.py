@@ -18,13 +18,13 @@ from typing import List
 import mindspore as ms
 import mindspore.ops as ops
 
-from mindformers.experimental.parallel_core.pynative.config import TransformerConfig
-from mindformers.experimental.parallel_core.pynative.parallel_state import (
+from mindspeed_ms.core.config import TransformerConfig
+from mindspeed_ms.core.parallel_state import (
     get_expert_model_parallel_group,
     get_expert_model_parallel_rank,
     get_tensor_model_parallel_world_size
 )
-from mindformers.experimental.parallel_core.pynative.tensor_parallel import (
+from mindspeed_ms.core.tensor_parallel import (
     all_to_all_hp2sp,
     AllGatherFromTensorParallelRegion,
     AllToAll,
@@ -32,7 +32,7 @@ from mindformers.experimental.parallel_core.pynative.tensor_parallel import (
     GatherFromTensorAndExpertParallelRegion,
     ReduceScatterToTensorParallelRegion,
 )
-from mindformers.experimental.parallel_core.pynative.tensor_parallel.mappings import (
+from mindspeed_ms.core.tensor_parallel.mappings import (
     gather_along_first_dim_expert_parallel
 )
 

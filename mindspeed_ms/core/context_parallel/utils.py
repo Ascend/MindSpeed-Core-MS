@@ -13,12 +13,13 @@
 # limitations under the License.
 # ============================================================================
 """Ring Attention utils."""
+import numpy as np
+
 from mindspore import Tensor
 from mindspore import ops
 from mindspore.communication import get_group_size, get_rank
-import numpy as np
 
-from mindformers.experimental.parallel_core.pynative.parallel_state import get_context_parallel_rank, \
+from mindspeed_ms.core.parallel_state import get_context_parallel_rank, \
     get_data_parallel_world_size, get_context_parallel_world_size
 
 

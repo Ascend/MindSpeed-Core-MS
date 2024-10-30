@@ -27,8 +27,8 @@ from mindspore.common import dtype as mstype
 from mindspore.communication.management import get_group_size, get_rank
 import mindspore.communication.comm_func as comm_func
 
-from mindformers.tools import logger
-from mindformers.experimental.parallel_core.pynative.distributed import ParamAndGradBuffer
+from mindspeed_ms.tools import logger
+from mindspeed_ms.core.distributed import ParamAndGradBuffer
 
 from .optimizer import MixedPrecisionOptimizer
 
@@ -88,15 +88,15 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         >>> from mindspore.communication.management import init
         >>> from mindspore.nn import SoftmaxCrossEntropyWithLogits
         >>> from mindspore.mint.optim import AdamW
-        >>> from mindformers.experimental.parallel_core.pynative.tensor_parallel import (ColumnParallelLinear,
+        >>> from mindspeed_ms.core.tensor_parallel import (ColumnParallelLinear,
         ... RowParallelLinear)
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import (initialize_model_parallel,
+        >>> from mindspeed_ms.core.parallel_state import (initialize_model_parallel,
         ... get_data_parallel_world_size, get_data_parallel_rank, get_data_parallel_group)
-        >>> from mindformers.experimental.parallel_core.pynative.config import (OptimizerConfig, ModelParallelConfig,
+        >>> from mindspeed_ms.core.config import (OptimizerConfig, ModelParallelConfig,
         ... TransformerConfig, TrainingConfig)
-        >>> from mindformers.experimental.parallel_core.pynative.distributed import (DistributedDataParallel,
+        >>> from mindspeed_ms.core.distributed import (DistributedDataParallel,
         ... DistributedDataParallelConfig)
-        >>> from mindformers.experimental.parallel_core.pynative.optimizer.distrib_optimizer import DistributedOptimizer
+        >>> from mindspeed_ms.core.optimizer.distrib_optimizer import DistributedOptimizer
         >>> from tests.st.test_distri_core.utils import TestData, train
         >>> class TestNet2(nn.Cell):
         ...     def __init__(self, config):

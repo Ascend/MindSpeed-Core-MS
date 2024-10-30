@@ -18,12 +18,12 @@ __all__ = [
     "ParallelMLP",
 ]
 
-from mindformers.experimental.parallel_core.pynative.tensor_parallel import (
+from mindspeed_ms.core.tensor_parallel import (
     ColumnParallelLinear,
     RowParallelLinear,
 )
 
-from mindformers.experimental.parallel_core.pynative.tensor_parallel.lora_layers import (
+from mindspeed_ms.core.tensor_parallel.lora_layers import (
     ColumnParallelLoRA,
     RowParallelLoRA
 )
@@ -65,9 +65,9 @@ class ParallelMLP(Module):
         >>> import mindspore.common.dtype as mstype
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.config import ModelParallelConfig, TransformerConfig
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
-        >>> from mindformers.experimental.parallel_core.pynative.transformer import ParallelMLP
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model.transformer import ParallelMLP
         >>> init()
         >>> initialize_model_parallel()
         >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=tensor_parallel)

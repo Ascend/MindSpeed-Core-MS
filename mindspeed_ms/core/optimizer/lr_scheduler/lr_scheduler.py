@@ -25,7 +25,7 @@ from mindspore.nn.learning_rate_schedule import (
     CosineDecayLR,
 )
 
-from mindformers.experimental.parallel_core.pynative.register import ModuleType, ModuleRegistry
+from mindspeed_ms.core.register import ModuleType, ModuleRegistry
 
 
 @ModuleRegistry.register_decorator(ModuleType.LR_SCHEDULER)

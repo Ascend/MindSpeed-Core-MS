@@ -19,11 +19,11 @@ import mindspore.ops.operations as P
 from mindspore import Parameter, Tensor, nn, mint
 from mindspore.common.initializer import initializer
 
-from mindformers.experimental.parallel_core.pynative.parallel_state import (
+from mindspeed_ms.core.parallel_state import (
     get_tensor_model_parallel_world_size,
     get_data_parallel_world_size,
 )
-from mindformers.experimental.parallel_core.pynative.tensor_parallel import (
+from mindspeed_ms.core.tensor_parallel import (
     CopyToModelParallelRegion,
     GatherFromModelParallelRegion,
     GatherFromSequenceParallelRegion,
@@ -31,8 +31,8 @@ from mindformers.experimental.parallel_core.pynative.tensor_parallel import (
     ReduceScatterToSequenceParallelRegion,
     ScatterToModelParallelRegion,
 )
-from mindformers.experimental.parallel_core.pynative.utils import divide
-from mindformers.experimental.parallel_core.pynative.tensor_parallel.random import (
+from mindspeed_ms.core.utils import divide
+from mindspeed_ms.core.tensor_parallel.random import (
     get_rng_tracer,
     TENSOR_PARALLEL_GENERATOR,
     EXPERT_PARALLEL_GENERATOR,

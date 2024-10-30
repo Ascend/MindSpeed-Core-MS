@@ -18,7 +18,7 @@ import os
 from mindspore.profiler import DynamicProfilerMonitor, Profiler, ProfilerLevel
 from mindspore.train import RunContext
 from mindspore.communication import get_rank
-from mindformers.tools import logger
+from mindspeed_ms.tools import logger
 
 
 def get_real_rank():

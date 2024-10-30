@@ -19,11 +19,11 @@ from mindspore import mint, ops, _no_grad, Parameter
 from mindspore.common.initializer import Zero
 from mindspore.common import dtype as mstype
 from mindspore.communication.comm_func import all_gather_into_tensor, reduce_scatter_tensor
-from mindformers.experimental.parallel_core.pynative.parallel_state import get_data_parallel_world_size, \
+from mindspeed_ms.core.parallel_state import get_data_parallel_world_size, \
     get_pipeline_model_parallel_rank, get_data_parallel_group, get_data_modulo_expert_parallel_group, \
     get_pipeline_model_parallel_world_size
-from mindformers.experimental.parallel_core.pynative.transformer.module import Module
-from mindformers.experimental.parallel_core.pynative.distributed.param_and_grad_buffer import ParamAndGradBuffer
+from mindspeed_ms.legacy.model.module import Module
+from mindspeed_ms.core.distributed.param_and_grad_buffer import ParamAndGradBuffer
 
 __all__ = ['DistributedDataParallel']
 
@@ -175,15 +175,15 @@ class DistributedDataParallel(Module):
         >>> from mindspore.communication.management import init
         >>> from mindspore.nn import SoftmaxCrossEntropyWithLogits
         >>> from mindspore.mint.optim import AdamW
-        >>> from mindformers.experimental.parallel_core.pynative.tensor_parallel import (ColumnParallelLinear,
+        >>> from mindspeed_ms.core.tensor_parallel import (ColumnParallelLinear,
         ... RowParallelLinear)
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import (initialize_model_parallel,
+        >>> from mindspeed_ms.core.parallel_state import (initialize_model_parallel,
         ... get_data_parallel_world_size, get_data_parallel_rank, get_data_parallel_group)
-        >>> from mindformers.experimental.parallel_core.pynative.config import (OptimizerConfig, ModelParallelConfig,
+        >>> from mindspeed_ms.core.config import (OptimizerConfig, ModelParallelConfig,
         ... TransformerConfig, TrainingConfig)
-        >>> from mindformers.experimental.parallel_core.pynative.distributed import (DistributedDataParallel,
+        >>> from mindspeed_ms.core.distributed import (DistributedDataParallel,
         ... DistributedDataParallelConfig)
-        >>> from mindformers.experimental.parallel_core.pynative.optimizer.distrib_optimizer import DistributedOptimizer
+        >>> from mindspeed_ms.core.optimizer.distrib_optimizer import DistributedOptimizer
         >>> from tests.st.test_distri_core.utils import TestData, train
         >>> class TestNet2(nn.Cell):
         ...     def __init__(self, config):

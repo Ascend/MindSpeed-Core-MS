@@ -19,14 +19,14 @@ from mindspore.nn import Cell
 import mindspore.ops as P
 import mindspore.nn as nn
 
-from mindformers.experimental.parallel_core.pynative.tensor_parallel import GatherFromSequenceParallelRegion, \
+from mindspeed_ms.core.tensor_parallel import GatherFromSequenceParallelRegion, \
     VocabParallelEmbedding, ScatterToSequenceParallelRegion, ColumnParallelLinear
-from mindformers.experimental.parallel_core.pynative.tensor_parallel.random import get_rng_tracer
-from mindformers.experimental.parallel_core.pynative.parallel_state import get_pipeline_model_parallel_world_size
-from mindformers.experimental.parallel_core.pynative.transformer.enums import ModelType, AttnMaskType
+from mindspeed_ms.core.tensor_parallel.random import get_rng_tracer
+from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_world_size
 
 from .module import Module
 from .transformer import ParallelTransformer
+from .enums import ModelType, AttnMaskType
 from .mlp import ParallelMLP
 from .rotary_pos_embedding import RotaryEmbedding
 
@@ -108,19 +108,18 @@ class Embedding(Module):
 
         >>> import mindspore as ms
         >>> from mindspore.communication import init
-        >>> from mindformers.experimental.parallel_core.pynative.config import TransformerConfig, ModelParallelConfig
-        >>> from mindformers.experimental.parallel_core.pynative.transformer.language_model import (
+        >>> from mindspeed_ms.core.config import TransformerConfig, ModelParallelConfig
+        >>> from mindspeed_ms.legacy.model.language_model import (
         ...     Embedding as Pynative_Embedding
         ... )
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
-        >>> from mindformers.experimental.parallel_core import Embedding
-        >>> from mindformers.core.context import build_context
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.core.parallel_core import Embedding
         >>> from mindspore.common.initializer import initializer
         >>> from mindspore.numpy import array_equal
-        >>> from mindformers.experimental.parallel_core.pynative.transformer.rotary_pos_embedding import (
+        >>> from mindspeed_ms.legacy.model.rotary_pos_embedding import (
         ...     apply_rotary_pos_emb as pynative_apply_rotary_pos_emb
         ... )
-        >>> from mindformers.experimental.parallel_core import apply_rotary_pos_emb
+        >>> from mindspeed_ms.core.parallel_core import apply_rotary_pos_emb
         >>> ms.set_context(mode=ms.PYNATIVE_MODE)
         >>> init()
         >>> initialize_model_parallel()
@@ -133,7 +132,7 @@ class Embedding(Module):
         ...                                ffn_hidden_size=1,
         ...                                parallel_config=parallel_config)
         ...     return config
-        >>> build_context(config={'context': {'mode': 'PYNATIVE_MODE'}, 'parallel': {}})
+        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic="ON")
         >>> x = initializer('normal', (1, 8, 4096, 64), ms.dtype.bfloat16)
         >>> freqs = initializer('normal', (1, 1, 4096, 64), ms.dtype.bfloat16)
         >>> config = get_config()
@@ -340,9 +339,9 @@ class TransformerLanguageModel(Module):
         >>> import mindspore as ms
         >>> from mindspore import Tensor
         >>> from mindspore.communication import init
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
-        >>> from mindformers.experimental.parallel_core.pynative.transformer import TransformerLanguageModel
-        >>> from mindformers.experimental.parallel_core.pynative.config import (
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model import TransformerLanguageModel
+        >>> from mindspeed_ms.core.config import (
         ...     init_configs_from_yaml,
         ...     TrainingConfig,
         ...     ModelParallelConfig,

@@ -27,10 +27,10 @@ from mindspore.common import dtype as mstype
 from mindspore.common.initializer import initializer
 import mindspore.communication.comm_func as comm_func
 
-from mindformers.experimental.parallel_core.pynative.parallel_state import get_data_parallel_rank, \
+from mindspeed_ms.core.parallel_state import get_data_parallel_rank, \
     get_data_parallel_world_size, get_data_parallel_group
-from mindformers.tools import logger
-from mindformers.experimental.parallel_core.pynative.register import ModuleType, ModuleRegistry
+from mindspeed_ms.tools import logger
+from mindspeed_ms.core.register import ModuleType, ModuleRegistry
 
 _adamw_opt = ops.MultitypeFuncGraph("adamw_opt")
 _split_params = ops.MultitypeFuncGraph("split_params")
@@ -213,8 +213,8 @@ class AdamW(Optimizer):
         >>> import mindspore as ms
         >>> from mindspore.communication.management import init, GlobalComm
         >>> from mindspore.nn.wrap.cell_wrapper import WithLossCell
-        >>> from mindformers import AdamW
-        >>> from mindformers.experimental.distri_cores.dynamic_cluster import initialize_model_parallel
+        >>> from mindspeed_ms.core.optimizer.zero.adamw_zero import AdamW
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> loss = SoftmaxCrossEntropyWithLogits()
         >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE)
         >>> ms.set_auto_parallel_context(parallel_mode=ms.ParallelMode.DATA_PARALLEL)

@@ -15,13 +15,13 @@
 """moe layer"""
 import mindspore as ms
 
-from mindformers.experimental.parallel_core.pynative.config import TransformerConfig
-from mindformers.experimental.parallel_core.pynative.parallel_state import (
+from mindspeed_ms.core.config import TransformerConfig
+from mindspeed_ms.core.parallel_state import (
     get_expert_model_parallel_rank,
     get_expert_model_parallel_world_size,
     get_tensor_model_parallel_world_size
 )
-from mindformers.experimental.parallel_core.pynative.transformer.module import Module
+from mindspeed_ms.legacy.model.module import Module
 
 from .experts import GroupedMLP, SequentialMLP
 from .router import TopKRouter

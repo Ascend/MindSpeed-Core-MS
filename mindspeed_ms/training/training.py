@@ -17,21 +17,21 @@
 import time
 import contextlib
 import os
-
 import numpy as np
 
 import mindspore as ms
-from mindspore.train import Perplexity
 import mindspore.common.dtype as mstype
 import mindspore.communication.comm_func as comm_func
-from mindspore.communication.management import get_rank
+
 from mindspore import nn, Tensor, Parameter, mint, value_and_grad
+from mindspore.train import Perplexity
+from mindspore.communication.management import get_rank
 from mindspore.amp import DynamicLossScaler, StaticLossScaler, all_finite
 from mindspore.experimental.optim.optimizer import Optimizer as mintOptimizer
 
-from mindformers.tools import logger
-from mindformers.tools.resume_ckpt import get_resume_checkpoint
-from mindformers.experimental.parallel_core.pynative.parallel_state import (
+from mindspeed_ms.tools import logger
+from mindspeed_ms.tools.resume_ckpt import get_resume_checkpoint
+from mindspeed_ms.core.parallel_state import (
     get_data_parallel_world_size,
     get_data_parallel_group,
     get_tensor_model_parallel_world_size,
@@ -44,20 +44,20 @@ from mindformers.experimental.parallel_core.pynative.parallel_state import (
     get_data_modulo_expert_parallel_group,
     get_expert_model_parallel_world_size
 )
-from mindformers.experimental.parallel_core.pynative.distributed import DistributedDataParallelConfig, \
+from mindspeed_ms.core.distributed import DistributedDataParallelConfig, \
     DistributedDataParallel
-from mindformers.experimental.parallel_core.pynative.optimizer import MixedPrecisionOptimizer, DistributedOptimizer
-from mindformers.experimental.parallel_core.pynative.pipeline_parallel.schedules import (
+from mindspeed_ms.core.optimizer import MixedPrecisionOptimizer, DistributedOptimizer
+from mindspeed_ms.core.pipeline_parallel.schedules import (
     forward_backward_pipelining_without_interleaving,
     forward_backward_pipelining_with_interleaving
 )
-from mindformers.experimental.parallel_core.pynative.config import GeneralConfig
-from mindformers.experimental.parallel_core.pynative.dist_checkpointing import save_checkpoint, load_checkpoint
-from mindformers.experimental.parallel_core.pynative.transformer.moe.utils import MoEAuxLossAutoScaler
-from mindformers.experimental.parallel_core.pynative.optimizer import get_optimizer, get_optimizer_param_scheduler
+from mindspeed_ms.core.config import GeneralConfig
+from mindspeed_ms.core.dist_checkpointing import save_checkpoint, load_checkpoint
+from mindspeed_ms.legacy.model.moe.utils import MoEAuxLossAutoScaler
+from mindspeed_ms.core.optimizer import get_optimizer, get_optimizer_param_scheduler
+from mindspeed_ms.core.profiler import PynativeProfiler
 
-from mindformers.experimental.parallel_core.pynative.profiler import PynativeProfiler
-from mindformers.experimental.parallel_core.pynative.training.utils import set_weight_decay
+from .utils import set_weight_decay
 from .grad_handler import inplace_apply_to_tensor_list, get_grad_process_func, GradAccumulator
 
 

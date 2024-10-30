@@ -17,18 +17,17 @@
 
 import re
 import math
-from collections import OrderedDict
-
 import yaml
+from collections import OrderedDict
 
 import mindspore.ops as P
 import mindspore.nn as nn
 from mindspore.communication import get_group_size
 from mindspore.nn.optim.optimizer import Optimizer
 
-from mindformers.tools import logger
-from mindformers.experimental.parallel_core.pynative.transformer.module import Module
-from mindformers.experimental.parallel_core.pynative.parallel_state import (
+from mindspeed_ms.tools import logger
+from mindspeed_ms.legacy.model.module import Module
+from mindspeed_ms.core.parallel_state import (
     get_pipeline_model_parallel_rank,
     get_pipeline_model_parallel_world_size,
     get_expert_model_parallel_rank,

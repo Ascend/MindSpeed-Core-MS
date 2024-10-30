@@ -22,9 +22,9 @@ from mindspore.common.recompute import (
     _check_input_args_validate,
     _padding_input_grads,
 )
-from mindformers.experimental.parallel_core.pynative.tensor_parallel.random import get_rng_tracer, \
+from mindspeed_ms.core.tensor_parallel.random import get_rng_tracer, \
     get_rng_state, set_rng_state
-from mindformers.experimental.parallel_core.pynative.transformer.module import Module
+from mindspeed_ms.legacy.model.module import Module
 __all__ = ["CheckpointedRecomputeOrientedCell"]
 
 

@@ -16,9 +16,9 @@
 
 from mindspore import nn, ops
 
-from mindformers.experimental.parallel_core.pynative.config import TransformerConfig
-from mindformers.experimental.parallel_core.pynative.transformer.module import Module
-from mindformers.experimental.parallel_core.pynative.transformer.mlp import ParallelMLP
+from mindspeed_ms.core.config import TransformerConfig
+from mindspeed_ms.legacy.model.module import Module
+from mindspeed_ms.legacy.model.mlp import ParallelMLP
 
 
 class GroupedMLP(Module):

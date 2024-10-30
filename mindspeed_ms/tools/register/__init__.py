@@ -1,4 +1,4 @@
-# Copyright 2024 Huawei Technologies Co., Ltd
+# Copyright 2022 Huawei Technologies Co., Ltd
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,15 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
+"""register init."""
+from .config import ActionDict, DictConfig
 
-"""pipeline parallel init"""
-
-__all__ = [
-    "P2PPrimitive",
-    "forward_backward_pipelining_without_interleaving",
-    "forward_backward_pipelining_with_interleaving",
-]
-
-from .p2p_communication import P2PPrimitive
-from .schedules import forward_backward_pipelining_without_interleaving, \
-                       forward_backward_pipelining_with_interleaving
+__all__ = ['ActionDict', 'DictConfig']

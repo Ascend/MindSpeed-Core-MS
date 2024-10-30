@@ -28,14 +28,14 @@ from mindspore import Parameter, Tensor, nn, ops, mint
 from mindspore.common.initializer import initializer, Zero
 from mindspore.common.api import _pynative_executor
 
-from mindformers.experimental.parallel_core.pynative.parallel_state import (
+from mindspeed_ms.core.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_data_parallel_world_size,
     get_tensor_model_parallel_group,
     get_stream
 )
-from mindformers.experimental.parallel_core.pynative.tensor_parallel import (
+from mindspeed_ms.core.tensor_parallel import (
     CopyToModelParallelRegion,
     GatherFromModelParallelRegion,
     ReduceFromModelParallelRegion,
@@ -43,8 +43,8 @@ from mindformers.experimental.parallel_core.pynative.tensor_parallel import (
     ScatterToModelParallelRegion,
     GatherFromSequenceParallelRegion
 )
-from mindformers.experimental.parallel_core.pynative.utils import divide
-from mindformers.experimental.parallel_core.pynative.tensor_parallel.random import (
+from mindspeed_ms.core.utils import divide
+from mindspeed_ms.core.tensor_parallel.random import (
     get_rng_tracer,
     TENSOR_PARALLEL_GENERATOR,
     EXPERT_PARALLEL_GENERATOR,
@@ -109,12 +109,12 @@ class LinearWithGradAccumulationAndAsyncCommunication(nn.Cell):
 
         >>> import mindspore as ms
         >>> from mindspore import nn, Tensor
-        >>> from mindformers.experimental.parallel_core.pynative.tensor_parallel import (
+        >>> from mindspeed_ms.core.tensor_parallel import (
         ...     LinearWithGradAccumulationAndAsyncCommunication
         ... )
         >>> import numpy as np
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> class LinearWithGradNet(nn.Cell):
         ...     def __init__(self):
         ...         super(LinearWithGradNet, self).__init__()
@@ -321,9 +321,9 @@ class LinearWithFrozenWeight(nn.Cell):
         >>> import mindspore.common.dtype as mstype
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.config import ModelParallelConfig, TransformerConfig
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
-        >>> from mindformers.experimental.parallel_core.pynative.tensor_parallel.layers import LinearWithFrozenWeight
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.core.tensor_parallel.layers import LinearWithFrozenWeight
         >>> input = Tensor(np.random.random((2, 3, 3)).astype(np.float32))
         >>> weight = Tensor(np.random.random((3, 3)).astype(np.float32))
         >>> bias = Tensor(np.random.random((1)).astype(np.float32))
@@ -435,13 +435,12 @@ class ColumnParallelLinear(nn.Cell):
         >>> import mindspore as ms
         >>> from mindspore import nn, Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
-        >>> from mindformers.experimental.parallel_core.pynative.config import (
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.core.config import (
         ...     ModelParallelConfig,
         ...     TransformerConfig
         ... )
-        >>> from mindformers.experimental.parallel_core.pynative.tensor_parallel import ColumnParallelLinear
-        >>> from mindformers.experimental.utils import init_method_normal
+        >>> from mindspeed_ms.core.tensor_parallel import ColumnParallelLinear
         >>> class TestNet(nn.Cell):
         ...     def __init__(self, config):
         ...         super(TestNet, self).__init__()
@@ -779,13 +778,12 @@ class RowParallelLinear(nn.Cell):
         >>> import mindspore as ms
         >>> from mindspore import nn, Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
-        >>> from mindformers.experimental.parallel_core.pynative.config import (
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.core.config import (
         ...     ModelParallelConfig,
         ...     TransformerConfig
         ... )
-        >>> from mindformers.experimental.parallel_core.pynative.tensor_parallel import RowParallelLinear
-        >>> from mindformers.experimental.utils import init_method_normal
+        >>> from mindspeed_ms.core.tensor_parallel import RowParallelLinear
         >>> class TestNet(nn.Cell):
         ...     def __init__(self, config):
         ...         super(TestNet, self).__init__()
@@ -1063,9 +1061,9 @@ class VocabParallelEmbedding(nn.Cell):
         >>> import mindspore as ms
         >>> from mindspore import nn, ops, Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindformers.experimental.parallel_core.pynative.parallel_state import initialize_model_parallel
-        >>> from mindformers.experimental.parallel_core.pynative.tensor_parallel.layers import VocabParallelEmbedding
-        >>> from mindformers.experimental.parallel_core.pynative.config import (
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.core.tensor_parallel.layers import VocabParallelEmbedding
+        >>> from mindspeed_ms.core.config import (
         ...     ModelParallelConfig,
         ...     DatasetConfig,
         ...     TransformerConfig

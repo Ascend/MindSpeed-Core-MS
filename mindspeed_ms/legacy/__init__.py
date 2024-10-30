@@ -12,29 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"mindformers init"
+"model init"
 
-from .transformer import get_attention_mask
-from .transformer import ParallelAttention
-from .transformer import ParallelTransformerLayer
-from .transformer import ParallelTransformer
-from .transformer import ParallelLMLogits
-from .rotary_pos_embedding import RotaryEmbedding, apply_rotary_pos_emb
-from .language_model import TransformerLanguageModel, VocabParallelEmbedding
-from .mlp import ParallelMLP
-from . import moe
+from . import model
 
-__all__ = [
-    "get_attention_mask",
-    "ParallelAttention",
-    "ParallelTransformerLayer",
-    "ParallelTransformer",
-    "ParallelLMLogits",
-    "TransformerLanguageModel",
-    "VocabParallelEmbedding",
-    "ParallelMLP",
-    "RotaryEmbedding",
-    "apply_rotary_pos_emb"
-]
-
-__all__.extend(moe.__all__)
+__all__ = []
+__all__.extend(model.__all__)

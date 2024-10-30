@@ -18,7 +18,7 @@ import math
 import mindspore as ms
 import mindspore.common.dtype as mstype
 
-from mindformers.tools import logger
+from mindspeed_ms.tools import logger
 
 lr_decay_style_list = ["constant", "WSD", "linear", "cosine", "inverse-square-root"]
 wd_incr_style_list = ["constant", "linear", "cosine"]

@@ -17,8 +17,8 @@
 import mindspore as ms
 from mindspore.communication.management import init
 
-from mindformers.tools import logger
-from mindformers.experimental.parallel_core.pynative.parallel_state import get_data_parallel_world_size, initialize_model_parallel
+from mindspeed_ms.tools import logger
+from mindspeed_ms.core.parallel_state import get_data_parallel_world_size, initialize_model_parallel
 
 
 def decay_filter(x):
@@ -50,7 +50,7 @@ def set_parallel_context(parallel_config):
     Sets the parallel context based on the provided parallel configuration.
 
     Args:
-        parallel_config (MindFormerConfig): The parallel configuration object containing the parallel settings.
+        parallel_config: The parallel configuration object containing the parallel settings.
 
     Returns:
         ParallelConfig: The updated parallel configuration object.

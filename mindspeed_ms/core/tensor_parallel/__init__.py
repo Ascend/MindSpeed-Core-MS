@@ -13,7 +13,7 @@
 # limitations under the License.
 # ============================================================================
 
-"""mindformers init"""
+"""tensor parallel init"""
 
 from .mappings import all_to_all_hp2sp, all_to_all_sp2hp
 from .mappings import CopyToModelParallelRegion

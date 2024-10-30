@@ -13,7 +13,7 @@
 # limitations under the License.
 # ============================================================================
 
-"""mindformers init"""
+"""zero init"""
 
 from .adamw_zero import AdamW
 

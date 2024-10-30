@@ -25,12 +25,12 @@ from mindspore.ops import functional as F
 from mindspore.ops import composite as C
 from mindspore.communication import get_group_size, GlobalComm
 
-from mindformers.experimental.parallel_core.pynative.parallel_state import (
+from mindspeed_ms.core.parallel_state import (
     get_model_parallel_group,
     get_tensor_model_parallel_rank,
     is_pipeline_last_stage
 )
-from mindformers.experimental.parallel_core.pynative.register import ModuleType, ModuleRegistry
+from mindspeed_ms.core.register import ModuleType, ModuleRegistry
 
 
 def inplace_apply_to_tensor_list(func: callable):
@@ -236,7 +236,7 @@ class GradAccumulator:
         NotImplementedError: If `op` is not mean or sum.
 
     Examples:
-        >>> from mindformers.experimental.distri_cores.grad_handler import GradAccumulator
+        >>> from mindspeed_ms.training.grad_handler import GradAccumulator
         >>> micro_batch_num = 2
         >>> accumulator = GradAccumulator(micro_batch_num)
         >>> grad_func = ops.value_and_grad(network, grad_position=0, weights=optimizer.parameters)

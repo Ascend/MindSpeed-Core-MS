@@ -15,7 +15,7 @@
 """loss function"""
 from mindspore import nn, mint
 
-from mindformers.experimental.parallel_core.pynative.register import ModuleType, ModuleRegistry
+from mindspeed_ms.core.register import ModuleType, ModuleRegistry
 
 __all__ = ['get_loss_func']
 

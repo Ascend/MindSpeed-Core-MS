@@ -13,10 +13,10 @@
 # limitations under the License.
 # ============================================================================
 
-"""mindformers init"""
+"""profiler init"""
+
+from .profiler import PynativeProfiler
 
 __all__ = [
     "PynativeProfiler"
 ]
-
-from .profiler import PynativeProfiler
