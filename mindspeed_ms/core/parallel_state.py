@@ -335,6 +335,8 @@ def initialize_model_parallel(tensor_model_parallel_size=1,
         get_data_parallel_group()
     if get_tensor_model_parallel_world_size() > 1:
         get_tensor_model_parallel_group()
+    if get_context_parallel_world_size() > 1:
+        get_context_parallel_group()
 
 
 def is_initialized():
