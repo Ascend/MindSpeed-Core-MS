@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 import os
+import gc
 import stat
 import glob
 import json
@@ -286,6 +287,7 @@ def save_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
         ms.save_checkpoint(params_dict, ckpt_file, append_dict=append_dict, format=format, crc_check=crc_check)
         record_last_ckpt_to_json(epoch=epoch_num, step=step_num, ckpt_file=os.path.basename(ckpt_file),
                                  meta_json=os.path.join(rank_path, 'meta.json'))
+        gc.collect()
     logger.info("ckpt saved")
 
 
