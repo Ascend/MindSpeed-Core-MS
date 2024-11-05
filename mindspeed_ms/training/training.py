@@ -152,6 +152,7 @@ class ParallelTrainingReducer:
 
         # pp
         if get_pipeline_model_parallel_world_size() > 1:
+            self.enable_loss_reduce["dp"] = False
             self.enable_grad_flag_reduce["pp"] = True
 
         # ep
