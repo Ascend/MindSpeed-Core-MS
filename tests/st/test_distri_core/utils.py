@@ -15,6 +15,7 @@
 """some utility functions"""
 from typing import Dict
 import collections
+import re
 import numpy as np
 
 import mindspore as ms
@@ -641,3 +642,15 @@ class MixtralModel(Module):
         loss = self.loss(logits, labels, loss_mask)
 
         return loss
+
+
+def read_loss_from_log(file_path):
+    """ reading loss from log """
+    losses = []
+    with open(file_path, 'r') as file:
+        for line in file:
+            loss_str = re.search(r'Loss: (\d+\.\d+)', line)
+            if loss_str:
+                loss_value = float(loss_str.group(1))
+                losses.append(loss_value)
+    return losses

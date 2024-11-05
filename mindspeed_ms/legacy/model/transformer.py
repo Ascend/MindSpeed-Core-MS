@@ -54,7 +54,7 @@ from mindspeed_ms.core.tensor_parallel.lora_layers import (
     ColumnParallelLoRA,
     RowParallelLoRA
 )
-from mindspeed_ms.legacy.model.utils import get_attn_mask_func
+from mindspeed_ms.legacy.model.utils import get_attn_mask_func, get_num_layer_list
 from mindspeed_ms.legacy.model.norm import get_norm
 from mindspeed_ms.legacy.model.moe.moe_layer import MoELayer
 
@@ -986,24 +986,26 @@ class ParallelTransformerLayer(Module):
         return output
 
 
-def _get_custom_num_layers(num_layer_list, pp_stage, pp_rank, vpp_stage=None, vpp_rank=0):
-    """get transformer layers nums for current rank according to custom num layer list"""
+def _get_layers_and_offset(num_layer_array, pp_stage, pp_rank, vpp_stage=None, vpp_rank=0):
+    """get transformer layers nums for current rank according to num layer list"""
     pp_layout = (1,)
     if vpp_stage is not None:
-        pp_layout = (vpp_stage, pp_stage)
+        pp_layout = (pp_stage, vpp_stage)
     elif pp_stage is not None:
         pp_layout = (pp_stage,)
-    num_layer_array = np.array(num_layer_list)
     if num_layer_array.shape != pp_layout:
-        raise ValueError("The shape of num_layer_list {} must equal to"
+        raise ValueError("The shape of num_layer_list {} must equal to "
                          "pp_layout {}".format(num_layer_array.shape, pp_layout))
     if vpp_stage is None:
         num_layers = num_layer_array[pp_rank]
         offset = num_layer_array[:pp_rank].sum()
         return num_layers, offset
 
-    num_layers = num_layer_array[vpp_rank][pp_rank]
-    offset = num_layer_array[:vpp_rank].sum() + num_layer_array[vpp_rank][:pp_rank].sum()
+    offset = 0
+    for i in range(vpp_rank):
+        offset += num_layer_array[:, i].sum()
+    offset += num_layer_array[:pp_rank, vpp_rank].sum()
+    num_layers = num_layer_array[pp_rank][vpp_rank]
     return num_layers, offset
 
 
@@ -1011,72 +1013,49 @@ def _get_custom_num_layers(num_layer_list, pp_stage, pp_rank, vpp_stage=None, vp
 def _get_num_layers(config, model_type, is_decoder=False):
     """get transformer layers nums for current rank"""
     args = get_args()
-    vpp = get_virtual_pipeline_model_parallel_world_size() \
-        if get_virtual_pipeline_model_parallel_world_size() is not None else 1
-    pp_split_num = vpp * get_pipeline_model_parallel_world_size()
+    standalone_embedding_stage = args.standalone_embedding_stage
+    pp_stage = get_pipeline_model_parallel_world_size()
+    pp_rank = get_pipeline_model_parallel_rank()
+    if standalone_embedding_stage:
+        pp_stage = pp_stage - 1
+        pp_rank = pp_rank - 1
+    vpp_stage = (get_virtual_pipeline_model_parallel_world_size()
+                 if get_virtual_pipeline_model_parallel_world_size() is not None else 1)
+    vpp_rank = (get_virtual_pipeline_model_parallel_rank()
+                if get_virtual_pipeline_model_parallel_world_size() is not None else 0)
+    pp_split_num = pp_stage * vpp_stage
     if config.num_layers < pp_split_num:
         raise RuntimeError(f"The number of model layers is {config.num_layers}, "
                            f"but using pipeline parallel requires at least "
-                           f"'pp({get_pipeline_model_parallel_world_size()}) "
-                           f"* vpp({vpp}) = {pp_split_num}' layers for splitting")
-    standalone_embedding_stage = args.standalone_embedding_stage
+                           f"'pp({pp_stage}) * vpp({vpp_stage}) = {pp_split_num}' "
+                           f"layers for splitting")
     if get_pipeline_model_parallel_world_size() > 1:
         if standalone_embedding_stage and get_pipeline_model_parallel_rank() == 0:
             num_layers = 0
             offset = 0
         else:
-            if config.num_layer_list:
-                pp_stage = get_pipeline_model_parallel_world_size()
-                pp_rank = get_pipeline_model_parallel_rank()
-                if standalone_embedding_stage:
-                    pp_stage = get_pipeline_model_parallel_world_size() - 1
-                    pp_rank = get_pipeline_model_parallel_rank() - 1
-                vpp_stage = get_virtual_pipeline_model_parallel_world_size()
-                vpp_rank = get_virtual_pipeline_model_parallel_rank() if vpp_stage is not None else 0
-                num_layer_array = np.array(config.num_layer_list)
-                if num_layer_array.sum() != config.num_layers:
-                    raise ValueError(f"The number of model layers is {config.num_layers}, "
-                                     f"but the sum of num_layer_list  "
-                                     f"{config.num_layer_list} is {num_layer_array.sum()}.")
-                if not np.all(num_layer_array > 0):
-                    raise ValueError(f"All elements of num_layer_list should be larger than 0, "
-                                     f"but got {num_layer_array}.")
-                num_layers, offset = _get_custom_num_layers(config.num_layer_list,
-                                                            pp_stage, pp_rank, vpp_stage, vpp_rank)
-                if vpp_stage is not None:
-                    logger.info(
-                        f"Custom num layer list is {num_layer_array}. "
-                        f"Num_layers in vpp_rank:{vpp_rank}, pp_rank:{pp_rank} is {num_layers}.")
-                else:
-                    logger.info(
-                        f"Custom num layer list is {num_layer_array}. "
-                        f"Num_layers in pp_rank:{pp_rank} is {num_layers}.")
-                return num_layers, offset
+            num_layer_list = get_num_layer_list(config)
+            num_layer_array = np.array(num_layer_list)
 
-            def divide_layers(num_layers, stage, rank):
-                num_layer_list = [num_layers // stage] * stage
-                remain_layer_nums = num_layers - sum(num_layer_list)
-                for i in range(remain_layer_nums):
-                    num_layer_list[-i - 2] += 1
-                num_layers = num_layer_list[rank]
-                offset = sum(num_layer_list[:rank])
-                return num_layers, offset
-
-            num_layers = config.num_layers
-            offset = 0
-
-            vpp_stage = get_virtual_pipeline_model_parallel_world_size()
-            if vpp_stage is not None:
-                vpp_rank = get_virtual_pipeline_model_parallel_rank()
-                num_layers, offset_vpp = divide_layers(num_layers, vpp_stage, vpp_rank)
-                offset = offset + offset_vpp
-
-            pp_stage = get_pipeline_model_parallel_world_size() - 1 \
-                if standalone_embedding_stage else get_pipeline_model_parallel_world_size()
-            pp_rank = get_pipeline_model_parallel_rank() - 1 \
-                if standalone_embedding_stage else get_pipeline_model_parallel_rank()
-            num_layers, offset_pp = divide_layers(num_layers, pp_stage, pp_rank)
-            offset = offset + offset_pp
+            if num_layer_array.sum() != config.num_layers:
+                raise ValueError(f"The number of model layers is {config.num_layers}, "
+                                 f"but the sum of num_layer_list "
+                                 f"{num_layer_array} is {num_layer_array.sum()}.")
+            if not np.all(num_layer_array > 0):
+                raise ValueError(f"All elements of num_layer_list should be larger than 0, "
+                                 f"but got {num_layer_array}.")
+            num_layers, offset = _get_layers_and_offset(num_layer_array,
+                                                        pp_stage, pp_rank,
+                                                        get_virtual_pipeline_model_parallel_world_size(), vpp_rank)
+            if get_virtual_pipeline_model_parallel_world_size() is not None:
+                logger.info(
+                    f"Custom num layer list is {num_layer_array}. "
+                    f"Num_layers in vpp_rank:{vpp_rank}, pp_rank:{pp_rank} is {num_layers}.")
+            else:
+                logger.info(
+                    f"Custom num layer list is {num_layer_array}. "
+                    f"Num_layers in pp_rank:{pp_rank} is {num_layers}.")
+            return num_layers, offset
     else:
         num_layers = config.num_layers
         offset = get_pipeline_model_parallel_rank() * num_layers
@@ -1363,7 +1342,7 @@ class ParallelTransformer(Module):
             vpp_stage = get_virtual_pipeline_model_parallel_world_size()
             vpp_rank = get_virtual_pipeline_model_parallel_rank() if vpp_stage is not None else 0
             if vpp_stage is not None:
-                pp_layout = (vpp_stage, pp_stage)
+                pp_layout = (pp_stage, vpp_stage)
             elif pp_stage is not None:
                 pp_layout = (pp_stage,)
 
@@ -1382,7 +1361,7 @@ class ParallelTransformer(Module):
                 raise ValueError("The shape of recompute_num_list {} must equal to "
                                  "pp_layout {}".format(recompute_num_array.shape, pp_layout))
             if vpp_stage is not None:
-                recompute_layers = recompute_num_array[vpp_rank][pp_rank]
+                recompute_layers = recompute_num_array[pp_rank][vpp_rank]
                 return recompute_layers
             return recompute_num_array[pp_rank]
         if recompute_config.recompute:
