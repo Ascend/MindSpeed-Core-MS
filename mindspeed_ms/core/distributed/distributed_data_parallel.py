@@ -147,7 +147,7 @@ class DistributedDataParallel(Module):
     communication among data parallel group.
 
     Args:
-        config (TrainingConfig): The TrainingConfig object containing the training related configurations.
+        config (TransformerConfig): The TrainingConfig object containing the training related configurations.
         ddp_config (DistributedDataParallelConfig): The DistributedDataParallelConfig object containing the ddp
             related configurations.
         module (Module): The module to be wrapped with DDP.
@@ -191,10 +191,10 @@ class DistributedDataParallel(Module):
         ...         hidden_size = config.hidden_size
         ...         self.columnlinear = ColumnParallelLinear(input_size=hidden_size, output_size=hidden_size,
         ...                                                  config=config, init_method=config.init_method,
-        ...                                                  bias=config.mlp_has_bias, gather_output=False,
+        ...                                                  bias=config.add_mlp_bias, gather_output=False,
         ...                                                  skip_bias_add=False, bias_init=config.bias_init)
         ...         self.rowlinear = RowParallelLinear(input_size=hidden_size, output_size=hidden_size, config=config,
-        ...                                            init_method=config.init_method, bias=config.mlp_has_bias,
+        ...                                            init_method=config.init_method, bias=config.add_mlp_bias,
         ...                                            input_is_parallel=True, skip_bias_add=False,
         ...                                            bias_init=config.bias_init)
         ...         self.loss = SoftmaxCrossEntropyWithLogits()
@@ -226,7 +226,7 @@ class DistributedDataParallel(Module):
         >>> parallel_config = ModelParallelConfig()
         >>> training_config = TrainingConfig(parallel_config=parallel_config)
         >>> optimizer_config = OptimizerConfig(parallel_config=parallel_config)
-        >>> model_config = TransformerConfig(vocab_size=40000, num_layers=1, num_attention_heads=1, mlp_has_bias=True,
+        >>> model_config = TransformerConfig(vocab_size=40000, num_layers=1, num_attention_heads=1, add_mlp_bias=True,
         >>>                                  gated_linear_unit=False, hidden_size=hidden_size,
         >>>                                  ffn_hidden_size=4*hidden_size, hidden_act='gelu',
         >>>                                  parallel_config=parallel_config, params_dtype='float32',

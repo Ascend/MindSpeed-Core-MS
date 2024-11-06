@@ -108,7 +108,7 @@ def get_learning_rate_scheduler(optimizer_config, return_instance: bool = True):
     lr_scheduler_cls = ModuleRegistry.get_item(module_type=ModuleType.LR_SCHEDULER, item_name=lr_scheduler_type)
 
     if return_instance:
-        kwargs = optimizer_config.learning_rate_scheduler_kwargs.copy()
-        kwargs["learning_rate"] = optimizer_config.learning_rate
+        kwargs = optimizer_config.lr_scheduler_kwargs.copy()
+        kwargs["learning_rate"] = optimizer_config.lr
         return lr_scheduler_cls(**kwargs)
     return lr_scheduler_cls

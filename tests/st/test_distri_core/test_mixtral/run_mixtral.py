@@ -13,7 +13,6 @@
 # limitations under the License.
 # ============================================================================
 """ Test Mixtral. """
-import argparse
 import os
 
 import numpy as np
@@ -25,20 +24,30 @@ from mindspore import Tensor
 from mindspore.communication.management import init
 from mindspore.nn import SGD
 
-from mindspeed_ms.training import get_model, TrainOneStepCell, train, get_loss_func
-from tests.st.test_distri_core.utils import MixtralModel, transform_mixtral_golden_params_to_pynative_params
-from mindspeed_ms.core.config import init_configs_from_yaml
+from mindspeed_ms.training import (
+    get_model,
+    TrainOneStepCell,
+    train,
+    get_loss_func,
+    parse_args,
+    get_args,
+    core_transformer_config_from_args,
+    core_transformer_config_from_yaml
+)
+from mindspeed_ms.core.optimizer import optimizer_config_from_args
+from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.core.parallel_state import (
     get_data_parallel_group,
-    get_expert_model_parallel_group,
-    get_tensor_model_parallel_group,
-    get_pipeline_model_parallel_group,
     get_data_parallel_rank,
+    get_expert_model_parallel_group,
     get_expert_model_parallel_rank,
-    get_tensor_model_parallel_rank,
+    get_pipeline_model_parallel_group,
     get_pipeline_model_parallel_rank,
-    initialize_model_parallel,
+    get_tensor_model_parallel_group,
+    get_tensor_model_parallel_rank,
+    initialize_model_parallel
 )
+from tests.st.test_distri_core.utils import MixtralModel, transform_mixtral_golden_params_to_pynative_params
 
 
 class TestData:
@@ -63,18 +72,17 @@ class TestData:
         return self.dataset_size
 
 
-def run_mixtral(config):
+# pylint: disable=W0621
+def run_mixtral(config: TransformerConfig):
     """ Test ParallelTransformer. """
+    args = get_args()
     print(f"config is:\n{config}")
-    model_config = config.model_config
-    parallel_config = config.parallel_config
-    training_config = config.training_config
-    tp = parallel_config.tensor_model_parallel_size
-    ep = parallel_config.expert_model_parallel_size
-    pp = parallel_config.pipeline_model_parallel_size
-    vpp = parallel_config.virtual_pipeline_model_parallel_size
-    seq_length = model_config.seq_length
-    micro_batch_num = config.dataset_config.micro_batch_num
+    tp = config.tensor_model_parallel_size
+    ep = config.expert_model_parallel_size
+    pp = config.pipeline_model_parallel_size
+    vpp = config.virtual_pipeline_model_parallel_size
+    seq_length = args.seq_length
+    micro_batch_num = args.micro_batch_size
 
     ms.set_context(
         device_target="Ascend",
@@ -106,7 +114,7 @@ def run_mixtral(config):
 
     ms.set_seed(2024)
 
-    golden_input_and_loss_path = config.dataset_config.dataset_dir
+    golden_input_and_loss_path = args.data_path
 
     # load golden input and loss
     assert os.path.exists(golden_input_and_loss_path), f"'{golden_input_and_loss_path}' did not exits"
@@ -126,12 +134,13 @@ def run_mixtral(config):
         dataset = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels', "attention_mask"], shuffle=False)
         dataset = dataset.batch(micro_batch_num)
 
+    optimizer_config = optimizer_config_from_args(args)
     # build net
     def model_provider_func(pre_process=True, post_process=True):
         """ get mixtral model """
-        loss = get_loss_func(training_config)
+        loss = get_loss_func(optimizer_config)
         network = MixtralModel(
-            model_config,
+            config,
             parallel_output=False,
             loss_func=loss,
             pre_process=pre_process,
@@ -139,7 +148,7 @@ def run_mixtral(config):
             )
         return network
 
-    network = get_model(model_provider_func, training_config)
+    network = get_model(model_provider_func, config)
 
     print(f"network construct is:\n{network}")
     print("network parameters are:")
@@ -147,7 +156,7 @@ def run_mixtral(config):
         print(f"{param.name} {param.dtype} {param.shape}")
 
     # load golden ckpt
-    golden_ckpt_path = config.training_config.checkpoint_dir
+    golden_ckpt_path = args.checkpoint_dir
 
     assert os.path.exists(golden_ckpt_path), f"'{golden_ckpt_path}' did not exits"
     golden_params = torch.load(golden_ckpt_path, map_location=torch.device('cpu'))
@@ -160,7 +169,7 @@ def run_mixtral(config):
     # transform ckpt
     new_params = transform_mixtral_golden_params_to_pynative_params(
         golden_params,
-        model_config
+        config
         )
     param_not_load, ckpt_not_load = ms.load_param_into_net(network, new_params)
     new_param_not_load = []
@@ -174,37 +183,18 @@ def run_mixtral(config):
 
 
     optimizer = SGD(params=network.trainable_params(), learning_rate=1e-4)
-    train_one_step_cell = TrainOneStepCell(network, optimizer, None, training_config, model_config)
+    train_one_step_cell = TrainOneStepCell(network, optimizer, None, config)
     # train
-    train(train_one_step_cell, dataset, training_config)
+    train(train_one_step_cell, dataset)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config_path', type=str, default="./config_mixtral_small.yaml", help="test config")
-    parser.add_argument('--ep', type=int, default=2, help="expert_model_parallel_size")
-    parser.add_argument('--tp', type=int, default=2, help="tensor_parallel")
-    parser.add_argument('--pp', type=int, default=1, help="pipeline_parallel")
-    parser.add_argument('--sp', action='store_true', help="use sequence parallel.")
-    parser.add_argument('--bs', type=int, default=1, help="batch size")
-    parser.add_argument('--mbn', type=int, default=1, help="micro batch num")
-    parser.add_argument('--num_layers', type=int, default=2, help="micro batch num")
-    parser.add_argument('--vpp', type=int, default=None, help="micro batch num")
-    parser.add_argument('--checkpoint_dir', type=str, default=None, help="micro batch num")
+    args = parse_args()
+    if args.yaml_cfg is None:
+        config = core_transformer_config_from_args(args)
+    else:
+        config = core_transformer_config_from_yaml(args)
 
-    cli_args, rest_args = parser.parse_known_args()
-
-    all_config = init_configs_from_yaml(cli_args.config_path)
-
-    all_config.parallel_config.tensor_model_parallel_size = cli_args.tp
-    all_config.parallel_config.expert_model_parallel_size = cli_args.ep
-    all_config.parallel_config.pipeline_model_parallel_size = cli_args.pp
-    all_config.parallel_config.sequence_parallel = cli_args.sp
-    all_config.parallel_config.virtual_pipeline_model_parallel_size = cli_args.vpp
-    all_config.dataset_config.batch_size = cli_args.bs
-    all_config.dataset_config.micro_batch_num = cli_args.mbn
-    all_config.model_config.num_layers = cli_args.num_layers
-    if cli_args.checkpoint_dir is not None and os.path.exists(cli_args.checkpoint_dir):
-        all_config.training_config.checkpoint_dir = cli_args.checkpoint_dir
-
-    run_mixtral(all_config)
+    if args.checkpoint_dir and not os.path.exists(args.checkpoint_dir):
+        args.checkpoint_dir = None
+    run_mixtral(config)

@@ -16,6 +16,7 @@
 from mindspore import nn, mint
 
 from mindspeed_ms.core.register import ModuleType, ModuleRegistry
+from mindspeed_ms.core.optimizer.optimizer_config import OptimizerConfig
 
 __all__ = ['get_loss_func']
 
@@ -64,12 +65,12 @@ class LossWithMask(nn.Cell):
         return loss
 
 
-def get_loss_func(training_config, return_instance: bool = True, **kwargs):
+def get_loss_func(optimizer_config: OptimizerConfig, return_instance: bool = True, **kwargs):
     """
     Get the loss function based on the provided loss function configuration.
 
     Args:
-        training_config (TrainingConfig): The configuration object for training.
+        optimizer_config (OptimizerConfig): The configuration object for training.
 
     Returns:
         loss_fn (callable): The loss function based on the provided configuration.
@@ -77,8 +78,8 @@ def get_loss_func(training_config, return_instance: bool = True, **kwargs):
     Raises:
         ValueError: If the specified loss function type is not supported.
     """
-    loss_func_kwargs = training_config.loss_func_kwargs
-    loss_func_kwargs["reduction"] = training_config.loss_reduction
+    loss_func_kwargs = optimizer_config.loss_func_kwargs
+    loss_func_kwargs["reduction"] = optimizer_config.loss_reduction
     loss_func_type = loss_func_kwargs['loss_func_type']
     if "CrossEntropyLoss" in loss_func_type:
         loss_func_kwargs["reduction"] = 'none'

@@ -15,8 +15,6 @@
 """some utility functions"""
 from typing import Dict
 import collections
-import os
-import time
 import numpy as np
 
 import mindspore as ms
@@ -25,8 +23,8 @@ import mindspore.common.dtype as mstype
 import mindspore.ops as ops
 from mindspore import Parameter, Tensor
 from mindspore.nn import DistributedGradReducer
-from mindspore.communication import get_rank
 
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.distributed import DistributedDataParallel
 from mindspeed_ms.core.parallel_state import (
     get_data_parallel_group,
@@ -35,9 +33,8 @@ from mindspeed_ms.core.parallel_state import (
     get_tensor_model_parallel_world_size,
     get_expert_model_parallel_rank,
 )
-from mindspeed_ms.core.dist_checkpointing import save_checkpoint
 from mindspeed_ms.core.optimizer import MixedPrecisionOptimizer
-from mindspeed_ms.core.config import TransformerConfig
+from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.legacy.model import ParallelLMLogits, TransformerLanguageModel
 from mindspeed_ms.legacy.model.module import Module
 
@@ -341,24 +338,24 @@ def transform_transformerlayer_params(params, hidden_size, kv_hidden_size=None, 
 
 def transform_mixtral_golden_params_to_pynative_params(
         golden_params: Dict[str, Tensor],
-        model_config
+        config
     ):
     """transform mixtral moe params to pynative params"""
-
+    args = get_args()
     tp_rank = get_tensor_model_parallel_rank()
     ep_rank = get_expert_model_parallel_rank()
     tp_world_size = get_tensor_model_parallel_world_size()
 
-    ep = model_config.parallel_config.expert_model_parallel_size
-    en = model_config.moe_config.num_experts
+    ep = config.expert_model_parallel_size
+    en = config.num_moe_experts
     expert_per_rank = en // ep
     global_expert_id_on_this_rank = [i + ep_rank * expert_per_rank for i in range(expert_per_rank)]
 
-    hidden_size = model_config.hidden_size
-    num_heads = model_config.num_attention_heads
+    hidden_size = config.hidden_size
+    num_heads = config.num_attention_heads
     num_query_groups = num_heads
-    if model_config.group_query_attention:
-        num_query_groups = model_config.num_query_groups
+    if args.group_query_attention:
+        num_query_groups = config.num_query_groups
     qkv_num_heads = num_heads + num_query_groups * 2
     kv_head_multiplier = num_heads // num_query_groups
 
@@ -399,7 +396,7 @@ def transform_mixtral_golden_params_to_pynative_params(
         if "self_attention.linear_qkv.weight" in k:
             new_name = new_name.replace("self_attention.linear_qkv.weight", "attention.qkv_proj.weight")
             v = v.numpy()
-            if not model_config.group_query_attention:
+            if not args.group_query_attention:
                 v = np.array(np.split(v, num_heads * 3))
                 querry_layer, key_layer, value_layer = v[0::3], v[1::3], v[2::3]
                 if tp_world_size > 1:
@@ -540,13 +537,14 @@ class MixtralModel(Module):
             loss_func=None,
             **kwargs):
         super(MixtralModel, self).__init__()
+        args = get_args()
         self.config = config
         self.parallel_output = parallel_output
         self.pre_process = pre_process
         self.post_process = post_process
-        self.pad_token = config.dataset_config.pad_token
+        self.pad_token = args.pad_token
         self.compute_dtype = config.compute_dtype
-        self.share_embeddings_and_output_weights = not config.untie_embeddings_and_output_weights
+        self.share_embeddings_and_output_weights = not args.untie_embeddings_and_output_weights
 
         self.language_model = TransformerLanguageModel(
             config,

@@ -25,6 +25,7 @@ from mindspore.ops import functional as F
 from mindspore.ops import composite as C
 from mindspore.communication import get_group_size, GlobalComm
 
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.parallel_state import (
     get_model_parallel_group,
     get_tensor_model_parallel_rank,
@@ -182,12 +183,12 @@ class ClipGlobalNorm(nn.Cell):
         return total_norm
 
 
-def get_grad_process_func(training_config, share_embeddings_and_output_weights=True, return_instance=True, **kwargs):
+def get_grad_process_func(config, share_embeddings_and_output_weights=True, return_instance=True, **kwargs):
     """
     Get the gradient processing function based on the provided training configuration.
 
     Args:
-        training_config (TrainingConfig): The training configuration object.
+        config (TransformerConfig): The training configuration object.
         return_instance (bool, optional): Whether to return an instance of the gradient processing function.
             Defaults to True.
         **kwargs: Additional keyword arguments.
@@ -199,7 +200,8 @@ def get_grad_process_func(training_config, share_embeddings_and_output_weights=T
         ValueError: If `params` is not provided for the "ClipGlobalNorm" gradient clip type.
 
     """
-    grad_process_func_kwargs = training_config.grad_clip_kwargs.copy()
+    args = get_args()
+    grad_process_func_kwargs = config.grad_clip_kwargs.copy()
     grad_clip_type = grad_process_func_kwargs.pop("grad_clip_type")
     grad_clip_cls = ModuleRegistry.get_item(module_type=ModuleType.GRAD_PROCESS_FUNC, item_name=grad_clip_type)
     if return_instance:
@@ -207,8 +209,8 @@ def get_grad_process_func(training_config, share_embeddings_and_output_weights=T
             if "params" not in kwargs:
                 raise ValueError("params is required for ClipGlobalNorm")
             grad_process_func_kwargs["params"] = kwargs["params"]
-            if training_config.use_distributed_optimizer or \
-                    training_config.parallel_config.zero_level in ["z2", "z3"]:
+            if args.use_distributed_optimizer or \
+                    config.zero_level in ["z2", "z3"]:
                 reduce_comm_group = GlobalComm.WORLD_COMM_GROUP
             else:
                 reduce_comm_group = get_model_parallel_group()

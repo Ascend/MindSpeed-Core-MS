@@ -28,6 +28,7 @@ from mindspore import Parameter, Tensor, nn, ops, mint
 from mindspore.common.initializer import initializer, Zero
 from mindspore.common.api import _pynative_executor
 
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
@@ -414,7 +415,7 @@ class ColumnParallelLinear(nn.Cell):
         NotImplementedError: `grad_output_buffer` is not supported for now.
         NotImplementedError: `tp_comm_buffer_name` is not supported for now.
         NotImplementedError: `disable_grad_reduce=True` is not supported for now.
-        NotImplementedError: `config.parallel_config.use_cpu_initialization` is not supported for now.
+        NotImplementedError: `config.use_cpu_initialization` is not supported for now.
         RuntimeError: use zero3 optimizer parallel without initializing data parallel communication.
         RuntimeError: `allreduce_dgrad` and `sequence_parallel` cannot be enabled at the same time.
 
@@ -449,7 +450,7 @@ class ColumnParallelLinear(nn.Cell):
         ...                                                  output_size=hidden_size,
         ...                                                  config=config,
         ...                                                  init_method=config.init_method,
-        ...                                                  bias=config.mlp_has_bias,
+        ...                                                  bias=config.add_mlp_bias,
         ...                                                  gather_output=False,
         ...                                                  skip_bias_add=False,
         ...                                                  bias_init=config.bias_init)
@@ -469,7 +470,7 @@ class ColumnParallelLinear(nn.Cell):
         >>> model_config = TransformerConfig(vocab_size=40000,
         ...                                  num_layers=1,
         ...                                  num_attention_heads=1,
-        ...                                  mlp_has_bias=True,
+        ...                                  add_mlp_bias=True,
         ...                                  gated_linear_unit=False,
         ...                                  hidden_size=hidden_size,
         ...                                  ffn_hidden_size=4*hidden_size,
@@ -522,8 +523,9 @@ class ColumnParallelLinear(nn.Cell):
             raise NotImplementedError("`tp_comm_buffer_name` is not supported for now.")
         if disable_grad_reduce:
             raise NotImplementedError("`disable_grad_reduce=True` is not supported for now.")
-        if config.parallel_config.use_cpu_initialization:
-            raise NotImplementedError("`config.parallel_config.use_cpu_initialization` is not supported for now.")
+        if config.use_cpu_initialization:
+            raise NotImplementedError("`config.use_cpu_initialization` is not supported for now.")
+        args = get_args()
 
         self.input_size = input_size
         self.output_size = output_size
@@ -541,9 +543,9 @@ class ColumnParallelLinear(nn.Cell):
         self.compute_dtype = compute_dtype if compute_dtype else self.config.compute_dtype
         self.transpose_b = transpose_b
 
-        self.expert_parallel = self.config.parallel_config.expert_model_parallel_size > 1
-        self.sequence_parallel = self.config.parallel_config.sequence_parallel
-        self.use_zero3 = self.config.parallel_config.zero_level == 'z3'
+        self.expert_parallel = self.config.expert_model_parallel_size > 1
+        self.sequence_parallel = self.config.sequence_parallel
+        self.use_zero3 = self.config.zero_level == 'z3'
         if self.use_zero3:
             try:
                 dp_size = get_data_parallel_world_size()
@@ -587,7 +589,7 @@ class ColumnParallelLinear(nn.Cell):
 
             if self.has_bias:
                 if hasattr(self.config, 'training_config'):
-                    wrap_with_ddp = self.config.training_config.wrap_with_ddp
+                    wrap_with_ddp = args.wrap_with_ddp
                 else:
                     wrap_with_ddp = False
 
@@ -604,13 +606,13 @@ class ColumnParallelLinear(nn.Cell):
                 )
 
         self.explicit_expert_comm = self.is_expert and (
-            config.parallel_config.tensor_model_parallel_size > 1 or self.expert_parallel
+            config.tensor_model_parallel_size > 1 or self.expert_parallel
         )
 
         self.copy_to_mp_region = CopyToModelParallelRegion()
         self.gather_from_mp_region = GatherFromModelParallelRegion()
         self.gather_from_sp_region = GatherFromSequenceParallelRegion(
-            need_to_swapaxes=self.config.dataset_config.data_layout == "BSH"
+            need_to_swapaxes=args.data_layout == "BSH"
         )
         self.allreduce_dgrad = (
             tensor_parallel_group_size > 1 and not self.sequence_parallel and not disable_grad_reduce
@@ -619,15 +621,15 @@ class ColumnParallelLinear(nn.Cell):
             raise RuntimeError(
                 "`allreduce_dgrad` and `sequence_parallel` cannot be enabled at the same time."
             )
-        self.gradient_accumulation_fusion = config.parallel_config.gradient_accumulation_fusion
+        self.gradient_accumulation_fusion = args.gradient_accumulation_fusion
         self.forward_impl_ = LinearWithGradAccumulationAndAsyncCommunication(
             bias=(self.has_bias and not self.skip_bias_add),
             gradient_accumulation_fusion=self.gradient_accumulation_fusion,
             sequence_parallel=False if self.explicit_expert_comm else self.sequence_parallel,
             allreduce_dgrad=False if self.explicit_expert_comm else self.allreduce_dgrad,
             transpose_b=self.transpose_b,
-            data_layout=self.config.dataset_config.data_layout,
-            recompute_comm=self.config.select_comm_recompute,
+            data_layout=args.data_layout,
+            recompute_comm=args.select_comm_recompute,
             need_gather_param_in_bw=self.use_zero3,
         )
 
@@ -688,6 +690,7 @@ class ColumnParallelLinear(nn.Cell):
 
     def sharded_state_dict(self):
         """provide the sharded state dict based on the config"""
+        args = get_args()
         tp_size = get_tensor_model_parallel_world_size()
         w_shard = (tp_size, 1) if self.transpose_b else (1, tp_size)
         state_dict = {}
@@ -704,8 +707,8 @@ class ColumnParallelLinear(nn.Cell):
             state_dict[self.bias.name] = {
                 'shape': self.bias.shape,
                 'shard': (tp_size,),
-                'opt_weight_shard_step': opt_weight_shard_step if not self.config.training_config.wrap_with_ddp else 0,
-                'opt_weight_shard_size': opt_weight_shard_size if not self.config.training_config.wrap_with_ddp else 0
+                'opt_weight_shard_step': opt_weight_shard_step if not args.wrap_with_ddp else 0,
+                'opt_weight_shard_size': opt_weight_shard_size if not args.wrap_with_ddp else 0
             }
         return state_dict
 
@@ -792,7 +795,7 @@ class RowParallelLinear(nn.Cell):
         ...                                            output_size=hidden_size,
         ...                                            config=config,
         ...                                            init_method=config.init_method,
-        ...                                            bias=config.mlp_has_bias,
+        ...                                            bias=config.add_mlp_bias,
         ...                                            input_is_parallel=True,
         ...                                            skip_bias_add=False,
         ...                                            bias_init=config.bias_init)
@@ -812,7 +815,7 @@ class RowParallelLinear(nn.Cell):
         >>> model_config = TransformerConfig(vocab_size=40000,
         ...                                  num_layers=1,
         ...                                  num_attention_heads=1,
-        ...                                  mlp_has_bias=True,
+        ...                                  add_mlp_bias=True,
         ...                                  gated_linear_unit=False,
         ...                                  hidden_size=hidden_size,
         ...                                  ffn_hidden_size=4*hidden_size,
@@ -846,6 +849,7 @@ class RowParallelLinear(nn.Cell):
             transpose_b=True,
         ):
         super(RowParallelLinear, self).__init__()
+        args = get_args()
         if stride > 1:
             raise NotImplementedError("`stride > 1` is not supported for now, "
                                       "but got `stride={}`".format(stride))
@@ -868,9 +872,9 @@ class RowParallelLinear(nn.Cell):
         self.param_init_dtype = param_init_dtype if param_init_dtype else self.config.params_dtype
         self.compute_dtype = compute_dtype if compute_dtype else self.config.compute_dtype
         self.is_expert = is_expert
-        self.expert_parallel = self.config.parallel_config.expert_model_parallel_size > 1
-        self.sequence_parallel = self.config.parallel_config.sequence_parallel
-        self.use_zero3 = self.config.parallel_config.zero_level == 'z3'
+        self.expert_parallel = self.config.expert_model_parallel_size > 1
+        self.sequence_parallel = self.config.sequence_parallel
+        self.use_zero3 = self.config.zero_level == 'z3'
         self.transpose_b = transpose_b
 
         if self.use_zero3:
@@ -916,7 +920,7 @@ class RowParallelLinear(nn.Cell):
 
             if self.has_bias:
                 if hasattr(self.config, 'training_config'):
-                    wrap_with_ddp = self.config.training_config.wrap_with_ddp
+                    wrap_with_ddp = args.wrap_with_ddp
                 else:
                     wrap_with_ddp = False
 
@@ -930,16 +934,16 @@ class RowParallelLinear(nn.Cell):
                 )
 
         self.explicit_expert_comm = self.is_expert and (
-            config.parallel_config.tensor_model_parallel_size > 1 or self.expert_parallel
+            config.tensor_model_parallel_size > 1 or self.expert_parallel
         )
 
         self.scatter_to_mp_region = ScatterToModelParallelRegion()
         if self.sequence_parallel:
             self.reduce_scatter_to_sp_region = ReduceScatterToSequenceParallelRegion(
-                need_to_swapaxes=self.config.dataset_config.data_layout == "BSH"
+                need_to_swapaxes=args.data_layout == "BSH"
             )
         self.reduce_from_mp_region = ReduceFromModelParallelRegion()
-        self.gradient_accumulation_fusion = config.parallel_config.gradient_accumulation_fusion
+        self.gradient_accumulation_fusion = args.gradient_accumulation_fusion
 
         self.forward_impl_ = LinearWithGradAccumulationAndAsyncCommunication(
             bias=False,
@@ -947,7 +951,7 @@ class RowParallelLinear(nn.Cell):
             sequence_parallel=False,
             allreduce_dgrad=False,
             transpose_b=self.transpose_b,
-            data_layout=self.config.dataset_config.data_layout,
+            data_layout=args.data_layout,
             need_gather_param_in_bw=self.use_zero3,
         )
 
@@ -996,6 +1000,7 @@ class RowParallelLinear(nn.Cell):
 
     def sharded_state_dict(self):
         """provide the sharded state dict based on the config"""
+        args = get_args()
         tp_size = get_tensor_model_parallel_world_size()
         w_shard = (1, tp_size) if self.transpose_b else (tp_size, 1)
         state_dict = {}
@@ -1011,8 +1016,8 @@ class RowParallelLinear(nn.Cell):
             state_dict[self.bias.name] = {
                 'shape': self.bias.shape,
                 'shard': (1,),
-                'opt_weight_shard_step': opt_weight_shard_step if not self.config.training_config.wrap_with_ddp else 0,
-                'opt_weight_shard_size': opt_weight_shard_size if not self.config.training_config.wrap_with_ddp else 0
+                'opt_weight_shard_step': opt_weight_shard_step if not args.wrap_with_ddp else 0,
+                'opt_weight_shard_size': opt_weight_shard_size if not args.wrap_with_ddp else 0
             }
         return state_dict
 
@@ -1039,8 +1044,8 @@ class VocabParallelEmbedding(nn.Cell):
 
     Raises:
         ValueError: The vocabulary size is not divisible by size of tensor parallel.
-        NotImplementedError: `config.parallel_config.deterministic_mode` is not supported for now.
-        NotImplementedError: `config.parallel_config.use_cpu_initialization` is not supported for now.
+        NotImplementedError: `config.deterministic_mode` is not supported for now.
+        NotImplementedError: `config.use_cpu_initialization` is not supported for now.
 
     Supported Platforms:
         ``Ascend``
@@ -1080,7 +1085,7 @@ class VocabParallelEmbedding(nn.Cell):
         ...             num_embeddings=config.vocab_size,
         ...             embedding_dim=config.hidden_size,
         ...             init_method=config.init_method,
-        ...             reduce_scatter_embeddings=config.parallel_config.sequence_parallel,
+        ...             reduce_scatter_embeddings=config.sequence_parallel,
         ...             config=config,
         ...         )
         ...     def construct(self, x):
@@ -1133,16 +1138,17 @@ class VocabParallelEmbedding(nn.Cell):
             param_init_dtype=None
     ):
         super().__init__()
-        if config.parallel_config.deterministic_mode:
-            raise NotImplementedError("`config.parallel_config.deterministic_mode` is not supported for now.")
-        if config.parallel_config.use_cpu_initialization:
-            raise NotImplementedError("`config.parallel_config.use_cpu_initialization` is not supported for now.")
+        if config.deterministic_mode:
+            raise NotImplementedError("`config.deterministic_mode` is not supported for now.")
+        if config.use_cpu_initialization:
+            raise NotImplementedError("`config.use_cpu_initialization` is not supported for now.")
 
+        args = get_args()
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
         self.reduce_scatter_embeddings = reduce_scatter_embeddings
         self.param_init_dtype = param_init_dtype if param_init_dtype else config.params_dtype
-        self.data_layout = config.dataset_config.data_layout
+        self.data_layout = args.data_layout
 
         self.tensor_model_parallel_size = get_tensor_model_parallel_world_size()
 

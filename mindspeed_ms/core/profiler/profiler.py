@@ -20,6 +20,8 @@ from mindspore.train import RunContext
 from mindspore.communication import get_rank
 from mindspeed_ms.tools import logger
 
+from mindspeed_ms.training.global_vars import get_args
+
 
 def get_real_rank():
     """get rank id"""
@@ -42,56 +44,54 @@ class ProfilerCallbackDict(dict):
 class PynativeProfiler:
     r"""
     Pynative profiling class
-    Args:
-        training_config (TransformerConfig): training_config;
     """
 
-    def __init__(self, training_config):
-        self.training_config = training_config
+    def __init__(self):
+        args = get_args()
         self.is_dynamic = False
-        if self.training_config.profile:
-            if not self.training_config.profile_save_path:
+        if args.profile:
+            if args.profile_save_path:
                 logger.warning(f"profile_save_path is not specified, using './profile' instead.")
-            logger.info(f"profile will be saving to {self.training_config.profile_save_path}")
-            if self.training_config.profile_dynamic_profiler_config_path:
+            logger.info(f"profile will be saving to {args.profile_save_path}")
+            if args.profile_dynamic_profiler_config_path:
                 self.dynamic_profiler = DynamicProfilerMonitor(
-                    cfg_path=self.training_config.profile_dynamic_profiler_config_path,
-                    output_path=self.training_config.profile_save_path)
+                    cfg_path=args.profile_dynamic_profiler_config_path,
+                    output_path=args.profile_save_path)
                 self.is_dynamic = True
             else:
                 profiler_level = None
-                if self.training_config.profile_level == "level0":
+                if args.profile_level == "level0":
                     profiler_level = ProfilerLevel.Level0
-                elif self.training_config.profile_level == "level1":
+                elif args.profile_level == "level1":
                     profiler_level = ProfilerLevel.Level1
-                elif self.training_config.profile_level == "level2":
+                elif args.profile_level == "level2":
                     profiler_level = ProfilerLevel.Level2
                 logger.debug(f"profiler level {profiler_level}")
 
                 profile_framework = None
-                if self.training_config.profile_framework in ['all', 'time']:
-                    profile_framework = self.training_config.profile_framework
+                if args.profile_framework in ['all', 'time']:
+                    profile_framework = args.profile_framework
                 logger.debug(f"profile_framework {profile_framework}")
 
                 # 按照rank_id设置性能数据落盘路径
                 rank_id = get_real_rank()
-                output_path = os.path.join(self.training_config.profile_save_path, f"rank_{rank_id}")
+                output_path = os.path.join(args.profile_save_path, f"rank_{rank_id}")
 
                 self.profiler = Profiler(start_profile=False,
                                          output_path=output_path,
                                          profiler_level=profiler_level,
-                                         with_stack=self.training_config.profile_with_stack,
-                                         profile_memory=self.training_config.profile_memory,
+                                         with_stack=args.profile_with_stack,
+                                         profile_memory=args.profile_memory,
                                          profile_framework=profile_framework,
-                                         profile_communication=self.training_config.profile_communication,
-                                         parallel_strategy=self.training_config.profile_parallel_strategy,
-                                         aicore_metrics=self.training_config.profile_aicore_metrics,
-                                         l2_cache=self.training_config.profile_l2_cache,
-                                         hbm_ddr=self.training_config.profile_hbm_ddr,
-                                         pcie=self.training_config.profile_pcie,
-                                         data_process=self.training_config.profile_data_process,
-                                         data_simplification=self.training_config.profile_data_simplification,
-                                         op_time=self.training_config.profile_op_time)
+                                         profile_communication=args.profile_communication,
+                                         parallel_strategy=args.profile_parallel_strategy,
+                                         aicore_metrics=args.profile_aicore_metrics,
+                                         l2_cache=args.profile_l2_cache,
+                                         hbm_ddr=args.profile_hbm_ddr,
+                                         pcie=args.profile_pcie,
+                                         data_process=args.profile_data_process,
+                                         data_simplification=args.profile_data_simplification,
+                                         op_time=args.profile_op_time)
 
     def step_begin(self, current_step):
         '''
@@ -99,7 +99,8 @@ class PynativeProfiler:
         Args:
             current_step (int): which step in training loop
         '''
-        if not self.training_config.profile:
+        args = get_args()
+        if not args.profile:
             return
         if self.is_dynamic:
             logger.info(f"start profiling in step {current_step}")
@@ -107,7 +108,7 @@ class PynativeProfiler:
             run_context = RunContext(cb_params)
             self.dynamic_profiler.step_begin(run_context)
         else:
-            if current_step == self.training_config.profile_step_start:
+            if current_step == args.profile_step_start:
                 logger.info(f"start profiling in step {current_step}")
                 self.profiler.start()
 
@@ -117,7 +118,8 @@ class PynativeProfiler:
         Args:
             current_step (int): which step in training loop
         '''
-        if not self.training_config.profile:
+        args = get_args()
+        if not args.profile:
             return
         if self.is_dynamic:
             cb_params = ProfilerCallbackDict({"cur_step_num": current_step})
@@ -125,9 +127,9 @@ class PynativeProfiler:
             logger.info(f"end profiling in step {current_step}")
             self.dynamic_profiler.step_end(run_context)
         else:
-            if current_step == self.training_config.profile_step_end:
+            if current_step == args.profile_step_end:
                 logger.info(f"stop profiling in step {current_step}")
-                if self.training_config.profile_offline_analyse:
+                if args.profile_offline_analyse:
                     self.profiler.stop()
                 else:
                     logger.info(f"analyzing profile")

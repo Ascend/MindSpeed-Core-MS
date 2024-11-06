@@ -43,6 +43,7 @@ except ImportError:
 from mindspore.communication import get_rank
 from mindspore.train.serialization import _update_param
 from mindspeed_ms.tools import logger
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.utils import generate_state_dict, save_strategy_file
 from mindspeed_ms.core.parallel_state import (
     get_data_parallel_group,
@@ -171,8 +172,8 @@ def save_pre_process(shard_info, model, optimizer, config):
     for name, param in list(params_dict.items()):
         target_shard_info = model_shard_info if name in model_shard_info else optimizer_shard_info
         ### moe layer
-        if config.moe_config is not None and config.moe_config.num_experts > 1 and "local_experts.0" in name:
-            local_expert_num = config.moe_config.num_experts // get_expert_model_parallel_world_size()
+        if config.num_moe_experts > 1 and "local_experts.0" in name:
+            local_expert_num = config.num_moe_experts // get_expert_model_parallel_world_size()
             local_experts_list = []
             for idx in range(local_expert_num):
                 local_expert_name = name.replace("local_experts.0", f"local_experts.{idx}")
@@ -186,7 +187,8 @@ def save_pre_process(shard_info, model, optimizer, config):
             target_shard_info[name] = shard_dict
 
         ### handle pipeline head sharing
-        if get_pipeline_model_parallel_world_size() == 1 and not config.untie_embeddings_and_output_weights:
+        args = get_args()
+        if get_pipeline_model_parallel_world_size() == 1 and not args.untie_embeddings_and_output_weights:
             language_model_embedding = "language_model.embedding.word_embeddings.weight"
             language_model_head = "language_model.output_layer.weight"
             if language_model_embedding in name:
@@ -202,8 +204,8 @@ def load_post_process(config, params_dict, optimizer=None):
     """ load post processing, concat qkv """
     for name, param in list(params_dict.items()):
         ### moe layer
-        if config.moe_config is not None and config.moe_config.num_experts > 1 and "local_experts.0" in name:
-            local_expert_num = config.moe_config.num_experts // get_expert_model_parallel_world_size()
+        if config.num_moe_experts > 1 and "local_experts.0" in name:
+            local_expert_num = config.num_moe_experts // get_expert_model_parallel_world_size()
             params_dict.pop(name)
             for shard_id in range(local_expert_num):
                 new_name = name.replace("local_experts.0", f"local_experts.{shard_id}")

@@ -240,15 +240,15 @@ class P2PPrimitive():
         recv_prev_shape = tensor_shape
         recv_next_shape = tensor_shape
 
-        recv_dtype = self.config.parallel_config.recv_dtype
+        pipeline_dtype = self.config.pipeline_dtype
         if recv_prev:
             if tensor_shape is None:
                 raise RuntimeError("Now receiving tensor from the previous stage, but the recv_shape is None.")
-            tensor_info_recv_prev = (recv_prev_shape, recv_dtype)
+            tensor_info_recv_prev = (recv_prev_shape, pipeline_dtype)
         if recv_next:
             if tensor_shape is None:
                 raise RuntimeError("Now receiving tensor from the next stage, but the recv_shape is None.")
-            tensor_info_recv_next = (recv_next_shape, recv_dtype)
+            tensor_info_recv_next = (recv_next_shape, pipeline_dtype)
 
         # if tensor_send_prev or tensor_send_next is not None, send a tensor to specific stage
         # if tensor_info_recv_prev or tensor_info_recv_next is not None, recv a tensor from specific stage

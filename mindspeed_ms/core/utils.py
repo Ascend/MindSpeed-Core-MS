@@ -17,8 +17,8 @@
 
 import re
 import math
-import yaml
 from collections import OrderedDict
+import yaml
 
 import mindspore.ops as P
 import mindspore.nn as nn
@@ -26,7 +26,6 @@ from mindspore.communication import get_group_size
 from mindspore.nn.optim.optimizer import Optimizer
 
 from mindspeed_ms.tools import logger
-from mindspeed_ms.legacy.model.module import Module
 from mindspeed_ms.core.parallel_state import (
     get_pipeline_model_parallel_rank,
     get_pipeline_model_parallel_world_size,
@@ -130,7 +129,7 @@ def get_default_dict_for_optimizer(optimizer, model_sharded_state_dict):
     return state_dict
 
 
-def generate_state_dict(network: Module, optimizer: Optimizer):
+def generate_state_dict(network: "Module", optimizer: Optimizer):
     r"""
     Generete the sharded stated dict for the network and optimizer.
 
@@ -295,17 +294,16 @@ def load_yaml(stream, yaml_loader=yaml.SafeLoader, object_pairs_hook=OrderedDict
     return yaml.load(stream, OrderedLoader)
 
 
-def valid_lora_config(model_config, params):
+def valid_lora_config(config, params):
     """valid target_cells in lora_config by params of the pretrain checkpoint.
 
     Args:
-        model_config (TransformerConfig): Config of the model.
+        config (TransformerConfig): Config of the model.
         params (dict): parameters of the pretrain model.
     """
-    lora_config = model_config.lora_config
     target_cells_flag = {}
-    target_cells_lst = lora_config.target_cells[0]
-    specific_lora_cell = lora_config.target_cells[1]
+    target_cells_lst = config.lora_target_cells[0]
+    specific_lora_cell = config.lora_target_cells[1]
     for cell_name in target_cells_lst:
         target_cells_flag.update({f'{cell_name}': False})
 
@@ -320,9 +318,9 @@ def valid_lora_config(model_config, params):
 
         if _check_target_linear(key):
             # find key in specific_rank and specific_alpha
-            rank, alpha = _get_specific_rank_alpha(key, specific_lora_cell, lora_config.lora_rank,
-                                                   lora_config.lora_alpha)
-            module_dict = _create_module_dict(key, (rank, alpha), lora_config.lora_dropout)
+            rank, alpha = _get_specific_rank_alpha(key, specific_lora_cell, config.lora_rank,
+                                                   config.lora_alpha)
+            module_dict = _create_module_dict(key, (rank, alpha), config.lora_dropout)
             if not lora_module:
                 lora_module = module_dict
             else:
@@ -338,8 +336,8 @@ def valid_lora_config(model_config, params):
     if not lora_module:
         raise ValueError("target_cells in your lora config is invalid, please check your target_cells.")
 
-    model_config.lora_config.lora_module = lora_module
-    return model_config
+    config.lora_module = lora_module
+    return config
 
 
 def _check_target_linear(key):

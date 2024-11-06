@@ -13,8 +13,4 @@
 # limitations under the License.
 # ============================================================================
 
-"""pynative init"""
-
-from .transformer_config import TransformerConfig
-
-__all__ = ["TransformerConfig"]
+"""Models init"""

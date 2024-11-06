@@ -1,0 +1,49 @@
+language_model:
+  # model architecture
+  num_layers: null
+  hidden_size: null
+  num_attention_heads: null
+  num_query_groups: 32
+  hidden_dropout: 0.0
+  attention_dropout: 0.0
+  add_bias_linear: False
+  add_qkv_bias: True
+  num_moe_experts: 1
+
+  # initialization
+  init_method_std: 0.01
+
+  # MoE related
+  moe_router_load_balancing_type: null
+  moe_token_dispatcher_type: "alltoall"
+
+  # miscellaneous
+  clone_scatter_output_in_embedding: False
+
+# training
+transformer_impl: "local"
+seed: null
+global_batch_size: 1
+micro_batch_size: 1
+train_iters: 0
+eval_interval: null
+train_samples: 0
+check_for_nan_in_loss_and_grad: False
+
+# optimization
+optimizer: "AdamWeightDecay"
+lr_decay_style: "constant"
+weight_decay_incr_style: "constant"
+clip_grad: 0.0
+
+# checkpoint arguments
+dist_ckpt_format: "ckpt"
+
+# loss arguments
+initial_loss_scale: null
+
+# distributed arguments
+delay_grad_reduce: False
+
+# logging
+log_interval: null

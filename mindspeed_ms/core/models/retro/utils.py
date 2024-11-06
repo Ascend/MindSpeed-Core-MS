@@ -12,9 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
+""" Model retro utils"""
 
-"""pynative init"""
+import os
 
-from .transformer_config import TransformerConfig
 
-__all__ = ["TransformerConfig"]
+def get_config_path(project_dir: str) -> str:
+    """Config copy stored within retro project dir."""
+    return os.path.join(project_dir, "config.json")
+
+
+def get_gpt_data_dir(project_dir: str) -> str:
+    """Get project-relative directory of GPT bin/idx datasets."""
+    return os.path.join(project_dir, "data")

@@ -30,6 +30,7 @@ class TestRingAttention:
         Expectation: test success
         """
         os.environ['HCCL_BUFFSIZE'] = "1"
+        os.environ['WORLD_SIZE'] = "8"
         scripts_name = "run_ring_attention.py"
         device_num = 8
 

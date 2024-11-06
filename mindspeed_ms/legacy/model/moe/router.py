@@ -16,7 +16,7 @@
 import mindspore as ms
 from mindspore import mint, nn, ops, Tensor
 
-from mindspeed_ms.core.config import TransformerConfig
+from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.core.parallel_state import (
     get_tensor_and_context_parallel_world_size,
     get_tensor_model_parallel_world_size
@@ -49,16 +49,15 @@ class TopKRouter(nn.Cell):
     def __init__(self, config: TransformerConfig):
         super(TopKRouter, self).__init__()
         self.config = config
-        self.moe_config = config.moe_config
         self.param_init_dtype = config.params_dtype
         self.compute_dtype = config.compute_dtype
         self.gating = mint.nn.Linear(config.hidden_size,
-                                     self.moe_config.num_experts,
+                                     self.config.num_moe_experts,
                                      bias=False,
                                      dtype=self.param_init_dtype)
-        self.topk = self.moe_config.moe_router_topk
-        self.routing_type = self.moe_config.moe_router_load_balancing_type
-        self.num_experts = self.moe_config.num_experts
+        self.topk = self.config.moe_router_topk
+        self.routing_type = self.config.moe_router_load_balancing_type
+        self.num_experts = self.config.num_moe_experts
         self.gather_from_sp = GatherFromSequenceParallelRegion(need_to_swapaxes=False)
 
         self.moe_aux_loss_auto_scaler = MoEAuxLossAutoScaler()
@@ -67,8 +66,8 @@ class TopKRouter(nn.Cell):
     def construct(self, input: ms.Tensor):
         """forward process"""
         ### add noise ###
-        if self.moe_config.moe_input_jitter_eps is not None:
-            eps = self.moe_config.moe_input_jitter_eps
+        if self.config.moe_input_jitter_eps is not None:
+            eps = self.config.moe_input_jitter_eps
             self.input_jitter = ops.uniform(input.shape, Tensor(1.0 - eps), Tensor(1.0 + eps))
             input = input * self.input_jitter
         ### add noise ###
@@ -77,12 +76,12 @@ class TopKRouter(nn.Cell):
 
         ### routint process ###
         # [b*s/tp, experts_num]
-        logits = logits.reshape(-1, self.moe_config.num_experts)
+        logits = logits.reshape(-1, self.config.num_moe_experts)
 
         # Apply Z-Loss
         logits = self.apply_z_loss(logits)  # [b*s/tp, experts_num]
 
-        if get_tensor_model_parallel_world_size() > 1 and self.moe_config.moe_token_dispatcher_type == "alltoall":
+        if get_tensor_model_parallel_world_size() > 1 and self.config.moe_token_dispatcher_type == "alltoall":
             # [b*s, experts_num]
             logits = self.gather_from_sp(logits)
 
@@ -94,9 +93,9 @@ class TopKRouter(nn.Cell):
             scores, indices, _ = topk_softmax_with_capacity(
                 logits,
                 self.topk,
-                capacity_factor=self.moe_config.moe_expert_capacity_factor,
-                pad_to_capacity=self.moe_config.moe_pad_expert_input_to_capacity,
-                drop_policy=self.moe_config.moe_token_drop_policy
+                capacity_factor=self.config.moe_expert_capacity_factor,
+                pad_to_capacity=self.config.moe_pad_expert_input_to_capacity,
+                drop_policy=self.config.moe_token_drop_policy
             )
             indices = ops.cast(indices, ms.int32)
         else:
@@ -121,9 +120,9 @@ class TopKRouter(nn.Cell):
         probs, indices, tokens_per_expert = topk_softmax_with_capacity(
             logits,
             self.topk,
-            capacity_factor=self.moe_config.moe_expert_capacity_factor,
-            pad_to_capacity=self.moe_config.moe_pad_expert_input_to_capacity,
-            drop_policy=self.moe_config.moe_token_drop_policy
+            capacity_factor=self.config.moe_expert_capacity_factor,
+            pad_to_capacity=self.config.moe_pad_expert_input_to_capacity,
+            drop_policy=self.config.moe_token_drop_policy
         )
         if self.training:
             scores = mint.nn.functional.softmax(logits, dim=-1, dtype=ms.float32)
@@ -142,9 +141,9 @@ class TopKRouter(nn.Cell):
         Outputs:
             Tensor, the activation tensor with the attached gradient function.
         """
-        moe_aux_loss_coeff = self.moe_config.moe_aux_loss_coeff
+        moe_aux_loss_coeff = self.config.moe_aux_loss_coeff
         sequence_partition_group = None
-        if self.moe_config.moe_token_dispatcher_type == "alltoall":
+        if self.config.moe_token_dispatcher_type == "alltoall":
             sequence_partition_group = "cp"
             moe_aux_loss_coeff /= get_tensor_model_parallel_world_size()
 
@@ -169,9 +168,9 @@ class TopKRouter(nn.Cell):
         Outputs:
             Tensor, the logits after applying the z-loss.
         """
-        if self.moe_config.moe_z_loss_coeff is not None and self.training:
+        if self.config.moe_z_loss_coeff is not None and self.training:
             moe_z_loss_coeff = (
-                self.moe_config.moe_z_loss_coeff
+                self.config.moe_z_loss_coeff
                 / get_tensor_and_context_parallel_world_size()
             )
             z_loss = z_loss_func(logits, moe_z_loss_coeff)

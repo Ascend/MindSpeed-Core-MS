@@ -45,12 +45,12 @@ def set_weight_decay(params, weight_decay=1e-1):
     return group_params
 
 
-def set_parallel_context(parallel_config):
+def set_parallel_context(config):
     """
     Sets the parallel context based on the provided parallel configuration.
 
     Args:
-        parallel_config: The parallel configuration object containing the parallel settings.
+        config: The parallel configuration object containing the parallel settings.
 
     Returns:
         ParallelConfig: The updated parallel configuration object.
@@ -58,16 +58,16 @@ def set_parallel_context(parallel_config):
     """
     init()
     initialize_model_parallel(
-        tensor_model_parallel_size=parallel_config.tensor_model_parallel_size,
-        pipeline_model_parallel_size=parallel_config.pipeline_model_parallel_size,
-        virtual_pipeline_model_parallel_size=parallel_config.virtual_pipeline_model_parallel_size,
+        tensor_model_parallel_size=config.tensor_model_parallel_size,
+        pipeline_model_parallel_size=config.pipeline_model_parallel_size,
+        virtual_pipeline_model_parallel_size=config.virtual_pipeline_model_parallel_size,
     )
     logger.info(
         f"dp {get_data_parallel_world_size()} | "
-        f"pp {parallel_config.pipeline_model_parallel_size} | "
-        f"tp {parallel_config.tensor_model_parallel_size} | "
-        f"sp {parallel_config.sequence_parallel} | "
-        f"vpp {parallel_config.virtual_pipeline_model_parallel_size}"
+        f"pp {config.pipeline_model_parallel_size} | "
+        f"tp {config.tensor_model_parallel_size} | "
+        f"sp {config.sequence_parallel} | "
+        f"vpp {config.virtual_pipeline_model_parallel_size}"
     )
 
 

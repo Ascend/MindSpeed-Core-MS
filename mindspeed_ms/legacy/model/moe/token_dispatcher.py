@@ -18,7 +18,7 @@ from typing import List
 import mindspore as ms
 import mindspore.ops as ops
 
-from mindspeed_ms.core.config import TransformerConfig
+from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.core.parallel_state import (
     get_expert_model_parallel_group,
     get_expert_model_parallel_rank,
@@ -54,19 +54,17 @@ class MoEAlltoAllTokenDispatcher():
     """
     def __init__(self, num_local_experts: int, local_expert_indices: List[int], config: TransformerConfig):
         self.config = config
-        self.moe_config = config.moe_config
-        self.parallel_config = self.config.parallel_config
         self.hidden_shape = None
         self.hidden_size = self.config.hidden_size
         self.num_local_experts = num_local_experts
         if self.num_local_experts <= 0:
             raise ValueError("expect num_local_experts > 0")
 
-        self.router_topk = self.moe_config.moe_router_topk
+        self.router_topk = self.config.moe_router_topk
         self.add_bias = self.config.add_bias_linear
-        self.en = self.moe_config.num_experts
-        self.ep = self.parallel_config.expert_model_parallel_size
-        self.use_self_defined_alltoall = self.moe_config.use_self_defined_alltoall
+        self.en = self.config.num_moe_experts
+        self.ep = self.config.expert_model_parallel_size
+        self.use_self_defined_alltoall = self.config.use_self_defined_alltoall
         self.local_expert_indices = local_expert_indices
         if len(self.local_expert_indices) != self.num_local_experts:
             raise ValueError(f"expect len(self.local_expert_indices) == {self.num_local_experts}, "

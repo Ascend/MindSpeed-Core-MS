@@ -21,6 +21,7 @@ import mindspore.common.dtype as mstype
 import mindspore.communication.comm_func as comm_func
 from mindspeed_ms.training.optimizer_param_scheduler import OptimizerParamScheduler
 
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.tools import logger
 from mindspeed_ms.training.grad_handler import inplace_apply_to_tensor_list, \
     get_grad_norm_fp32, clip_grad_by_total_norm_fp32, param_is_not_shared
@@ -28,56 +29,57 @@ from mindspeed_ms.core.parallel_state import get_tensor_model_parallel_rank, \
     get_data_parallel_world_size, get_model_parallel_group
 
 
-def get_optimizer_param_scheduler(optimizer, optimizer_config, dataset_config, training_config):
+def get_optimizer_param_scheduler(optimizer):
     """ Build the learning rate scheduler."""
     # Iteration-based training.
+    args = get_args()
     dp = get_data_parallel_world_size()
-    global_batch_size = dataset_config.batch_size * dp * dataset_config.micro_batch_num
-    if training_config.training_iters > 0:
-        if optimizer_config.lr_decay_iters is None:
-            optimizer_config.lr_decay_iters = training_config.training_iters
+    global_batch_size = args.global_batch_size * dp * args.micro_batch_size
+    if args.train_iters > 0:
+        if args.lr_decay_iters is None:
+            args.lr_decay_iters = args.train_iters
 
-        lr_decay_steps = optimizer_config.lr_decay_iters * global_batch_size
-        wd_incr_steps = training_config.training_iters * global_batch_size
+        lr_decay_steps = args.lr_decay_iters * global_batch_size
+        wd_incr_steps = args.train_iters * global_batch_size
         wsd_decay_steps = None
-        if optimizer_config.lr_wsd_decay_iters is not None:
-            wsd_decay_steps = optimizer_config.lr_wsd_decay_iters * global_batch_size
-        if optimizer_config.lr_warmup_fraction is not None:
-            lr_warmup_steps = optimizer_config.lr_warmup_fraction * lr_decay_steps
+        if args.lr_wsd_decay_iters is not None:
+            wsd_decay_steps = args.lr_wsd_decay_iters * global_batch_size
+        if args.lr_warmup_fraction is not None:
+            lr_warmup_steps = args.lr_warmup_fraction * lr_decay_steps
         else:
-            lr_warmup_steps = optimizer_config.lr_warmup_iters * global_batch_size
+            lr_warmup_steps = args.lr_warmup_iters * global_batch_size
     # Sample-based training.
-    elif dataset_config.train_samples:
-        training_config.training_iters = dataset_config.train_samples // global_batch_size
-        if optimizer_config.lr_decay_samples is None:
-            optimizer_config.lr_decay_samples = dataset_config.train_samples
-        lr_decay_steps = optimizer_config.lr_decay_samples
-        wd_incr_steps = dataset_config.train_samples
-        wsd_decay_steps = optimizer_config.lr_wsd_decay_samples
-        if optimizer_config.lr_warmup_fraction is not None:
-            lr_warmup_steps = optimizer_config.lr_warmup_fraction * lr_decay_steps
+    elif args.train_samples:
+        args.train_iters = args.train_samples // global_batch_size
+        if args.lr_decay_samples is None:
+            args.lr_decay_samples = args.train_samples
+        lr_decay_steps = args.lr_decay_samples
+        wd_incr_steps = args.train_samples
+        wsd_decay_steps = args.lr_wsd_decay_samples
+        if args.lr_warmup_fraction is not None:
+            lr_warmup_steps = args.lr_warmup_fraction * lr_decay_steps
         else:
-            lr_warmup_steps = optimizer_config.lr_warmup_samples
+            lr_warmup_steps = args.lr_warmup_samples
     else:
         raise Exception(
             'either train-iters or train-samples should be positive number.')
 
     opt_param_scheduler = OptimizerParamScheduler(
         optimizer,
-        init_lr=optimizer_config.lr_warmup_init,
-        max_lr=optimizer_config.learning_rate,
-        min_lr=optimizer_config.min_lr,
+        init_lr=args.lr_warmup_init,
+        max_lr=args.lr,
+        min_lr=args.min_lr,
         lr_warmup_steps=lr_warmup_steps,
         lr_decay_steps=lr_decay_steps,
-        lr_decay_style=optimizer_config.lr_decay_style,
-        start_wd=optimizer_config.start_weight_decay,
-        end_wd=optimizer_config.end_weight_decay,
+        lr_decay_style=args.lr_decay_style,
+        start_wd=args.start_weight_decay,
+        end_wd=args.end_weight_decay,
         wd_incr_steps=wd_incr_steps,
-        wd_incr_style=optimizer_config.weight_decay_incr_style,
-        use_checkpoint_opt_param_scheduler=optimizer_config.use_checkpoint_opt_param_scheduler,
-        override_opt_param_scheduler=optimizer_config.override_opt_param_scheduler,
+        wd_incr_style=args.weight_decay_incr_style,
+        use_checkpoint_opt_param_scheduler=args.use_checkpoint_opt_param_scheduler,
+        override_opt_param_scheduler=args.override_opt_param_scheduler,
         wsd_decay_steps=wsd_decay_steps,
-        lr_wsd_decay_style=optimizer_config.lr_wsd_decay_style
+        lr_wsd_decay_style=args.lr_wsd_decay_style
         )
 
     return opt_param_scheduler

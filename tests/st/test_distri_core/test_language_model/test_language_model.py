@@ -45,12 +45,13 @@ class TestLanguageModel:
         """
         os.environ['HCCL_BUFFSIZE'] = "1"
         scripts_name = "run_language_model.py"
+        yaml_file = "test_language_model.yaml"
         device_num = 1
         log_dir = "language_model_log"
         sh_path = os.path.split(os.path.realpath(__file__))[0]
         scripts_path = os.path.join(sh_path, scripts_name)
 
-        scripts_cmd = f"{scripts_path}"
+        scripts_cmd = f"{scripts_path} --yaml-cfg {yaml_file}"
         cmd = f"msrun --worker_num={device_num} " + \
                     f"--local_worker_num={device_num} " + \
                     f"--master_port=8132 " + \

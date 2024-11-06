@@ -132,13 +132,13 @@ def get_norm(config, scale=1.0):
     if config.normalization == "LayerNorm":
         return LayerNorm(
             config.hidden_size,
-            eps=config.norm_epsilon)
+            eps=config.layernorm_epsilon)
     if config.normalization == "RMSNorm":
         return RMSNorm(dim=config.hidden_size,
-                       eps=config.norm_epsilon,
+                       eps=config.layernorm_epsilon,
                        scale=scale)
     if config.normalization == "FusedRMSNorm":
-        return FusedRMSNorm(dim=config.hidden_size, eps=config.norm_epsilon, compute_type=config.compute_dtype,
+        return FusedRMSNorm(dim=config.hidden_size, eps=config.layernorm_epsilon, compute_type=config.compute_dtype,
                             scale=scale)
 
     raise Exception(f"unsupported norm type '{config.normalization}'.")

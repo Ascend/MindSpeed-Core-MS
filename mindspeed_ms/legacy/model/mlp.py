@@ -18,6 +18,7 @@ __all__ = [
     "ParallelMLP",
 ]
 
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.tensor_parallel import (
     ColumnParallelLinear,
     RowParallelLinear,
@@ -80,11 +81,12 @@ class ParallelMLP(Module):
 
     def __init__(self, config, is_expert=False):
         super(ParallelMLP, self).__init__(config)
+        args = get_args()
         self.config = config
         self.add_bias = config.add_bias_linear
-        self.act_type = self.config.hidden_act
+        self.act_type = self.config.activation_func
         self.hidden_size = self.config.hidden_size
-        self.has_bias = self.config.mlp_has_bias
+        self.has_bias = self.config.add_mlp_bias
         mapping_output_size = self.config.ffn_hidden_size
         if self.config.gated_linear_unit:
             mapping_output_size *= 2
@@ -102,7 +104,7 @@ class ParallelMLP(Module):
 
         self.bias_gelu_fusion = False
 
-        if self.act_type == "swiglu" and config.apply_swiglu_fusion:
+        if self.act_type == "swiglu" and args.apply_swiglu_fusion:
             self.act_type = "fused_swiglu"
         self.act_func = get_act_func(self.act_type)
 
@@ -121,7 +123,7 @@ class ParallelMLP(Module):
             is_expert=is_expert,
             bias_init=self.config.bias_init,
         )
-        use_lora = config.lora_config.use_lora
+        use_lora = config.use_lora
         if use_lora:
             mapping_lora = self._get_cell_lora_config(config, 'mapping')
             if mapping_lora is not None:
