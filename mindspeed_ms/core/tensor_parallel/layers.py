@@ -32,9 +32,11 @@ from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
-    get_data_parallel_world_size,
     get_tensor_model_parallel_group,
-    get_stream
+    get_stream,
+    get_zero_shard_group,
+    get_group_size,
+    get_zero_full_shard_flag
 )
 from mindspeed_ms.core.tensor_parallel import (
     CopyToModelParallelRegion,
@@ -49,6 +51,7 @@ from mindspeed_ms.core.tensor_parallel.random import (
     get_rng_tracer,
     TENSOR_PARALLEL_GENERATOR,
     EXPERT_PARALLEL_GENERATOR,
+    ZERO_PARALLEL_GENERATOR,
 )
 
 
@@ -548,7 +551,7 @@ class ColumnParallelLinear(nn.Cell):
         self.use_zero3 = self.config.zero_level == 'z3'
         if self.use_zero3:
             try:
-                dp_size = get_data_parallel_world_size()
+                dp_size = get_group_size(get_zero_shard_group(with_context_parallel=False))
             except AssertionError as e:
                 raise RuntimeError("When using zero3 optimizer parallel. Data parallel communication "
                                    "need be initialized. Please check 'dp' in order when calling "
@@ -570,6 +573,8 @@ class ColumnParallelLinear(nn.Cell):
             self.sequence_parallel = False
 
         mode = EXPERT_PARALLEL_GENERATOR if self.is_expert and self.expert_parallel else TENSOR_PARALLEL_GENERATOR
+        if self.use_zero3 and not get_zero_full_shard_flag():
+            mode = ZERO_PARALLEL_GENERATOR
 
         weight_shape = (self.output_size_per_partition, self.input_size) if self.transpose_b \
                         else (self.input_size, self.output_size_per_partition)
@@ -695,7 +700,8 @@ class ColumnParallelLinear(nn.Cell):
         w_shard = (tp_size, 1) if self.transpose_b else (1, tp_size)
         state_dict = {}
         opt_weight_shard_step = get_tensor_model_parallel_world_size() if self.use_zero3 else 0
-        opt_weight_shard_size = get_data_parallel_world_size() if self.use_zero3 else 0
+        opt_weight_shard_size = get_group_size(get_zero_shard_group(with_context_parallel=False)) \
+            if self.use_zero3 else 0
         if not self.skip_weight_param_allocation:
             state_dict[self.weight.name] = {
                 'shape': self.weight.shape,
@@ -879,7 +885,7 @@ class RowParallelLinear(nn.Cell):
 
         if self.use_zero3:
             try:
-                dp_size = get_data_parallel_world_size()
+                dp_size = get_group_size(get_zero_shard_group(with_context_parallel=False))
             except AssertionError as e:
                 raise RuntimeError("When using zero3 optimizer parallel. Data parallel communication "
                                    "need be initialized. Please check 'dp' in order when calling "
@@ -901,6 +907,8 @@ class RowParallelLinear(nn.Cell):
             )
 
         mode = EXPERT_PARALLEL_GENERATOR if self.is_expert and self.expert_parallel else TENSOR_PARALLEL_GENERATOR
+        if self.use_zero3 and not get_zero_full_shard_flag():
+            mode = ZERO_PARALLEL_GENERATOR
 
         weight_shape = (self.output_size, self.input_size_per_partition) if self.transpose_b \
                         else (self.input_size_per_partition, self.output_size)
@@ -1005,7 +1013,8 @@ class RowParallelLinear(nn.Cell):
         w_shard = (1, tp_size) if self.transpose_b else (tp_size, 1)
         state_dict = {}
         opt_weight_shard_step = get_tensor_model_parallel_world_size() if self.use_zero3 else 0
-        opt_weight_shard_size = get_data_parallel_world_size() if self.use_zero3 else 0
+        opt_weight_shard_size = get_group_size(get_zero_shard_group(with_context_parallel=False)) \
+            if self.use_zero3 else 0
         state_dict[self.weight.name] = {
             'shape': self.weight.shape,
             'shard': w_shard,

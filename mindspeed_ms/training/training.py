@@ -50,6 +50,9 @@ from mindspeed_ms.core.parallel_state import (
     is_pipeline_first_stage,
     get_data_modulo_expert_parallel_group,
     get_expert_model_parallel_world_size,
+    get_zero_full_shard_flag,
+    get_zero_shard_group,
+    get_zero_shard_grad_group,
     get_pipeline_model_parallel_rank,
     get_tensor_model_parallel_rank
 )
@@ -313,9 +316,14 @@ def get_model(model_provider_func, config: TransformerConfig):
             use_zero3=(config.zero_level == "z3"),
         )
         logger.info(f"Wrap model with DistributedDataParallel. Config:\n{ddp_config}")
+        zero_comm_group = None
+        if not get_zero_full_shard_flag():
+            zero_comm_group = {"zero_shard_group": get_zero_shard_group(with_context_parallel=True),
+                               "zero_shard_grad_group": get_zero_shard_grad_group()}
         model = nn.CellList([DistributedDataParallel(config=config,
                                                      ddp_config=ddp_config,
-                                                     module=model_chunck) for model_chunck in model],
+                                                     module=model_chunck,
+                                                     zero_comm_group=zero_comm_group) for model_chunck in model],
                             auto_prefix=False)
 
     return model
@@ -644,7 +652,7 @@ class TrainOneStepCell(nn.Cell):
             current_step_loss_scale = self.loss_scaler.scale_value
         else:
             current_step_loss_scale = None
-        if self.config.num_moe_experts > 1:
+        if self.config.num_moe_experts is not None and self.config.num_moe_experts > 1:
             MoEAuxLossAutoScaler.set_loss_scale(mint.div(current_step_loss_scale, self.micro_batch_num))
 
         # loss is scale and unscale in forward_backward_func
@@ -670,13 +678,7 @@ class TrainOneStepCell(nn.Cell):
 
         global_norm = None
         if is_finite:
-            # scale grads and clip grads if enabled
-            if not self.use_mixed_precision_optimizer:
-                global_norm = self.unscale_and_clip_grads(grads, current_step_loss_scale)
-                grads_tuple = tuple(grads)
-                self.optimizer(grads_tuple)
-            else:
-                self.optimizer()
+            global_norm = self._call_optimizer(grads, current_step_loss_scale)
 
         # Update learning rate.
         if self.opt_param_scheduler:
@@ -700,6 +702,16 @@ class TrainOneStepCell(nn.Cell):
 
         return loss, is_finite, current_step_loss_scale, learning_rate, global_norm
 
+    def _call_optimizer(self, grads, current_step_loss_scale):
+        # scale grads and clip grads if enabled
+        global_norm = None
+        if not self.use_mixed_precision_optimizer:
+            global_norm = self.unscale_and_clip_grads(grads, current_step_loss_scale)
+            grads_tuple = tuple(grads)
+            self.optimizer(grads_tuple)
+        else:
+            self.optimizer()
+        return global_norm
 
 def train(
         train_one_step_cell,

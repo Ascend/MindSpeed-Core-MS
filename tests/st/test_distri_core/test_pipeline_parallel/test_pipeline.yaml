@@ -9,6 +9,7 @@ model_parallel:
   params_dtype: "float32"
   compute_dtype: "float32"
   softmax_compute_dtype: "float32"
+  variable_seq_lengths: False
 
 language_model:
   num_layers: 8

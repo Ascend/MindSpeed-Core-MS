@@ -172,7 +172,7 @@ def save_pre_process(shard_info, model, optimizer, config):
     for name, param in list(params_dict.items()):
         target_shard_info = model_shard_info if name in model_shard_info else optimizer_shard_info
         ### moe layer
-        if config.num_moe_experts > 1 and "local_experts.0" in name:
+        if config.num_moe_experts is not None and config.num_moe_experts > 1 and "local_experts.0" in name:
             local_expert_num = config.num_moe_experts // get_expert_model_parallel_world_size()
             local_experts_list = []
             for idx in range(local_expert_num):

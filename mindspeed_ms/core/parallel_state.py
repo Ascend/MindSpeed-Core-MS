@@ -15,6 +15,8 @@
 
 """Model and data parallel groups."""
 import warnings
+import numpy as np
+
 import mindspore
 from mindspore.communication import create_group, destroy_group, get_group_size, get_rank
 from mindspore import hal
@@ -25,20 +27,27 @@ _SP_SEND_STREAM = None
 _SP_RECV_STREAM = None
 _SP_SEND_OML_STREAM = None
 _SP_RECV_OML_STREAM = None
+_GLOBAL_MP_RANK = None
 
 group_info_maps = {}
 
 # special_groups has a different initialization process compared to normal_groups
 normal_groups = ['tp', 'dp', 'pp', 'cp', 'dp-cp', 'tp-pp', 'tp-dp-cp', 'tp-dp', 'tp-cp']
-special_groups = ['ep', 'tp-ep', 'tp-ep-pp', 'dp-independent_ep', 'vpp', 'embedding', 'position_embedding']
+special_groups = ['ep', 'tp-ep', 'tp-ep-pp', 'dp-independent_ep', 'vpp', 'embedding', 'position_embedding',
+                  "dp-zero", "dp-zero-grad", "dp-zero-tp"]
 valid_groups = normal_groups + special_groups
 
 # A list of global ranks for pipeline group
 _PIPELINE_GLOBAL_RANKS = None
+# zero shard size, not initialized
+_ZERO_SHARD_SIZE = None
+_ZERO_FULL_SHARD = True
+_ZERO_WITH_CP = False
 
 
 class GroupInfo:
     """ Comm Group Info """
+
     def __init__(self):
         self.group = None
         self.world_size = None
@@ -240,6 +249,7 @@ def initialize_model_parallel(tensor_model_parallel_size=1,
                               expert_model_parallel_size=1,
                               order="tp-cp-ep-dp-pp",
                               communicator_config_path=None,
+                              zero_shard_size=-1,
                               **kwargs):
     """Initialize model data parallel groups.
     """
@@ -306,6 +316,8 @@ def initialize_model_parallel(tensor_model_parallel_size=1,
     rank_generator.init_group('tp-ep', independent_ep=True)
     rank_generator.init_group('tp-ep-pp', independent_ep=True)
     rank_generator.init_group('dp', independent_ep=True)
+    global _GLOBAL_MP_RANK
+    _GLOBAL_MP_RANK = [rank for rank in rank_generator.get_ranks("tp-pp")]
 
     # Build the pipeline-parallel related groups.
     rank_generator.init_embedding_group(pipeline_model_parallel_split_rank)
@@ -337,6 +349,12 @@ def initialize_model_parallel(tensor_model_parallel_size=1,
         get_tensor_model_parallel_group()
     if get_context_parallel_world_size() > 1:
         get_context_parallel_group()
+    # initialize zero3 shard size
+    set_zero_shard_size(zero_shard_size)
+    if not get_zero_full_shard_flag():
+        get_zero_shard_group()
+        get_zero_shard_grad_group()
+    get_zero_shard_tp_group()
 
 
 def is_initialized():
@@ -381,6 +399,11 @@ def _get_group_helper(mode):
 def get_tensor_model_parallel_group():
     """Get the tensor model parallel group the caller rank belongs to."""
     return _get_group_helper('tp')
+
+
+def get_zero_parallel_group():
+    """Get the tensor model parallel group the caller rank belongs to."""
+    return _get_group_helper('dp-zero')
 
 
 def get_context_parallel_group():
@@ -516,6 +539,11 @@ def get_tensor_model_parallel_rank():
     return _get_rank_helper('tp')
 
 
+def get_zero_parallel_rank():
+    """Return my rank for the tensor model parallel group."""
+    return _get_rank_helper('dp-zero')
+
+
 def get_context_parallel_rank():
     """Return my rank for the context parallel group."""
     return _get_rank_helper('cp')
@@ -530,6 +558,11 @@ def get_expert_model_parallel_rank():
 def get_data_parallel_rank(with_context_parallel=False):
     """Return my rank for the data parallel group."""
     return _get_rank_helper('dp-cp') if with_context_parallel else _get_rank_helper('dp')
+
+
+def get_zero_shard_rank():
+    """Return my rank for the data parallel group."""
+    return _get_rank_helper('dp-zero')
 
 
 def get_pipeline_model_parallel_rank():
@@ -676,3 +709,138 @@ def destroy_model_parallel():
     _SP_SEND_OML_STREAM = None
     global _SP_RECV_OML_STREAM
     _SP_RECV_OML_STREAM = None
+
+
+def set_zero_shard_size(zero_shard_size):
+    """initialize zero3 shard size"""
+    try:
+        dp_size = get_data_parallel_world_size()
+    except AssertionError as e:
+        raise RuntimeError("When using zero3 optimizer parallel. Data parallel communication "
+                           "need be initialized. Please check 'dp' in order when calling "
+                           "initialize_model_parallel.") from e
+    if zero_shard_size == 1:
+        raise ValueError("zero_shard_size should be greater than 1")
+    if zero_shard_size != -1:
+        if zero_shard_size > dp_size or dp_size % zero_shard_size != 0:
+            logger.warning("zero_shard_size should be less than or equal to data parallel size or "
+                           "zero_shard_size should be a factor of data parallel size, but got"
+                           f"{zero_shard_size}, zero_shard_size will not take effect.")
+        else:
+            if zero_shard_size < dp_size:
+                global _ZERO_FULL_SHARD
+                _ZERO_FULL_SHARD = False
+            if dp_size <= 8:
+                logger.warning("When using zero unsaturated shard, data parallel size is recommended to be greater "
+                               f"then 8, but got {dp_size}. Unless the performance may be worse.")
+            dp_size = zero_shard_size
+
+    global _ZERO_SHARD_SIZE
+    _ZERO_SHARD_SIZE = dp_size
+
+
+def get_zero_shard_size():
+    """get zero3 shard size"""
+    global _ZERO_SHARD_SIZE
+    if _ZERO_SHARD_SIZE is None:
+        raise RuntimeError("Zero shard size is not initialized")
+    return _ZERO_SHARD_SIZE
+
+
+def get_zero_full_shard_flag():
+    """get whether zero3 shard size is unsaturated or not"""
+    global _ZERO_FULL_SHARD
+    return _ZERO_FULL_SHARD
+
+
+def _local_rank_in_zero_shard_group(dp_rank):
+    """inner func, calculate the same param group"""
+    zero_shard_size = get_zero_shard_size()
+    # [0, 1, 2, 3, 4, 5, 6, 7] -> [0, 1, 4, 5], [2, 3, 6, 7]
+    # [0, 2, 4, 6] -> [0, 4], [2, 6]
+    new_dp_rank_order = []
+    for i in range(get_data_parallel_world_size()):
+        if i == get_data_parallel_world_size() - 1:
+            new_dp_rank_order.append(get_data_parallel_world_size() - 1)
+        else:
+            new_dp_rank_order.append((i * zero_shard_size) % (get_data_parallel_world_size() - 1))
+    all_rank_list_index = np.split(np.array(new_dp_rank_order), zero_shard_size)
+    current_rank_list_in_zero = None
+    group_rank_id = -1
+    for group_rank_id, rank_list_index in enumerate(all_rank_list_index):
+        current_rank = get_rank()
+        rank_list = [dp_rank[i] for i in rank_list_index]
+        if current_rank in rank_list:
+            current_rank_list_in_zero = rank_list
+            break
+    if current_rank_list_in_zero is None or group_rank_id == -1:
+        raise ValueError("Can not find current rank in zero shard group or group rank id is -1")
+    current_rank_list_in_zero.sort()
+    return current_rank_list_in_zero, group_rank_id
+
+
+def get_zero_shard_group(with_context_parallel=False):
+    """Get the data parallel group the caller rank belongs to."""
+    global _ZERO_WITH_CP
+    _ZERO_WITH_CP = with_context_parallel
+    group = get_group_info("dp-cp") if with_context_parallel else get_group_info("dp")
+    if get_zero_full_shard_flag():
+        return group.group
+    dp_rank = group.global_ranks
+    zero_shard_size = get_zero_shard_size()
+    # [0, 1, 2, 3, 4, 5, 6, 7] -> [0, 1, 2, 3], [4, 5, 6, 7]
+    # [0, 2, 4, 6] -> [0, 2], [4, 6]
+    current_idx = dp_rank.index(get_rank())
+    idx, _ = divmod(current_idx, zero_shard_size)
+    current_rank_list_in_zero = dp_rank[idx * zero_shard_size: (idx + 1) * zero_shard_size]
+    group_name = "dp-zero-" + "-".join([str(i) for i in current_rank_list_in_zero])
+    comm_group = get_group_info("dp-zero")
+    comm_group.group = group_name
+    comm_group.global_ranks = current_rank_list_in_zero
+    comm_group.world_size = zero_shard_size
+    comm_group.rank = idx
+    return _get_group_helper("dp-zero")
+
+
+def get_zero_shard_grad_group():
+    """Get the data parallel group the caller rank belongs to."""
+    zero_shard_size = get_zero_shard_size()
+    group = get_group_info("dp-cp") if _ZERO_WITH_CP else get_group_info("dp")
+    if get_zero_full_shard_flag():
+        return group.group
+    dp_rank = group.global_ranks
+    current_rank_list_in_zero, group_rank_id = _local_rank_in_zero_shard_group(dp_rank)
+    group_name = "dp-zero-grad-" + "-".join([str(i) for i in current_rank_list_in_zero])
+    comm_group = get_group_info("dp-zero-grad")
+    comm_group.group = group_name
+    comm_group.global_ranks = current_rank_list_in_zero
+    comm_group.world_size = zero_shard_size
+    comm_group.rank = group_rank_id
+    return _get_group_helper("dp-zero-grad")
+
+
+def get_zero_shard_tp_group():
+    """Get the data parallel group the caller rank belongs to."""
+    z3_group = get_group_info("dp")
+    if not get_zero_full_shard_flag():
+        z3_group = get_group_info("dp-zero-grad")
+    # DP [0, 2, 4, 6] --> z3_group [0, 4] [2, 6]
+    # DP [1, 3, 5, 7] --> tp_group [1, 3] [5, 7]
+    # TP [0, 1] [2, 3] [4, 5] [6, 7]
+    z3_rank = z3_group.global_ranks
+    mp_rank = _GLOBAL_MP_RANK
+    new_rank_list = []
+    for rank in z3_rank:
+        for mp in mp_rank:
+            if rank in mp:
+                new_rank_list.extend(mp)
+                break
+    new_rank_list = list(set(new_rank_list))
+    new_rank_list.sort()
+    group_name = "dp-zero-tp-" + "-".join([str(i) for i in new_rank_list])
+    comm_group = get_group_info("dp-zero-tp")
+    comm_group.group = group_name
+    comm_group.global_ranks = new_rank_list
+    comm_group.world_size = len(new_rank_list)
+    comm_group.rank = z3_group.rank
+    return _get_group_helper("dp-zero-tp")

@@ -18,10 +18,10 @@ from collections import deque
 from mindspore import mint, ops, _no_grad, Parameter
 from mindspore.common.initializer import Zero
 from mindspore.common import dtype as mstype
-from mindspore.communication.comm_func import all_gather_into_tensor, reduce_scatter_tensor
+from mindspore.communication.comm_func import all_gather_into_tensor, reduce_scatter_tensor, all_reduce
 from mindspeed_ms.core.parallel_state import get_data_parallel_world_size, \
     get_pipeline_model_parallel_rank, get_data_parallel_group, get_data_modulo_expert_parallel_group, \
-    get_pipeline_model_parallel_world_size
+    get_pipeline_model_parallel_world_size, get_zero_full_shard_flag
 from mindspeed_ms.legacy.model.module import Module
 from mindspeed_ms.core.distributed.param_and_grad_buffer import ParamAndGradBuffer
 
@@ -29,16 +29,15 @@ __all__ = ['DistributedDataParallel']
 
 
 @_no_grad()
-def all_gather_param(cell, wait_buffer):
-    group = get_data_parallel_group()
+def all_gather_param(cell, wait_buffer, data_parallel_group):
     cell.sharded_weight = Parameter(0.0)
     cell.sharded_weight.assign_value(cell.weight)
-    comm_handle = all_gather_into_tensor(cell.sharded_weight, group=group, async_op=True)
+    comm_handle = all_gather_into_tensor(cell.sharded_weight, group=data_parallel_group, async_op=True)
     wait_buffer.append(comm_handle)
 
 
 @_no_grad()
-def reduce_scatter_grad(param, wait_grad_buffer, grad_reduce_in_fp32, average_in_collective):
+def reduce_scatter_grad(param, wait_grad_buffer, grad_reduce_in_fp32, average_in_collective, data_parallel_group):
     ''' reduce scatter for param grad after grad mean reduction '''
     if grad_reduce_in_fp32:
         param.full_grad = ops.cast(param.full_grad, mstype.float32)
@@ -46,10 +45,14 @@ def reduce_scatter_grad(param, wait_grad_buffer, grad_reduce_in_fp32, average_in
     if average_in_collective:
         param.full_grad = mint.div(param.full_grad, get_data_parallel_world_size())
 
-    group = get_data_parallel_group()
-
-    comm_handle = reduce_scatter_tensor(param.full_grad, group=group, async_op=True)
+    comm_handle = reduce_scatter_tensor(param.full_grad, group=data_parallel_group, async_op=True)
     wait_grad_buffer.append(comm_handle)
+
+
+@_no_grad()
+def all_reduce_grad(param, zero_shard_grad_group):
+    grad, _ = all_reduce(param.grad, group=zero_shard_grad_group, async_op=False)
+    return grad
 
 
 def wait_grad(param, wait_grad_buffer):
@@ -60,17 +63,24 @@ def wait_grad(param, wait_grad_buffer):
     param.full_grad = None
 
 
-def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective):
+def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, zero_comm_group):
     ''' register fw bw hook for the zero3 params '''
     wait_buffer = deque()
     wait_grad_buffer = deque()
+    data_parallel_group = get_data_parallel_group()
+    if zero_comm_group is not None:
+        if zero_comm_group.get("zero_shard_group") is None or zero_comm_group.get("zero_shard_grad_group") is None:
+            raise ValueError("zero_comm_group is illegel, please pass the correct group info like"
+                             "{'zero_shard_group': xxx, 'zero_shard_grad_group': xxx}")
+        data_parallel_group = zero_comm_group.get("zero_shard_group")
+        zero_shard_grad_group = zero_comm_group.get("zero_shard_grad_group")
     z3_optim_cells = []
 
     # pylint: disable=W0622
     @_no_grad()
     def _pre_forward_cell_hook(cell, input):
         if hasattr(cell, 'zero_start'):
-            all_gather_param(cell, wait_buffer)
+            all_gather_param(cell, wait_buffer, data_parallel_group)
         (full_param, handle) = wait_buffer.popleft()
         handle.wait()
         cell.weight.assign_value(full_param)
@@ -78,7 +88,7 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective):
         next_cell_id = cell.next_cell_id
         if next_cell_id is not None:
             next_cell = z3_optim_cells[next_cell_id]
-            all_gather_param(next_cell, wait_buffer)
+            all_gather_param(next_cell, wait_buffer, data_parallel_group)
         return input
 
     # pylint: disable=W0622, W0613
@@ -91,7 +101,7 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective):
     # pylint: disable=W0622, W0613
     def _pre_backward_cell_hook(cell, grad_output):
         if hasattr(cell, 'zero_end'):
-            all_gather_param(cell, wait_buffer)
+            all_gather_param(cell, wait_buffer, data_parallel_group)
         (full_param, handle) = wait_buffer.popleft()
         handle.wait()
         cell.weight.assign_value(full_param)
@@ -99,20 +109,27 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective):
 
         if pre_cell_id is not None:
             pre_cell = z3_optim_cells[pre_cell_id]
-            all_gather_param(pre_cell, wait_buffer)
+            all_gather_param(pre_cell, wait_buffer, data_parallel_group)
 
     # pylint: disable=W0622, W0613
     def _post_backward_cell_hook(cell, grad_input, grad_output):
         cell.weight.assign_value(cell.sharded_weight)
         cell.sharded_weight = None
 
-        reduce_scatter_grad(cell.weight, wait_grad_buffer, grad_reduce_in_fp32, average_in_collective)
+        reduce_scatter_grad(cell.weight, wait_grad_buffer, grad_reduce_in_fp32, average_in_collective,
+                            data_parallel_group)
         next_cell_id = cell.next_cell_id
         if next_cell_id is not None:
             next_cell = z3_optim_cells[next_cell_id]
             wait_grad(next_cell.weight, wait_grad_buffer)
+            if zero_comm_group is not None:
+                next_cell_grad = all_reduce_grad(next_cell.weight, zero_shard_grad_group)
+                next_cell.weight.grad.copy_(next_cell_grad)
         if hasattr(cell, 'zero_start'):
             wait_grad(cell.weight, wait_grad_buffer)
+            if zero_comm_group is not None:
+                cell_grad = all_reduce_grad(cell.weight, zero_shard_grad_group)
+                cell.weight.grad.copy_(cell_grad)
 
     def recursion_cells(cell):
         sub_cells_list = cell.cells()
@@ -247,6 +264,7 @@ class DistributedDataParallel(Module):
             ddp_config,
             module,
             disable_bucketing=False,
+            zero_comm_group=None,
         ):
         super(DistributedDataParallel, self).__init__(auto_prefix=False)
         self.config = config
@@ -254,13 +272,19 @@ class DistributedDataParallel(Module):
         self.module = module
         self.param_to_buffer = {}
         self.zero3_param = []
+        invalid_zero_comm_group = get_zero_full_shard_flag() != (zero_comm_group is None)
+        if invalid_zero_comm_group:
+            raise ValueError("When set the zero_shard_size, the zero_comm_group should be set as well, but got"
+                             f"get_zero_full_shard_flag={get_zero_full_shard_flag()},"
+                             f"zero_comm_group={zero_comm_group}")
         if ddp_config.use_zero3:
             if get_pipeline_model_parallel_world_size() > 1:
                 raise RuntimeError(f"DDP ZeRO3 is not compatible with pipeline parallel. "
                                    f"Please check the configuration.")
             set_model_fw_bw_hook(self.module, \
                                  self.ddp_config.grad_reduce_in_fp32, \
-                                 self.ddp_config.average_in_collective)
+                                 self.ddp_config.average_in_collective, \
+                                 zero_comm_group)
 
         if self.ddp_config.bucket_size is None:
             dp_size = get_data_parallel_world_size()
@@ -306,17 +330,19 @@ class DistributedDataParallel(Module):
             dense_params,
             group=get_data_parallel_group(with_context_parallel=True),
             gradient_scaling_factor=gradient_scaling_factor,
+            zero_comm_group=zero_comm_group,
         )
         self.expert_parallel_buffers = self.allocate_buffers_for_parameters(
             expert_parallel_params,
             group=get_data_modulo_expert_parallel_group(),
             gradient_scaling_factor=expert_gradient_scaling_factor,
+            zero_comm_group=zero_comm_group,
         )
 
         # register hook for bucket grad reduce
         self.register_hook_for_params()
 
-    def allocate_buffers_for_parameters(self, input_params, group, gradient_scaling_factor):
+    def allocate_buffers_for_parameters(self, input_params, group, gradient_scaling_factor, zero_comm_group):
         """ allocate buffers for parameters in different dtype group. """
         param_and_grad_dtype_to_params = {}
         # group all params by parameter's data type and their gradient's data type.
@@ -341,6 +367,7 @@ class DistributedDataParallel(Module):
                     bucket_size=self.bucket_size,
                     param_to_name=None,
                     gradient_scaling_factor=gradient_scaling_factor,
+                    zero_comm_group=zero_comm_group
                 )
             )
             for param in params:

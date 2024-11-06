@@ -16,7 +16,7 @@
 
 from dataclasses import dataclass
 import inspect
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, Tuple
 
 import mindspore.common.dtype as mstype
 from mindspore._c_expression.typing import Float, BFloat
@@ -115,6 +115,9 @@ class OptimizerConfig:
     """Second coefficient for computing running averages of gradient and its square in Adam
     optimizer.
     """
+
+    betas: Tuple[float, float] = (0.9, 0.999)
+    """Tuple of coefficients used for computing running averages of gradient and its square in AdamW"""
 
     # Placeholder. Do not use
     adam_eps: float = 1e-08

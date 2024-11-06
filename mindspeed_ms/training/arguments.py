@@ -1592,6 +1592,9 @@ def _add_distributed_args(parser):
     # Additional arguments
     group.add_argument('--zero-level', type=str, default=None,
                        help='Zero level for ZeRO optimizer, if None, will not use ZeRO optimizer')
+    group.add_argument('--zero_shard_size', type=int, default=-1,
+                       help='Shard size for ZeRo optimizer, if -1 will shard in dp size otherwise will shard in the '
+                            'given size')
     group.add_argument('--zero-without-ddp', action='store_true')
     group.add_argument('--num-layer-list', nargs='+', type=int, default=None,
                        help='User-defined pipeline parallel model layer division')
