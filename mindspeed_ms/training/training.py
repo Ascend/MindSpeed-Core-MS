@@ -986,7 +986,12 @@ def pretrain(train_valid_test_datasets_provider,
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer, optimizer_config, dataset_config, training_config)
 
     resume_dict = None
-    if training_config.resume_training is True and os.path.exists(training_config.load_checkpoint):
+    if (
+        training_config.resume_training is True and
+        training_config.load_checkpoint is not None and
+        os.path.exists(training_config.load_checkpoint)
+        ):
+
         rank_path = os.path.join(training_config.load_checkpoint, f"rank_{get_rank()}")
         if os.path.exists(rank_path):
             meta_path = os.path.join(rank_path, "meta.json")

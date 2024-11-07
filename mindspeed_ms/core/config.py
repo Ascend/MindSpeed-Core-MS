@@ -104,7 +104,7 @@ mapping_dict = {
     'use_distributed_optimizer': 'training_config.use_distributed_optimizer',
     'resume_training': 'training_config.resume_training',
     'resume_crc_check': 'training_config.crc_check',
-    'load_checkpoint': 'training_config.load_checkpoint',
+    'load': 'training_config.load_checkpoint',
     'save': 'training_config.output_dir',
     'ckpt_prefix': 'training_config.prefix',
     'ckpt_format': 'training_config.ckpt_format',
@@ -1864,7 +1864,8 @@ def validate_crc_check(config_instance, crc_check):
 @TrainingConfig.validator("load_checkpoint")
 def validate_load_checkpoint(config_instance, load_checkpoint):
     """Validate load_checkpoint is str."""
-    Validator.check_value_type("load_checkpoint", load_checkpoint, [str])
+    if load_checkpoint is not None:
+        Validator.check_value_type("load_checkpoint", load_checkpoint, [str])
     return load_checkpoint
 
 
