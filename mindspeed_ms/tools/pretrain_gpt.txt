@@ -1,0 +1,279 @@
+# Copyright 2024 Huawei Technologies Co., Ltd
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ============================================================================
+"""Train llama2 model."""
+
+import argparse
+import os
+import mindspore as ms
+from mindspore.train import Perplexity
+from mindspore.communication.comm_func import all_gather_into_tensor
+from mindspore.communication.management import get_rank
+
+from pangu.gpt_model import GPTModel
+from mindformers.experimental.parallel_core.pynative.config import (
+    init_configs_from_yaml,
+    init_configs_from_args
+)
+from mindspore import mint,Tensor, ops
+from mindspore.communication import get_rank
+from mindspore.communication.comm_func import broadcast
+from megatron.training import print_rank_0
+from mindformers.experimental.parallel_core.pynative.training.loss_func import get_loss_func
+from mindformers.experimental.parallel_core.pynative.optimizer import get_optimizer
+from mindformers.experimental.parallel_core.pynative.optimizer.optimizer import get_optimizer_param_scheduler
+from mindformers.experimental.parallel_core.pynative.dist_checkpointing.checkpointing import load_checkpoint
+from mindformers.tools import logger
+
+from mindformers.experimental.parallel_core.pynative.training import TrainOneStepCell, train, pretrain
+from mindformers.experimental.parallel_core.pynative.parallel_state import (
+    get_tensor_model_parallel_rank,
+    get_pipeline_model_parallel_rank,
+    is_pipeline_first_stage,
+    is_pipeline_last_stage
+)
+
+from mindformers.tools.resume_ckpt import get_resume_checkpoint
+from mindformers.experimental.parallel_core.pynative.optimizer.optimizer import get_optimizer_param_scheduler
+from utils import set_parallel_context, set_seed, set_weight_decay
+
+# import from third party
+import megatron
+from pangu.training.arguments import _add_pangu_args
+from pangu.data.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
+from pangu.data.gpt_dataset import GPTDatasetConfig
+from pangu.data.gpt_dataset import MockGPTDataset, GPTDataset
+from pangu.data.utils import get_train_valid_test_num_samples
+from megatron.training import get_tokenizer
+from pangu.tokenizer import build_tokenizer
+from pangu.data.data_samplers import build_pretraining_data_loader
+from pangu.training.utils_ms import get_batch_on_this_cp_rank,get_batch_on_this_tp_rank, get_ltor_reset_masks_and_position_ids
+from pangu.data.gpt_from_mr_dataset import GPTFromMRDataset
+from pangu.data.simple_blended_megatron_dataset_builder import SimpleBlendedMegatronDatasetBuilder
+from megatron.training.initialize import initialize_megatron
+from megatron.training import get_args
+from pangu.data.dataset import get_dataset
+from pangu.initialize import initialize_megatron, _compile_dependencies
+
+
+def get_batch(data_iterator):
+    """Generate a batch."""
+    args = get_args()
+
+    # 开了eodset + pretrain
+    if not args.reset_attention_mask:
+        # reset attention mask 需要不跑
+        if (not is_pipeline_first_stage()) and (not is_pipeline_last_stage()):
+            return dict(
+                tokens=None,
+                labels=None,
+                loss_mask=None,
+                attention_mask=None,
+                position_ids=None)
+
+    batch = get_batch_on_this_tp_rank(data_iterator)
+    loss_mask = mint.where(batch['labels'] < 0, 0, 1)
+    batch['loss_mask'] = loss_mask
+    tokenizer = get_tokenizer()
+    if args.eod_mask_loss:
+        batch['loss_mask'][batch['tokens'] == tokenizer.eod] = 0.0
+
+    has_negative = (batch['tokens'] < 0).any()
+    if has_negative:
+        batch['tokens'] = mint.abs(batch['tokens'])
+        batch['labels'] = mint.abs(batch['labels'])
+    # add support for reset_attention_mask, reset_position_ids, eod_mask_loss for pack data
+    if args.mask_compress and args.reset_attention_mask:
+        actual_seq_len, position_ids = get_ltor_actual_seq_len_and_position_ids(
+            batch['tokens'],
+            tokenizer.eod,
+            args.reset_position_ids)
+        batch['position_ids'] = position_ids
+        set_actual_seq_len(actual_seq_len)
+    enable_attention_mask_on_device = args.reset_attention_mask and not args.reset_position_ids
+    if not args.mask_compress and not enable_attention_mask_on_device:
+        attention_mask, position_ids = get_ltor_reset_masks_and_position_ids(
+            batch['tokens'],
+            tokenizer.eod,
+            args.reset_position_ids,
+            args.reset_attention_mask)
+        batch['attention_mask'] = attention_mask
+        batch['position_ids'] = position_ids
+        #set_attention_mask(batch['attention_mask'])
+    check_mismatch(batch['tokens'], batch['labels'])
+    # TODO to support get batch on cp
+    # batch = get_batch_on_this_cp_rank(batch)
+    return batch
+
+
+def check_mismatch(tokens, labels):
+    if tokens is None or labels is None:
+        return
+    mid_idx = tokens.shape[1] // 2  # 找到中间的索引
+    for i in range(tokens.shape[0]):
+        if tokens[i, mid_idx+1] != labels[i, mid_idx] and labels[i, mid_idx] != -100:
+            print(f"Mismatch found for sample {i} after broadcast:")
+            print(f"tokens: {tokens[i]}")
+            print(f"labels: {labels[i]}")
+
+
+
+def core_gpt_dataset_config_from_args(args):
+    # Support loading either a data file or a data folder that includes a lot of *.bin files
+    data_suffix = ".bin"
+    default_weight = "1" # the same default weight for each *.bin
+    file_paths = []
+    for data_path_ in args.data_path:
+        if os.path.isfile(data_path_+data_suffix):
+            # Single file
+            pass
+        elif os.path.isdir(data_path_):
+            # Data folder
+            for dir_path, _, filenames in os.walk(data_path_):
+                for file_name in filenames:
+                    if file_name.endswith(data_suffix):
+                        file_path = os.path.abspath(os.path.join(dir_path, file_name))
+                        file_paths.append(os.path.splitext(file_path)[0])
+            if not file_paths:
+                raise ValueError("data_path has no data_file endwith .bin, check it")
+
+    if file_paths:
+        # Sort and combine all data path in the folder
+
+        try:
+            file_paths = sorted(file_paths, key=lambda x: (int(os.path.basename(x).split('_')[2]), int(os.path.basename(x).split('_')[-1])))
+        except Exception as e:
+            # By this way we can know about the type of error occurring
+            print("skip sort data files due to error: ", e)
+        result = []
+        for file_path in file_paths:
+            result.append(default_weight)
+            result.append(file_path)
+        args.data_path = result
+
+    print(f'loading *.bin from args.data_path: {args.data_path}')
+
+    tokenizer = get_tokenizer()
+
+    return GPTDatasetConfig(
+        random_seed=args.seed,
+        sequence_length=args.seq_length,
+        blend=args.data_path,
+        blend_per_split=[args.train_data_path, args.valid_data_path, args.test_data_path],
+        split=args.split,
+        path_to_cache=args.data_cache_path,
+        mock=args.mock_data,
+        mmap_bin_files=args.mmap_bin_files,
+        tokenizer=tokenizer,
+        reset_position_ids=args.reset_position_ids,
+        reset_attention_mask=args.reset_attention_mask,
+        eod_mask_loss=args.eod_mask_loss,
+        create_attention_mask=args.create_attention_mask_in_dataloader,
+        dataset_margin=args.dataset_margin,
+    )
+
+def is_dataset_built_on_rank():
+    return get_tensor_model_parallel_rank() == 0
+
+def train_valid_test_datasets_provider(train_val_test_num_samples):
+    """Build the train test and validation datasets.
+
+    Args:
+        train_val_test_num_samples : A list containing the number of samples in train test and validation.
+    """
+    args = get_args()
+
+    config = core_gpt_dataset_config_from_args(args)
+
+    if config.mock:
+        dataset_type = MockGPTDataset
+    else:
+        dataset_type = GPTFromMRDataset if args.is_dataset_from_mr else GPTDataset
+    print("> building train, validation, and test datasets for GPT ...")
+
+    if args.is_instruction_dataset:
+        from pangu.tokenizer import build_tokenizer
+        tokenizer = build_tokenizer(args)
+        train_ds, valid_ds, test_ds = build_instruction_dataset(
+        data_prefix=args.data_path,
+        splits_string=args.split,
+        train_valid_test_num_samples=train_val_test_num_samples,
+        seq_length=args.seq_length,
+        seed=args.seed,
+        tokenizer = tokenizer)
+    else:
+        if args.simple_blend == "no":
+            train_ds, valid_ds, test_ds = BlendedMegatronDatasetBuilder(
+                dataset_type,
+                train_val_test_num_samples,
+                is_dataset_built_on_rank,
+                config
+            ).build()
+        else:
+            assert args.is_dataset_from_mr, "Setting args.simple_blend to values other than 'no' requires args.is_dataset_from_mr"
+            train_ds, valid_ds, test_ds = SimpleBlendedMegatronDatasetBuilder(
+                dataset_type,
+                train_val_test_num_samples,
+                is_dataset_built_on_rank,
+                config
+            ).build()
+
+    print("> finished creating GPT datasets ...")
+
+    return train_ds, valid_ds, test_ds
+
+
+if __name__ == "__main__":
+    initialize_megatron(extra_args_provider=_add_pangu_args)
+    args = get_args()
+    all_config = init_configs_from_args(args)
+    ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON', pynative_synchronize=True)
+    set_parallel_context(all_config.parallel_config)
+    set_seed(all_config.training_config.seed)
+    _compile_dependencies()
+
+    train_ds, _, _ = train_valid_test_datasets_provider(get_train_valid_test_num_samples())
+    train_dataloader = build_pretraining_data_loader(train_ds, 0)
+    def model_provider_func(pre_process=True, post_process=True):
+        """get llama2 model"""
+        network_with_loss = GPTModel(
+            all_config.model_config, pre_process=pre_process, post_process=post_process
+        )
+        tp_rank = get_tensor_model_parallel_rank()
+        pp_rank = get_pipeline_model_parallel_rank()
+        if args.load:
+            file_suffix = args.load_path_format.format(tp_rank, pp_rank)
+            file_path = os.path.join(args.load, file_suffix)
+            ms_ckpt_new = ms.load_checkpoint(file_path)
+
+            not_loaded_params, ckpt_not_load = ms.load_param_into_net(network_with_loss, ms_ckpt_new)
+            print(f"not_loaded_params: {not_loaded_params}", flush=True)
+            print(f"ckpt_not_loaded_params: {ckpt_not_load}", flush=True)
+        else:
+            print("No parameters are loaded.")
+
+        return network_with_loss
+
+    pretrain(
+        train_valid_test_datasets_provider=None,
+        model_provider_func=model_provider_func,
+        model_type=None,
+        forward_step_func=None,
+        process_non_loss_data_func=None,
+        extra_args_provider=None,
+        all_config=all_config,
+        train_data_loader=train_dataloader,
+        get_batch_func=get_batch,
+        args_defaults={},
+        )
