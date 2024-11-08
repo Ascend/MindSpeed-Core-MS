@@ -44,6 +44,7 @@ _SUPPORT_DTYPE_DICT = DictWithValueError(
 )
 
 _SUPPORT_INIT_METHOD = DictWithValueError(_INITIALIZER_ALIAS)
+_GLOBAL_ARGS = None
 
 mapping_dict = {
     # model config
@@ -176,6 +177,12 @@ mapping_dict = {
     'select_comm_recompute': 'parallel_config.select_comm_recompute'
 }
 
+def set_global_args(args):
+    global _GLOBAL_ARGS
+    _GLOBAL_ARGS = args
+
+def get_args():
+    return _GLOBAL_ARGS
 
 def config_to_str(cls, gap=2 * " "):
     """Return class attribute str for print."""
@@ -360,7 +367,7 @@ def init_configs_from_args(run_args: argparse.Namespace = None, model_type: str 
     """
     if not isinstance(run_args, argparse.Namespace):
         raise ValueError("run_args should be argparse.Namespace.")
-
+    set_global_args(run_args)
     flatten_dict = vars(run_args)
     raw_dict = flatten_dict_to_raw(flatten_dict, model_type)
 
