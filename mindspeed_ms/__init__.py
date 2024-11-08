@@ -18,12 +18,10 @@
 from . import tools
 from . import training
 from . import legacy
-from . import model
 from . import core
 
 __all__ = []
 __all__.extend(tools.__all__)
 __all__.extend(training.__all__)
 __all__.extend(legacy.__all__)
-__all__.extend(model.__all__)
 __all__.extend(core.__all__)
