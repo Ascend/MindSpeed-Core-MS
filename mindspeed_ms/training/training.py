@@ -780,6 +780,11 @@ def train(
         src_rank = (get_rank() // tp_world_size) * tp_world_size
         comm_func.broadcast(dataset_size_tensor, src_rank, get_tensor_model_parallel_group())
     dataset_size = dataset_size_tensor.asnumpy().tolist()
+    if isinstance(dataset_size, list):
+        dataset_size = dataset_size[0]
+    if dataset_size <= 0:
+        raise ValueError(f"Expect dataset_size > 0, but got {dataset_size}")
+
     logger.info(f"dataset size is {dataset_size}")
 
     train_one_step_cell.set_train()
@@ -845,7 +850,7 @@ def train(
     ):
         # we need to refresh train_dataloader every epoch
         # when resume training, epoch_step > 1, so train_data_dict_iterator will not be refreshed
-        if epoch_step == 1:
+        if epoch_step == 1 and train_dataloader is not None:
             train_data_dict_iterator = train_dataloader.create_dict_iterator(num_epochs=1)
 
         # get step data
@@ -986,11 +991,9 @@ def pretrain(train_valid_test_datasets_provider,
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer, optimizer_config, dataset_config, training_config)
 
     resume_dict = None
-    if (
-        training_config.resume_training is True and
-        training_config.load_checkpoint is not None and
-        os.path.exists(training_config.load_checkpoint)
-        ):
+    if training_config.resume_training is True and \
+       training_config.load_checkpoint is not None and \
+       os.path.exists(training_config.load_checkpoint):
 
         rank_path = os.path.join(training_config.load_checkpoint, f"rank_{get_rank()}")
         if os.path.exists(rank_path):
