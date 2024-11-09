@@ -32,6 +32,7 @@ class TestParallelRandom:
         Expectation: test success
         """
         os.environ['HCCL_BUFFSIZE'] = "1"
+        os.environ['WORLD_SIZE'] = "8"
         scripts_name = "run_parallel_random.py"
         device_num = 4
 

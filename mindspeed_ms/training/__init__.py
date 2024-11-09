@@ -14,8 +14,14 @@
 # ============================================================================
 
 """training init"""
+from .arguments import parse_args, core_transformer_config_from_args
+from .global_vars import get_args
+from .model_parallel_config import ModelParallelConfig
 from .training import TrainOneStepCell, pretrain, train, get_model, ParallelTrainingReducer
 from .loss_func import get_loss_func
+from .yaml_arguments import core_transformer_config_from_yaml
 
-__all__ = ["TrainOneStepCell", "train", "pretrain", 'get_model',
-           'ParallelTrainingReducer', 'get_loss_func']
+__all__ = ["parse_args", "get_args", "core_transformer_config_from_args",
+           "TrainOneStepCell", "train", "pretrain", 'get_model',
+           "ModelParallelConfig", 'ParallelTrainingReducer', 'get_loss_func',
+           "core_transformer_config_from_yaml"]

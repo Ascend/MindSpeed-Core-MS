@@ -22,6 +22,7 @@ from mindspore.ops import functional as F
 from mindspore import Tensor, mint, nn, hal
 import mindspore.communication.comm_func as comm_func
 
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_rank, \
     get_pipeline_model_parallel_world_size, get_context_parallel_world_size, get_tensor_model_parallel_world_size, \
     is_pipeline_last_stage, is_pipeline_first_stage, is_rank_in_embedding_group, get_embedding_group, \
@@ -235,6 +236,8 @@ def forward_backward_pipelining_with_interleaving(
     if forward_only:
         raise NotImplementedError("'forward_only' input of pipeline interleaved is not supported for now.")
 
+    args = get_args()
+
     # set grad
     requires_grad = True
     if forward_only:
@@ -243,7 +246,7 @@ def forward_backward_pipelining_with_interleaving(
         sub_model.set_grad(requires_grad=requires_grad)
 
     # init p2p class
-    p2p_primitive = P2PPrimitive(config=config.model_config)
+    p2p_primitive = P2PPrimitive(config=config)
 
     # record sync model chunk id
     synchronized_model_chunks = set()
@@ -257,14 +260,14 @@ def forward_backward_pipelining_with_interleaving(
         set_hidden_states_parameters.append(set_hidden_states_parameter)
 
     # get config value
-    hidden_size = config.model_config.hidden_size
-    use_sequence_parallel = config.model_config.parallel_config.sequence_parallel
-    overlap_p2p_comm = config.model_config.parallel_config.overlap_p2p_comm
-    calculate_per_token_loss = config.training_config.calculate_per_token_loss
-    data_layout = config.model_config.dataset_config.data_layout
-    wrap_with_ddp = config.training_config.wrap_with_ddp
-    overlap_grad_reduce = config.training_config.overlap_grad_reduce
-    delay_grad_reduce = config.training_config.delay_grad_reduce
+    hidden_size = config.hidden_size
+    use_sequence_parallel = config.sequence_parallel
+    overlap_p2p_comm = config.overlap_p2p_comm
+    calculate_per_token_loss = config.calculate_per_token_loss
+    data_layout = args.data_layout
+    wrap_with_ddp = args.wrap_with_ddp
+    overlap_grad_reduce = args.overlap_grad_reduce
+    delay_grad_reduce = args.delay_grad_reduce
 
     # correct tensor shape if use seq parallel or context parallel
     tensor_shape = correct_p2p_shape(seq_length, hidden_size, micro_batch_size, data_layout, use_sequence_parallel)[0]
@@ -719,6 +722,8 @@ def forward_backward_pipelining_without_interleaving(
     if config is None:
         raise ValueError("Please input config for 'forward_backward_pipelining_without_interleaving' function")
 
+    args = get_args()
+
     # set grad
     requires_grad = True
     if forward_only:
@@ -726,7 +731,7 @@ def forward_backward_pipelining_without_interleaving(
     model.set_grad(requires_grad=requires_grad)
 
     # init p2p class
-    p2p_primitive = P2PPrimitive(config=config.model_config)
+    p2p_primitive = P2PPrimitive(config=config)
 
     # get model weights and merge `set_hidden_states` parameter
     weights = model.trainable_params()
@@ -734,13 +739,13 @@ def forward_backward_pipelining_without_interleaving(
     weights.insert(0, set_hidden_states_param)
 
     # get config value
-    hidden_size = config.model_config.hidden_size
-    use_sequence_parallel = config.model_config.parallel_config.sequence_parallel
-    calculate_per_token_loss = config.training_config.calculate_per_token_loss
-    data_layout = config.model_config.dataset_config.data_layout
-    wrap_with_ddp = config.training_config.wrap_with_ddp
-    overlap_grad_reduce = config.training_config.overlap_grad_reduce
-    delay_grad_reduce = config.training_config.delay_grad_reduce
+    hidden_size = config.hidden_size
+    use_sequence_parallel = config.sequence_parallel
+    calculate_per_token_loss = config.calculate_per_token_loss
+    data_layout = args.data_layout
+    wrap_with_ddp = args.wrap_with_ddp
+    overlap_grad_reduce = args.overlap_grad_reduce
+    delay_grad_reduce = args.delay_grad_reduce
 
     # correct tensor shape if use seq parallel or context parallel
     recv_tensor_shapes = correct_p2p_shape(seq_length, hidden_size, \

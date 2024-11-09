@@ -16,7 +16,7 @@
 
 from mindspore import nn, ops
 
-from mindspeed_ms.core.config import TransformerConfig
+from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.legacy.model.module import Module
 from mindspeed_ms.legacy.model.mlp import ParallelMLP
 

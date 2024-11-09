@@ -12,9 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
+"""Mindspeed global variables."""
 
-"""pynative init"""
+_GLOBAL_ARGS = None
 
-from .transformer_config import TransformerConfig
 
-__all__ = ["TransformerConfig"]
+def get_args():
+    assert _GLOBAL_ARGS is not None, 'global arguments is not initialized.'
+    return _GLOBAL_ARGS
+
+
+def set_global_variables(args):
+    assert args is not None
+    global _GLOBAL_ARGS
+    _GLOBAL_ARGS = args
+
+
+def set_args(args):
+    global _GLOBAL_ARGS
+    _GLOBAL_ARGS = args

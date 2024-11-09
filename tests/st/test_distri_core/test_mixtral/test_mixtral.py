@@ -68,7 +68,7 @@ class TestMixtral:
 
         rm_file_patterns = ["npy_pynative*", f"msrun_log_pynative{postfix}*", "kernel_meta*"]
         print("")
-        for rm_path in rm_file_patterns :
+        for rm_path in rm_file_patterns:
             rm_path = os.path.join(os.getcwd(), rm_path)
             print(f"removing {rm_path}")
             os.system(f"rm -rf {rm_path}")
@@ -76,7 +76,7 @@ class TestMixtral:
         sh_path = os.path.split(os.path.realpath(__file__))[0]
         scripts_path = os.path.join(sh_path, scripts_name)
 
-        scripts_cmd = f"{scripts_path} --config_path=./config_mixtral_small.yaml --ep=2 --tp=2 --pp=2 --sp"
+        scripts_cmd = f"{scripts_path} --yaml-cfg config_mixtral_small.yaml"
         cmd = f"msrun --worker_num={device_num} " + \
                     f"--local_worker_num={device_num} " + \
                     f"--master_port=8119 " + \

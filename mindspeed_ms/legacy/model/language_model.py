@@ -19,6 +19,7 @@ from mindspore.nn import Cell
 import mindspore.ops as P
 import mindspore.nn as nn
 
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.tensor_parallel import GatherFromSequenceParallelRegion, \
     VocabParallelEmbedding, ScatterToSequenceParallelRegion, ColumnParallelLinear
 from mindspeed_ms.core.tensor_parallel.random import get_rng_tracer
@@ -50,7 +51,7 @@ class Pooler(Cell):
                               bias_init='zeros',
                               dtype=param_init_dtype,
                               activation='tanh')
-        self.sequence_parallel = config.parallel_config.sequence_parallel
+        self.sequence_parallel = config.sequence_parallel
         self.gather_from_sequence_parallel_region = GatherFromSequenceParallelRegion(
             need_to_swapaxes=False,
             tensor_parallel_output_grad=False
@@ -152,12 +153,13 @@ class Embedding(Module):
                  **kwargs):
         super().__init__(**kwargs)
 
+        args = get_args()
         self.param_init_dtype = config.params_dtype
         self.compute_dtype = config.compute_dtype
         self.init_method = config.init_method
-        self.sequence_parallel = config.parallel_config.sequence_parallel
+        self.sequence_parallel = config.sequence_parallel
         self.num_tokentypes = num_tokentypes
-        self.data_layout = config.dataset_config.data_layout
+        self.data_layout = args.data_layout
         self.fp32_residual_connection = config.fp32_residual_connection
         self.clone_scatter_output_in_embedding = config.clone_scatter_output_in_embedding
 
@@ -169,8 +171,8 @@ class Embedding(Module):
                                                       param_init_dtype=self.param_init_dtype)
 
         # init position embedding
-        self.use_position_embedding = config.position_embedding_type == 'learned_absolute'
-        self.parallel_position_embedding = config.parallel_position_embedding
+        self.use_position_embedding = args.position_embedding_type == 'learned_absolute'
+        self.parallel_position_embedding = args.parallel_position_embedding
         if self.use_position_embedding:
             if not self.parallel_position_embedding:
                 self.position_embeddings = nn.Embedding(max_sequence_length,
@@ -376,11 +378,12 @@ class TransformerLanguageModel(Module):
                  post_process=True,
                  visual_encoder=None,
                  **kwargs):
-        super().__init__(config, share_embeddings_and_output_weights=not config.untie_embeddings_and_output_weights,
+        args = get_args()
+        super().__init__(config, share_embeddings_and_output_weights=not args.untie_embeddings_and_output_weights,
                          **kwargs)
-        if config.untie_embeddings_and_output_weights and add_decoder:
+        if args.untie_embeddings_and_output_weights and add_decoder:
             raise ValueError("When 'untie_embeddings_and_output_weights' is True, 'add_decoder' can't be True")
-        if config.retro_add_retriever:
+        if args.retro_add_retriever:
             raise NotImplementedError("retriever is not supported for now.")
         if visual_encoder is not None:
             raise NotImplementedError("visual_encoder is not supported for now.")
@@ -397,13 +400,13 @@ class TransformerLanguageModel(Module):
         self.add_decoder = add_decoder
 
         # get value from config
-        self.seq_length = config.seq_length
+        self.seq_length = args.seq_length
         self.compute_dtype = config.compute_dtype
-        self.untie_embeddings_and_output_weights = config.untie_embeddings_and_output_weights
-        post_norm = config.use_final_norm
+        self.untie_embeddings_and_output_weights = args.untie_embeddings_and_output_weights
+        post_norm = args.use_post_norm
         param_init_dtype = config.params_dtype
         self.hidden_size = config.hidden_size
-        padded_vocab_size = config.vocab_size
+        padded_vocab_size = args.vocab_size
         hidden_dropout_rate = config.hidden_dropout
 
         if self.pre_process:
@@ -418,21 +421,21 @@ class TransformerLanguageModel(Module):
             # init visual encoder
             if visual_encoder is not None:
                 self.visual_encoder = visual_encoder
-                self.visual_mlp = ParallelMLP(config.visual_config)
+                self.visual_mlp = ParallelMLP(config)
             else:
                 self.visual_encoder = None
 
         # init rotary embeddings
-        self.use_rotary_embeddings = config.position_embedding_type == 'rope'
+        self.use_rotary_embeddings = args.position_embedding_type == 'rope'
         if self.use_rotary_embeddings:
             rotary_dim = config.hidden_size // config.num_attention_heads \
                 if config.kv_channels is None else config.kv_channels
             self.rotary_pos_emb = RotaryEmbedding(
                 rotary_dim,
-                rotary_percent=config.rotary_percent,
+                rotary_percent=args.rotary_percent,
                 rotary_interleaved=config.rotary_interleaved,
-                seq_len_interpolation_factor=config.seq_len_interpolation_factor,
-                rotary_base=config.rotary_base)
+                seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor,
+                rotary_base=args.rotary_base)
 
         # init encoder
 

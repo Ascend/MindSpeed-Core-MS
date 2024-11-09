@@ -13,23 +13,21 @@
 # limitations under the License.
 # ============================================================================
 """Language model test"""
-import os
-import argparse
 import numpy as np
 import mindspore as ms
 import mindspore.dataset as ds
 from mindspore.nn import Adam, SoftmaxCrossEntropyWithLogits
 from mindspore.communication import init
-from mindspeed_ms.training import TrainOneStepCell, train
 from mindspeed_ms.legacy.model import TransformerLanguageModel
-from mindspeed_ms.core.parallel_state import initialize_model_parallel
-from mindspeed_ms.core.config import (
-    init_configs_from_yaml,
-    TrainingConfig,
-    ModelParallelConfig,
-    TransformerConfig,
-    DatasetConfig,
+from mindspeed_ms.training import (
+    TrainOneStepCell,
+    train,
+    parse_args,
+    get_args,
+    core_transformer_config_from_args,
+    core_transformer_config_from_yaml
 )
+from mindspeed_ms.core.parallel_state import initialize_model_parallel
 from tests.st.test_distri_core.utils import generate_ckpt, transform_transformerlayer_params
 
 ms.set_seed(1024)
@@ -62,6 +60,7 @@ class FakeData():
 
 class ParallelLanguageModel(ms.nn.Cell):
     """ Test language model """
+    # pylint: disable=W0621
     def __init__(self, config):
         super().__init__()
         self.language_model = TransformerLanguageModel(config, encoder_attn_mask_type=None)
@@ -75,8 +74,10 @@ class ParallelLanguageModel(ms.nn.Cell):
         return loss
 
 
-def run_parallel_language_model(training_config, model_config, dataset_config):
+# pylint: disable=W0621
+def run_parallel_language_model(config):
     """main function."""
+    args = get_args()
     ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic="ON")
 
     # init
@@ -84,28 +85,28 @@ def run_parallel_language_model(training_config, model_config, dataset_config):
     initialize_model_parallel()
 
     # generate dataset
-    dataset = FakeData(data_num=16, seq_length=model_config.seq_length)
+    dataset = FakeData(data_num=16, seq_length=args.seq_length)
     fake_dataset = ds.GeneratorDataset(dataset,
                                        column_names=['input_ids', 'labels', 'attention_mask'],
                                        shuffle=False)
     # calculate global batch size
-    global_batch_size = dataset_config.batch_size * dataset_config.micro_batch_num
+    global_batch_size = args.global_batch_size * args.micro_batch_size
     fake_dataset = fake_dataset.batch(global_batch_size)
     print("global batch size: ", global_batch_size, flush=True)
 
     # init ckpt
-    param_dict = generate_ckpt(hidden_size=model_config.hidden_size,
+    param_dict = generate_ckpt(hidden_size=config.hidden_size,
                                module_type='transformer',
-                               num_layers=model_config.num_layers,
+                               num_layers=config.num_layers,
                                prefix=None,
-                               vocab_size=model_config.vocab_size,
+                               vocab_size=args.vocab_size,
                                use_embedding=True)
     param_dict = transform_transformerlayer_params(param_dict,
-                                                   hidden_size=model_config.hidden_size,
+                                                   hidden_size=config.hidden_size,
                                                    kv_hidden_size=None,
                                                    prefix='language_model.encoder.layers.')
     # init model
-    network = ParallelLanguageModel(model_config)
+    network = ParallelLanguageModel(config)
 
     # load ckpt
     ms.load_param_into_net(network, param_dict)
@@ -113,21 +114,16 @@ def run_parallel_language_model(training_config, model_config, dataset_config):
     optimizer = Adam(params=network.trainable_params(), learning_rate=0.001, beta1=0.9, beta2=0.95)
 
     # init train one step cell
-    train_one_step_cell = TrainOneStepCell(network, optimizer, None, training_config, model_config)
+    train_one_step_cell = TrainOneStepCell(network, optimizer, None, config)
 
     # train
-    train(train_one_step_cell, fake_dataset, training_config)
+    train(train_one_step_cell, fake_dataset)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--generate_golden', action='store_true', help="Generate golden data for test."
-    )
-    args, _ = parser.parse_known_args()
-    CONFIG_PATH = "test_language_model.yaml"
-    assert os.path.exists(CONFIG_PATH) and CONFIG_PATH.endswith(('.yaml', '.yml'))
-    training_config_main, parallel_config_main, dataset_config_main, model_config_main = init_configs_from_yaml(
-        CONFIG_PATH, [TrainingConfig, ModelParallelConfig, DatasetConfig, TransformerConfig]
-    )
-    run_parallel_language_model(training_config_main, model_config_main, dataset_config_main)
+    args = parse_args()
+    if args.yaml_cfg is not None:
+        config = core_transformer_config_from_yaml(args)
+    else:
+        config = core_transformer_config_from_args(args)
+    run_parallel_language_model(config)

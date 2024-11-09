@@ -19,6 +19,7 @@ import mindspore.ops.operations as P
 from mindspore import Parameter, Tensor, nn, mint
 from mindspore.common.initializer import initializer
 
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.parallel_state import (
     get_tensor_model_parallel_world_size,
     get_data_parallel_world_size,
@@ -153,6 +154,7 @@ class ColumnParallelLoRA(nn.Cell):
         if disable_grad_reduce:
             raise NotImplementedError("`disable_grad_reduce=True` is not supported for now.")
 
+        args = get_args()
         self.input_size = input_size
         self.output_size = output_size
         self.has_bias = bias
@@ -173,9 +175,9 @@ class ColumnParallelLoRA(nn.Cell):
         self.compute_dtype = compute_dtype if compute_dtype else self.config.compute_dtype
         self.transpose_b = transpose_b
 
-        self.expert_parallel = self.config.parallel_config.expert_model_parallel_size > 1
-        self.sequence_parallel = self.config.parallel_config.sequence_parallel
-        self.use_zero3 = self.config.parallel_config.zero_level == 'z3'
+        self.expert_parallel = self.config.expert_model_parallel_size > 1
+        self.sequence_parallel = self.config.sequence_parallel
+        self.use_zero3 = self.config.zero_level == 'z3'
         if self.use_zero3:
             try:
                 dp_size = get_data_parallel_world_size()
@@ -228,7 +230,7 @@ class ColumnParallelLoRA(nn.Cell):
         self.copy_to_mp_region = CopyToModelParallelRegion()
         self.gather_from_mp_region = GatherFromModelParallelRegion()
         self.gather_from_sp_region = GatherFromSequenceParallelRegion(
-            need_to_swapaxes=self.config.dataset_config.data_layout == "BSH"
+            need_to_swapaxes=args.data_layout == "BSH"
         )
 
     def construct(self, input_, weight=None):
@@ -410,6 +412,7 @@ class RowParallelLoRA(nn.Cell):
         if tp_comm_buffer_name:
             raise NotImplementedError("`tp_comm_buffer_name` is not supported for now.")
 
+        args = get_args()
         self.input_size = input_size
         self.output_size = output_size
         self.has_bias = bias
@@ -427,9 +430,9 @@ class RowParallelLoRA(nn.Cell):
         self.param_init_dtype = param_init_dtype if param_init_dtype else self.config.params_dtype
         self.compute_dtype = compute_dtype if compute_dtype else self.config.compute_dtype
         self.is_expert = is_expert
-        self.expert_parallel = self.config.parallel_config.expert_model_parallel_size > 1
-        self.sequence_parallel = self.config.parallel_config.sequence_parallel
-        self.use_zero3 = self.config.parallel_config.zero_level == 'z3'
+        self.expert_parallel = self.config.expert_model_parallel_size > 1
+        self.sequence_parallel = self.config.sequence_parallel
+        self.use_zero3 = self.config.zero_level == 'z3'
         self.transpose_b = transpose_b
 
         if self.use_zero3:
@@ -490,7 +493,7 @@ class RowParallelLoRA(nn.Cell):
 
         self.scatter_to_mp_region = ScatterToModelParallelRegion()
         self.reduce_scatter_to_sp_region = ReduceScatterToSequenceParallelRegion(
-            need_to_swapaxes=self.config.dataset_config.data_layout == "BSH"
+            need_to_swapaxes=args.data_layout == "BSH"
         )
         self.reduce_from_mp_region = ReduceFromModelParallelRegion()
 

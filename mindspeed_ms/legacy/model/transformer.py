@@ -32,6 +32,7 @@ import mindspore.common.dtype as mstype
 from mindspore import nn, ops, mint, Parameter
 import mindspore.ops.functional as F
 
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.parallel_state import (
     get_pipeline_model_parallel_rank,
     get_tensor_model_parallel_world_size,
@@ -190,7 +191,7 @@ class CoreAttention(nn.Cell):
         self.param_init_dtype = self.config.params_dtype
         self.attention_softmax_in_fp32 = self.config.attention_softmax_in_fp32
         self.softmax_compute_dtype = self.config.softmax_compute_dtype
-        self.sequence_parallel = self.config.parallel_config.sequence_parallel
+        self.sequence_parallel = self.config.sequence_parallel
         self.attn_mask_type = attn_mask_type
         self.apply_query_key_layer_scaling = self.config.apply_query_key_layer_scaling
         self.head_dim = self.config.kv_channels
@@ -369,6 +370,8 @@ class ParallelAttention(Module):
     def __init__(self, config, layer_number, attention_type=AttnType.self_attn,
                  attn_mask_type=AttnMaskType.padding):
         super(ParallelAttention, self).__init__()
+
+        args = get_args()
         self.config = config
         self.layer_index = max(1, layer_number)
         self.param_init_dtype = self.config.params_dtype
@@ -376,15 +379,15 @@ class ParallelAttention(Module):
 
         self.attn_type = attention_type
         self.attn_mask_type = attn_mask_type
-        self.group_query_attention = self.config.group_query_attention
+        self.group_query_attention = args.group_query_attention
         self.num_heads = self.config.num_attention_heads
         self.num_query_groups = self.config.num_query_groups if self.group_query_attention else self.num_heads
         self.hidden_size = self.config.hidden_size
         self.kv_channels = self.config.kv_channels
         self.kv_hidden_size = self.kv_channels * self.num_query_groups
 
-        self.sequence_parallel = self.config.parallel_config.sequence_parallel
-        self.use_flash_attention = self.config.use_flash_attention and attention_type == AttnType.self_attn \
+        self.sequence_parallel = self.config.sequence_parallel
+        self.use_flash_attention = args.use_flash_attn and attention_type == AttnType.self_attn \
             and self.attn_mask_type == AttnMaskType.causal
         if self.use_flash_attention:
             if self.attn_type != AttnType.self_attn:
@@ -392,14 +395,14 @@ class ParallelAttention(Module):
                     'FlashAttention code path only supports self-attention for now.'
                 )
             self.fa_config = self.config.fa_config
-        self.enable_flash_sp = self.config.enable_flash_sp
+        self.use_flash_sp = args.use_flash_sp
         self.norm_factor = math.sqrt(self.kv_channels)
 
         tp_group_size = get_tensor_model_parallel_world_size()
         self.tp_group_size = tp_group_size
         self.num_heads_per_partition = divide(self.num_heads, tp_group_size)
-        self.use_lora = self.config.lora_config.use_lora
-        self.data_layout = self.config.dataset_config.data_layout
+        self.use_lora = self.config.use_lora
+        self.data_layout = args.data_layout
 
         if self.group_query_attention:
             if self.num_query_groups % tp_group_size != 0:
@@ -439,7 +442,7 @@ class ParallelAttention(Module):
             )
 
         if get_context_parallel_world_size() > 1:
-            if not self.enable_flash_sp:
+            if not self.use_flash_sp:
                 self.ring_attention = RingAttention(
                     self.num_heads,
                     input_layout="BNSD",
@@ -472,7 +475,7 @@ class ParallelAttention(Module):
             output_size,
             config=self.config,
             init_method=self.config.init_method,
-            bias=self.config.qkv_has_bias,
+            bias=self.config.add_qkv_bias,
             gather_output=False,
             bias_init=self.config.bias_init,
         )
@@ -484,7 +487,7 @@ class ParallelAttention(Module):
                     output_size,
                     config=self.config,
                     init_method=self.config.init_method,
-                    bias=self.config.qkv_has_bias,
+                    bias=self.config.add_qkv_bias,
                     gather_output=False,
                     skip_bias_add=False,
                     bias_init=self.config.bias_init,
@@ -502,7 +505,7 @@ class ParallelAttention(Module):
             output_size,
             config=self.config,
             init_method=self.config.init_method,
-            bias=self.config.out_proj_has_bias,
+            bias=self.config.add_out_proj_bias,
             input_is_parallel=input_is_parallel,
             skip_bias_add=True,
             bias_init=self.config.bias_init,
@@ -515,7 +518,7 @@ class ParallelAttention(Module):
                     output_size,
                     config=self.config,
                     init_method=self.config.init_method,
-                    bias=self.config.out_proj_has_bias,
+                    bias=self.config.add_out_proj_bias,
                     input_is_parallel=input_is_parallel,
                     skip_bias_add=False,
                     bias_init=self.config.bias_init,
@@ -680,7 +683,7 @@ class ParallelAttention(Module):
             key = key.transpose(1, 2, 0, 3)
             value = value.transpose(1, 2, 0, 3)
 
-            if not self.enable_flash_sp:
+            if not self.use_flash_sp:
                 output = self.ring_attention(query, key, value)
             else:
                 # BNSD to BSH
@@ -802,28 +805,28 @@ class ParallelTransformerLayer(Module):
                  drop_path_rate=0.0,
                  ):
         super(ParallelTransformerLayer, self).__init__(config)
+        args = get_args()
         self.config = config
 
         self.layer_index = layer_number
         self.layer_type = layer_type
 
         self.apply_residual_connection_post_norm = (
-            self.config.apply_residual_connection_post_norm
+            self.config.apply_residual_connection_post_layernorm
         )
         self.fp32_residual_connection = self.config.fp32_residual_connection
 
-        self.residual_connection_dtype = self.config.residual_connection_dtype
         # Normalize the input data.
         self.input_norm = get_norm(config)
 
-        self.use_sandwich_norm = config.use_sandwich_norm
+        self.use_sandwich_norm = args.use_sandwich_norm
 
         if self.use_sandwich_norm:
-            self.attn_post_norm = get_norm(config, config.attn_post_norm_scale)
+            self.attn_post_norm = get_norm(config, args.attn_post_norm_scale)
 
         # Attention.
         attention_config = copy.deepcopy(config)
-        use_lora = config.lora_config.use_lora
+        use_lora = config.use_lora
         if use_lora:
             attention_config.update_lora_config("attention")
 
@@ -844,7 +847,7 @@ class ParallelTransformerLayer(Module):
         # Normalize the attention output
         self.post_attention_norm = get_norm(config)
         if self.use_sandwich_norm:
-            self.ffn_post_norm = get_norm(config, config.ffn_post_norm_scale)
+            self.ffn_post_norm = get_norm(config, args.ffn_post_norm_scale)
 
         # Cross attention.
         if self.layer_type in (LayerType.decoder,
@@ -859,7 +862,7 @@ class ParallelTransformerLayer(Module):
             self.post_inter_attention_norm = get_norm(config)
 
         # MLP
-        if self.config.moe_config is not None and self.config.moe_config.num_experts > 1:
+        if self.config.num_moe_experts > 1:
             moe_config = copy.deepcopy(config)
             self.mlp = MoELayer(moe_config)
         else:
@@ -881,7 +884,7 @@ class ParallelTransformerLayer(Module):
         else:
             self.retriever = None
 
-        if self.config.retro_add_retriever:
+        if args.retro_add_retriever:
             raise NotImplementedError(
                 "retro_add_retriever is not supported for now."
             )
@@ -894,7 +897,8 @@ class ParallelTransformerLayer(Module):
 
     def _set_selective_recompute(self):
         """Set selective recompute for transformer layer."""
-        if not self.config.use_flash_attention:
+        args = get_args()
+        if not args.use_flash_attn:
             self.attention.core_attention.recompute()
         else:
             if self.mlp.act_func and isinstance(self.mlp.act_func, nn.Cell):
@@ -1006,6 +1010,7 @@ def _get_custom_num_layers(num_layer_list, pp_stage, pp_rank, vpp_stage=None, vp
 # pylint: disable=W0613
 def _get_num_layers(config, model_type, is_decoder=False):
     """get transformer layers nums for current rank"""
+    args = get_args()
     vpp = get_virtual_pipeline_model_parallel_world_size() \
         if get_virtual_pipeline_model_parallel_world_size() is not None else 1
     pp_split_num = vpp * get_pipeline_model_parallel_world_size()
@@ -1014,17 +1019,13 @@ def _get_num_layers(config, model_type, is_decoder=False):
                            f"but using pipeline parallel requires at least "
                            f"'pp({get_pipeline_model_parallel_world_size()}) "
                            f"* vpp({vpp}) = {pp_split_num}' layers for splitting")
-    standalone_embedding_stage = config.parallel_config.standalone_embedding_stage
-    if config.encoder_num_layers or config.decoder_num_layers:
-        raise NotImplementedError(
-            "`encoder_num_layers` and `decoder_num_layers` are not supported for now."
-        )
+    standalone_embedding_stage = args.standalone_embedding_stage
     if get_pipeline_model_parallel_world_size() > 1:
         if standalone_embedding_stage and get_pipeline_model_parallel_rank() == 0:
             num_layers = 0
             offset = 0
         else:
-            if config.parallel_config.num_layer_list:
+            if config.num_layer_list:
                 pp_stage = get_pipeline_model_parallel_world_size()
                 pp_rank = get_pipeline_model_parallel_rank()
                 if standalone_embedding_stage:
@@ -1032,15 +1033,15 @@ def _get_num_layers(config, model_type, is_decoder=False):
                     pp_rank = get_pipeline_model_parallel_rank() - 1
                 vpp_stage = get_virtual_pipeline_model_parallel_world_size()
                 vpp_rank = get_virtual_pipeline_model_parallel_rank() if vpp_stage is not None else 0
-                num_layer_array = np.array(config.parallel_config.num_layer_list)
+                num_layer_array = np.array(config.num_layer_list)
                 if num_layer_array.sum() != config.num_layers:
                     raise ValueError(f"The number of model layers is {config.num_layers}, "
                                      f"but the sum of num_layer_list  "
-                                     f"{config.parallel_config.num_layer_list} is {num_layer_array.sum()}.")
+                                     f"{config.num_layer_list} is {num_layer_array.sum()}.")
                 if not np.all(num_layer_array > 0):
                     raise ValueError(f"All elements of num_layer_list should be larger than 0, "
                                      f"but got {num_layer_array}.")
-                num_layers, offset = _get_custom_num_layers(config.parallel_config.num_layer_list,
+                num_layers, offset = _get_custom_num_layers(config.num_layer_list,
                                                             pp_stage, pp_rank, vpp_stage, vpp_rank)
                 if vpp_stage is not None:
                     logger.info(
@@ -1187,6 +1188,7 @@ class ParallelTransformer(Module):
                  drop_path_rate=0.0,
                  ):
         super(ParallelTransformer, self).__init__(config)
+        args = get_args()
         if drop_path_rate > 0.0:
             raise NotImplementedError(
                 "`drop_path_rate > 0` is not supported for now, "
@@ -1200,8 +1202,8 @@ class ParallelTransformer(Module):
         self.post_process = post_process
         self.config = config
         self.drop_path_rate = drop_path_rate
-        self.transformer_impl = config.transformer_impl
-        self.retro_add_retriever = config.retro_add_retriever
+        self.transformer_impl = args.transformer_impl
+        self.retro_add_retriever = args.retro_add_retriever
 
         self.distribute_saved_activations = \
             config.distribute_saved_activations and not config.sequence_parallel
@@ -1226,11 +1228,11 @@ class ParallelTransformer(Module):
             config, model_type=None, is_decoder=False
         )
 
-        seq_length = config.seq_length
-        if config.parallel_config.sequence_parallel:
+        seq_length = args.seq_length
+        if config.sequence_parallel:
             seq_length = seq_length // get_tensor_model_parallel_world_size()
 
-        if config.retro_add_retriever:
+        if args.retro_add_retriever:
             raise NotImplementedError(
                 "retro_add_retriever is not supported for now."
             )
@@ -1242,10 +1244,10 @@ class ParallelTransformer(Module):
             raise NotImplementedError("ModelType `retro_encoder` is not supported for now.")
 
         layers_config = copy.deepcopy(config)
-        use_lora = config.lora_config.use_lora
+        use_lora = config.use_lora
 
         # user defined recompute
-        recompute_config = self.config.parallel_config.recompute_config
+        recompute_config = self.config.recompute_config
         if recompute_config is not None:
             (full_recompute_layers, select_recompute_layers,
              select_comm_recompute_layers) = self._get_recompute_nums(recompute_config)
@@ -1330,8 +1332,8 @@ class ParallelTransformer(Module):
 
         self.pipeline_parallel = get_pipeline_model_parallel_world_size() > 1
         if self.pipeline_parallel:
-            batch_size = config.dataset_config.batch_size
-            if config.dataset_config.data_layout == "BSH":
+            batch_size = args.global_batch_size
+            if args.data_layout == "BSH":
                 hidden_states_shape = (batch_size, seq_length, config.hidden_size)
             else:
                 hidden_states_shape = (seq_length, batch_size, config.hidden_size)
@@ -1347,11 +1349,12 @@ class ParallelTransformer(Module):
     def _get_recompute_nums(self, recompute_config):
         """Get recompute layers nums for current rank"""
         # Get vpp_rank and pp_rank
+        args = get_args()
         pp_rank = 0
         vpp_stage = None
         pp_layout = (1,)
         if get_pipeline_model_parallel_world_size() > 1:
-            standalone_embedding_stage = self.config.parallel_config.standalone_embedding_stage
+            standalone_embedding_stage = args.standalone_embedding_stage
             pp_stage = get_pipeline_model_parallel_world_size()
             pp_rank = get_pipeline_model_parallel_rank()
             if standalone_embedding_stage:
@@ -1546,23 +1549,24 @@ class ParallelLMLogits(nn.Cell):
 
     def __init__(self, config, bias=False, compute_dtype=None):
         super(ParallelLMLogits, self).__init__()
+        args = get_args()
         self.compute_dtype = (
             compute_dtype if compute_dtype else config.compute_dtype
         )
         self.config = config
         self.is_tensor_parallel = get_tensor_model_parallel_world_size() > 1
-        if self.is_tensor_parallel or self.config.parallel_config.sequence_parallel:
-            self.allreduce_dgrad = self.is_tensor_parallel and not config.parallel_config.sequence_parallel
+        if self.is_tensor_parallel or self.config.sequence_parallel:
+            self.allreduce_dgrad = self.is_tensor_parallel and not config.sequence_parallel
         else:
             self.allreduce_dgrad = False
 
-        self.gradient_accumulation_fusion = config.parallel_config.gradient_accumulation_fusion
+        self.gradient_accumulation_fusion = config.gradient_accumulation_fusion
         self.forward_impl_ = LinearWithGradAccumulationAndAsyncCommunication(
             bias=bias,
             gradient_accumulation_fusion=self.gradient_accumulation_fusion,
-            sequence_parallel=self.config.parallel_config.sequence_parallel,
+            sequence_parallel=self.config.sequence_parallel,
             allreduce_dgrad=self.allreduce_dgrad,
-            data_layout=config.dataset_config.data_layout
+            data_layout=args.data_layout
         )
         self.copy_to_mp_region = CopyToModelParallelRegion()
         self.gather_from_mp_region = GatherFromModelParallelRegion()
@@ -1570,7 +1574,7 @@ class ParallelLMLogits(nn.Cell):
     def construct(self, input_, word_embeddings_weight, parallel_output=True, bias=None
                   ):
         """LM logits using word embedding table"""
-        if self.is_tensor_parallel or self.config.parallel_config.sequence_parallel:
+        if self.is_tensor_parallel or self.config.sequence_parallel:
             input_parallel = input_
         else:
             input_parallel = self.copy_to_mp_region(input_)

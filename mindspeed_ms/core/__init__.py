@@ -18,6 +18,7 @@
 from . import distributed
 from . import pipeline_parallel
 from . import tensor_parallel
+from . import models
 from . import optimizer
 from . import transformer
 from . import dist_checkpointing

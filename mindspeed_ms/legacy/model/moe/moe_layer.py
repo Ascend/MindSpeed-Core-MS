@@ -15,7 +15,7 @@
 """moe layer"""
 import mindspore as ms
 
-from mindspeed_ms.core.config import TransformerConfig
+from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.core.parallel_state import (
     get_expert_model_parallel_rank,
     get_expert_model_parallel_world_size,
@@ -60,13 +60,12 @@ class MoELayer(Module):
         self.submodules = submodules
         self.layer_number = layer_number
 
-        moe_config = config.moe_config
         ep_world_size = get_expert_model_parallel_world_size()
-        num_experts = moe_config.num_experts
+        num_experts = config.num_moe_experts
         rank_id = get_expert_model_parallel_rank()
 
-        self.tp = config.parallel_config.tensor_model_parallel_size
-        self.sp = config.parallel_config.sequence_parallel
+        self.tp = config.tensor_model_parallel_size
+        self.sp = config.sequence_parallel
 
         if ep_world_size <= 0:
             raise ValueError(f"Expect expert parallel size > 0, but got {ep_world_size}")
@@ -82,19 +81,19 @@ class MoELayer(Module):
 
         self.router = TopKRouter(config=config)
 
-        if moe_config.moe_grouped_gemm:
+        if config.moe_grouped_gemm:
             self.experts = GroupedMLP(num_local_experts, config)
         else:
             self.experts = SequentialMLP(num_local_experts, config)
 
-        if moe_config.moe_token_dispatcher_type == "alltoall":
+        if config.moe_token_dispatcher_type == "alltoall":
             self.token_dispatcher = MoEAlltoAllTokenDispatcher(
                 num_local_experts=num_local_experts,
                 local_expert_indices=local_expert_indices,
                 config=config
                 )
         else:
-            raise ValueError(f"Unsupported token dispatcher type: {moe_config.moe_token_dispatcher_type}")
+            raise ValueError(f"Unsupported token dispatcher type: {config.moe_token_dispatcher_type}")
 
     def construct(self, hidden_states: ms.Tensor):
         """moe layer forward"""

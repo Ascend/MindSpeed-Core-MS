@@ -1,0 +1,6 @@
+mindspeed-core-ms/mindspeed_ms/core/tensor_parallel/layers.py:bprop
+mindspeed-core-ms/mindspeed_ms/core/transformer/transformer_config.py:__post_init__
+mindspeed-core-ms/mindspeed_ms/training/arguments.py:validate_args
+mindspeed-core-ms/mindspeed_ms/training/yaml_arguments.py:validate_yaml
+mindspeed-core-ms/mindspeed_ms/training/arguments.py:_add_training_args
+mindspeed-core-ms/mindspeed_ms/training/arguments.py:_add_data_args

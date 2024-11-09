@@ -21,6 +21,7 @@ import mindspore as ms
 import mindspore.ops as P
 import mindspore.communication.comm_func as comm_func
 from mindspeed_ms.tools import logger
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.parallel_state import (
     is_pipeline_first_stage,
     is_pipeline_last_stage,
@@ -66,11 +67,12 @@ class Module(nn.Cell):
     """
     def __init__(self, config=None, share_embeddings_and_output_weights=True, **kwargs):
         super(Module, self).__init__(**kwargs)
+        args = get_args()
         self.share_embeddings_and_output_weights = share_embeddings_and_output_weights
         self.shared_weight_name_list = []
         if config is not None:
             self.config = config
-            self.share_embeddings_and_output_weights = not config.untie_embeddings_and_output_weights
+            self.share_embeddings_and_output_weights = not args.untie_embeddings_and_output_weights
             if get_pipeline_model_parallel_world_size() > 1:
                 self.pre_process = is_pipeline_first_stage()
                 self.post_process = is_pipeline_last_stage()
@@ -193,5 +195,5 @@ class Module(nn.Cell):
         """get lora config by cell_name"""
         cell_lora_config = copy.deepcopy(config)
         cell_lora_config.update_lora_config(cell_name)
-        cell_lora_config = cell_lora_config.lora_config.lora_module
+        cell_lora_config = cell_lora_config.lora_module
         return cell_lora_config

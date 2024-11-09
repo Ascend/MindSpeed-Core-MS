@@ -12,9 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-
-"""pynative init"""
-
-from .transformer_config import TransformerConfig
-
-__all__ = ["TransformerConfig"]
+"""ST."""

@@ -1,70 +1,100 @@
-training_config:
-  seed: 1921
-  output_dir: './output'
-  training_iters: 10
-  log_interval: 1
-  eval_interval: null
-  save_interval: null
-  loss_scale: 1
-  loss_reduction: "mean"
-  loss_func_kwargs:
-    loss_func_type: "CrossEntropyLoss"
-  checkpoint_dir: "./data/golden_mixtral_large.pt"
-
-dataset_config:
-  batch_size: 1
-  micro_batch_num: 1
-  dataset_dir: 'data'
-  shuffle: False
-  drop_remainder: True
-  pad_token: 0
-  dataset_dir: "./data/golden_mixtral_input_and_loss_large.npy"
-
-parallel_config:
+model_parallel:
+  # model parallelism
   tensor_model_parallel_size: 2
   pipeline_model_parallel_size: 1
   context_parallel_size: 1
   expert_model_parallel_size: 2
-  sequence_parallel: True
 
-model_config:
-  num_layers: 2
-  seq_length: 4096
-  num_attention_heads: 32
-  hidden_size: 4096
-  ffn_hidden_size: 14336
-  vocab_size: 32000
-  group_query_attention: True
-  num_query_groups: 8
-  attention_type: 'self_attn'
-  qkv_has_bias: False
-  out_proj_has_bias: False
+  # training
   params_dtype: "float32"
-  init_method: 'normal'
   compute_dtype: "float32"
   softmax_compute_dtype: "float32"
+
+  # pipeline parallel
+  sequence_parallel: True
+  pipeline_dtype: "float32"
+
+language_model:
+  # model architecture
+  num_layers: 2
+  hidden_size: 4096
+  ffn_hidden_size: 14336
+  num_attention_heads: 32
+  num_query_groups: 8
   hidden_dropout: 0.0
   attention_dropout: 0.0
-  mask_func_type: "attn_mask_fill"
-  mlp_has_bias: False
-  gated_linear_unit: True
-  hidden_act: 'swiglu'
-  apply_residual_connection_post_norm: False
-  normalization: 'FusedRMSNorm'
-  norm_epsilon: 1.e-5
-  untie_embeddings_and_output_weights: True
-  position_embedding_type: 'rope'
   add_bias_linear: False
+  add_out_proj_bias: False
+  add_qkv_bias: False
+  add_mlp_bias: False
+  mask_func_type: "attn_mask_fill"
+  gated_linear_unit: True
+  activation_func: "swiglu"
+  num_moe_experts: 4
+  apply_residual_connection_post_layernorm: False
+  normalization: 'FusedRMSNorm'
+  layernorm_epsilon: 1.e-5
 
-moe_config:
-  num_experts: 4
+  # initialization
+  init_method: "normal"
+  init_method_std: 0.01
+
+  # MoE related
   moe_router_topk: 2
-  moe_token_dispatcher_type: 'alltoall'
+  moe_router_load_balancing_type: "aux_loss"
+  moe_token_dispatcher_type: "alltoall"
   moe_z_loss_coeff: 1.e-3
   moe_aux_loss_coeff: 1.e-2
-  moe_router_load_balancing_type: 'aux_loss' # ['none', 'aux_loss']
   moe_input_jitter_eps: null
   moe_expert_capacity_factor: -1
   moe_token_drop_policy: null
   moe_pad_expert_input_to_capacity: False
   use_self_defined_alltoall: False
+
+  # miscellaneous
+  clone_scatter_output_in_embedding: False
+
+# training
+transformer_impl: "local"
+seed: 1921
+global_batch_size: 1
+micro_batch_size: 1
+train_iters: 10
+eval_interval: null
+train_samples: 0
+group_query_attention: True
+untie_embeddings_and_output_weights: True
+position_embedding_type: "rope"
+check_for_nan_in_loss_and_grad: False
+
+# data
+vocab_size: 32000
+seq_length: 4096
+shuffle: False
+pad_token: 0
+data_path: "./data/golden_mixtral_input_and_loss_large.npy"
+
+# checkpointing arguments
+save: "./output"
+save_interval: null
+dist_ckpt_format: "ckpt"
+checkpoint_dir: "./data/golden_mixtral_large.pt"
+
+# optimizer
+optimizer: "AdamWeightDecay"
+lr_decay_style: "constant"
+weight_decay_incr_style: "constant"
+clip_grad: 0.0
+
+# loss arguments
+loss_scale: 1
+initial_loss_scale: null
+loss_reduction: "mean"
+loss_func_kwargs:
+  loss_func_type: "CrossEntropyLoss"
+
+# distributed arguments
+delay_grad_reduce: False
+
+# logging
+log_interval: 1
