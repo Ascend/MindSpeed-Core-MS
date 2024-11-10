@@ -14,12 +14,18 @@
 # ============================================================================
 """utils"""
 
-__all__ = ["get_attn_mask_func"]
+__all__ = ["get_attn_mask_func", "get_num_layer_list"]
 
+import math
 import mindspore.ops as ops
 
 from mindspore import Tensor
 from mindspore.common import dtype as mstype
+from mindspeed_ms.core.parallel_state import (
+    get_pipeline_model_parallel_world_size,
+    get_virtual_pipeline_model_parallel_world_size
+)
+from mindspeed_ms.training.global_vars import get_args
 
 
 def attn_mask_fill(attention_scores: Tensor, attention_mask, fill_value=-10000.0):
@@ -62,3 +68,41 @@ def get_attn_mask_func(mask_func_type):
                        "mask function are ['attn_mask_fill', 'attn_mask_add'] "
                        ", but got {}.".format(mask_func_type))
     return ATTNMASK_FUNC_MAP[mask_func_type]
+
+
+def get_num_layer_list(config):
+    """Get num_layer_list for pp/vpp scenario"""
+    num_layer_list = []
+    if config.num_layer_list:
+        num_layer_list = config.num_layer_list
+    else:
+        args = get_args()
+        standalone_embedding_stage = args.standalone_embedding_stage
+        pp_stage = get_pipeline_model_parallel_world_size()
+        if standalone_embedding_stage:
+            pp_stage = pp_stage - 1
+        vpp_stage = (get_virtual_pipeline_model_parallel_world_size()
+                     if get_virtual_pipeline_model_parallel_world_size() is not None else 1)
+        if pp_stage == 0:
+            raise ValueError(f"pp_stage need larger than zero!")
+        pp_split_num = pp_stage * vpp_stage
+        num_layers = config.num_layers
+        borrow_layer_num = math.ceil(num_layers / pp_split_num) * pp_split_num - num_layers
+        num_layer_list = [(num_layers + borrow_layer_num) // pp_stage] * pp_stage
+        if get_virtual_pipeline_model_parallel_world_size() is None:
+            num_layer_list[-1] -= borrow_layer_num
+            if num_layer_list[-1] <= 0:
+                raise NotImplementedError(
+                    f"num_layers {config.num_layers} will range to {num_layer_list} "
+                    f"for pp {pp_stage}, and last stage has no layer"
+                )
+        else:
+            # split num_layer_list from (pp_stage) to (pp_stage, vpp_stage)
+            num_layer_list = [[(num_layer_list[i] // vpp_stage)] * vpp_stage for i in range(pp_stage)]
+            num_layer_list[-1][-1] -= borrow_layer_num
+            if num_layer_list[-1][-1] <= 0:
+                raise NotImplementedError(
+                    f"num_layers {config.num_layers} will range to {num_layer_list}  "
+                    f"for pp {pp_stage} vpp {vpp_stage}, and last model chunk has no layer."
+                )
+    return num_layer_list

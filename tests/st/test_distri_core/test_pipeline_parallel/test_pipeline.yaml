@@ -1,0 +1,56 @@
+model_parallel:
+  tensor_model_parallel_size: 1
+  pipeline_model_parallel_size: 4
+  context_parallel_size: 1
+  expert_model_parallel_size: 1
+  virtual_pipeline_model_parallel_size: null
+  sequence_parallel: False
+  pipeline_dtype: "float32"
+  params_dtype: "float32"
+  compute_dtype: "float32"
+  softmax_compute_dtype: "float32"
+
+language_model:
+  num_layers: 8
+  num_attention_heads: 1
+  num_query_groups: 1
+  hidden_size: 128
+  ffn_hidden_size: 1
+  hidden_dropout: 0.0
+  attention_dropout: 0.0
+  mask_func_type: "attn_mask_add" # need add
+
+  # Must add
+  clone_scatter_output_in_embedding: False
+  attention_softmax_in_fp32: True
+  apply_rope_fusion: False
+  add_bias_linear: False
+  num_moe_experts: 1
+
+# data
+seq_length: 64
+vocab_size: 256
+
+# training
+epochs: 1
+train_iters: 2
+untie_embeddings_and_output_weights: True
+global_batch_size: 2
+micro_batch_size: 8
+
+# loss arguments
+initial_loss_scale: 1  # loss_scale_value
+hysteresis: 2   # loss_scale_factor
+loss_scale_window: 1000
+loss_reduction: "mean"
+fp16_lm_cross_entropy: False # need add
+
+# pangu arguments
+use_query_layer: False
+use_visual_encoder: False
+
+# logging
+log_interval: 1
+
+# custom arguments
+model_customize_staged: False
