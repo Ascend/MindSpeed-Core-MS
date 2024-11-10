@@ -69,7 +69,6 @@ class Module(nn.Cell):
         super(Module, self).__init__(**kwargs)
         args = get_args()
         self.share_embeddings_and_output_weights = share_embeddings_and_output_weights
-        self.shared_weight_name_list = []
         if config is not None:
             self.config = config
             self.share_embeddings_and_output_weights = not args.untie_embeddings_and_output_weights
@@ -146,7 +145,6 @@ class Module(nn.Cell):
             shared_weight.shared = True
 
         # all-reduce embedding weight and head weight
-        self.shared_weight_name_list.append(shared_weight.name)
         weight_sum = shared_weight.value().sum()
         if weight_sum != 0.0 and self.post_process:
             raise ValueError(f"When embedding's weight share with head layer in pipeline parallel, "

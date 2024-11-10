@@ -35,24 +35,33 @@ from mindspeed_ms.core.parallel_state import (
 )
 
 from test_pipeline_net import PipelineTestNet, FakeData
+from tests.st.test_distri_core.utils import get_layer_str_param
 
 ms.set_seed(2024)
 
-def generate_ckpt(vocab_size, seq_length, hidden_size, num_layers, share_weight=False):
+def generate_ckpt(vocab_size,
+                  seq_length,
+                  model_config,
+                  standalone_embedding_stage,
+                  share_weight):
     """ get ckpt dict """
+    hidden_size = model_config.hidden_size
+    num_layers = model_config.num_layers
     ckpt = {}
+    layer_str_dict = get_layer_str_param(model_config, standalone_embedding_stage)
     embedding_param = ms.Parameter(ms.Tensor(np.random.random((vocab_size, hidden_size)),
                                              ms.float32),
                                    name='embedding.weight')
     ckpt['embedding.weight'] = embedding_param
     for i in range(num_layers):
         idx = i
+        layer_str = layer_str_dict[idx]
         # first
-        param_name = f'fake_transformer.fake_transformer_layers.{idx}.first_liner.weight'
+        param_name = f'fake_transformer.fake_transformer_layers.{layer_str}.first_liner.weight'
         ckpt[param_name] = ms.Parameter(ms.Tensor(np.random.random((seq_length, hidden_size)), ms.float32),
                                         name=param_name)
         # second
-        param_name = f'fake_transformer.fake_transformer_layers.{idx}.second_liner.weight'
+        param_name = f'fake_transformer.fake_transformer_layers.{layer_str}.second_liner.weight'
         ckpt[param_name] = ms.Parameter(ms.Tensor(np.random.random((hidden_size, seq_length)), ms.float32),
                                         name=param_name)
     if not share_weight:
@@ -94,8 +103,8 @@ def run_pipeline(model_config, train_args):
     # get ckpt
     ckpt_dict = generate_ckpt(train_args.vocab_size,
                               train_args.seq_length,
-                              model_config.hidden_size,
-                              model_config.num_layers,
+                              model_config,
+                              train_args.standalone_embedding_stage,
                               not train_args.untie_embeddings_and_output_weights)
     # generate dataset
     dataset = FakeData(data_num=32, seq_length=train_args.seq_length)
@@ -147,8 +156,8 @@ def run_standalone(model_config, train_args):
     # get ckpt
     ckpt_dict = generate_ckpt(train_args.vocab_size,
                               train_args.seq_length,
-                              model_config.hidden_size,
-                              model_config.num_layers,
+                              model_config,
+                              train_args.standalone_embedding_stage,
                               not train_args.untie_embeddings_and_output_weights)
 
     # generate dataset

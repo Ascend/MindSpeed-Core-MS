@@ -28,7 +28,12 @@ from mindspeed_ms.legacy.model import get_attention_mask
 from mindspeed_ms.legacy.model.module import Module
 from mindspeed_ms.legacy.model.transformer import _get_num_layers
 from mindspeed_ms.core.tensor_parallel.layers import VocabParallelEmbedding
-from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_world_size
+from mindspeed_ms.core.parallel_state import (
+    get_pipeline_model_parallel_rank,
+    get_pipeline_model_parallel_world_size,
+    get_virtual_pipeline_model_parallel_world_size,
+    get_virtual_pipeline_model_parallel_rank
+)
 
 
 class FakeData:
@@ -93,9 +98,18 @@ class FakeTransformer(Cell):
         self.num_layers, self.offset = _get_num_layers(config, None)
         layers_dict = OrderedDict()
         for i in range(self.num_layers):
-            layers_dict[str(i + self.offset)] = FakeTransformerLayer(seq_length,
-                                                                     hidden_size,
-                                                                     param_init=param_init)
+            layer_str = f"{i + self.offset}"
+            pp_size = get_pipeline_model_parallel_world_size()
+            vpp_size = get_virtual_pipeline_model_parallel_world_size()
+            if pp_size is not None and pp_size > 1:
+                layer_str += f"_pp{get_pipeline_model_parallel_rank()}"
+            if vpp_size is not None and vpp_size > 1:
+                layer_str += f"_vpp{get_virtual_pipeline_model_parallel_rank()}"
+            if pp_size is not None and pp_size > 1:
+                layer_str += f"_id{i}"
+            layers_dict[layer_str] = FakeTransformerLayer(seq_length,
+                                                          hidden_size,
+                                                          param_init=param_init)
         self.fake_transformer_layers = nn.SequentialCell(layers_dict)
         self.pipeline_parallel = get_pipeline_model_parallel_world_size() > 1
         if self.pipeline_parallel:
@@ -188,9 +202,8 @@ class PipelineTestNet(Module):
                 config=config,
                 param_init_dtype=config.params_dtype
             )
-            self.embedding.shared = True
-            self.embedding.shared_embedding = True
-            self.shared_weight_name_list.append(self.embedding.weight.name)
+            self.embedding.weight.shared = True
+            self.embedding.weight.shared_embedding = True
 
         self.fake_transformer = FakeTransformer(config,
                                                 batch_size,
@@ -203,9 +216,8 @@ class PipelineTestNet(Module):
                                       self.vocab_size,
                                       share_embedding_weight=not self.untie_embeddings_and_output_weights)
             if self.pipeline_parallel:
-                self.fake_head.shared = True
-                self.fake_head.shared_embedding = True
-                self.shared_weight_name_list.append(self.fake_head.weight.name)
+                self.fake_head.weight.shared = True
+                self.fake_head.weight.shared_embedding = True
             self.final_norm = nn.LayerNorm((hidden_size,))
             self.total_loss = FinalLossLayer()
 

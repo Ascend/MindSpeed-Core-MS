@@ -26,7 +26,7 @@ from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_rank, \
     get_pipeline_model_parallel_world_size, get_context_parallel_world_size, get_tensor_model_parallel_world_size, \
     is_pipeline_last_stage, is_pipeline_first_stage, is_rank_in_embedding_group, get_embedding_group, \
-    set_virtual_pipeline_model_parallel_rank, get_stream, get_data_parallel_group, get_data_parallel_world_size
+    set_virtual_pipeline_model_parallel_rank, get_data_parallel_group, get_data_parallel_world_size
 
 from .p2p_communication import P2PPrimitive
 
@@ -1099,37 +1099,27 @@ def all_reduce_share_embedding(grads, weights, model, wrap_with_ddp=False):
         # get share weight name
         weight_name = [weight.name for weight in weights]
         if isinstance(model, nn.CellList):
-            model_list = []
-            shared_weight_name_list = []
-            if wrap_with_ddp:
-                model_list.extend([sub_model.module for sub_model in model])
-            else:
-                model_list = model
-            share_embeddings_and_output_weights = model_list[0].share_embeddings_and_output_weights
-            for sub_model in model_list:
-                shared_weight_name_list.extend(sub_model.shared_weight_name_list)
-        else:
-            if wrap_with_ddp:
-                model = model.module
-            share_embeddings_and_output_weights = model.share_embeddings_and_output_weights
-            shared_weight_name_list = model.shared_weight_name_list
-        if len(shared_weight_name_list) > 1:
-            raise RuntimeError(f"Now, only support one share weight in the stage. "
-                               f"But got a couple of share weights: {shared_weight_name_list}")
-
+            model = model[0]
+        if wrap_with_ddp:
+            model = model.module
+        share_embeddings_and_output_weights = model.share_embeddings_and_output_weights
         # sync for share weight
         if get_pipeline_model_parallel_world_size() > 1 and share_embeddings_and_output_weights:
             shared_weight_index = []
             weight_grad = None
-            for i, name in enumerate(weight_name):
-                if name in shared_weight_name_list:
+            for i, grad_i in enumerate(grads):
+                if hasattr(weights[i], "shared_embedding") and weights[i].shared_embedding:
                     if wrap_with_ddp and weights[i].grad is None:
                         continue
-                    weight_grad = weight_grad + grads[i] if weight_grad is not None else grads[i]
+                    weight_grad = weight_grad + grad_i if weight_grad is not None else grad_i
                     shared_weight_index.append(i)
+            if len(shared_weight_index) > 1:
+                shared_weight_name_list = [weight_name[idx] for idx in shared_weight_index]
+                raise RuntimeError(f"Now, only support one share weight in the stage. "
+                                   f"But got a couple of share weights: {shared_weight_name_list}")
             if shared_weight_index:
                 if wrap_with_ddp:
-                    hal.current_stream().wait_stream(get_stream())
+                    hal.current_stream().wait_stream(hal.communication_stream())
                 weight_grad.copy_(comm_func.all_reduce(weight_grad, group=get_embedding_group())[0])
     return grads
 
