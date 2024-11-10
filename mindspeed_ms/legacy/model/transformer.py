@@ -1286,7 +1286,16 @@ class ParallelTransformer(Module):
         # ensure the Parameter of each rank init as correct name
         layers_dict = OrderedDict()
         for i in range(self.num_layers):
-            layers_dict[str(i + offset)] = ParallelTransformerLayer(
+            layer_str = f"{i + offset}"
+            pp_size = get_pipeline_model_parallel_world_size()
+            vpp_size = get_virtual_pipeline_model_parallel_world_size()
+            if pp_size is not None and pp_size > 1:
+                layer_str += f"_pp{get_pipeline_model_parallel_rank()}"
+            if vpp_size is not None and vpp_size > 1:
+                layer_str += f"_vpp{get_virtual_pipeline_model_parallel_rank()}"
+            if pp_size is not None and pp_size > 1:
+                layer_str += f"_id{i}"
+            layers_dict[layer_str] = ParallelTransformerLayer(
                 config=layers_index_config[i] if use_lora or recompute_config else layers_config,
                 layer_number=i + 1 + offset,
                 self_attn_mask_type=self_attn_mask_type,

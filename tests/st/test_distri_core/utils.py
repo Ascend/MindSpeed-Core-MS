@@ -33,11 +33,14 @@ from mindspeed_ms.core.parallel_state import (
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
     get_expert_model_parallel_rank,
+    get_virtual_pipeline_model_parallel_world_size,
+    get_pipeline_model_parallel_world_size,
 )
 from mindspeed_ms.core.optimizer import MixedPrecisionOptimizer
 from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.legacy.model import ParallelLMLogits, TransformerLanguageModel
 from mindspeed_ms.legacy.model.module import Module
+from mindspeed_ms.legacy.model.utils import get_num_layer_list
 
 
 class TestData:
@@ -258,6 +261,34 @@ def generate_ckpt(hidden_size,
     return param_dict
 
 
+def get_layer_str_param(config, standalone_embedding_stage=False):
+    "get transformer layer str"
+    vpp_size = get_virtual_pipeline_model_parallel_world_size()
+    pp_size = get_pipeline_model_parallel_world_size()
+    num_layers = config.num_layers
+    layers_str_dict = {}
+    num_layer_list = get_num_layer_list(config)
+    if vpp_size is not None and vpp_size > 1:
+        chunk_cap = num_layer_list[0][0]
+        vpp_cap = sum(num_layer[0] for num_layer in num_layer_list)
+        for pp_rank, vpp_layer_list in enumerate(num_layer_list):
+            pp_rank_new = pp_rank + 1 if standalone_embedding_stage else pp_rank
+            for vpp_rank, vpp_layers in enumerate(vpp_layer_list):
+                for idx in range(vpp_layers):
+                    index = vpp_cap * vpp_rank + chunk_cap * pp_rank + idx
+                    layers_str_dict[index] = f"{index}_pp{pp_rank_new}_vpp{vpp_rank}_id{idx}"
+        return layers_str_dict
+    if pp_size is not None and pp_size > 1:
+        index = 0
+        for pp_rank, idxs in enumerate(num_layer_list):
+            pp_rank_new = pp_rank + 1 if standalone_embedding_stage else pp_rank
+            for idx in range(idxs):
+                layers_str_dict[index] = f"{index}_pp{pp_rank_new}_id{idx}"
+                index += 1
+        return layers_str_dict
+    return {i: str(i) for i in range(num_layers)}
+
+
 def transform_transformerlayer_params(params, hidden_size, kv_hidden_size=None, prefix=""):
     """
     transform transformerlayer parameters.
@@ -361,6 +392,7 @@ def transform_mixtral_golden_params_to_pynative_params(
     kv_head_multiplier = num_heads // num_query_groups
 
     new_params = collections.OrderedDict()
+    layer_str_param = get_layer_str_param(config)
     print("↓↓↓↓↓↓↓↓↓↓↓ pt -> ckpt map ↓↓↓↓↓↓↓↓↓↓↓")
     for k, v in golden_params.items():
         if "_extra_state" in k:
@@ -369,6 +401,15 @@ def transform_mixtral_golden_params_to_pynative_params(
         pynative_prefix = "language_model.encoder."
         # "decoder." -> "network.model.transformer."
         new_name = k.replace(golden_prefix, pynative_prefix)
+        # "0" -> "0_pp0_id0"
+        local_str_idx = ""
+        for idx, new_name_str in enumerate(new_name):
+            if new_name_str.isdigit():
+                while new_name[idx].isdigit():
+                    local_str_idx += new_name[idx]
+                    idx += 1
+                new_name = new_name.replace(local_str_idx, layer_str_param[int(local_str_idx)], 1)
+                break
         # embedding.word_embeddings.weight -> language_model.embedding.word_embeddings.weight
         if "embedding.word_embeddings.weight" in k:
             new_name = new_name.replace(
