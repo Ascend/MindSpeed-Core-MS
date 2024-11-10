@@ -163,6 +163,10 @@ class ModelParallelConfig:
     num_layer_list: list = None
     """User-defined pipeline parallel model layer division"""
 
+    # Additional argument
+    noop_layers: list = None
+    """Noop layers in transformer"""
+
     ###################
     # Optimizations
     ###################

@@ -26,7 +26,7 @@ from mindspeed_ms.training.loss_func import LossWithMask
 from mindspeed_ms.training.arguments import get_args
 from mindspeed_ms.legacy.model import get_attention_mask
 from mindspeed_ms.legacy.model.module import Module
-from mindspeed_ms.legacy.model.transformer import _get_num_layers
+from mindspeed_ms.legacy.model.transformer import _get_num_layers, NoopTransformerLayer
 from mindspeed_ms.core.tensor_parallel.layers import VocabParallelEmbedding
 from mindspeed_ms.core.parallel_state import (
     get_pipeline_model_parallel_rank,
@@ -97,19 +97,29 @@ class FakeTransformer(Cell):
         self.pre_process = pre_process
         self.num_layers, self.offset = _get_num_layers(config, None)
         layers_dict = OrderedDict()
-        for i in range(self.num_layers):
-            layer_str = f"{i + self.offset}"
-            pp_size = get_pipeline_model_parallel_world_size()
-            vpp_size = get_virtual_pipeline_model_parallel_world_size()
-            if pp_size is not None and pp_size > 1:
-                layer_str += f"_pp{get_pipeline_model_parallel_rank()}"
-            if vpp_size is not None and vpp_size > 1:
-                layer_str += f"_vpp{get_virtual_pipeline_model_parallel_rank()}"
-            if pp_size is not None and pp_size > 1:
-                layer_str += f"_id{i}"
-            layers_dict[layer_str] = FakeTransformerLayer(seq_length,
-                                                          hidden_size,
-                                                          param_init=param_init)
+        if self.num_layers == 0:
+            self.num_layers = 1
+            layers_dict[str(0)] = NoopTransformerLayer(1)
+            print("layer 0 is Noop layer", flush=True)
+        else:
+            for i in range(self.num_layers):
+                layer_str = f"{i + self.offset}"
+                pp_size = get_pipeline_model_parallel_world_size()
+                vpp_size = get_virtual_pipeline_model_parallel_world_size()
+                if pp_size is not None and pp_size > 1:
+                    layer_str += f"_pp{get_pipeline_model_parallel_rank()}"
+                if vpp_size is not None and vpp_size > 1:
+                    layer_str += f"_vpp{get_virtual_pipeline_model_parallel_rank()}"
+                if pp_size is not None and pp_size > 1:
+                    layer_str += f"_id{i}"
+                if config.noop_layers:
+                    if i + self.offset in config.noop_layers:  # not i, but i + offset
+                        layers_dict[layer_str] = NoopTransformerLayer(i + self.offset + 1)
+                        print(f"layer {layer_str} is Noop layer", flush=True)
+                        continue
+                layers_dict[layer_str] = FakeTransformerLayer(seq_length,
+                                                              hidden_size,
+                                                              param_init=param_init)
         self.fake_transformer_layers = nn.SequentialCell(layers_dict)
         self.pipeline_parallel = get_pipeline_model_parallel_world_size() > 1
         if self.pipeline_parallel:

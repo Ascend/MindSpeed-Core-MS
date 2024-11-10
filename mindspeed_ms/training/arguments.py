@@ -73,6 +73,7 @@ def parse_args(extra_args_provider=None, args_defaults={}, ignore_unknown_args=F
     parser = _add_one_logger_args(parser)
     parser = _add_lora_args(parser)
     parser = _add_profile_args(parser)
+    parser = _add_network_args(parser)
 
     # Custom arguments.
     if extra_args_provider is not None:
@@ -2003,4 +2004,13 @@ def _add_lora_args(parser):
     group.add_argument('--lora-dropout', type=float,
                        default=0.0, help='The dropout rate for LoRA')
 
+    return parser
+
+
+def _add_network_args(parser):
+    """network args"""
+    group = parser.add_argument_group(title='network')
+
+    group.add_argument("--noop-layers", type=str,
+                       help='Specity the noop layers.')
     return parser
