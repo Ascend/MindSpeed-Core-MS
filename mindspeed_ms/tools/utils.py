@@ -687,6 +687,7 @@ def is_pynative():
 
 def barrier_world(action: str = None):
     """barrier all rank until action is done"""
+    from mindspore.common.api import _pynative_executor
     if get_real_group_size() > 1:
         from .logger import logger
         if action is not None:
@@ -695,6 +696,7 @@ def barrier_world(action: str = None):
             logger.info("Now barriered...")
 
         comm_func.barrier()
+        _pynative_executor.sync()
 
 
 def get_pipeline_rank_ids():
