@@ -918,6 +918,7 @@ class ModelParallelConfig(BaseConfig):
             recompute: str = None,
             select_recompute: str = None,
             select_comm_recompute: str = None,
+            variable_seq_lengths: bool = False,
             **kwargs,
     ):
         super().__init__()
@@ -937,6 +938,7 @@ class ModelParallelConfig(BaseConfig):
         self.use_cpu_initialization = use_cpu_initialization
         self.deterministic_mode = deterministic_mode
         self.num_layer_list = num_layer_list
+        self.variable_seq_lengths = variable_seq_lengths
         self.recompute_config = recompute_config if recompute_config is not None else {}
         if recompute is not None:
             self.recompute_config['recompute'] = list(ast.literal_eval(recompute))

@@ -14,7 +14,8 @@
 # ======================
 """p2p primitives."""
 
-from mindspore import nn
+import mindspore as ms
+from mindspore import nn, Tensor
 from mindspore.ops.auto_generate.gen_ops_prim import inner_comm_irecv_op, inner_comm_isend_op
 
 from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_group, \
@@ -237,8 +238,16 @@ class P2PPrimitive():
         tensor_info_recv_prev = None
         tensor_info_recv_next = None
 
-        recv_prev_shape = tensor_shape
-        recv_next_shape = tensor_shape
+        if not self.config.parallel_config.variable_seq_lengths:
+            recv_prev_shape = tensor_shape
+            recv_next_shape = tensor_shape
+        else:
+            recv_prev_shape, recv_next_shape = self._communicate_shapes(
+                tensor_send_next,
+                tensor_send_prev,
+                recv_prev,
+                recv_next
+            )
 
         recv_dtype = self.config.parallel_config.recv_dtype
         if recv_prev:
@@ -325,3 +334,59 @@ class P2PPrimitive():
                 send_prev_handle = send_prev_req(tensor_send_prev)
                 reqs.append(send_prev_handle)
         return reqs, tensor_recv_prev, tensor_recv_next
+
+    def _communicate_shapes(self,
+                            tensor_send_next,
+                            tensor_send_prev,
+                            recv_prev,
+                            recv_next):
+        """
+        For dynamic sequence length scenarios, the shape of the tensor to be received is unknown in advance.
+        Args:
+            tensor_send_next: tensor in next rank, shape should be sent (None if not send)
+            tensor_send_prev: tensor in prev rank, shape should be sent (None if not send)
+            recv_prev: boolean, whether shape need to receive tensor from prev rank
+            recv_next: boolean, whether shape need to receive tensor from next rank
+        Returns:
+
+        """
+        tensor_send_prev_shape = None
+        tensor_send_next_shape = None
+        tensor_info_recv_prev = None
+        tensor_info_recv_next = None
+
+        if recv_prev:
+            # communicated shape is always 3d
+            tensor_info_recv_prev = ((3,), ms.int64)
+        if recv_next:
+            # communicated shape is always 3d
+            tensor_info_recv_next = ((3,), ms.int64)
+        if tensor_send_prev is not None:
+            tensor_send_prev_shape = Tensor(tensor_send_prev.shape, ms.int64)
+        if tensor_send_next is not None:
+            tensor_send_next_shape = Tensor(tensor_send_next.shape, ms.int64)
+
+        reqs, tensor_recv_prev_shape, tensor_recv_next_shape = self._isend_and_irecv(
+            tensor_send_prev=tensor_send_prev_shape,
+            tensor_info_recv_prev=tensor_info_recv_prev,
+            tensor_send_next=tensor_send_next_shape,
+            tensor_info_recv_next=tensor_info_recv_next,
+            group=get_pipeline_model_parallel_group()
+        )
+
+        if reqs:
+            for req in reqs:
+                req.wait()
+            reqs = None
+
+        recv_prev_shape = (0, 0, 0)
+        if tensor_recv_prev_shape is not None:
+            recv_prev_shape = tensor_recv_prev_shape.asnumpy().tolist()
+            recv_prev_shape = tuple(recv_prev_shape)
+
+        recv_next_shape = (0, 0, 0)
+        if tensor_recv_next_shape is not None:
+            recv_next_shape = tensor_recv_next_shape.asnumpy().tolist()
+            recv_next_shape = tuple(recv_next_shape)
+
+        return recv_prev_shape, recv_next_shape
