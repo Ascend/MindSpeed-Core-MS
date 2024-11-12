@@ -49,12 +49,16 @@ def generate_ckpt(vocab_size,
     num_layers = model_config.num_layers
     ckpt = {}
     layer_str_dict = get_layer_str_param(model_config, standalone_embedding_stage)
+    print(f"layer_str_dict = {layer_str_dict}")
     embedding_param = ms.Parameter(ms.Tensor(np.random.random((vocab_size, hidden_size)),
                                              ms.float32),
                                    name='embedding.weight')
     ckpt['embedding.weight'] = embedding_param
     for i in range(num_layers):
         idx = i
+        if model_config.noop_layers:
+            if idx in model_config.noop_layers:
+                continue
         layer_str = layer_str_dict[idx]
         # first
         param_name = f'fake_transformer.fake_transformer_layers.{layer_str}.first_liner.weight'
@@ -251,4 +255,18 @@ if __name__ == '__main__':
         config.virtual_pipeline_model_parallel_size = 2
         args.untie_embeddings_and_output_weights = False
         config.num_layer_list = [[1, 1], [1, 1], [1, 1], [1, 1]]
+        run_pipeline(config, args)
+    elif extra_args.run_mode == 'pp_with_standalone_embedding_stage':
+        args.untie_embeddings_and_output_weights = False
+        args.standalone_embedding_stage = True
+        config.pipeline_model_parallel_size = 2
+        config.virtual_pipeline_model_parallel_size = 2
+        run_pipeline(config, args)
+    elif extra_args.run_mode == 'pp_with_noop_layers':
+        args.untie_embeddings_and_output_weights = False
+        config.virtual_pipeline_model_parallel_size = 2
+        config.pipeline_model_parallel_size = 2
+        config.num_layers += 2
+        config.noop_layers = [4, 5]
+        print(f"config.noop_layers = {config.noop_layers}")
         run_pipeline(config, args)
