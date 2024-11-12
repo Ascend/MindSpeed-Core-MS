@@ -41,7 +41,7 @@ from mindspeed_ms.core.utils import divide
 
 from mindspeed_ms.core.transformer.enums import AttnMaskType
 from mindspeed_ms.core.transformer import ModuleSpec, build_module
-from mindspeed_ms.training import get_args as ms_args
+from mindspeed_ms.training import get_args
 
 
 @dataclass
@@ -88,7 +88,7 @@ class Attention(Module, ABC):
             attention_type: str,
     ):
         super().__init__(config=config)
-        args = ms_args()
+        args = get_args()
         self.config = config
         self.layer_number = layer_number
         self.attn_mask_type = attn_mask_type
@@ -113,7 +113,6 @@ class Attention(Module, ABC):
         if self.use_flash_attention:
             if self.attention_type != "self":
                 raise NotImplementedError('FlashAttention code path only supports self-attention for now.')
-            self.fa_config = self.config.fa_config
         self.enable_flash_sp = args.use_flash_sp
 
         self.sequence_parallel = self.config.sequence_parallel
@@ -309,6 +308,7 @@ class Attention(Module, ABC):
             packed_seq_params=None,
     ):
         """ construct """
+        args = get_args()
         # hidden_states: [sq, b, h]
 
         # For self attention we just duplicate the rotary_pos_emb if it isn't already
@@ -393,7 +393,7 @@ class Attention(Module, ABC):
                 value = value.astype(mstype.float16)
             attention_mask = attention_mask.astype(mstype.uint8)
 
-            if self.fa_config and hasattr(self.fa_config, 'input_layout') and self.fa_config.input_layout == 'SBH':
+            if args.shape_order == 'SBH':
                 # SBND -> SBH
                 fa_use_sbh = True
                 query, key, value = [
@@ -406,25 +406,16 @@ class Attention(Module, ABC):
                 key = key.transpose(1, 2, 0, 3)
                 value = value.transpose(1, 2, 0, 3)
 
-            if self.fa_config:
-                output = ops.flash_attention_score(
-                    query,
-                    key,
-                    value,
-                    self.num_heads_per_partition,
-                    attn_mask=attention_mask,
-                    scalar_value=1.0 / self.norm_factor,
-                    **self.fa_config,
-                )
-            else:
-                output = ops.flash_attention_score(
-                    query,
-                    key,
-                    value,
-                    self.num_heads_per_partition,
-                    attn_mask=attention_mask,
-                    scalar_value=1.0 / self.norm_factor,
-                )
+            output = ops.flash_attention_score(
+                query, key, value,
+                self.num_heads_per_partition,
+                attn_mask=attention_mask,
+                scalar_value=1.0 / self.norm_factor,
+                input_layout=args.shape_order,
+                pre_tokens=args.pre_tockens,
+                next_tokens=args.next_tockens,
+                sparse_mode=args.sparse_mode
+            )
             if not fa_use_sbh:
                 core_attn_out = _merge_heads(output)
                 # BSH -> SBH

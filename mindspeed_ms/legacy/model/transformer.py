@@ -402,7 +402,6 @@ class ParallelAttention(Module):
                 raise NotImplementedError(
                     'FlashAttention code path only supports causal mask for now.'
                 )
-            self.fa_config = self.config.fa_config
         self.use_flash_sp = args.use_flash_sp
         self.norm_factor = math.sqrt(self.kv_channels)
 
@@ -546,6 +545,7 @@ class ParallelAttention(Module):
                   rotary_pos_emb=None,
                   ):
         """Construct function of attention block."""
+        args = get_args()
         if inference_params:
             raise NotImplementedError("inference_params is not supported for now.")
         # hidden_states: [B, S, H]
@@ -647,7 +647,7 @@ class ParallelAttention(Module):
                 value = value.astype(mstype.float16)
             attention_mask = attention_mask.astype(mstype.uint8)
 
-            if self.fa_config and 'input_layout' in self.fa_config and self.fa_config.input_layout == 'SBH':
+            if args.shape_order == 'SBH':
                 # SBND -> SBH
                 fa_use_sbh = True
                 query, key, value = [
@@ -660,25 +660,17 @@ class ParallelAttention(Module):
                 key = key.transpose(1, 2, 0, 3)
                 value = value.transpose(1, 2, 0, 3)
 
-            if self.fa_config:
-                output = ops.flash_attention_score(
-                    query,
-                    key,
-                    value,
-                    self.num_heads_per_partition,
-                    attn_mask=attention_mask,
-                    scalar_value=1.0 / self.norm_factor,
-                    **self.fa_config,
-                )
-            else:
-                output = ops.flash_attention_score(
-                    query,
-                    key,
-                    value,
-                    self.num_heads_per_partition,
-                    attn_mask=attention_mask,
-                    scalar_value=1.0 / self.norm_factor,
-                )
+            output = ops.flash_attention_score(
+                query, key, value,
+                self.num_heads_per_partition,
+                attn_mask=attention_mask,
+                scalar_value=1.0 / self.norm_factor,
+                input_layout=args.shape_order,
+                pre_tokens=args.pre_tockens,
+                next_tokens=args.next_tockens,
+                sparse_mode=args.sparse_mode
+            )
+
             if not fa_use_sbh:
                 context_layer = _merge_heads(output)
                 # BSH -> SBH

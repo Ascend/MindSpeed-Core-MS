@@ -123,7 +123,7 @@ class TransformerConfig(ModelParallelConfig):
     ####################
     # initialization
     ####################
-    init_method: str = None
+    init_method: Callable = None
     """Method to initialize weights. Note that bias is always set to zero. Should be a function that
     takes a single Tensor and initializes it. If None, will be set to
     megatron.core.utils.init_method_normal(init_method_std) which is torch nn init normal with
@@ -140,7 +140,7 @@ class TransformerConfig(ModelParallelConfig):
     init_method and output_layer_init_method are provided."""
 
     # Additional argument
-    bias_init: str = "zeros"
+    bias_init: Callable = None
     """Bias init method, default is zeros. additional parameter"""
 
     ####################
@@ -320,10 +320,6 @@ class TransformerConfig(ModelParallelConfig):
     moe_layer_recompute: bool = False
     """Memory optimization: checkpointing moe_layer to save actiavtion memory."""
 
-    # Additional argument
-    use_self_defined_alltoall: bool = False
-    """Use self-defined 'alltoall' operators, additional parameter"""
-
     ####################
     # miscellaneous
     ####################
@@ -397,10 +393,6 @@ class TransformerConfig(ModelParallelConfig):
     # Additional argument
     lora_module: dict = None
     """LoRA module, additional parameter"""
-
-    # Additional argument
-    fa_config: dict = None
-    """"""
 
     def update_lora_config(self, cell_name):
         """Update lora config"""
@@ -547,7 +539,10 @@ class TransformerConfig(ModelParallelConfig):
                 f'rotary_interleaved does not work with apply_rope_fusion.')
 
         if self.init_method is None:
-            self.init_method = "normal"
+            self.init_method = _SUPPORT_INIT_METHOD["normal"]()
+
+        if self.bias_init is None:
+            self.bias_init = _SUPPORT_INIT_METHOD["zeros"]()
 
         if self.output_layer_init_method is None:
             self.output_layer_init_method = "normal"

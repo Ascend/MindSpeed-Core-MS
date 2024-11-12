@@ -46,7 +46,7 @@ untie_embeddings_and_output_weights: False
 global_batch_size: 1
 micro_batch_size: 1
 clip_grad: 0.0
-train_samples: 0
+train_samples: null
 transformer_impl: "local"
 use_post_norm: False    
 

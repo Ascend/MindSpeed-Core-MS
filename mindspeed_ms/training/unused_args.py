@@ -79,7 +79,6 @@ UNUSED_TRANSFORMER_CONFIG = {
 
 
 UNUSED_GLOBAL_ARGS = {
-    "max_position_embeddings",
     "add_position_embedding",
     "make_vocab_size_divisible_by",
     "squared_relu",
@@ -130,7 +129,6 @@ UNUSED_GLOBAL_ARGS = {
     "bias_swiglu_fusion",
     "dataloader_type",
     "no_persist_layer_norm",
-    "use_mcore_models",
     "manual_gc",
     "manual_gc_interval",
     "manual_gc_eval",

@@ -107,7 +107,7 @@ class ParallelMLP(Module):
         elif args.onnx_safe:
             self.act_func = erf_gelu
         else:
-            if self.act_type == "swiglu" and args.apply_swiglu_fusion:
+            if self.act_type == "swiglu" and args.use_fused_swiglu:
                 self.act_type = "fused_swiglu"
             self.act_func = get_act_func(self.act_type)
 

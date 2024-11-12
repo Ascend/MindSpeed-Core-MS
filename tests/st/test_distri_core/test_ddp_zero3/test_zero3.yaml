@@ -20,8 +20,8 @@ language_model:
   attention_dropout: 0.0
   init_method: 'normal'
   normalization: "FusedRMSNorm"
-  layernorm_epsilon: 1.e-5  # norm_epsilon
-  activation_func: "gelu"  # hidden_act
+  layernorm_epsilon: 1.e-5
+  activation_func: "gelu"
   masked_softmax_fusion: False
   bias_dropout_fusion: False
 
@@ -46,7 +46,6 @@ epochs: 1
 train_iters: 2
 untie_embeddings_and_output_weights: False
 clip_grad: 0.0
-train_samples: 0
 transformer_impl: "local"
 use_post_norm: False
 loss_scale: 1.0
@@ -57,6 +56,8 @@ average_in_collective: True
 use_distributed_optimizer: True
 save: "./saved_ckpt"
 save_interval: 1
+
+# optimizer
 optimizer: "mint.AdamW"
 adam_beta1: 0.9
 adam_beta2: 0.999
@@ -69,10 +70,11 @@ min_lr: 1.e-1
 delay_grad_reduce: False
 
 # loss arguments
-initial_loss_scale: 1  # loss_scale_value
-hysteresis: 2   # loss_scale_factor
+initial_loss_scale: 1
+hysteresis: 2
 loss_scale_window: 1000
 fp16_lm_cross_entropy: False # need add
+
 
 # pangu arguments
 use_query_layer: False

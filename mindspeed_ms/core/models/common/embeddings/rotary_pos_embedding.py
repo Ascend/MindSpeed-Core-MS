@@ -130,7 +130,7 @@ class RotaryEmbedding(Module):
     def __init__(
             self,
             kv_channels,
-            rotary_percent=1.0,
+            rotary_percent,
             rotary_interleaved=False,
             seq_len_interpolation_factor=None,
             rotary_base=10000,
@@ -141,8 +141,6 @@ class RotaryEmbedding(Module):
         if rotary_percent < 1.0:
             dim = int(dim * rotary_percent)
         self.rotary_interleaved = rotary_interleaved
-        if self.rotary_interleaved:
-            raise NotImplementedError('Rotary interleaved is not supported for now.')
 
         self.seq_len_interpolation_factor = seq_len_interpolation_factor
         self.inv_freq = 1.0 / (
@@ -160,8 +158,9 @@ class RotaryEmbedding(Module):
         if not self.rotary_interleaved:
             emb = ops.concat((freqs, freqs), axis=-1)
         else:
-            raise NotImplementedError('Rotary interleaved is not supported for now.')
-
+            emb = ops.stack((freqs.view(-1, 1), freqs.view(-1, 1)), axis=-1).view(
+                freqs.shape[0], -1
+            )
         # emb [S, ..., D]
         emb = emb[:, None, None, :]
         return Tensor(emb)

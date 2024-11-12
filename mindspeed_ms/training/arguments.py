@@ -35,7 +35,7 @@ from mindspeed_ms.training.unused_args import (
     UNUSED_GLOBAL_ARGS
 )
 from mindspeed_ms.training.yaml_arguments import load_yaml, validate_yaml, _check_list_is_validate
-from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
+from mindspeed_ms.core.transformer.transformer_config import TransformerConfig, _SUPPORT_INIT_METHOD
 
 
 str_dtype_to_ms = {
@@ -89,14 +89,12 @@ def parse_args(extra_args_provider=None, args_defaults={}, ignore_unknown_args=F
 
     # Experimental yaml
     if args.yaml_cfg is not None:
-        assert args.yaml_cfg and not args.use_legacy_models, \
-            "Yaml config is not supported with legacy models."
         args = load_yaml(args.yaml_cfg)
 
 
     # Args from environment
-    args.rank = int(os.getenv('RANK', '0'))
-    args.world_size = int(os.getenv("WORLD_SIZE", '1'))
+    args.rank = int(os.getenv('RANK_ID', '0'))
+    args.world_size = int(os.getenv("MS_WORKER_NUM", '1'))
 
     defaults = parser.parse_args(args=[])
     if args.yaml_cfg is not None:
@@ -215,7 +213,7 @@ def validate_args(args, default_args, defaults={}):
     # Load saved args from Retro (if applicable).
     load_retro_args(args)
 
-    """
+
     # Tensor model parallel size.
     args.tensor_model_parallel_size = min(
         args.tensor_model_parallel_size, args.world_size)
@@ -227,7 +225,7 @@ def validate_args(args, default_args, defaults={}):
     args.pipeline_model_parallel_size = min(
         args.pipeline_model_parallel_size,
         (args.world_size // args.tensor_model_parallel_size))
-    """
+
     args.transformer_pipeline_model_parallel_size = (
         args.pipeline_model_parallel_size - 1
         if args.standalone_embedding_stage else
@@ -235,19 +233,15 @@ def validate_args(args, default_args, defaults={}):
     )
 
     # Checks.
-
     model_parallel_size = args.pipeline_model_parallel_size * \
                           args.tensor_model_parallel_size
-    """
     assert args.world_size % (model_parallel_size * args.context_parallel_size) == 0, \
         'world size ({}) is not divisible by tensor parallel size ({}) times ' \
         'pipeline parallel size ({}) times context parallel size ({})'.format(
         args.world_size, args.tensor_model_parallel_size,
         args.pipeline_model_parallel_size, args.context_parallel_size)
-    """
     args.data_parallel_size = args.world_size // (model_parallel_size * args.context_parallel_size)
-    # We ignore world size, so data_parallel_size may be zero
-    args.data_parallel_size = args.data_parallel_size if args.data_parallel_size > 0 else 1
+
     if args.rank == 0:
         print('using world size: {}, data-parallel size: {}, '
               'context-parallel size: {} '
@@ -379,8 +373,8 @@ def validate_args(args, default_args, defaults={}):
             '--overlap-param-gather only supported with MCore models'
 
     # Parameters & compute & pipeline dtype.
-    args.params_dtype = str_dtype_to_ms[args.params_dtype]
-    args.compute_dtype = str_dtype_to_ms[args.compute_dtype]
+    args.params_dtype = mstype.float32
+    args.compute_dtype = mstype.float32
     if args.fp16:
         assert not args.bf16
         args.params_dtype = mstype.half
@@ -427,7 +421,7 @@ def validate_args(args, default_args, defaults={}):
     # during pipeline parallelism, it should not be set if sequence length
     # is constant during training.
     args.variable_seq_lengths = False
-    """
+
     # Iteration-based training.
     if args.train_iters:
         # If we use iteration-based training, make sure the
@@ -459,7 +453,7 @@ def validate_args(args, default_args, defaults={}):
             assert args.lr_warmup_samples == 0, \
                 'can only specify one of lr-warmup-fraction ' \
                 'and lr-warmup-samples'
-    """
+
 
     if args.num_layers is not None:
         assert args.encoder_num_layers is None, \
@@ -471,7 +465,8 @@ def validate_args(args, default_args, defaults={}):
         args.num_layers = args.encoder_num_layers
 
     # Check required arguments.
-    required_args = ['num_layers', 'hidden_size', 'num_attention_heads']
+    required_args = ['num_layers', 'hidden_size', 'num_attention_heads',
+                     'max_position_embeddings']
     for req_arg in required_args:
         _check_arg_is_not_none(args, req_arg)
 
@@ -503,12 +498,10 @@ def validate_args(args, default_args, defaults={}):
         assert args.encoder_seq_length is not None
         args.seq_length = args.encoder_seq_length
 
-    """
     if args.seq_length is not None:
         assert args.max_position_embeddings >= args.seq_length
     if args.decoder_seq_length is not None:
         assert args.max_position_embeddings >= args.decoder_seq_length
-    """
 
     if args.context_parallel_size > 1 and args.context_parallel_algo == 'hybrid_cp_algo':
         assert args.ulysses_degree_in_cp is not None, "--ulysses-degree-in-cp must be specified in hybrid_cp_algo"
@@ -545,8 +538,60 @@ def validate_args(args, default_args, defaults={}):
         assert args.start_weight_decay is not None
         assert args.end_weight_decay is not None
 
+    # noop layers initialize
+    if isinstance(args.noop_layers, str):
+        noop_layers = set()
+        for x in args.noop_layers.split(','):
+            if int(x) >= args.num_layers or int(x) < 0:
+                raise AssertionError(f'each element in args.noop_layers({args.noop_layers}) should bigger or equal '
+                                        f'to 0 and smaller than args.num_layers({args.num_layers})')
+            noop_layers.add(int(x))
+        args.noop_layers = noop_layers
+
+    # Now not support the transformer_engine
+    if args.transformer_impl == 'transformer_engine':
+        args.transformer_impl = 'local'
+
+    # clone_scatter_output_in_embedding not supported yet
+    if args.clone_scatter_output_in_embedding:
+        logger.warning('clone_scatter_output_in_embedding would be set False')
+        args.clone_scatter_output_in_embedding = False
+
+    # bias_dropout_fusion not supported yet
+    if args.bias_dropout_fusion:
+        logger.warning('bias_dropout_fusion would be set False')
+        args.bias_dropout_fusion = False
+
+    # normalization
+    if args.use_fused_rmsnorm:
+        if args.normalization != "RMSNorm":
+            raise AssertionError(
+                '--use-fused-rmsnorm must enable with '
+                '--normalization=RMSNorm, but got normalization'
+                '={}.'.format(args.normalization))
+        args.normalization = "FusedRMSNorm"
+
+    # We only support SBH
+    args.data_layout = 'SBH'
+
+    # Use mcore or legacy
+    args.use_legacy_models = not args.use_mcore_models
+
     # Activation function mapping.
     _init_activation_func(args)
+
+    # Optimizer
+    if args.optimizer == 'adam':
+        args.optimizer = 'SpeedAdamW'
+
+    # DDP and zero_level
+    args.wrap_with_ddp = True
+    if args.zero_level is not None:
+        if args.use_distributed_optimizer:
+            assert args.zero_level == 'z3', \
+                "zero_level must be None or 'z3' when use_distributed_optimizer is ON"
+        else:
+            args.wrap_with_ddp = False
 
     # Activation recomputing.
     if args.distribute_saved_activations:
@@ -575,18 +620,6 @@ def validate_args(args, default_args, defaults={}):
     # model parallel memory optimization is enabled
     if args.sequence_parallel:
         args.async_tensor_model_parallel_allreduce = False
-
-    """
-    if os.environ.get('CUDA_DEVICE_MAX_CONNECTIONS') != "1":
-        if args.sequence_parallel:
-            raise RuntimeError(
-                "Using sequence parallelism requires setting the environment variable "
-                "CUDA_DEVICE_MAX_CONNECTIONS to 1")
-        if args.async_tensor_model_parallel_allreduce:
-            raise RuntimeError(
-                "Using async gradient all reduce requires setting the environment "
-                "variable CUDA_DEVICE_MAX_CONNECTIONS to 1")
-    """
 
     # Disable bias gelu fusion if we are disabling bias altogether
     if not args.add_bias_linear:
@@ -631,10 +664,6 @@ def validate_args(args, default_args, defaults={}):
     if args.num_experts is not None:
         assert args.spec is None, "Model Spec must be None when using MoEs"
 
-    # Context parallel
-    if args.context_parallel_size > 1:
-        assert not args.use_legacy_models, "Context parallelism is not supported in legacy models."
-
     # Expert parallelism check
     if args.expert_model_parallel_size > 1:
         assert args.num_experts is not None, "num_experts must be non None to use expert model parallelism"
@@ -656,14 +685,6 @@ def validate_args(args, default_args, defaults={}):
     if args.use_tp_pp_dp_mapping:
         assert args.context_parallel_size * args.expert_model_parallel_size <= 1, \
             "context_parallel and expert_model_parallel can't be used with tp-pp-dp mapping."
-
-    # Deterministic mode
-    if args.deterministic_mode:
-        assert not args.use_flash_attn, 'Flash attention can not be used in deterministic mode.'
-
-        all_reduce_choices = ["Tree", "Ring", "CollnetDirect", "CollnetChain", "^NVLS"]
-        assert os.getenv("NCCL_ALGO", -1) != -1 and os.getenv("NCCL_ALGO") in all_reduce_choices, \
-            f"NCCL_ALGO must be one of {all_reduce_choices}."
 
     # Update the printed args to reflect that `apply_query_key_layer_scaling` also controls `attention_softmax_in_fp32`
     if args.apply_query_key_layer_scaling:
@@ -745,6 +766,7 @@ def core_transformer_config_from_args(args, config_class=None):
     kw_args['batch_p2p_comm'] = not args.overlap_p2p_comm
     kw_args['num_moe_experts'] = args.num_experts
     kw_args['rotary_interleaved'] = args.rotary_interleaved
+    kw_args['bias_init'] = _SUPPORT_INIT_METHOD[args.bias_init]()
     kw_args['activation_func'] = "gelu"
     if args.swiglu:
         kw_args['activation_func'] = "silu"
@@ -755,9 +777,10 @@ def core_transformer_config_from_args(args, config_class=None):
     if args.squared_relu:
         assert not args.swiglu
         kw_args['activation_func'] = "squared_relu"
+
     if args.init_method_xavier_uniform:
-        kw_args['init_method'] = "xavier_uniform_"
-        kw_args['scaled_init_method'] = "xavier_uniform_"
+        kw_args['init_method'] = _SUPPORT_INIT_METHOD['xavier_uniform']()
+        kw_args['scaled_init_method'] = _SUPPORT_INIT_METHOD['xavier_uniform']()
     if args.group_query_attention:
         kw_args['num_query_groups'] = args.num_query_groups
     else:
@@ -925,7 +948,7 @@ def _add_network_size_args(parser):
                        help='Pad the vocab size to be divisible by this value.'
                        'This is added for computational efficiency reasons.')
     group.add_argument('--normalization', default='LayerNorm',
-                       choices=['LayerNorm', 'RMSNorm', 'FusedRMSNorm'],
+                       choices=['LayerNorm', 'RMSNorm'],
                        help='Which normalization technique to use.')
     group.add_argument('--norm-epsilon', type=float, default=1e-5,
                        help='Epsilon for layer norm and RMS norm.')
@@ -954,6 +977,7 @@ def _add_network_size_args(parser):
                        help='Untie embeddings and output weights.')
 
     # Additional arguments
+    group.add_argument('--use-fused-rmsnorm', action='store_true', help='Use fused RMSNorm')
     group.add_argument('--parallel-position-embedding', action='store_true',
                        help='Apply parallel vocab embedding layer when using absolute position embedding')
     group.add_argument('--disable-post-norm', action='store_false',
@@ -1283,7 +1307,7 @@ def _add_training_args(parser):
                        help='Enable bias only in the QKV linear layers',
                        dest='add_qkv_bias')
     group.add_argument('--optimizer', type=str, default='adam',
-                       choices=['adam', 'sgd', 'AdamWeightDecay'],
+                       choices=['adam', 'sgd', 'mint.AdamW'],
                        help='Optimizer function')
     group.add_argument('--dataloader-type', type=str, default=None,
                        choices=['single', 'cyclic', 'external'],
@@ -1305,12 +1329,8 @@ def _add_training_args(parser):
                        'gradient computation of linear layers',
                        dest='gradient_accumulation_fusion')
     group.add_argument('--use-mcore-models', action='store_true',
-                       dest='deprecated_use_mcore_models',
-                       help='DEPRECATED. Use the implementation from megatron core.'
-                       'Now ignored and mcore models are the default, use '
-                       '--use-legacy-models to not use core models.')
-    group.add_argument('--use-legacy-models', action='store_true',
-                       help='Use the legacy Megatron models, not Megatron-Core models.')
+                       help='Use the implementation from megatron core.'
+                       'Now ignored and mcore models are the default.')
     group.add_argument('--manual-gc', action='store_true',
                        help='Disable the threshold-based default garbage '
                        'collector and trigger the garbage collection manually. '
@@ -1335,23 +1355,25 @@ def _add_training_args(parser):
                        dest='tp_comm_split_rs')
 
     # Additional arguments
-    group.add_argument('--select-comm-recompute', action='store_true',
-                       help='Whether to select commucation recompute or not')
-    group.add_argument('--select-recompute', action='store_true', help='Whether to select recompute or not')
     group.add_argument('--epochs', type=int, default=None, help='Epochs for training')
-    group.add_argument('--params-dtype', type=str, default='float32', choices=[
-        'float32', 'float16', 'bfloat16'], help='Parameter initialize data type')
-    group.add_argument('--compute-dtype', type=str, default='float32', choices=[
-                       'float32', 'float16', 'bfloat16'], help='Compute data type of linear module')
     group.add_argument('--resume-training', action='store_true', help='Resume training')
     group.add_argument('--encoder-attn-mask-type', type=str, default=None, help='')
     group.add_argument('--mask-func-type', type=str, default='attn_mask_add', help='')
     group.add_argument('--use-flash-sp', action='store_true', help='')
-    group.add_argument('--apply-swiglu-fusion', action='store_true', help='')
+    group.add_argument('--use-fused-swiglu', action='store_true', help='Use fused swiglu.')
     group.add_argument('--use-sandwich-norm', action='store_true', help='')
     group.add_argument('--attn-post-norm-scale', type=float, default=1.0, help='')
     group.add_argument('--ffn-post-norm-scale', type=float, default=1.0, help='')
-    group.add_argument('--new-dataset', action='store_true', help='When resume traing, whether use new dataset or not')
+    # flash attention about
+    group.add_argument('--pre-tockens', type=int, default=65536,
+                       help='pre-tockens is used by Flash attention')
+    group.add_argument('--next-tockens', type=int, default=0,
+                       help='next-tockens is used by Flash attention')
+    group.add_argument('--sparse-mode', type=int, default=0,
+                       help='different modes of flash attention mask')
+    group.add_argument('--shape-order', type=str, default='SBH',
+                       choices=['SBH', 'BSH', 'BSND', 'BNSD'],
+                       help='input shape order used by Flash attention')
 
     return parser
 
@@ -1651,7 +1673,6 @@ def _add_distributed_args(parser):
     group.add_argument('--virtual-pipeline-model-parallel-size', type=int, default=None)
     group.add_argument('--num-layer-list', type=str, default=None,
                        help='User-defined pipeline parallel model layer division')
-    group.add_argument('--wrap-with-ddp', action='store_true', help='Using DistributedDataParallel to wrap model')
     group.add_argument('--disable-mem-align', action='store_false', dest='enable_mem_align')
 
     return parser
@@ -1780,8 +1801,6 @@ def _add_data_args(parser):
     # additional arguments
     group.add_argument('--shuffle', action='store_true',
                        help='Shuffle dataset')
-    group.add_argument('--data-layout', type=str,
-                       default='BSH', help='Input layout')
     group.add_argument('--enable-compile-cache', action='store_true',
                        help='Save compile cache. Enable this may cause low train performance')
     group.add_argument('--compile-cache-path', type=str,

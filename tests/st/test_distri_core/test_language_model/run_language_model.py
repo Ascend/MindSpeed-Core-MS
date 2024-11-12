@@ -122,6 +122,8 @@ def run_parallel_language_model(config):
 
 if __name__ == '__main__':
     args = parse_args()
+    args.wrap_with_ddp = False
+    args.data_layout = "BSH"
     if args.yaml_cfg is not None:
         config = core_transformer_config_from_yaml(args)
     else:

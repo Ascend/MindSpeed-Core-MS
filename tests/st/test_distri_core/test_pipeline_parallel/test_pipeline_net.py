@@ -226,7 +226,7 @@ class PipelineTestNet(Module):
                 init_method=HeUniform(),
                 reduce_scatter_embeddings=config.sequence_parallel,
                 config=config,
-                param_init_dtype=config.params_dtype
+                params_dtype=config.params_dtype
             )
             self.embedding.weight.shared = True
             self.embedding.weight.shared_embedding = True

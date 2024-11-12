@@ -47,7 +47,6 @@ language_model:
   moe_expert_capacity_factor: -1
   moe_token_drop_policy: null
   moe_pad_expert_input_to_capacity: False
-  use_self_defined_alltoall: False
 
   # miscellaneous
   clone_scatter_output_in_embedding: False
@@ -59,11 +58,14 @@ global_batch_size: 2
 micro_batch_size: 1
 train_iters: 10
 eval_interval: null
-train_samples: 0
 group_query_attention: True
 untie_embeddings_and_output_weights: True
 position_embedding_type: "rope"
 check_for_nan_in_loss_and_grad: False
+max_position_embeddings: 4
+shape_order: "BSH"
+pre_tockens: 2147483647
+next_tockens: 2147483647
 
 # data
 vocab_size: 64
@@ -78,7 +80,7 @@ save_interval: 1
 dist_ckpt_format: "ckpt"
 
 # optimizer
-optimizer: "AdamWeightDecay"
+optimizer: "mint.AdamW"
 lr_decay_style: "constant"
 weight_decay_incr_style: "constant"
 clip_grad: 0.0

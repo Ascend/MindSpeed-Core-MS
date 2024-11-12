@@ -168,7 +168,7 @@ class Embedding(Module):
                                                       hidden_size,
                                                       config=config,
                                                       init_method=self.init_method,
-                                                      param_init_dtype=self.param_init_dtype)
+                                                      params_dtype=self.param_init_dtype)
 
         # init position embedding
         self.use_position_embedding = args.position_embedding_type == 'learned_absolute'
@@ -184,7 +184,7 @@ class Embedding(Module):
                                                                   hidden_size,
                                                                   config=config,
                                                                   init_method=self.init_method,
-                                                                  param_init_dtype=self.param_init_dtype)
+                                                                  params_dtype=self.param_init_dtype)
         # init tokentypes embedding
         if self.num_tokentypes > 0:
             self.tokentype_embeddings = nn.Embedding(num_tokentypes,
@@ -413,7 +413,7 @@ class TransformerLanguageModel(Module):
             # init embedding layer
             self.embedding = Embedding(self.hidden_size,
                                        padded_vocab_size,
-                                       self.seq_length,
+                                       args.max_position_embeddings,
                                        hidden_dropout_rate,
                                        config,
                                        self.num_tokentypes)
@@ -464,7 +464,7 @@ class TransformerLanguageModel(Module):
                     config=config,
                     init_method=init_method,
                     bias=False,
-                    param_init_dtype=param_init_dtype
+                    params_dtype=param_init_dtype
                 )
 
     def set_input_tensor(self, input_tensor):

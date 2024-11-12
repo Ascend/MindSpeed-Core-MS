@@ -14,6 +14,7 @@
 # ============================================================================
 """Test ParallelRandom"""
 from typing import Dict, List
+import os
 import sys
 
 import mindspore.common.dtype as mstype
@@ -57,14 +58,14 @@ VERIFY_YAML_DICT = {
     "masked_softmax_fusion": True,
     "persist_layer_norm": False,
     "memory_efficient_layer_norm": False,
-    "bias_dropout_fusion": True,
+    "bias_dropout_fusion": False,
     "apply_rope_fusion": True,
     "recompute_granularity": None,
     "recompute_method": None,
     "recompute_num_layers": None,
     "distribute_saved_activations": None,
     "fp8": None,
-    "clone_scatter_output_in_embedding": True,
+    "clone_scatter_output_in_embedding": False,
     "normalization": "LayerNorm",
     "moe_router_load_balancing_type": "aux_loss",
     "moe_router_topk": 2,
@@ -91,7 +92,7 @@ VERIFY_YAML_DICT = {
     "transformer_impl": "local",
     "use_flash_attn": False,
     "seed": 1234,
-    "optimizer": "adam",
+    "optimizer": "SpeedAdamW",
     "lr": 2.5e-4,
     "lr_decay_style": "cosine",
     "lr_decay_iters": None,
@@ -127,7 +128,6 @@ VERIFY_CONFIG_DICT = {
     "ffn_hidden_size": 256,
     "hidden_dropout": 0.0,
     "attention_dropout": 0.0,
-    "init_method": 'normal',
     "add_qkv_bias": True,
     "mask_func_type": "attn_mask_add",
     "normalization": "FusedRMSNorm",
@@ -179,11 +179,6 @@ class TestConfig:
         assert config.deallocate_pipeline_outputs
         assert config.gated_linear_unit
         assert config.bias_activation_fusion
-
-        # complex struct verify
-        assert config.fa_config.input_layout == "BSH"
-        assert config.fa_config.nest.a == 1
-        assert config.fa_config.nest.b == 2
         assert config.num_layer_list == [1, 2, 3]
 
 
@@ -196,7 +191,8 @@ class TestConfig:
             "--context-parallel-size", "1",
             "--expert-model-parallel-size", "1",
             "--no-rope-fusion",
-            "--normalization", "FusedRMSNorm",
+            "--normalization", "RMSNorm",
+            "--use-fused-rmsnorm",
             "--num-layers", "4",
             "--num-attention-heads", "4",
             "--num-query-groups", "1",
@@ -221,7 +217,6 @@ class TestConfig:
             "--global-batch-size", "8",
             "--micro-batch-size", "1",
             "--clip-grad", "0.0",
-            "--train-samples", "0",
             "--transformer-impl", "local",
             "--disable-post-norm",
             "--initial-loss-scale", "1",
@@ -269,6 +264,7 @@ class TestConfig:
 
     def test_parse_vpp_yaml(self):
         """test parse vpp arguments from yaml file"""
+        os.environ['MS_WORKER_NUM'] = "8"
         yaml_file = "vpp.yaml"
         sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
         _ = parse_args()
