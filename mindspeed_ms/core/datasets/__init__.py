@@ -13,5 +13,32 @@
 # limitations under the License.
 # ============================================================================
 
-"""pynative init"""
+"""datasets init"""
+from .blended_dataset import BlendedDataset
+from .blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
+from .blended_megatron_dataset_config import BlendedMegatronDatasetConfig
+from .gpt_dataset import GPTDataset, MockGPTDataset, GPTDatasetConfig
+from .indexed_dataset import IndexedDataset, IndexedDatasetBuilder, get_bin_path, get_idx_path
+from .megatron_dataset import MegatronDataset, MockDataset
+from .megatron_tokenizer import MegatronTokenizer
+from .utils import Split, compile_helpers, log_single_rank, normalize
+from . import PanGu38Bv3
 
+__all__ = ['BlendedDataset',
+           'BlendedMegatronDatasetBuilder',
+           'BlendedMegatronDatasetConfig',
+           'GPTDataset',
+           'MockGPTDataset',
+           'GPTDatasetConfig',
+           'IndexedDataset',
+           'IndexedDatasetBuilder',
+           'get_bin_path',
+           'get_idx_path',
+           'MegatronDataset',
+           'MockDataset',
+           'MegatronTokenizer',
+           'Split',
+           'compile_helpers',
+           'log_single_rank',
+           'normalize']
+__all__.extend(PanGu38Bv3.__all__)
