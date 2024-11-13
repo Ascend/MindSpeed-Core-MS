@@ -27,7 +27,7 @@ from mindspeed_ms.training import (
     core_transformer_config_from_args,
     core_transformer_config_from_yaml
 )
-from mindspeed_ms.core.parallel_state import initialize_model_parallel
+from mindspeed_ms.core.parallel_state import initialize_model_parallel, get_data_parallel_world_size
 from tests.st.test_distri_core.utils import generate_ckpt, transform_transformerlayer_params
 
 ms.set_seed(1024)
@@ -90,7 +90,7 @@ def run_parallel_language_model(config):
                                        column_names=['input_ids', 'labels', 'attention_mask'],
                                        shuffle=False)
     # calculate global batch size
-    global_batch_size = args.global_batch_size * args.micro_batch_size
+    global_batch_size = args.global_batch_size // get_data_parallel_world_size()
     fake_dataset = fake_dataset.batch(global_batch_size)
     print("global batch size: ", global_batch_size, flush=True)
 

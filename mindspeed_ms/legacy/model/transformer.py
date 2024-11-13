@@ -1349,7 +1349,7 @@ class ParallelTransformer(Module):
         if self.pipeline_parallel:
             vpp_world_size = get_virtual_pipeline_model_parallel_world_size()
             vpp_str = ''
-            batch_size = args.global_batch_size
+            batch_size = args.micro_batch_size
             if vpp_world_size is not None and vpp_world_size > 1:
                 vpp_rank = get_virtual_pipeline_model_parallel_rank()
                 vpp_str += f'_{vpp_rank}_chunk'

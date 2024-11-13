@@ -339,8 +339,9 @@ def get_forward_backward_func(network_with_loss, params, config: TransformerConf
 
     forward_backward_func = None
     seq_length = args.seq_length
-    micro_batch_num = args.micro_batch_size
-    micro_batch_size = args.global_batch_size
+    dp = get_data_parallel_world_size()
+    micro_batch_num = args.global_batch_size // (args.micro_batch_size * dp)
+    micro_batch_size = args.micro_batch_size
     data_layout = args.data_layout
 
     # no pipeline parallel
@@ -560,9 +561,7 @@ class TrainOneStepCell(nn.Cell):
         self.optimizer = optimizer
         self.config = config
         self.opt_param_scheduler = opt_param_scheduler
-        self.increment = args.micro_batch_size * \
-                    args.global_batch_size * \
-                    get_data_parallel_world_size()
+        self.increment = args.global_batch_size
         self.wrap_with_ddp = args.wrap_with_ddp
         self.use_mixed_precision_optimizer = isinstance(optimizer, MixedPrecisionOptimizer)
         if isinstance(optimizer, DistributedOptimizer) and args.overlap_param_gather:
@@ -610,7 +609,8 @@ class TrainOneStepCell(nn.Cell):
         # init parallel reducer
         self.parallel_reducer = ParallelTrainingReducer(parameters, config)
 
-        self.micro_batch_num = args.micro_batch_size
+        dp = get_data_parallel_world_size()
+        self.micro_batch_num = args.global_batch_size // (args.micro_batch_size * dp)
         # init forward_backward_func
         self.forward_backward_func = get_forward_backward_func(
             network_with_loss, parameters, config

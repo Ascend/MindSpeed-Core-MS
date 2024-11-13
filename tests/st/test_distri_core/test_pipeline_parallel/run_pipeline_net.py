@@ -29,6 +29,7 @@ from mindspeed_ms.training.yaml_arguments import core_transformer_config_from_ya
 from mindspeed_ms.core.parallel_state import (
     initialize_model_parallel,
     get_data_parallel_group,
+    get_data_parallel_world_size,
     get_pipeline_model_parallel_group,
     get_pipeline_model_parallel_rank,
     get_pipeline_model_parallel_world_size
@@ -114,7 +115,7 @@ def run_pipeline(model_config, train_args, dynamic_dataset=False):
     dataset = FakeData(data_num=32, seq_length=train_args.seq_length, dynamic_dataset=dynamic_dataset)
     dataset_parallel = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels'], shuffle=False)
     # calculate global batch size
-    global_batch_size = train_args.global_batch_size * train_args.micro_batch_size
+    global_batch_size = train_args.global_batch_size // get_data_parallel_world_size()
     dataset_parallel = dataset_parallel.batch(global_batch_size)
     print("global batch size: ", global_batch_size, flush=True)
 
@@ -168,7 +169,7 @@ def run_standalone(model_config, train_args):
     dataset = FakeData(data_num=32, seq_length=train_args.seq_length)
     dataset_parallel = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels'], shuffle=False)
     # calculate global batch size
-    global_batch_size = train_args.global_batch_size * train_args.micro_batch_size
+    global_batch_size = train_args.global_batch_size
     dataset_parallel = dataset_parallel.batch(global_batch_size)
     print("global batch size: ", global_batch_size, flush=True)
 
