@@ -136,6 +136,7 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
         for sub_cell in sub_cells_list:
             if sub_cell.__class__.__name__ in ["ColumnParallelLinear", "RowParallelLinear"] and sub_cell.use_zero3:
                 sub_cell.pre_cell_id = sub_cell.next_cell_id = None
+                sub_cell.weight.full_grad = None
                 z3_optim_cells.append(sub_cell)
             else:
                 recursion_cells(sub_cell)

@@ -278,7 +278,7 @@ class LinearWithGradAccumulationAndAsyncCommunication(nn.Cell):
         if self.sequence_parallel and self.data_layout == "BSH":
             grad_input = grad_input.swapaxes(0, 1)
 
-        if self.need_gather_param_in_bw:
+        if self.need_gather_param_in_bw and hasattr(weight, 'full_grad'):
             weight.full_grad = grad_weight
 
         return grad_input, grad_weight, grad_bias, None
