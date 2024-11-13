@@ -24,6 +24,7 @@ from mindspore.communication.management import get_rank, get_group_size
 import mindspore.communication.comm_func as comm_func
 
 from mindspeed_ms.core.utils import divide
+from mindspeed_ms.tools import logger
 
 
 __all__ = ['Bucket', 'ParamAndGradBuffer']
@@ -65,6 +66,7 @@ class Bucket:
             data_parallel_group,
             data_parallel_world_size,
             gradient_scaling_factor,
+            zero_comm_group=None,
         ):
         self.ddp_config = ddp_config
 
@@ -78,9 +80,20 @@ class Bucket:
         self.numel_unpadded = numel_unpadded
         self.data_parallel_group = data_parallel_group
         self.data_parallel_world_size = data_parallel_world_size
+        self.zero_shard_group_world_size = data_parallel_world_size
+        self.zero_comm_group = zero_comm_group
+        if zero_comm_group is not None:
+            if zero_comm_group.get("zero_shard_group") is None or zero_comm_group.get("zero_shard_grad_group") is None:
+                raise ValueError("zero_comm_group is illegel, please pass the correct group info like"
+                                 "{'zero_shard_group': xxx, 'zero_shard_grad_group': xxx}")
+            self.zero_shard_group_world_size = get_group_size(group=zero_comm_group.get("zero_shard_group"))
+            self.data_parallel_group = zero_comm_group.get("zero_shard_group")
+            logger.info(f"data parallel group has been changed to zero shard group {self.data_parallel_group}")
+            self.zero_shard_grad_group = zero_comm_group.get("zero_shard_grad_group")
+
         self.gradient_scaling_factor = gradient_scaling_factor
 
-        if self.data_parallel_world_size > 1:
+        if self.zero_shard_group_world_size > 1:
             self.grad_reducer = comm_func.reduce_scatter_tensor \
                                 if self.ddp_config.use_distributed_optimizer \
                                 else comm_func.all_reduce
@@ -90,6 +103,12 @@ class Bucket:
         """ conduct all-reduce/reduce-scatter on src tensor and inplace update result into target. """
         self.communication_result, self.communication_handle = \
             self.grad_reducer(src, 'sum', self.data_parallel_group, async_op=self.ddp_config.overlap_grad_reduce)
+        if self.zero_comm_group is not None:
+            # make sure reducescatter + allreduce is in order
+            self.communication_handle.wait()
+            self.communication_result, self.communication_handle = (
+                comm_func.all_reduce(self.communication_result, group=self.zero_shard_grad_group,
+                                     async_op=self.ddp_config.overlap_grad_reduce))
 
     def reset(self):
         """ reset bucket for the next iteration. """
@@ -106,7 +125,7 @@ class Bucket:
         if self.gradient_scaling_factor != 1.0:
             self.grad_data.copy_(mint.mul(self.grad_data, self.gradient_scaling_factor))
 
-        if self.data_parallel_world_size > 1:
+        if self.zero_shard_group_world_size > 1:
             self.inplace_reduce_dp(self.grad_data)
         self.is_reduce_issued = True
 
@@ -116,7 +135,7 @@ class Bucket:
         # on grad data, and only the section of grad_data which current dp rank
         # takes charge will be updated
         if self.ddp_config.use_distributed_optimizer:
-            sharded_size = self.grad_data_numel // self.data_parallel_world_size
+            sharded_size = self.grad_data_numel // self.zero_shard_group_world_size
             dp_rank = get_rank(self.data_parallel_group)
             start_idx = dp_rank * sharded_size
             end_idx = (dp_rank + 1) * sharded_size
@@ -127,7 +146,7 @@ class Bucket:
 
         if not self.ddp_config.overlap_grad_reduce:
             self.issue_grad_reduce()
-            if self.data_parallel_world_size > 1:
+            if self.zero_shard_group_world_size > 1:
                 target.copy_(self.communication_result)
                 self.communication_result = None
                 if self.ddp_config.average_in_collective:
@@ -136,7 +155,7 @@ class Bucket:
         if not self.is_reduce_issued:
             raise RuntimeError(f"The bucket reduce has not been issued "
                                f"with only {len(self.params_grad_ready)}/{len(self.params)} params ready")
-        if self.data_parallel_world_size > 1:
+        if self.zero_shard_group_world_size > 1:
             self.communication_handle.wait()
             target.copy_(self.communication_result)
             self.communication_result = None
@@ -185,13 +204,18 @@ class ParamAndGradBuffer:
             bucket_size,
             param_to_name,
             gradient_scaling_factor,
+            zero_comm_group=None,
         ):
         super(ParamAndGradBuffer, self).__init__()
         self.param_dtype = param_dtype
         self.grad_dtype = grad_dtype
         self.data_parallel_group = data_parallel_group
         self.data_parallel_world_size = get_group_size(group=self.data_parallel_group)
+        self.zero_shard_group_world_size = self.data_parallel_world_size
         self.gradient_scaling_factor = gradient_scaling_factor
+        self.zero_comm_group = zero_comm_group
+        if self.zero_comm_group is not None:
+            self.zero_shard_group_world_size = get_group_size(group=zero_comm_group.get("zero_shard_group"))
 
         self.buckets = []
         self.param_index_map = {}
@@ -199,7 +223,7 @@ class ParamAndGradBuffer:
         self.param_to_bucket = {}
         self.sync_enabled = True
 
-        shard_num = 1 if not self.ddp_config.use_distributed_optimizer else self.data_parallel_world_size
+        shard_num = 1 if not self.ddp_config.use_distributed_optimizer else self.zero_shard_group_world_size
 
         # helper func
         def _need_new_bucket(bucket_numel):
@@ -318,7 +342,8 @@ class ParamAndGradBuffer:
                             numel_unpadded=bucket_end_index - bucket_start_index - padded_numel,
                             data_parallel_group=self.data_parallel_group,
                             data_parallel_world_size=self.data_parallel_world_size,
-                            gradient_scaling_factor=self.gradient_scaling_factor)
+                            gradient_scaling_factor=self.gradient_scaling_factor,
+                            zero_comm_group=zero_comm_group)
             self.buckets.append(bucket)
             for param in bucket_params:
                 self.param_to_bucket[param] = bucket

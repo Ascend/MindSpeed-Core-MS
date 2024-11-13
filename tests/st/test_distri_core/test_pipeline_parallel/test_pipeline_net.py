@@ -38,20 +38,36 @@ from mindspeed_ms.core.parallel_state import (
 
 class FakeData:
     """ generate fake data for pipeline parallel test """
-    def __init__(self, data_num, seq_length, input_data=None):
+    def __init__(self, data_num, seq_length, input_data=None, dynamic_dataset=False):
         super().__init__()
         if input_data is not None:
             self.input_data = input_data
             self.data_num = self.input_data.shape[0]
             self.seq_length = self.input_data[0].shape[0]
         else:
-            self.input_data = np.random.randint(0, 100, (data_num, seq_length))
-            self.labels = np.random.randint(0, 100, (data_num, seq_length))
+            if dynamic_dataset:
+                self.input_data_1 = np.random.randint(0, 100, (data_num // 2, seq_length))
+                self.input_data_2 = np.random.randint(0, 100, (data_num // 2, seq_length // 2))
+                self.labels_1 = np.random.randint(0, 100, (data_num // 2, seq_length))
+                self.labels_2 = np.random.randint(0, 100, (data_num // 2, seq_length // 2))
+            else:
+                self.input_data = np.random.randint(0, 100, (data_num, seq_length))
+                self.labels = np.random.randint(0, 100, (data_num, seq_length))
+        self.dynamic_dataset = dynamic_dataset
 
     def __getitem__(self, index):
+        if self.dynamic_dataset:
+            new_index = index % (self.input_data_1.shape[0])
+            if index // self.input_data_1.shape[0] == 0:
+                return (Tensor(self.input_data_1[new_index], dtype=ms.int32),
+                        Tensor(self.labels_1[new_index], dtype=ms.int32))
+            return (Tensor(self.input_data_2[new_index], dtype=ms.int32),
+                    Tensor(self.labels_2[new_index], dtype=ms.int32))
         return Tensor(self.input_data[index], dtype=ms.int32), Tensor(self.labels[index], dtype=ms.int32)
 
     def __len__(self):
+        if self.dynamic_dataset:
+            return self.input_data_1.shape[0] + self.input_data_2.shape[0]
         return self.input_data.shape[0]
 
 

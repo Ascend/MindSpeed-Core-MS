@@ -26,10 +26,12 @@ from mindspore.experimental.optim.adamw import SpeedAdamW
 from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.register import ModuleType, ModuleRegistry
 from mindspeed_ms.core.distributed import DistributedDataParallel
-from mindspeed_ms.core.parallel_state import get_data_parallel_group
 from mindspeed_ms.core.dist_checkpointing import get_checkpoint_name
 from mindspeed_ms.core.optimizer.lr_scheduler import get_learning_rate_scheduler
 from mindspeed_ms.core.optimizer.optimizer_config import OptimizerConfig
+from mindspeed_ms.core.parallel_state import (get_data_parallel_group,
+                                              get_zero_full_shard_flag,
+                                              get_zero_shard_group)
 
 from . import zero
 from . import lr_scheduler
@@ -65,13 +67,16 @@ def get_ditributed_optimizer(optimizer, optimizer_config, model_chunks):
         per_model_ep_buffers[model_idx] = model_chunk.expert_parallel_buffers
     grad_scaler = None if not optimizer_config.loss_scale \
         else ops.Tensor(optimizer_config.loss_scale, mstype.float32)
+    data_parallel_group = get_data_parallel_group(with_context_parallel=True)
+    if not get_zero_full_shard_flag():
+        data_parallel_group = get_zero_shard_group(with_context_parallel=True)
     distributed_optimizer = DistributedOptimizer(
         optimizer=optimizer,
         config=optimizer_config,
         grad_scaler=grad_scaler,
         init_state_fn=None,
         per_model_buffers=per_model_buffers,
-        data_parallel_group=get_data_parallel_group(with_context_parallel=True),
+        data_parallel_group=data_parallel_group,
     )
     args = get_args()
     ckpt_file, _ = get_checkpoint_name(os.path.join(args.save, 'opt_shard_info'),
@@ -144,7 +149,7 @@ def _prepare_optimizer_kwargs(optimizer_config, params, network, optimizer_cls, 
     optimizer_kwargs = optimizer_config.get_needed_params_for_class(optimizer_cls)
     if optimizer_config.optimizer.startswith("mint") or optimizer_config.optimizer.startswith("Speed"):
         optimizer_kwargs["lr"] = learning_rate
-        optimizer_kwargs["betas"] = tuple(optimizer_kwargs["adam_beta1"], optimizer_kwargs["adam_beta2"])
+        optimizer_kwargs["betas"] = tuple(optimizer_kwargs["betas"])
     else:
         optimizer_kwargs["learning_rate"] = learning_rate
     optimizer_kwargs["weight_decay"] = weight_decay

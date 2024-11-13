@@ -83,7 +83,7 @@ def generate_ckpt(vocab_size,
     return ckpt
 
 
-def run_pipeline(model_config, train_args):
+def run_pipeline(model_config, train_args, dynamic_dataset=False):
     """main function."""
     ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
     init()
@@ -111,7 +111,7 @@ def run_pipeline(model_config, train_args):
                               train_args.standalone_embedding_stage,
                               not train_args.untie_embeddings_and_output_weights)
     # generate dataset
-    dataset = FakeData(data_num=32, seq_length=train_args.seq_length)
+    dataset = FakeData(data_num=32, seq_length=train_args.seq_length, dynamic_dataset=dynamic_dataset)
     dataset_parallel = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels'], shuffle=False)
     # calculate global batch size
     global_batch_size = train_args.global_batch_size * train_args.micro_batch_size
@@ -270,3 +270,13 @@ if __name__ == '__main__':
         config.noop_layers = [4, 5]
         print(f"config.noop_layers = {config.noop_layers}")
         run_pipeline(config, args)
+    elif extra_args.run_mode == 'pp_interleaved_with_variable_seq_length':
+        config.virtual_pipeline_model_parallel_size = 2
+        args.untie_embeddings_and_output_weights = False
+        config.variable_seq_lengths = True
+        run_pipeline(config, args)
+    elif extra_args.run_mode == 'pp_interleaved_with_variable_seq_length_dynamic_data':
+        config.virtual_pipeline_model_parallel_size = 2
+        args.untie_embeddings_and_output_weights = False
+        config.variable_seq_lengths = True
+        run_pipeline(config, args, dynamic_dataset=True)

@@ -13,6 +13,8 @@
 # limitations under the License.
 # ============================================================================
 """some utility functions"""
+import os
+import time
 from typing import Dict
 import collections
 import re
@@ -24,6 +26,7 @@ import mindspore.common.dtype as mstype
 import mindspore.ops as ops
 from mindspore import Parameter, Tensor
 from mindspore.nn import DistributedGradReducer
+from mindspore.communication import get_rank
 
 from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.distributed import DistributedDataParallel
@@ -36,6 +39,7 @@ from mindspeed_ms.core.parallel_state import (
     get_virtual_pipeline_model_parallel_world_size,
     get_pipeline_model_parallel_world_size,
 )
+from mindspeed_ms.core.dist_checkpointing import save_checkpoint
 from mindspeed_ms.core.optimizer import MixedPrecisionOptimizer
 from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.legacy.model import ParallelLMLogits, TransformerLanguageModel
@@ -695,3 +699,21 @@ def read_loss_from_log(file_path):
                 loss_value = float(loss_str.group(1))
                 losses.append(loss_value)
     return losses
+
+
+def _transform_ckpt_helper(config, model, optimizer, src_ckpt_path, dst_ckpt_path, ckpt_prefix="network", timeout=15,
+                           output_format='safetensors'):
+    """ helper function for transform ckpt """
+    save_checkpoint(config, model, optimizer, None, dst_ckpt_path, only_save_strategy=True)
+    time.sleep(5)
+    if get_rank() == 0:
+        src_merged_strategy_file = dst_ckpt_path + "/src_merged_strategy.ckpt"
+        dst_merged_strategy_file = dst_ckpt_path + "/dst_merged_strategy.ckpt"
+        ms.merge_pipeline_strategys(os.path.join(src_ckpt_path, "strategy"), src_merged_strategy_file)
+        ms.merge_pipeline_strategys(os.path.join(dst_ckpt_path, "strategy"), dst_merged_strategy_file)
+        ms.transform_checkpoints(src_ckpt_path, dst_ckpt_path, ckpt_prefix,
+                                 src_merged_strategy_file,
+                                 dst_merged_strategy_file,
+                                 output_format=output_format)
+    else:
+        time.sleep(timeout)

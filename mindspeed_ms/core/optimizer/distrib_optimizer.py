@@ -29,6 +29,7 @@ import mindspore.communication.comm_func as comm_func
 
 from mindspeed_ms.tools import logger
 from mindspeed_ms.core.distributed import ParamAndGradBuffer
+from mindspeed_ms.core.parallel_state import get_tensor_model_parallel_world_size
 
 from .optimizer import MixedPrecisionOptimizer
 
@@ -208,6 +209,8 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         """ Build parameter range map for bucket. """
         bucket = param_and_grad_buffer.buckets[bucket_index]
         data_parallel_group = param_and_grad_buffer.data_parallel_group
+        if param_and_grad_buffer.zero_comm_group is not None:
+            data_parallel_group = param_and_grad_buffer.zero_comm_group["zero_shard_group"]
         shard_start, shard_end = shard_bucket(bucket, group=data_parallel_group)
 
         # buffer range info of slice data processed by this rank
@@ -278,6 +281,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         sharded_param_fp16_groups = []
         sharded_param_fp32_from_fp16_groups = []
         sharded_param_fp32_groups = []
+        zero3_param = []
 
         for sharded_group in sharded_param_groups:
             param_fp16_this_group = []
@@ -293,13 +297,19 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
                         zero3_main_param = ops.cast(param.view(-1), mstype.float32)
                         param_fp16_this_group.append(param)
                         zero3_main_param.name = param.name
+                        zero3_main_param.origin_shape = param.shape
+                        zero3_main_param.use_zero3 = True
                         sharded_param_fp16_this_group.append(param)
                         sharded_param_fp32_from_fp16_this_group.append(zero3_main_param)
+                        zero3_param.append(zero3_main_param)
                     elif param.dtype == mstype.float32:
                         param_fp32_this_group.append(param)
                         zero3_fp32_main_param = param.view(-1)
                         zero3_fp32_main_param.name = param.name
+                        zero3_fp32_main_param.origin_shape = param.shape
+                        zero3_fp32_main_param.use_zero3 = True
                         sharded_param_fp32_this_group.append(zero3_fp32_main_param)
+                        zero3_param.append(zero3_fp32_main_param)
                     else:
                         raise TypeError("Invalid parameter dtype. Supported parameter dtypes are"
                                         "`mindspore.float16`, `mindspore.bfloat16` and `mindspore.float32`,"
@@ -352,6 +362,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
             sharded_param_fp16_groups,
             sharded_param_fp32_from_fp16_groups,
             sharded_param_fp32_groups,
+            zero3_param
         )
 
     def __init__(
@@ -387,6 +398,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
                 self.buffers.append(buffer)
                 buffer_idx += 1
 
+        self.zero3_param = []
         self.param_ranges_map = []
         # build param ranges
         for buffer in self.buffers:
@@ -414,6 +426,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
             self.sharded_param_fp16_groups,
             self.sharded_param_fp32_from_fp16_groups,
             self.sharded_param_fp32_groups,
+            self.zero3_param
         ) = self._build_sharded_params_and_grads(self.param_ranges_map,
                                                  self.param_to_bucket_map,
                                                  self.sharded_param_groups,
@@ -484,13 +497,6 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
 
     def _load_state_from_fs_model_space(self, state_dict):
         """ load state from fully sharded parameter state. """
-        if len(self.param_to_bucket_map) != len(self.optimizer.parameters):
-            raise ValueError(
-                f"Inconsistent size between "
-                f"'self.param_to_bucket_map' ({len(self.param_to_bucket_map)}) and "
-                f"'self.optimizer.parameters' ({len(self.optimizer.parameters)})"
-            )
-
         # Build a mapping from sharded param to sharded state
         param_to_state = zip(self.optimizer.parameters, self.optimizer.exp_avg, self.optimizer.exp_avg_sq)
         shard_param_to_state_map = {
@@ -572,6 +578,14 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         else:
             raise NotImplementedError('Unknow sharding_type: {}'.format(sharding_type))
 
+        for param in self.zero3_param:
+            loaded_param = state_dict.get(param.name)
+            # saved shape is 2d, need to reshape to 1d
+            param.copy_(loaded_param.view(-1))
+            param_id_in_opt = self.param_idx_in_opt[param.name]
+            self.optimizer.exp_avg[param_id_in_opt].copy_(state_dict['exp_avg.' + param.name].view(-1))
+            self.optimizer.exp_avg_sq[param_id_in_opt].copy_(state_dict['exp_avg_sq.' + param.name].view(-1))
+
         if 'state_step' in state_dict.keys():
             self.optimizer.state_step.assign_value(state_dict['state_step'].value())
 
@@ -593,7 +607,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         for group_idx, _ in enumerate(self.optimizer.param_groups):
             # update params in this group
             self.optimizer.param_groups[group_idx]['params'] = [
-                *self.sharded_param_fp32_groups[group_idx],\
+                *self.sharded_param_fp32_groups[group_idx], \
                 *self.sharded_param_fp32_from_fp16_groups[group_idx]
             ]
             self.optimizer.group_start_id[group_idx + 1] = self.optimizer.group_start_id[group_idx] + \
@@ -692,16 +706,23 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
             for buffer_index, bucket_index, shard_start, shard_end in self.param_buffer_dp_views:
                 bucket = self.buffers[buffer_index].buckets[bucket_index]
                 param_data_view = bucket.param_data[shard_start: shard_end]
+                group = bucket.data_parallel_group
+                if bucket.zero_comm_group is not None:
+                    group = bucket.zero_comm_group["zero_shard_group"]
                 param_data = comm_func.all_gather_into_tensor(param_data_view,
-                                                              group=bucket.data_parallel_group)[0].reshape(-1)
+                                                              group=group)[0].reshape(-1)
                 bucket.param_data.copy_(param_data)
 
     def _dispatch_gather_model_params(self, all_gather_handle_index):
+        """ dispatch allgather for model params"""
         (buffer_index, bucket_index, shard_start, shard_end) = self.buffer_bucket_index_list[all_gather_handle_index]
         bucket = self.buffers[buffer_index].buckets[bucket_index]
         param_data_view = bucket.param_data[shard_start: shard_end]
+        group = bucket.data_parallel_group
+        if bucket.zero_comm_group is not None:
+            group = bucket.zero_comm_group["zero_shard_group"]
         param_data, param_all_gather_handle = comm_func.all_gather_into_tensor(param_data_view,
-                                                                               group=bucket.data_parallel_group,
+                                                                               group=group,
                                                                                async_op=True)
         self.bucket_allgather_param_data_map[all_gather_handle_index] = param_data.reshape(-1)
         self.all_gather_handles[all_gather_handle_index] = param_all_gather_handle
@@ -845,6 +866,15 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
                 requires_grad=False
             )
 
+        for param in self.zero3_param:
+            param_dict[param.name] = ms.Parameter(ms.Tensor(param).view(param.origin_shape))
+            param_id_in_opt = self.param_idx_in_opt.get(param.name)
+            exp_avg_param = self.optimizer.exp_avg[param_id_in_opt]
+            exp_avg_sq_param = self.optimizer.exp_avg_sq[param_id_in_opt]
+            param_dict['exp_avg.' + param.name] = ms.Parameter(ms.Tensor(exp_avg_param).view(param.origin_shape),
+                                                               name='exp_avg.' + param.name, requires_grad=False)
+            param_dict['exp_avg_sq.' + param.name] = ms.Parameter(ms.Tensor(exp_avg_sq_param).view(param.origin_shape),
+                                                                  name='exp_avg_sq.' + param.name, requires_grad=False)
         # add state step to state_dict
         param_dict['state_step'] = self.optimizer.state_step
 
@@ -863,3 +893,33 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
             )
 
         return param_dict
+
+    def sharded_state_dict(self, model_sharded_state_dict):
+        """provide optim's sharded state dict based on the model's sharding info"""
+        state_dict = {}
+        for idx, param in enumerate(self.optimizer.parameters):
+            exp_avg = self.optimizer.exp_avg[idx]
+            exp_avg_sq = self.optimizer.exp_avg_sq[idx]
+            model_name = param.name
+            if model_name in model_sharded_state_dict and 'shard' in model_sharded_state_dict[model_name]:
+                shard = list(model_sharded_state_dict[model_name]['shard'])
+                shape = list(model_sharded_state_dict[model_name]['shape'])
+            else:
+                raise Exception(f"the input dict has no shard info for '{model_name}'.")
+            use_zero3 = hasattr(param, 'use_zero3') and param.use_zero3
+            opt_weight_shard_step = get_tensor_model_parallel_world_size() if use_zero3 else 0
+            opt_weight_shard_size = get_group_size(self.data_parallel_group) if use_zero3 else 0
+            state_dict[exp_avg.name] = {
+                'shape': shape,
+                'shard': tuple(shard),
+                'opt_weight_shard_step': opt_weight_shard_step,
+                'opt_weight_shard_size': opt_weight_shard_size
+            }
+            state_dict[exp_avg_sq.name] = {
+                'shape': shape,
+                'shard': tuple(shard),
+                'opt_weight_shard_step': opt_weight_shard_step,
+                'opt_weight_shard_size': opt_weight_shard_size
+            }
+
+        return state_dict
