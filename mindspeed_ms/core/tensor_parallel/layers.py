@@ -211,6 +211,22 @@ class LinearWithGradAccumulationAndAsyncCommunication(nn.Cell):
             x = x.view(x.shape[0] * x.shape[1], x.shape[2])
         return dout, x
 
+    def grad_accumulate_fusion(self, grad_weight):
+        if hasattr(self.weight_param, 'grad_accumulated'):
+            origin_dtype = None
+            if grad_weight.dtype != self.weight_param.dtype:
+                grad_weight = ops.cast(grad_weight, self.weight_param.dtype)
+                origin_dtype = grad_weight.dtype
+            self.weight_param.main_grad[:] = mint.add(self.weight_param.main_grad, grad_weight)
+            self.weight_param.grad_accumulated = True
+            if origin_dtype:
+                grad_weight = ops.cast(grad_weight, origin_dtype)
+        return grad_weight
+
+    def set_weight_grad(self, weight, grad_weight):
+        if self.need_gather_param_in_bw and hasattr(weight, 'full_grad'):
+            weight.full_grad = grad_weight
+
     # pylint: disable=W0613, C0111
     def bprop(self, *args):
         dout = args[-1]
@@ -258,15 +274,7 @@ class LinearWithGradAccumulationAndAsyncCommunication(nn.Cell):
 
         if self.gradient_accumulation_fusion and self.weight_param is not None and \
             isinstance(self.weight_param, Parameter):
-            if hasattr(self.weight_param, 'grad_accumulated'):
-                origin_dtype = None
-                if grad_weight.dtype != self.weight_param.dtype:
-                    grad_weight = ops.cast(grad_weight, self.weight_param.dtype)
-                    origin_dtype = grad_weight.dtype
-                self.weight_param.main_grad[:] = mint.add(self.weight_param.main_grad, grad_weight)
-                self.weight_param.grad_accumulated = True
-                if origin_dtype:
-                    grad_weight = ops.cast(grad_weight, origin_dtype)
+            grad_weight = self.grad_accumulate_fusion(grad_weight)
 
         if self.sequence_parallel or self.allreduce_dgrad:
             grad_input_handle.wait()
@@ -274,8 +282,7 @@ class LinearWithGradAccumulationAndAsyncCommunication(nn.Cell):
         if self.sequence_parallel and self.data_layout == "BSH":
             grad_input = grad_input.swapaxes(0, 1)
 
-        if self.need_gather_param_in_bw:
-            weight.full_grad = grad_weight
+        self.set_weight_grad(weight, grad_weight)
 
         return grad_input, grad_weight, grad_bias, None
 
