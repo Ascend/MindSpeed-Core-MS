@@ -141,12 +141,13 @@ def _get_params_dict(model, optimizer):
     elif isinstance(optimizer, MixedPrecisionOptimizer):
         params_dict = optimizer.state_dict()
         for _, param in model.parameters_and_names():
-            if not param.requires_grad:
+            if not param.requires_grad and "set_hidden_states" not in param.name:
                 params_dict[param.name] = param
     else:
         params_dict = optimizer.parameters_dict()
         for _, param in model.parameters_and_names():
-            params_dict[param.name] = param
+            if not param.requires_grad and "set_hidden_states" not in param.name:
+                params_dict[param.name] = param
     if not params_dict:
         raise ValueError("None of params dict has been extract from model and optimizer.")
     return params_dict
@@ -361,7 +362,7 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
         # synchronize parameters in optimizer to model
         optimizer.reload_main_params()
         for _, param in model.parameters_and_names():
-            if not param.requires_grad:
+            if not param.requires_grad and "set_hidden_states" not in param.name:
                 new_param = param_dict[param.name]
                 _update_param(param, new_param, False)
     else:

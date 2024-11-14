@@ -58,10 +58,11 @@ class _RecomputeCellWithRng(_RecomputeCell):
         :return: input grad and weight grads
         """
         grad_input = args[-1]
-        input_args = self.args[-1]
-        kwargs = self.kwargs[-1]
-        self.args.pop()
-        self.kwargs.pop()
+        # fifo considering pp and microbatch
+        input_args = self.args[0]
+        kwargs = self.kwargs[0]
+        self.args.pop(0)
+        self.kwargs.pop(0)
         if kwargs:
             input_args_for_check = list(input_args) + list(kwargs.values())
         else:

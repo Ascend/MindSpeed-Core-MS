@@ -94,14 +94,6 @@ def get_sp_params(config: TransformerConfig):
     return sp_params
 
 
-def rename_set_hidden_states_parameter(model, model_chunk_id=None):
-    """ rename set_hidden_states parameter """
-    weight_untrainable = model.untrainable_params()
-    for param in weight_untrainable:
-        if "set_hidden_states" in param.name:
-            param.name = param.name + f"_{model_chunk_id}_chunk"
-
-
 def model_zero_grad_buffer(model, wrap_with_ddp):
     """ zero grad buffer if wrap_with_ddp=True """
     if wrap_with_ddp:
@@ -291,7 +283,6 @@ def get_model(model_provider_func, config: TransformerConfig):
                 post_process = is_pipeline_last_stage()
                 this_model = model_provider_func(pre_process=pre_process,
                                                  post_process=post_process)
-                rename_set_hidden_states_parameter(this_model, i)
                 model.append(this_model)
         else:
             pre_process = is_pipeline_first_stage()
