@@ -44,7 +44,7 @@ from mindspore.communication import get_rank
 from mindspore.train.serialization import _update_param
 from mindspeed_ms.tools import logger
 from mindspeed_ms.training.global_vars import get_args
-from mindspeed_ms.core.utils import generate_state_dict, save_strategy_file
+from mindspeed_ms.core.utils import generate_state_dict, save_strategy_file, pp_layer_rename
 from mindspeed_ms.core.parallel_state import (
     get_data_parallel_group,
     get_data_parallel_rank,
@@ -153,6 +153,23 @@ def _get_params_dict(model, optimizer):
     return params_dict
 
 
+def _save_process_pp_layers(shard_info, params_dict):
+    """ preprocess pp layers before saving, drop pp suffix """
+    if get_pipeline_model_parallel_world_size() == 1:
+        return shard_info, params_dict
+    model_shard_info = shard_info["model"]
+    optimizer_shard_info = shard_info["optimizer"]
+    for name, _ in list(params_dict.items()):
+        if "layers." not in name:
+            continue
+        target_shard_info = model_shard_info if name in model_shard_info else optimizer_shard_info
+        new_name = pp_layer_rename(name, need_drop_suffix=True)
+        local_pp_param = params_dict.pop(name).asnumpy()
+        shard_dict = target_shard_info.pop(name)
+        params_dict[new_name] = ms.Parameter(ms.Tensor(local_pp_param))
+        target_shard_info[new_name] = shard_dict
+    return shard_info, params_dict
+
 # pylint: disable=W0212
 def save_pre_process(shard_info, model, optimizer, config):
     """ preprocess before saving, split qkv and handle pp embedding share """
@@ -197,6 +214,7 @@ def save_pre_process(shard_info, model, optimizer, config):
                 params_dict[new_name] = ms.Parameter(param, name=new_name)
                 target_shard_info[new_name] = target_shard_info[name]
 
+    shard_info, params_dict = _save_process_pp_layers(shard_info, params_dict)
     return shard_info, params_dict
 
 
@@ -211,6 +229,12 @@ def load_post_process(config, params_dict, optimizer=None):
             for shard_id in range(local_expert_num):
                 new_name = name.replace("local_experts.0", f"local_experts.{shard_id}")
                 params_dict[new_name] = ms.Parameter(ms.Tensor(param[shard_id]))
+
+    for name, param in list(params_dict.items()):
+        ### pp layer
+        new_name = pp_layer_rename(name, need_drop_suffix=False)
+        params_dict.pop(name)
+        params_dict[new_name] = ms.Parameter(ms.Tensor(param))
 
     ### ZeRO DP
     if optimizer is not None and hasattr(optimizer, "zero_level") and optimizer.zero_level in ["z1", "z2", "z3"]:

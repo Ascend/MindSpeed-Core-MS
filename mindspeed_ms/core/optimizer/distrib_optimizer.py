@@ -30,6 +30,7 @@ import mindspore.communication.comm_func as comm_func
 from mindspeed_ms.tools import logger
 from mindspeed_ms.core.distributed import ParamAndGradBuffer
 from mindspeed_ms.core.parallel_state import get_tensor_model_parallel_world_size
+from mindspeed_ms.core.utils import pp_layer_rename
 
 from .optimizer import MixedPrecisionOptimizer
 
@@ -806,13 +807,14 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         strategy['param_info'] = {}
         for buffer_idx, buffer in enumerate(self.buffers):
             for param, value in buffer.param_index_map.items():
+                new_name = pp_layer_rename(param.name, need_drop_suffix=True)
                 start_idx, end_idx, bucket_idx = value
                 this_buffer = self.buffers[buffer_idx]
                 start_idx, end_idx, bucket_idx = this_buffer.param_index_map[param]
-                strategy['param_info'][param.name] = {}
-                strategy['param_info'][param.name]['range_map'] = (buffer_idx, bucket_idx, start_idx, end_idx)
-                strategy['param_info'][param.name]['shape'] = param.shape
-                strategy['param_info'][param.name]['dtype'] = str(param.dtype).lower()
+                strategy['param_info'][new_name] = {}
+                strategy['param_info'][new_name]['range_map'] = (buffer_idx, bucket_idx, start_idx, end_idx)
+                strategy['param_info'][new_name]['shape'] = param.shape
+                strategy['param_info'][new_name]['dtype'] = str(param.dtype).lower()
         # build buffer info
         strategy['buffer_info'] = {}
         for buffer_idx, buffer in enumerate(self.buffers):
