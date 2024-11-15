@@ -186,22 +186,22 @@ class LinearWithGradAccumulationAndAsyncCommunication(nn.Cell):
         self.recompute_comm = recompute_comm and self.sequence_parallel
         self.used_bprop_inputs = [0, 1, 2, 3]
 
-    # pylint: disable=C0111
-    def construct(self, x, weight, bias, weight_param=None):
+    # pylint: disable=C0111, W0622
+    def construct(self, input, weight, bias, weight_param=None):
         if bias is None:
             self.use_bias = False
         self.weight_param = weight_param
         if self.sequence_parallel:
             if self.data_layout == "BSH":
-                x = x.swapaxes(0, 1)
-            x = comm_func.all_gather_into_tensor(x, group=self.tp_group)[0]
+                input = input.swapaxes(0, 1)
+            input = comm_func.all_gather_into_tensor(input, group=self.tp_group)[0]
             if self.data_layout == "BSH":
-                x = x.swapaxes(0, 1)
+                input = input.swapaxes(0, 1)
 
         if _pynative_executor.grad_flag() and not self.recompute_comm:
-            self.input_parallel.append(x)
+            self.input_parallel.append(input)
 
-        output_parallel = self.matmul(x, weight)
+        output_parallel = self.matmul(input, weight)
         if self.use_bias:
             output_parallel = mint.add(
                 output_parallel, bias
