@@ -223,7 +223,7 @@ def load_post_process(config, params_dict, optimizer=None):
     """ load post processing, concat qkv """
     for name, param in list(params_dict.items()):
         ### moe layer
-        if config.num_moe_experts > 1 and "local_experts.0" in name:
+        if config.num_moe_experts is not None and config.num_moe_experts > 1 and "local_experts.0" in name:
             local_expert_num = config.num_moe_experts // get_expert_model_parallel_world_size()
             params_dict.pop(name)
             for shard_id in range(local_expert_num):
