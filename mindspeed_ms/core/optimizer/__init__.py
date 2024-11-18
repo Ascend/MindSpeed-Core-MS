@@ -149,7 +149,7 @@ def _prepare_optimizer_kwargs(optimizer_config, params, network, optimizer_cls, 
     optimizer_kwargs = optimizer_config.get_needed_params_for_class(optimizer_cls)
     if optimizer_config.optimizer.startswith("mint") or optimizer_config.optimizer.startswith("Speed"):
         optimizer_kwargs["lr"] = learning_rate
-        optimizer_kwargs["betas"] = tuple(optimizer_kwargs["betas"])
+        optimizer_kwargs["betas"] = tuple([optimizer_config.adam_beta1, optimizer_config.adam_beta2])
     else:
         optimizer_kwargs["learning_rate"] = learning_rate
     optimizer_kwargs["weight_decay"] = weight_decay
