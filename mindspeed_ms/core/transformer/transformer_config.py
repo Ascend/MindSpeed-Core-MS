@@ -567,6 +567,9 @@ class TransformerConfig(ModelParallelConfig):
         if self.init_method is None:
             self.init_method = "normal"
 
+        if self.output_layer_init_method is None:
+            self.output_layer_init_method = "normal"
+
         """
         if self.output_layer_init_method is None:
             self.output_layer_init_method = scaled_init_method_normal(
