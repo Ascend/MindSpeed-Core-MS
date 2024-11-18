@@ -591,6 +591,8 @@ class ColumnParallelLinear(nn.Cell):
                 )
                 if self.use_zero3:
                     setattr(self.weight, 'use_zero3', self.use_zero3)
+            else:
+                self.weight = None
 
             if self.has_bias:
                 if not args.wrap_with_ddp:
@@ -643,9 +645,6 @@ class ColumnParallelLinear(nn.Cell):
         if weight is None and self.skip_weight_param_allocation:
             raise ValueError("when skip_weight_param_allocation=True,"
                              " weight should be passed to construct(), but got None.")
-        if weight is not None and not self.skip_weight_param_allocation:
-            raise ValueError("when skip_weight_param_allocation=False,"
-                             "weight should not be passed to construct(), but got {}".format(weight))
 
         if (
                 self.sequence_parallel

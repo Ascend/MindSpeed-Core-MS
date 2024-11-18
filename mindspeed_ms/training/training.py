@@ -91,7 +91,8 @@ def get_sp_params(config: TransformerConfig):
             'gating.lora_a'
         ]
     else:
-        sp_params = ["norm", "mlp.projection.bias", "attention.out_proj.bias"]
+        sp_params = ["norm", "mlp.projection.bias", "attention.out_proj.bias",
+                     "attention.linear_proj.bias", "linear_fc2.bias"]
     return sp_params
 
 
