@@ -1347,12 +1347,7 @@ class ParallelTransformer(Module):
 
         self.pipeline_parallel = get_pipeline_model_parallel_world_size() > 1
         if self.pipeline_parallel:
-            vpp_world_size = get_virtual_pipeline_model_parallel_world_size()
-            vpp_str = ''
             batch_size = args.micro_batch_size
-            if vpp_world_size is not None and vpp_world_size > 1:
-                vpp_rank = get_virtual_pipeline_model_parallel_rank()
-                vpp_str += f'_{vpp_rank}_chunk'
             if args.data_layout == "BSH":
                 hidden_states_shape = (batch_size, seq_length, config.hidden_size)
             else:
@@ -1362,7 +1357,7 @@ class ParallelTransformer(Module):
                     hidden_states_shape, dtype=config.compute_dtype
                 ),
                 requires_grad=False,
-                name=f"set_hidden_states{vpp_str}",
+                name="set_hidden_states",
             )
 
 
