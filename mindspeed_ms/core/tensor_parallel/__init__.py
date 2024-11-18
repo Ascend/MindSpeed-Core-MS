@@ -36,7 +36,7 @@ from .random import DATA_PARALLEL_GENERATOR
 from .random import TENSOR_PARALLEL_GENERATOR
 from .random import EXPERT_PARALLEL_GENERATOR
 from .cross_entropy import VocabParallelCrossEntropy
-
+from .utils import split_tensor_along_last_dim
 
 __all__ = [
     'all_to_all_hp2sp',
@@ -63,5 +63,6 @@ __all__ = [
     'DATA_PARALLEL_GENERATOR',
     'TENSOR_PARALLEL_GENERATOR',
     'EXPERT_PARALLEL_GENERATOR',
-    'VocabParallelCrossEntropy'
+    'VocabParallelCrossEntropy',
+    'split_tensor_along_last_dim',
 ]
