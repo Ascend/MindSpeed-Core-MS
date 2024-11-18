@@ -58,7 +58,7 @@ from mindspeed_ms.legacy.model.utils import get_attn_mask_func, get_num_layer_li
 from mindspeed_ms.legacy.model.norm import get_norm
 from mindspeed_ms.legacy.model.moe.moe_layer import MoELayer
 
-from mindspeed_ms.legacy.model.rotary_pos_embedding import (
+from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import (
     apply_rotary_pos_emb,
 )
 from mindspeed_ms.legacy.model.scale_mask_softmax import (
@@ -1041,8 +1041,8 @@ def _get_num_layers(config, model_type, is_decoder=False):
                 raise ValueError(f"All elements of num_layer_list should be larger than 0, "
                                  f"but got {num_layer_array}.")
             num_layers, offset = get_layers_and_offset(num_layer_array,
-                                                        pp_stage, pp_rank,
-                                                        get_virtual_pipeline_model_parallel_world_size(), vpp_rank)
+                                                       pp_stage, pp_rank,
+                                                       get_virtual_pipeline_model_parallel_world_size(), vpp_rank)
             if get_virtual_pipeline_model_parallel_world_size() is not None:
                 logger.info(
                     f"Custom num layer list is {num_layer_array}. "

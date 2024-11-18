@@ -54,7 +54,7 @@ class TestLanguageModel:
         scripts_cmd = f"{scripts_path} --yaml-cfg {yaml_file}"
         cmd = f"msrun --worker_num={device_num} " + \
                     f"--local_worker_num={device_num} " + \
-                    f"--master_port=8132 " + \
+                    f"--master_port=8983 " + \
                     f"--log_dir={log_dir} " + \
                     f"--join=True " + \
                     f"--cluster_time_out=300 " + \

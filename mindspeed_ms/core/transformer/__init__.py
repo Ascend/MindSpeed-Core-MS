@@ -15,6 +15,7 @@
 
 """pynative init"""
 
+from .module import Module
+from .spec_utils import ModuleSpec, build_module
 from .transformer_config import TransformerConfig
-
-__all__ = ["TransformerConfig"]
+from .transformer_layer import TransformerLayer, TransformerLayerSubmodules
