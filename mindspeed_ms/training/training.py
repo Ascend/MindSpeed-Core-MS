@@ -22,6 +22,7 @@ import numpy as np
 import mindspore as ms
 import mindspore.common.dtype as mstype
 import mindspore.communication.comm_func as comm_func
+from mindspore.common.api import _pynative_executor
 
 from mindspore import nn, Tensor, Parameter, mint, value_and_grad
 from mindspore.train import Perplexity
@@ -769,7 +770,9 @@ def train(
         # so we need to broadcast it to other tp_rank
         tp_world_size = get_tensor_model_parallel_world_size()
         src_rank = (get_rank() // tp_world_size) * tp_world_size
-        comm_func.broadcast(dataset_size_tensor, src_rank, get_tensor_model_parallel_group())
+        dataset_size_tensor = comm_func.broadcast(dataset_size_tensor, src_rank, get_tensor_model_parallel_group())
+        comm_func.barrier(group=get_tensor_model_parallel_group())
+        _pynative_executor.sync()
     dataset_size = dataset_size_tensor.asnumpy().tolist()
     if isinstance(dataset_size, list):
         dataset_size = dataset_size[0]
@@ -788,10 +791,13 @@ def train(
         global_step = initial_step + initial_epoch * dataset_size + 1
         epoch_step = global_step % dataset_size
         current_epoch = global_step // dataset_size
+        if epoch_step == 0 and current_epoch > 0:
+            epoch_step = dataset_size
+            current_epoch -= 1
         logger.info(f"Resume training starts from global step {global_step}, epoch {current_epoch}, step {epoch_step}.")
 
     if epoch_step > 1:
-        logger.info(f"Resume training will skip {epoch_step} step data")
+        logger.info(f"Resume training will skip {epoch_step - 1} step data")
 
     evaluation_flag = (
         val_dataloader is not None
@@ -801,7 +807,9 @@ def train(
         and training_config.best_metric_comparison is not None
         and training_config.eval_metric is not None
     )
-    save_ckpt_flag = training_config.save_interval is not None and training_config.training_iters != 0
+    save_ckpt_flag = (training_config.save_interval is not None and
+                      training_config.training_iters != 0 and
+                      training_config.save_interval <= training_config.training_iters)
     correct_metric_flag = is_pipeline_last_stage() # not use pp or pp last_stage
 
     if evaluation_flag:
