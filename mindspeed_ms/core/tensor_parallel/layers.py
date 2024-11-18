@@ -593,12 +593,7 @@ class ColumnParallelLinear(nn.Cell):
                     setattr(self.weight, 'use_zero3', self.use_zero3)
 
             if self.has_bias:
-                if hasattr(self.config, 'training_config'):
-                    wrap_with_ddp = args.wrap_with_ddp
-                else:
-                    wrap_with_ddp = False
-
-                if not wrap_with_ddp:
+                if not args.wrap_with_ddp:
                     if self.use_zero3 and not self.transpose_b:
                         bias_output_size = divide(self.output_size_per_partition, dp_size)
                     else:
@@ -927,12 +922,7 @@ class RowParallelLinear(nn.Cell):
                 setattr(self.weight, 'use_zero3', self.use_zero3)
 
             if self.has_bias:
-                if hasattr(self.config, 'training_config'):
-                    wrap_with_ddp = args.wrap_with_ddp
-                else:
-                    wrap_with_ddp = False
-
-                if not wrap_with_ddp:
+                if not args.wrap_with_ddp:
                     if self.use_zero3 and not self.transpose_b:
                         bias_output_size = divide(self.output_size, dp_size)
                     else:
