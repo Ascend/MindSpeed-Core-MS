@@ -33,6 +33,7 @@ from mindspeed_ms.core.parallel_state import (
     get_expert_model_parallel_world_size,
     is_pipeline_last_stage
 )
+from mindspeed_ms.training.global_vars import get_args
 
 
 class DictWithValueError(dict):
@@ -410,3 +411,37 @@ def _check_target_cell_exists(key, target_cells_lst):
         if match is not None and match.group() == key:
             return target_key
     return target_cell_found
+
+
+def pp_layer_rename(raw_name, need_drop_suffix=False):
+    """
+    Converts between with_suffix and without_suffix for pp_layer.
+
+    Inputs:
+        raw_name (str): params name.
+        need_drop_suffix (bool): if True then return name without suffix else with suffix
+    Return:
+        a new name
+    """
+    if get_pipeline_model_parallel_world_size() == 1 or "layers." not in raw_name:
+        return raw_name
+    if need_drop_suffix and "_pp" in raw_name:
+        # find layers.XX_ppXX_idXX. or layers.XX_ppXX_vppXX_idXX.
+        name_match = re.search(r'layers\.(\d+)(_pp\w+)\.', raw_name)
+        if name_match is None:
+            raise ValueError(f"name {raw_name} format unexpected, should include "
+                             f"layers.XX_ppXX_idXX. if pp and "
+                             f"layers.XX_ppXX_vppXX_idXX. if vpp")
+        ignore_str = name_match.group(2)
+        new_name = raw_name.replace(ignore_str, "")
+    elif not need_drop_suffix:
+        args = get_args()
+        layer_str_dict = args.parameters_id_map
+        # find layers.XX.
+        name_match = re.search(r'layers\.(\d+)\.', raw_name)
+        global_id = name_match.group(1)
+        if global_id not in layer_str_dict:
+            raise ValueError(f"get global_id {global_id} from name {raw_name} "
+                             f"but not found in layer_str_dict {layer_str_dict}")
+        new_name = raw_name.replace(f"layers.{global_id}", f"layers.{layer_str_dict[global_id]}")
+    return new_name

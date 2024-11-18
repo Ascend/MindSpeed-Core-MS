@@ -1304,12 +1304,17 @@ class ParallelTransformer(Module):
 
         # ensure the Parameter of each rank init as correct name
         layers_dict = OrderedDict()
+        if not hasattr(args, "parameters_id_map"):
+            layer_str_dict = {}
+        else:
+            layer_str_dict = args.parameters_id_map
         if self.num_layers == 0:
             self.num_layers = 1
             layers_dict[str(0)] = NoopTransformerLayer(1)
         else:
             for i in range(self.num_layers):
-                layer_str = f"{i + offset}"
+                global_id = i + offset
+                layer_str = f"{global_id}"
                 pp_size = get_pipeline_model_parallel_world_size()
                 vpp_size = get_virtual_pipeline_model_parallel_world_size()
                 if pp_size is not None and pp_size > 1:
@@ -1322,6 +1327,7 @@ class ParallelTransformer(Module):
                     if i + offset in config.noop_layers:
                         layers_dict[layer_str] = NoopTransformerLayer(i + 1 + offset)
                         continue
+                layer_str_dict[str(global_id)] = layer_str
                 layers_dict[layer_str] = ParallelTransformerLayer(
                     config=layers_index_config[i] if use_lora or recompute_config else layers_config,
                     layer_number=i + 1 + offset,
@@ -1329,6 +1335,7 @@ class ParallelTransformer(Module):
                     drop_path_rate=drop_path_rate
                 )
         self.layers = nn.SequentialCell(layers_dict)
+        args.parameters_id_map = layer_str_dict
 
         # gradient checkpointing for recompute.
         self.checkpointed_recompute = (
