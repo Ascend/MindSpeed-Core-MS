@@ -213,7 +213,7 @@ class PipelineTestNet(Module):
         hidden_size = config.hidden_size
         seq_length = args.seq_length
         self.vocab_size = args.vocab_size
-        batch_size = args.global_batch_size
+        batch_size = args.micro_batch_size
         self.pre_process = pre_process
         self.post_process = post_process
         self.pipeline_parallel = get_pipeline_model_parallel_world_size() > 1

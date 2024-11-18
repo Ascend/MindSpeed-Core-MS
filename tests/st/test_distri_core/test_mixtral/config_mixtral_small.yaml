@@ -58,7 +58,7 @@ language_model:
 # training
 transformer_impl: "local"
 seed: 1921
-global_batch_size: 1
+global_batch_size: 2
 micro_batch_size: 1
 train_iters: 10
 eval_interval: null

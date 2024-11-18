@@ -25,16 +25,14 @@ from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.tools import logger
 from mindspeed_ms.training.grad_handler import inplace_apply_to_tensor_list, \
     get_grad_norm_fp32, clip_grad_by_total_norm_fp32, param_is_not_shared
-from mindspeed_ms.core.parallel_state import get_tensor_model_parallel_rank, \
-    get_data_parallel_world_size, get_model_parallel_group
+from mindspeed_ms.core.parallel_state import get_tensor_model_parallel_rank, get_model_parallel_group
 
 
 def get_optimizer_param_scheduler(optimizer):
     """ Build the learning rate scheduler."""
     # Iteration-based training.
     args = get_args()
-    dp = get_data_parallel_world_size()
-    global_batch_size = args.global_batch_size * dp * args.micro_batch_size
+    global_batch_size = args.global_batch_size
     if args.train_iters > 0:
         if args.lr_decay_iters is None:
             args.lr_decay_iters = args.train_iters

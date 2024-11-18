@@ -47,8 +47,8 @@ max_position_embeddings: 4096
 epochs: 1
 train_iters: 2
 untie_embeddings_and_output_weights: False
-global_batch_size: 8 #
-micro_batch_size: 1
+global_batch_size: 8
+micro_batch_size: 8
 clip_grad: 0.0
 train_samples: 0
 transformer_impl: "local"
