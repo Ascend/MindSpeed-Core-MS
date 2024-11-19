@@ -12,15 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""ScaleMaskSoftmax"""
-import mindspore.ops.functional as F
-
+"""FusedScaleMaskSoftmax"""
 from mindspore import mint, ops
 from mindspore.common import dtype as mstype
 from .module import Module
 
 
-class ScaleMaskSoftmax(Module):
+class FusedScaleMaskSoftmax(Module):
     r"""
     fused operation: scaling + mask + softmax
 
@@ -41,20 +39,42 @@ class ScaleMaskSoftmax(Module):
         - The output tensor.
     """
 
-    def __init__(self, mask_func, scale=None, softmax_compute_type=mstype.float32):
-        super().__init__()
+    def __init__(
+            self,
+            input_in_fp16,
+            input_in_bf16,
+            attn_mask_type,
+            scaled_masked_softmax_fusion,
+            mask_func,
+            softmax_in_fp32,
+            scale,
+        ):
+        super(FusedScaleMaskSoftmax, self).__init__()
+        self.input_in_fp16 = input_in_fp16
+        self.input_in_bf16 = input_in_bf16
+        if input_in_fp16 and self.input_in_bf16:
+            raise ValueError("both fp16 and bf16 flags cannot be active at the same time.")
+        self.input_in_float16 = self.input_in_fp16 or self.input_in_bf16
+        self.attn_mask_type = attn_mask_type
+        if scaled_masked_softmax_fusion:
+            raise NotImplementedError(
+                "`scaled_masked_softmax_fusion` is not supported for now."
+            )
         self.mask_func = mask_func
-        self.softmax_compute_type = softmax_compute_type
+        self.softmax_in_fp32 = softmax_in_fp32
         self.scale = scale
 
-        if self.scale is not None and self.softmax_compute_type != mstype.float32:
+        if self.scale is not None and not self.softmax_in_fp32:
             raise ValueError("softmax should be in fp32 when scaled")
 
     def construct(self, x, mask):
         """construct method"""
-        origin_dtype = F.dtype(x)
-        if self.softmax_compute_type != origin_dtype:
-            x = ops.cast(x, self.softmax_compute_type)
+        return self.forward_softmax(x, mask)
+
+    def forward_softmax(self, x, mask):
+        """scale mask softmax"""
+        if self.input_in_float16 and self.softmax_in_fp32:
+            x = ops.cast(x, mstype.float32)
 
         if self.scale is not None:
             x = x * self.scale
@@ -62,7 +82,10 @@ class ScaleMaskSoftmax(Module):
 
         probs = mint.nn.functional.softmax(masked_input, dim=-1)
 
-        if self.softmax_compute_type != origin_dtype:
-            probs = ops.cast(probs, origin_dtype)
+        if self.input_in_float16 and self.softmax_in_fp32:
+            if self.input_in_fp16:
+                probs = ops.cast(probs, mstype.float16)
+            else:
+                probs = ops.cast(probs, mstype.bfloat16)
 
         return probs

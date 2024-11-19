@@ -19,6 +19,7 @@ __all__ = ["get_attn_mask_func", "get_num_layer_list"]
 import math
 import mindspore.ops as ops
 
+from mindspore import mint
 from mindspore import Tensor
 from mindspore.common import dtype as mstype
 from mindspeed_ms.core.parallel_state import (
@@ -129,3 +130,15 @@ def get_layers_and_offset(num_layer_array, pp_stage, pp_rank, vpp_stage=None, vp
     offset += num_layer_array[:pp_rank, vpp_rank].sum()
     num_layers = num_layer_array[pp_rank][vpp_rank]
     return num_layers, offset
+
+
+def gelu_impl(x):
+    """OpenAI's gelu implementation."""
+    return 0.5 * x * (1.0 + mint.nn.functional.tanh(0.7978845608028654 * x *
+                                                    (1.0 + 0.044715 * x * x)))
+
+def openai_gelu(x):
+    return gelu_impl(x)
+
+def erf_gelu(x):
+    return x * 0.5 * (mint.erf(x / 1.41421).to(dtype=x.dtype)+mint.ones_like(x).to(dtype=x.dtype))

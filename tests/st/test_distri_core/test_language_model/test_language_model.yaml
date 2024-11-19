@@ -7,7 +7,6 @@ model_parallel:
   pipeline_dtype: "float32"
   params_dtype: "float32"
   compute_dtype: "float32"
-  softmax_compute_dtype: "float32" # need add
 
 language_model:
   num_layers: 4
@@ -19,8 +18,6 @@ language_model:
   attention_dropout: 0.0
   init_method: 'normal'
   add_qkv_bias: True
-  add_out_proj_bias: False
-  add_mlp_bias: True
   mask_func_type: "attn_mask_add" # need add
   normalization: "FusedRMSNorm"
   layernorm_epsilon: 0.00001  # norm_epsilon
@@ -34,7 +31,7 @@ language_model:
   clone_scatter_output_in_embedding: False
   attention_softmax_in_fp32: True
   apply_rope_fusion: False
-  add_bias_linear: False
+  add_bias_linear: True
 
 # data
 seq_length: 32

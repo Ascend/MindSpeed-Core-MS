@@ -8,7 +8,6 @@ model_parallel:
   # training
   params_dtype: "float32"
   compute_dtype: "float32"
-  softmax_compute_dtype: "float32"
 
   # pipeline parallel
   sequence_parallel: True
@@ -24,9 +23,7 @@ language_model:
   hidden_dropout: 0.0
   attention_dropout: 0.0
   add_bias_linear: False
-  add_out_proj_bias: False
   add_qkv_bias: False
-  add_mlp_bias: False
   mask_func_type: "attn_mask_fill"
   gated_linear_unit: True
   activation_func: "swiglu"

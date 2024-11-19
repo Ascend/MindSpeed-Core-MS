@@ -62,7 +62,7 @@ from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import (
     apply_rotary_pos_emb,
 )
 from mindspeed_ms.legacy.model.scale_mask_softmax import (
-    ScaleMaskSoftmax,
+    FusedScaleMaskSoftmax,
 )
 from mindspeed_ms.legacy.model.enums import (
     AttnType, AttnMaskType, LayerType, ModelType
@@ -186,21 +186,21 @@ class CoreAttention(nn.Cell):
 
     def __init__(self, layer_number, config, attn_mask_type=AttnMaskType.padding):
         super(CoreAttention, self).__init__()
-        self.config = config
         self.layer_index = max(1, layer_number)
-        self.param_init_dtype = self.config.params_dtype
-        self.attention_softmax_in_fp32 = self.config.attention_softmax_in_fp32
-        self.softmax_compute_dtype = self.config.softmax_compute_dtype
-        self.sequence_parallel = self.config.sequence_parallel
+        self.param_init_dtype = config.params_dtype
+        self.attention_softmax_in_fp32 = config.attention_softmax_in_fp32
+        self.sequence_parallel = config.sequence_parallel
+        self.fp16 = config.fp16
+        self.bf16 = config.bf16
         self.attn_mask_type = attn_mask_type
-        self.apply_query_key_layer_scaling = self.config.apply_query_key_layer_scaling
-        self.head_dim = self.config.kv_channels
-        projection_size = self.config.kv_channels * self.config.num_attention_heads
+        self.apply_query_key_layer_scaling = config.apply_query_key_layer_scaling
+        self.head_dim = config.kv_channels
+        projection_size = config.kv_channels * config.num_attention_heads
         world_size = get_tensor_model_parallel_world_size()
         self.hidden_size_per_partition = divide(projection_size,
                                                 world_size)
 
-        if self.config.masked_softmax_fusion:
+        if config.masked_softmax_fusion:
             raise NotImplementedError(
                 "`masked_softmax_fusion` is not supported for now."
             )
@@ -213,13 +213,17 @@ class CoreAttention(nn.Cell):
             norm_factor *= coeff
         self.norm_factor = norm_factor
 
-        self.mask_func = get_attn_mask_func(self.config.mask_func_type)
-        self.scale_mask_softmax = ScaleMaskSoftmax(
-            self.mask_func, softmax_compute_type=mstype.float32 \
-                if self.attention_softmax_in_fp32 else self.softmax_compute_dtype
+        self.mask_func = get_attn_mask_func(config.mask_func_type)
+        self.scale_mask_softmax = FusedScaleMaskSoftmax(
+            self.fp16, self.bf16,
+            self.attn_mask_type,
+            config.masked_softmax_fusion,
+            self.mask_func,
+            self.attention_softmax_in_fp32,
+            coeff
         )
 
-        self.attention_dropout = mint.nn.Dropout(p=self.config.attention_dropout)
+        self.attention_dropout = mint.nn.Dropout(p=config.attention_dropout)
 
     def construct(self, query_layer, key_layer, value_layer, attention_mask):
         """ CoreAttention forward."""
@@ -394,6 +398,10 @@ class ParallelAttention(Module):
                 raise NotImplementedError(
                     'FlashAttention code path only supports self-attention for now.'
                 )
+            if self.attn_mask_type != AttnMaskType.causal:
+                raise NotImplementedError(
+                    'FlashAttention code path only supports causal mask for now.'
+                )
             self.fa_config = self.config.fa_config
         self.use_flash_sp = args.use_flash_sp
         self.norm_factor = math.sqrt(self.kv_channels)
@@ -477,7 +485,7 @@ class ParallelAttention(Module):
             output_size,
             config=self.config,
             init_method=self.config.init_method,
-            bias=self.config.add_qkv_bias,
+            bias=self.config.add_qkv_bias or self.config.add_bias_linear,
             gather_output=False,
             bias_init=self.config.bias_init,
         )
@@ -489,7 +497,7 @@ class ParallelAttention(Module):
                     output_size,
                     config=self.config,
                     init_method=self.config.init_method,
-                    bias=self.config.add_qkv_bias,
+                    bias=self.config.add_qkv_bias or self.config.add_bias_linear,
                     gather_output=False,
                     skip_bias_add=False,
                     bias_init=self.config.bias_init,
@@ -507,7 +515,7 @@ class ParallelAttention(Module):
             output_size,
             config=self.config,
             init_method=self.config.init_method,
-            bias=self.config.add_out_proj_bias,
+            bias=self.config.add_bias_linear,
             input_is_parallel=input_is_parallel,
             skip_bias_add=True,
             bias_init=self.config.bias_init,
@@ -520,7 +528,7 @@ class ParallelAttention(Module):
                     output_size,
                     config=self.config,
                     init_method=self.config.init_method,
-                    bias=self.config.add_out_proj_bias,
+                    bias=self.config.add_bias_linear,
                     input_is_parallel=input_is_parallel,
                     skip_bias_add=False,
                     bias_init=self.config.bias_init,
