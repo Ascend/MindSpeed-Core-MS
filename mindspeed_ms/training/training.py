@@ -37,6 +37,7 @@ from mindspeed_ms.core.parallel_state import (
     get_data_parallel_group,
     get_tensor_model_parallel_world_size,
     get_tensor_model_parallel_group,
+    get_context_parallel_world_size,
     get_pipeline_model_parallel_world_size,
     get_pipeline_model_parallel_group,
     is_pipeline_last_stage,
@@ -46,7 +47,6 @@ from mindspeed_ms.core.parallel_state import (
     get_expert_model_parallel_world_size,
     get_pipeline_model_parallel_rank,
     get_tensor_model_parallel_rank,
-    get_context_parallel_world_size
 )
 from mindspeed_ms.core.distributed import DistributedDataParallelConfig, \
     DistributedDataParallel
@@ -130,12 +130,13 @@ class ParallelTrainingReducer:
             "tp": False,
         }
 
+        self.with_context_parallel = get_context_parallel_world_size() > 1
         self.sp_reduce_params = get_sp_params(training_config)
         self.expert_params = ["mlp.experts.local_experts"]
 
         self.batch_reduction = training_config.loss_reduction
         # dp
-        if get_data_parallel_world_size() > 1:
+        if get_data_parallel_world_size(with_context_parallel=self.with_context_parallel) > 1:
             self.enable_loss_reduce["dp"] = True
             if training_config.parallel_config.zero_level is None \
                 and not training_config.wrap_with_ddp:
@@ -168,7 +169,7 @@ class ParallelTrainingReducer:
         if self.enable_grad_reduce["ep-dp"] and self.expert_filter[idx]:
             group = get_data_modulo_expert_parallel_group()
         else:
-            group = get_data_parallel_group()
+            group = get_data_parallel_group(with_context_parallel=self.with_context_parallel)
         return group
 
     def inplace_reduce_dp_grad(self, grads, params=None):
@@ -181,13 +182,15 @@ class ParallelTrainingReducer:
                     group = self.get_reduce_group(idx)
                     param.grad = comm_func.all_reduce(param.grad, "sum", group)[0]
                     if self.batch_reduction == "mean":
-                        param.grad = mint.div(param.grad, get_data_parallel_world_size())
+                        param.grad = mint.div(param.grad, get_data_parallel_world_size(
+                            with_context_parallel=self.with_context_parallel))
             else:
                 if self.batch_reduction == "mean":
                     for idx, grad in enumerate(grads):
                         group = self.get_reduce_group(idx)
                         grads[idx] = mint.div(
-                            comm_func.all_reduce(grad, "sum", group)[0], get_data_parallel_world_size())
+                            comm_func.all_reduce(grad, "sum", group)[0], get_data_parallel_world_size(
+                                with_context_parallel=self.with_context_parallel))
                 elif self.batch_reduction == "sum":
                     for idx, grad in enumerate(grads):
                         group = self.get_reduce_group(idx)
@@ -216,9 +219,13 @@ class ParallelTrainingReducer:
         if self.enable_loss_reduce["dp"]:
             if self.batch_reduction == "mean":
                 loss = mint.div(
-                    comm_func.all_reduce(loss, "sum", get_data_parallel_group())[0], get_data_parallel_world_size())
+                    comm_func.all_reduce(loss, "sum", get_data_parallel_group(
+                        with_context_parallel=self.with_context_parallel
+                    ))[0], get_data_parallel_world_size(with_context_parallel=self.with_context_parallel))
             else:
-                loss = comm_func.all_reduce(loss, "sum", get_data_parallel_group())[0]
+                loss = comm_func.all_reduce(loss, "sum", get_data_parallel_group(
+                    with_context_parallel=self.with_context_parallel
+                ))[0]
         return loss
 
     def reduce_overflow(self, overflow):
@@ -228,7 +235,9 @@ class ParallelTrainingReducer:
         if self.enable_grad_flag_reduce["pp"]:
             overflow = comm_func.all_reduce(overflow, "max", get_pipeline_model_parallel_group())[0]
         if self.enable_grad_flag_reduce["dp"]:
-            overflow = comm_func.all_reduce(overflow, "max", get_data_parallel_group())[0]
+            overflow = comm_func.all_reduce(overflow, "max", get_data_parallel_group(
+                with_context_parallel=self.with_context_parallel
+            ))[0]
         if self.enable_grad_flag_reduce["tp"]:
             overflow = comm_func.all_reduce(overflow, "max", get_tensor_model_parallel_group())[0]
 
@@ -239,7 +248,9 @@ class ParallelTrainingReducer:
         if self.enable_grad_flag_reduce["pp"]:
             is_finite = comm_func.all_reduce(is_finite, "prod", get_pipeline_model_parallel_group())[0]
         if self.enable_grad_flag_reduce["dp"]:
-            is_finite = comm_func.all_reduce(is_finite, "prod", get_data_parallel_group())[0]
+            is_finite = comm_func.all_reduce(is_finite, "prod", get_data_parallel_group(
+                with_context_parallel=self.with_context_parallel
+            ))[0]
         if self.enable_grad_flag_reduce["tp"]:
             is_finite = comm_func.all_reduce(is_finite, "prod", get_tensor_model_parallel_group())[0]
         return is_finite.astype(mstype.bool_)

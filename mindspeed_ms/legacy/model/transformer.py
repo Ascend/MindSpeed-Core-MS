@@ -31,6 +31,8 @@ import numpy as np
 import mindspore.common.dtype as mstype
 from mindspore import nn, ops, mint, Parameter
 import mindspore.ops.functional as F
+from mindspore.ops.auto_generate.gen_ops_prim import FlashAttentionScore
+from mindspeed_ms.core.config import get_args
 
 from mindspeed_ms.core.parallel_state import (
     get_pipeline_model_parallel_rank,
@@ -38,6 +40,7 @@ from mindspeed_ms.core.parallel_state import (
     get_pipeline_model_parallel_world_size,
     get_data_parallel_world_size,
     get_context_parallel_world_size,
+    get_context_parallel_group,
     get_virtual_pipeline_model_parallel_rank,
     get_virtual_pipeline_model_parallel_world_size
 )
@@ -68,6 +71,9 @@ from mindspeed_ms.legacy.model.enums import (
 )
 from mindspeed_ms.core.context_parallel.ring_attention import (
     RingAttention,
+)
+from mindspeed_ms.core.context_parallel.ulysses_context_parallel import (
+    UlyssesContextAttention,
 )
 from mindspeed_ms.core.context_parallel.flash_sp import FlashSP
 
@@ -369,6 +375,7 @@ class ParallelAttention(Module):
     def __init__(self, config, layer_number, attention_type=AttnType.self_attn,
                  attn_mask_type=AttnMaskType.padding):
         super(ParallelAttention, self).__init__()
+        args = get_args()
         self.config = config
         self.layer_index = max(1, layer_number)
         self.param_init_dtype = self.config.params_dtype
@@ -392,7 +399,7 @@ class ParallelAttention(Module):
                     'FlashAttention code path only supports self-attention for now.'
                 )
             self.fa_config = self.config.fa_config
-        self.enable_flash_sp = self.config.enable_flash_sp
+        self.use_flash_sp = self.config.enable_flash_sp
         self.norm_factor = math.sqrt(self.kv_channels)
 
         tp_group_size = get_tensor_model_parallel_world_size()
@@ -410,6 +417,20 @@ class ParallelAttention(Module):
             self.kv_num_heads_per_partition = divide(self.num_query_groups, tp_group_size)
         else:
             self.kv_num_heads_per_partition = self.num_heads_per_partition
+
+        if self.use_flash_attention:
+            if self.fa_config:
+                self.flash_attention = FlashAttentionScore(
+                    head_num=self.num_heads_per_partition // get_context_parallel_world_size(),
+                    scale_value=1.0 / self.norm_factor,
+                    **self.fa_config
+                )
+            else:
+                self.flash_attention = FlashAttentionScore(
+                    head_num=self.num_heads_per_partition // get_context_parallel_world_size(),
+                    scale_value=1.0 / self.norm_factor,
+                    input_layout='BNSD'
+                )
 
         if self.attn_type == AttnType.self_attn:
             self.qkv_proj = self._init_qkv_proj(
@@ -439,22 +460,47 @@ class ParallelAttention(Module):
             )
 
         if get_context_parallel_world_size() > 1:
-            if not self.enable_flash_sp:
-                self.ring_attention = RingAttention(
-                    self.num_heads,
-                    input_layout="BNSD",
-                    scale_value=1 / self.norm_factor,
-                    sparse_mode=0
-                )
+            args = get_args()
+            if args.context_parallel_algo == 'ulysses_cp_algo':
+                ulysses_group = get_context_parallel_group()
+                if self.use_flash_attention:
+                    self.core_attention_flash = UlyssesContextAttention(self.flash_attention, ulysses_group)
+                else:
+                    raise NotImplementedError("Ulysses context parallel not implemented for core attention.")
+            elif not self.use_flash_sp:
+                if self.fa_config and 'input_layout' in self.fa_config and self.fa_config.input_layout == 'SBH':
+                    self.ring_attention = RingAttention(
+                        self.num_heads,
+                        input_layout="SBH",
+                        scale_value=1 / self.norm_factor,
+                        sparse_mode=0
+                    )
+                else:
+                    self.ring_attention = RingAttention(
+                        self.num_heads,
+                        input_layout="BNSD",
+                        scale_value=1 / self.norm_factor,
+                        sparse_mode=0
+                    )
             else:
-                self.flash_sp = FlashSP(
-                    self.num_heads,
-                    input_layout="BSH",
-                    scale_value=1 / self.norm_factor,
-                    dp=get_data_parallel_world_size(),
-                    mp=get_tensor_model_parallel_world_size(),
-                    sp=get_context_parallel_world_size(),
-                )
+                if self.fa_config and 'input_layout' in self.fa_config and self.fa_config.input_layout == 'SBH':
+                    self.flash_sp = FlashSP(
+                        self.num_heads,
+                        input_layout="SBH",
+                        scale_value=1 / self.norm_factor,
+                        dp=get_data_parallel_world_size(),
+                        mp=get_tensor_model_parallel_world_size(),
+                        sp=get_context_parallel_world_size(),
+                    )
+                else:
+                    self.flash_sp = FlashSP(
+                        self.num_heads,
+                        input_layout="BNSD",
+                        scale_value=1 / self.norm_factor,
+                        dp=get_data_parallel_world_size(),
+                        mp=get_tensor_model_parallel_world_size(),
+                        sp=get_context_parallel_world_size(),
+                    )
 
         self.core_attention = CoreAttention(self.layer_index, self.config, self.attn_mask_type)
 
@@ -533,14 +579,15 @@ class ParallelAttention(Module):
                   rotary_pos_emb=None,
                   ):
         """Construct function of attention block."""
+        args = get_args()
         if inference_params:
             raise NotImplementedError("inference_params is not supported for now.")
         # hidden_states: [B, S, H]
         ori_dtype = hidden_states.dtype
         if self.data_layout == "SBH":
-            seq_len, bs, _ = hidden_states.shape
+            seq_len, _, _ = hidden_states.shape
         else:
-            bs, seq_len, _ = hidden_states.shape
+            _, seq_len, _ = hidden_states.shape
         # apply query, key, value projection
         if self.attn_type == AttnType.self_attn:
             if self.sequence_parallel:
@@ -674,29 +721,35 @@ class ParallelAttention(Module):
                 key = key.astype(mstype.float16)
             if value.dtype == mstype.float32:
                 value = value.astype(mstype.float16)
+            attention_mask = attention_mask.astype(mstype.uint8)
 
-            # SBND -> BNSD
-            query = query.transpose(1, 2, 0, 3)
-            key = key.transpose(1, 2, 0, 3)
-            value = value.transpose(1, 2, 0, 3)
-
-            if not self.enable_flash_sp:
-                output = self.ring_attention(query, key, value)
+            if self.fa_config and 'input_layout' in self.fa_config and self.fa_config.input_layout == 'SBH':
+                # SBND -> SBH
+                fa_use_sbh = True
+                query, key, value = [
+                    x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3]) for x in [query, key, value]
+                ]
             else:
-                # BNSD to BSH
-                query = query.transpose((0, 2, 1, 3)).reshape(bs, seq_len, -1)
-                key = key.transpose((0, 2, 1, 3)).reshape(bs, seq_len, -1)
-                value = value.transpose((0, 2, 1, 3)).reshape(bs, seq_len, -1)
+                # SBND -> BNSD
+                fa_use_sbh = False
+                query = query.transpose(1, 2, 0, 3)
+                key = key.transpose(1, 2, 0, 3)
+                value = value.transpose(1, 2, 0, 3)
 
+            if args.context_parallel_algo == 'ulysses_cp_algo':
+                output = self.core_attention_flash(query, key, value, attn_mask=attention_mask)
+
+            elif not self.use_flash_sp:
+                output = self.ring_attention(query, key, value, attention_mask)
+            else:
                 output = self.flash_sp(query, key, value)
-                # BSH to BNSD
-                output = output.reshape(bs, seq_len, -1, self.kv_channels).transpose(
-                    (0, 2, 1, 3)
-                )
 
-            context_layer = _merge_heads(output)
-            # BSH -> SBH
-            context_layer = context_layer.swapaxes(0, 1)
+            if not fa_use_sbh:
+                context_layer = _merge_heads(output)
+                # BSH -> SBH
+                context_layer = context_layer.swapaxes(0, 1)
+            else:
+                context_layer = output
 
         if self.data_layout == "BSH":
             context_layer = context_layer.swapaxes(0, 1)
