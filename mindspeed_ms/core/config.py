@@ -270,8 +270,10 @@ def modify_flatten_dict(flatten_dict: dict, default_param_dict: dict):
     if flatten_dict.get('swiglu', False):
         flatten_dict['hidden_act'] = 'swiglu'
 
-    if str(flatten_dict.get('params_dtype', 'float32')) == 'torch.bfloat16':
-        flatten_dict['params_dtype'] = 'bfloat16'
+    params_dtype = str(flatten_dict.get('params_dtype', 'float32'))
+    if 'torch.' in params_dtype:
+        params_dtype = params_dtype.replace('torch.', '')
+    flatten_dict['params_dtype'] = params_dtype
 
     if flatten_dict.get('bf16', False):
         flatten_dict['compute_dtype'] = 'bfloat16'
@@ -279,8 +281,10 @@ def modify_flatten_dict(flatten_dict: dict, default_param_dict: dict):
     if flatten_dict.get('fp16', False):
         flatten_dict['compute_dtype'] = 'float16'
 
-    if str(flatten_dict.get('embedding_dtype', 'float32')) == 'torch.bfloat16':
-        flatten_dict['embedding_dtype'] = 'bfloat16'
+    embedding_dtype = str(flatten_dict.get('embedding_dtype', 'float32'))
+    if 'torch.' in embedding_dtype:
+        embedding_dtype = embedding_dtype.replace('torch.', '')
+    flatten_dict['embedding_dtype'] = embedding_dtype
 
     loss_scale_key = ['loss_scale', 'initial_loss_scale', 'hysteresis', 'loss_scale_window']
     for key in loss_scale_key:
