@@ -50,6 +50,7 @@ from mindspeed_ms.legacy.model.module import Module
 from mindspeed_ms.legacy.model.utils import get_num_layer_list
 from mindspeed_ms.tools.utils import barrier_world
 
+from mindspeed_ms.legacy.model.enums import AttnMaskType
 
 class TestData:
     """
@@ -598,7 +599,7 @@ class MixtralModel(Module):
 
         self.language_model = TransformerLanguageModel(
             config,
-            encoder_attn_mask_type=None,
+            encoder_attn_mask_type=AttnMaskType.causal,
             num_tokentypes=num_tokentypes,
             pre_process=self.pre_process,
             post_process=self.post_process
@@ -644,8 +645,8 @@ class MixtralModel(Module):
         elif labels is None:
             labels = input_ids
 
-        labels = labels[:, 1:].contiguous()
-        input_ids = input_ids[:, :-1].contiguous()
+        labels = labels.contiguous()
+        input_ids = input_ids.contiguous()
 
         position_ids = None
 

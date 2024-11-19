@@ -48,9 +48,12 @@ from mindspeed_ms.core.parallel_state import (
     get_pipeline_model_parallel_rank,
     get_tensor_model_parallel_group,
     get_tensor_model_parallel_rank,
+    get_context_parallel_group,
+    get_context_parallel_rank,
     get_context_parallel_world_size,
     initialize_model_parallel
 )
+from mindspeed_ms.core.context_parallel.utils import get_batch_on_this_cp_rank
 from tests.st.test_distri_core.utils import MixtralModel, transform_mixtral_golden_params_to_pynative_params
 
 
@@ -60,12 +63,22 @@ def get_batch(data_iterator):
         data = next(data_iterator)
     else:
         data = None
-    batch = {
-        'input_ids': data["input_ids"][:, :-1].astype(ms.int32),
-        'labels': data["labels"][:, 1:].astype(ms.int32),
-        'attention_mask': data["attention_mask"].astype(ms.int32),
-    }
 
+    if args.context_parallel_algo == 'megatron_cp_algo' and args.cp_attention_mask_type == 'causal':
+        batch = {
+            'input_ids': data["input_ids"][:, :-1].astype(ms.int32),
+            'labels': data["labels"][:, 1:].astype(ms.int32),
+            'attention_mask': None,
+        }
+    else:
+        batch = {
+            'input_ids': data["input_ids"][:, :-1].astype(ms.int32),
+            'labels': data["labels"][:, 1:].astype(ms.int32),
+            'attention_mask': data["attention_mask"].astype(ms.int32),
+        }
+
+
+    batch = get_batch_on_this_cp_rank(batch)
     return batch.values()
 
 
@@ -81,16 +94,14 @@ def loss_func(loss_mask, output_tensor):
     cp_world_size = get_context_parallel_world_size()
     if cp_world_size > 1:
         loss = ReduceFromContextParallelRegion()(loss)
-
     # Check individual rank losses are not NaN prior to DP all-reduce.
     if args.check_for_nan_in_loss_and_grad:
         global_rank = ms.communication.get_rank()
         if loss[0].isnan():
             raise ValueError(f"Rank {global_rank}: found NaN in local forward loss calculation")
 
-    average_loss = average_losses_across_data_parallel_group([loss[0] * cp_world_size / loss[1]])
-
-    return loss[0] * cp_world_size / loss[1], {'lm loss': average_loss[0]}
+    average_loss = average_losses_across_data_parallel_group([loss[0] / loss[1]])
+    return loss[0] / loss[1], {'lm loss': average_loss[0]}
 
 
 def forward_step(data_iterator, model):
@@ -102,12 +113,10 @@ def forward_step(data_iterator, model):
     """
     # pylint: disable=W0621
     args = get_args()
-
     # get batch data
     input_data, labels, attention_mask = get_batch(data_iterator)
     loss_mask = mint.ne(input_data, args.pad_token).astype(args.compute_dtype)
     input_tensor = (input_data, labels, attention_mask)
-
     # pylint: disable=W0621
     def core_forward_func(*args):
         input_data, labels, attention_mask = args
@@ -148,6 +157,7 @@ def run_mixtral(config: TransformerConfig):
     tp = config.tensor_model_parallel_size
     ep = config.expert_model_parallel_size
     pp = config.pipeline_model_parallel_size
+    cp = config.context_parallel_size
     vpp = config.virtual_pipeline_model_parallel_size
     seq_length = args.seq_length
     micro_batch_num = args.micro_batch_size
@@ -155,7 +165,7 @@ def run_mixtral(config: TransformerConfig):
     ms.set_context(
         device_target="Ascend",
         mode=ms.PYNATIVE_MODE,
-        max_device_memory="58GB",
+        max_device_memory="29GB",
         deterministic='ON',
         pynative_synchronize=True
         )
@@ -165,6 +175,7 @@ def run_mixtral(config: TransformerConfig):
         tensor_model_parallel_size=tp,
         expert_model_parallel_size=ep,
         pipeline_model_parallel_size=pp,
+        context_parallel_size=cp,
         virtual_pipeline_model_parallel_size=vpp
         )
 
@@ -172,13 +183,17 @@ def run_mixtral(config: TransformerConfig):
     ep_group = get_expert_model_parallel_group()
     tp_group = get_tensor_model_parallel_group()
     pp_group = get_pipeline_model_parallel_group()
+    cp_group = get_context_parallel_group()
     dp_rank = get_data_parallel_rank()
     ep_rank = get_expert_model_parallel_rank()
     tp_rank = get_tensor_model_parallel_rank()
+    cp_rank = get_context_parallel_rank()
     pp_rank = get_pipeline_model_parallel_rank()
 
-    print(f"dp_group is {dp_group}, ep_group is {ep_group}, tp_group is {tp_group}, pp_group is {pp_group}", flush=True)
-    print(f"dp_rank is {dp_rank}, ep_rank is {ep_rank}, tp_rank is {tp_rank}, pp_rank is {pp_rank}", flush=True)
+    print(f"dp_group is {dp_group}, ep_group is {ep_group}, tp_group is {tp_group}, \
+        cp_group is {cp_group}, pp_group is {pp_group}", flush=True)
+    print(f"dp_rank is {dp_rank}, ep_rank is {ep_rank}, tp_rank is {tp_rank}, \
+        cp_rank is {cp_rank}, pp_rank is {pp_rank}", flush=True)
 
     ms.set_seed(2024)
 
@@ -193,9 +208,10 @@ def run_mixtral(config: TransformerConfig):
 
     # making dataset
     if ep == 1:
+        print("ep = 1")
         dataset = TestData(dataset_size=2, input_data=input_data, label_data=input_data)
         dataset = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels', "attention_mask"], shuffle=False)
-        dataset = dataset.batch(2)
+        dataset = dataset.batch(micro_batch_num)
     else:
         input_data = np.tile(input_data[dp_rank % 2, None], (micro_batch_num, 1))
         dataset = TestData(dataset_size=micro_batch_num, input_data=input_data, label_data=input_data)

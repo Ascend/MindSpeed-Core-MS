@@ -27,12 +27,14 @@ import math
 import copy
 from collections import OrderedDict
 import numpy as np
+import mindspore as ms
 
 import mindspore.common.dtype as mstype
 from mindspore import nn, ops, mint, Parameter
 import mindspore.ops.functional as F
 from mindspore.communication.comm_func import all_gather_into_tensor
 
+from mindspore.ops.auto_generate.gen_ops_prim import FlashAttentionScore
 from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.parallel_state import (
     get_pipeline_model_parallel_rank,
@@ -40,6 +42,7 @@ from mindspeed_ms.core.parallel_state import (
     get_pipeline_model_parallel_world_size,
     get_data_parallel_world_size,
     get_context_parallel_world_size,
+    get_context_parallel_group,
     get_virtual_pipeline_model_parallel_rank,
     get_virtual_pipeline_model_parallel_world_size,
     get_tp_x_world_size,
@@ -74,6 +77,9 @@ from mindspeed_ms.legacy.model.enums import (
 )
 from mindspeed_ms.core.context_parallel.ring_attention import (
     RingAttention,
+)
+from mindspeed_ms.core.context_parallel.ulysses_context_parallel import (
+    UlyssesContextAttention,
 )
 from mindspeed_ms.core.context_parallel.flash_sp import FlashSP
 
@@ -122,6 +128,32 @@ def _merge_heads(x):
     x_merged = x.reshape(merged_shape)
     return x_merged
 
+class FlashSelfAttention(ms.nn.Cell):
+    """Implements the flash attention."""
+    def __init__(self,
+                 head_num,
+                 keep_prob=1.0,
+                 scale_value=1.0,
+                 pre_tokens=2147483647,
+                 next_tokens=2147483647,
+                 inner_precise=0,
+                 input_layout="BSH",
+                 sparse_mode=0
+                 ):
+        super(FlashSelfAttention, self).__init__()
+
+        self.flash_attention = FlashAttentionScore(head_num,
+                                                   keep_prob=keep_prob,
+                                                   scale_value=scale_value,
+                                                   pre_tokens=pre_tokens,
+                                                   next_tokens=next_tokens,
+                                                   inner_precise=inner_precise,
+                                                   input_layout=input_layout,
+                                                   sparse_mode=sparse_mode
+                                                   )
+    def construct(self, query, key, value, attn_mask):
+        output = self.flash_attention(query, key, value, attn_mask=attn_mask)
+        return output[-1]
 
 class CoreAttention(nn.Cell):
     r"""
@@ -437,6 +469,20 @@ class ParallelAttention(Module):
         else:
             self.kv_num_heads_per_partition = self.num_heads_per_partition
 
+        if self.use_flash_attention:
+            if self.input_layout:
+                self.flash_attention = FlashSelfAttention(
+                    head_num=self.num_heads_per_partition // get_context_parallel_world_size(),
+                    scale_value=1.0 / self.norm_factor,
+                    input_layout=self.input_layout
+                )
+            else:
+                self.flash_attention = FlashSelfAttention(
+                    head_num=self.num_heads_per_partition // get_context_parallel_world_size(),
+                    scale_value=1.0 / self.norm_factor,
+                    input_layout='BNSD'
+                )
+
         if self.attn_type == AttnType.self_attn:
             self.qkv_proj = self._init_qkv_proj(
                 self.hidden_size,
@@ -464,17 +510,27 @@ class ParallelAttention(Module):
             )
 
         if get_context_parallel_world_size() > 1:
-            if not self.use_flash_sp:
+            args = get_args()
+            input_layout = 'BNSD'
+            if self.input_layout:
+                input_layout = self.input_layout
+            if args.context_parallel_algo == 'ulysses_cp_algo':
+                ulysses_group = get_context_parallel_group()
+                if self.use_flash_attention:
+                    self.core_attention_flash = UlyssesContextAttention(self.flash_attention, ulysses_group)
+                else:
+                    raise NotImplementedError("Ulysses context parallel not implemented for core attention.")
+            elif not self.use_flash_sp:
                 self.ring_attention = RingAttention(
                     self.num_heads,
-                    input_layout="BNSD",
+                    input_layout=input_layout,
                     scale_value=1 / self.norm_factor,
                     sparse_mode=0
                 )
             else:
                 self.flash_sp = FlashSP(
                     self.num_heads,
-                    input_layout="BSH",
+                    input_layout=input_layout,
                     scale_value=1 / self.norm_factor,
                     dp=get_data_parallel_world_size(),
                     mp=get_tensor_model_parallel_world_size(),
@@ -588,9 +644,9 @@ class ParallelAttention(Module):
         # hidden_states: [B, S, H]
         ori_dtype = hidden_states.dtype
         if self.data_layout == "SBH":
-            seq_len, bs, _ = hidden_states.shape
+            seq_len, _, _ = hidden_states.shape
         else:
-            bs, seq_len, _ = hidden_states.shape
+            _, seq_len, _ = hidden_states.shape
         # apply query, key, value projection
         if self.attn_type == AttnType.self_attn:
             if self.sequence_parallel:
@@ -740,29 +796,36 @@ class ParallelAttention(Module):
                 key = key.astype(mstype.float16)
             if value.dtype == mstype.float32:
                 value = value.astype(mstype.float16)
+            if attention_mask is not None:
+                attention_mask = attention_mask.astype(mstype.uint8)
 
-            # SBND -> BNSD
-            query = query.transpose(1, 2, 0, 3).contiguous()
-            key = key.transpose(1, 2, 0, 3).contiguous()
-            value = value.transpose(1, 2, 0, 3).contiguous()
-
-            if not self.use_flash_sp:
-                output = self.ring_attention(query, key, value)
+            if args.shape_order == 'SBH':
+                # SBND -> SBH
+                fa_use_sbh = True
+                query, key, value = [
+                    x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3]).contiguous() for x in [query, key, value]
+                ]
             else:
-                # BNSD to BSH
-                query = query.transpose((0, 2, 1, 3)).reshape(bs, seq_len, -1)
-                key = key.transpose((0, 2, 1, 3)).reshape(bs, seq_len, -1)
-                value = value.transpose((0, 2, 1, 3)).reshape(bs, seq_len, -1)
+                # SBND -> BNSD
+                fa_use_sbh = False
+                query = query.transpose(1, 2, 0, 3).contiguous()
+                key = key.transpose(1, 2, 0, 3).contiguous()
+                value = value.transpose(1, 2, 0, 3).contiguous()
 
+            if args.context_parallel_algo == 'ulysses_cp_algo':
+                output = self.core_attention_flash(query, key, value, attn_mask=attention_mask)
+
+            elif not self.use_flash_sp:
+                output = self.ring_attention(query, key, value, attention_mask)
+            else:
                 output = self.flash_sp(query, key, value)
-                # BSH to BNSD
-                output = output.reshape(bs, seq_len, -1, self.kv_channels).transpose(
-                    (0, 2, 1, 3)
-                )
 
-            context_layer = _merge_heads(output)
-            # BSH -> SBH
-            context_layer = context_layer.swapaxes(0, 1).contiguous()
+            if not fa_use_sbh:
+                context_layer = _merge_heads(output)
+                # BSH -> SBH
+                context_layer = context_layer.swapaxes(0, 1).contiguous()
+            else:
+                context_layer = output
 
         if self.data_layout == "BSH":
             context_layer = context_layer.swapaxes(0, 1)
