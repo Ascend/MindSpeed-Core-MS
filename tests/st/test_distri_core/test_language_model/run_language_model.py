@@ -13,12 +13,16 @@
 # limitations under the License.
 # ============================================================================
 """Language model test"""
+import os
+from functools import partial
 import numpy as np
 import mindspore as ms
 import mindspore.dataset as ds
 from mindspore.nn import Adam, SoftmaxCrossEntropyWithLogits
 from mindspore.communication import init
+from mindspore import mint
 from mindspeed_ms.legacy.model import TransformerLanguageModel
+from mindspeed_ms.core.parallel_state import initialize_model_parallel
 from mindspeed_ms.training import (
     TrainOneStepCell,
     train,
@@ -27,11 +31,74 @@ from mindspeed_ms.training import (
     core_transformer_config_from_args,
     core_transformer_config_from_yaml
 )
-from mindspeed_ms.core.parallel_state import initialize_model_parallel, get_data_parallel_world_size
+from mindspeed_ms.training.utils import average_losses_across_data_parallel_group
+from mindspeed_ms.training.global_vars import set_global_variables
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.core.tensor_parallel.mappings import ReduceFromContextParallelRegion
 from tests.st.test_distri_core.utils import generate_ckpt, transform_transformerlayer_params
+
 
 ms.set_seed(1024)
 ds.set_seed(1024)
+
+
+def get_batch(data_iterator):
+    """ get micro batch data """
+    if data_iterator is not None:
+        data = next(data_iterator)
+    else:
+        data = None
+    return data.values()
+
+
+def loss_func(loss_mask, output_tensor):
+    """ loss reduction function. """
+    # pylint: disable=W0621
+    args = get_args()
+
+    losses = output_tensor.float()
+    loss_mask = loss_mask.view(-1).float()
+
+    if args.context_parallel_size > 1:
+        loss = mint.cat([mint.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
+        loss = ReduceFromContextParallelRegion()(loss)
+        loss = loss[0] / loss[1]
+    else:
+        loss = mint.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+
+    print(f"final micro loss: {loss}")
+
+    if args.check_for_nan_in_loss_and_grad:
+        global_rank = ms.communication.get_rank()
+        if loss.isnan():
+            raise RuntimeError(f"Rank {global_rank}: found NaN in local forward loss calculation. "
+                               f"Device: {ms.hal.get_device_name()}, node: {os.uname()[1]}")
+
+    # Reduce loss for logging
+    average_loss = average_losses_across_data_parallel_group([loss])
+    return loss * args.context_parallel_size, {'lm loss': average_loss[0]}
+
+
+def forward_step(data_iterator, model):
+    """Forward training step
+
+    Args:
+        data_iterator: Input data iterator.
+        model: The model.
+    """
+    # get batch data
+    input_data, labels, attention_mask = get_batch(data_iterator)
+    loss_mask = mint.ones_like(labels)
+    loss_mask = ms.ops.sum(loss_mask, dim=-1, keepdim=False)
+    input_tensor = (input_data, attention_mask, labels)
+
+    # pylint: disable=W0621
+    def core_forward_func(*args):
+        input_data, attention_mask, labels = args
+        output_tensor = model(input_data, attention_mask, labels)
+        return output_tensor
+
+    return input_tensor, core_forward_func, partial(loss_func, loss_mask)
 
 
 class FakeData():
@@ -64,7 +131,8 @@ class ParallelLanguageModel(ms.nn.Cell):
     def __init__(self, config):
         super().__init__()
         self.language_model = TransformerLanguageModel(config, encoder_attn_mask_type=None)
-        self.loss = SoftmaxCrossEntropyWithLogits(reduction='mean')
+        self.loss = SoftmaxCrossEntropyWithLogits(reduction='none')
+        self.config = config
 
     def construct(self, input_ids, attention_mask, labels):
         """ Language model test forward """
@@ -90,9 +158,8 @@ def run_parallel_language_model(config):
                                        column_names=['input_ids', 'labels', 'attention_mask'],
                                        shuffle=False)
     # calculate global batch size
-    global_batch_size = args.global_batch_size // get_data_parallel_world_size()
-    fake_dataset = fake_dataset.batch(global_batch_size)
-    print("global batch size: ", global_batch_size, flush=True)
+    fake_dataset = fake_dataset.batch(args.micro_batch_size)
+    print("micro batch size: ", args.micro_batch_size, flush=True)
 
     # init ckpt
     param_dict = generate_ckpt(hidden_size=config.hidden_size,
@@ -117,11 +184,13 @@ def run_parallel_language_model(config):
     train_one_step_cell = TrainOneStepCell(network, optimizer, None, config)
 
     # train
-    train(train_one_step_cell, fake_dataset)
-
+    train(train_one_step_cell, fake_dataset, forward_step)
 
 if __name__ == '__main__':
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
+
     args.wrap_with_ddp = False
     args.data_layout = "BSH"
     if args.yaml_cfg is not None:

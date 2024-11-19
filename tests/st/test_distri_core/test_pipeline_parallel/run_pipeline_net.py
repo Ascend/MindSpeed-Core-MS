@@ -13,23 +13,28 @@
 # limitations under the License.
 # ============================================================================
 """Pipeline parallel test"""
+import os
 import argparse
+from functools import partial
 import numpy as np
 import mindspore as ms
+from mindspore import mint
 import mindspore.dataset as ds
 from mindspore.nn import Adam
 from mindspore.mint.optim import AdamW
 from mindspore.communication import init
 
-from mindspeed_ms.training.training import TrainOneStepCell, train, get_model
+from mindspeed_ms.core.tensor_parallel.mappings import ReduceFromContextParallelRegion
+from mindspeed_ms.training import TrainOneStepCell, train, get_model, get_args
+from mindspeed_ms.training.utils import average_losses_across_data_parallel_group
 from mindspeed_ms.core.optimizer import DistributedOptimizer
 from mindspeed_ms.training.arguments import parse_args
 from mindspeed_ms.core.optimizer import optimizer_config_from_args
-from mindspeed_ms.training.yaml_arguments import core_transformer_config_from_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
+from mindspeed_ms.training.yaml_arguments import core_transformer_config_from_yaml, validate_yaml
 from mindspeed_ms.core.parallel_state import (
     initialize_model_parallel,
     get_data_parallel_group,
-    get_data_parallel_world_size,
     get_pipeline_model_parallel_group,
     get_pipeline_model_parallel_rank,
     get_pipeline_model_parallel_world_size
@@ -39,6 +44,62 @@ from test_pipeline_net import PipelineTestNet, FakeData
 from tests.st.test_distri_core.utils import get_layer_str_param
 
 ms.set_seed(2024)
+
+def get_batch(data_iterator):
+    """ get micro batch data """
+    if data_iterator is not None:
+        data = next(data_iterator)
+    else:
+        data = None
+    return data.values()
+
+
+def loss_func(loss_mask, output_tensor):
+    """ loss reduction function. """
+    # pylint: disable=W0621
+    args = get_args()
+
+    losses = output_tensor.float()
+    loss_mask = loss_mask.view(-1).float()
+
+    if args.context_parallel_size > 1:
+        loss = mint.cat([mint.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
+        loss = ReduceFromContextParallelRegion()(loss)
+        loss = loss[0] / loss[1]
+    else:
+        loss = mint.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+
+    if args.check_for_nan_in_loss_and_grad:
+        global_rank = ms.communication.get_rank()
+        if loss.isnan():
+            raise RuntimeError(f"Rank {global_rank}: found NaN in local forward loss calculation. "
+                               f"Device: {ms.hal.get_device_name()}, node: {os.uname()[1]}")
+
+    # Reduce loss for logging
+    average_loss = average_losses_across_data_parallel_group([loss])
+    return loss * args.context_parallel_size, {'lm loss': average_loss[0]}
+
+
+def forward_step(data_iterator, model):
+    """Forward training step
+
+    Args:
+        data_iterator: Input data iterator.
+        model: The model.
+    """
+    # get batch data
+    input_data, labels = get_batch(data_iterator)
+    loss_mask = mint.ones_like(labels)
+    input_tensor = (input_data, labels)
+
+    # pylint: disable=W0621
+    def core_forward_func(*args):
+        input_data, labels = args
+        output_tensor = model(input_data, labels)
+        return output_tensor
+
+    return input_tensor, core_forward_func, partial(loss_func, loss_mask)
+
 
 def generate_ckpt(vocab_size,
                   seq_length,
@@ -115,9 +176,9 @@ def run_pipeline(model_config, train_args, dynamic_dataset=False):
     dataset = FakeData(data_num=32, seq_length=train_args.seq_length, dynamic_dataset=dynamic_dataset)
     dataset_parallel = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels'], shuffle=False)
     # calculate global batch size
-    global_batch_size = train_args.global_batch_size // get_data_parallel_world_size()
-    dataset_parallel = dataset_parallel.batch(global_batch_size)
-    print("global batch size: ", global_batch_size, flush=True)
+    dataset_parallel = dataset_parallel.batch(train_args.micro_batch_size)
+    if vpp is not None and vpp > 1:
+        dataset_parallel = [dataset_parallel] * vpp
 
     # init model
     def model_provider_func(pre_process=True, post_process=True):
@@ -126,7 +187,7 @@ def run_pipeline(model_config, train_args, dynamic_dataset=False):
         # load ckpt
         ms.load_param_into_net(network, ckpt_dict)
         return network
-    network = get_model(model_provider_func, model_config)
+    network = get_model(model_provider_func, model_config, wrap_with_ddp=args.wrap_with_ddp)
 
     if train_args.wrap_with_ddp and train_args.use_distributed_optimizer:
         optimizer_config = optimizer_config_from_args(train_args)
@@ -148,7 +209,7 @@ def run_pipeline(model_config, train_args, dynamic_dataset=False):
 
     print(f"network trainable params: {network.trainable_params()}", flush=True)
 
-    train(train_one_step_cell, dataset_parallel)
+    train(train_one_step_cell, dataset_parallel, forward_step)
 
 
 def run_standalone(model_config, train_args):
@@ -169,9 +230,7 @@ def run_standalone(model_config, train_args):
     dataset = FakeData(data_num=32, seq_length=train_args.seq_length)
     dataset_parallel = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels'], shuffle=False)
     # calculate global batch size
-    global_batch_size = train_args.global_batch_size
-    dataset_parallel = dataset_parallel.batch(global_batch_size)
-    print("global batch size: ", global_batch_size, flush=True)
+    dataset_parallel = dataset_parallel.batch(train_args.micro_batch_size)
 
     # init model
     def model_provider_func(pre_process=True, post_process=True):
@@ -180,7 +239,7 @@ def run_standalone(model_config, train_args):
         # load ckpt
         ms.load_param_into_net(network, ckpt_dict)
         return network
-    network = get_model(model_provider_func, model_config)
+    network = get_model(model_provider_func, model_config, wrap_with_ddp=args.wrap_with_ddp)
 
     if train_args.wrap_with_ddp and train_args.use_distributed_optimizer:
         optimizer_config = optimizer_config_from_args(train_args)
@@ -202,14 +261,21 @@ def run_standalone(model_config, train_args):
 
     print(f"network trainable params: {network.trainable_params()}", flush=True)
 
-    train(train_one_step_cell, dataset_parallel)
+    train(train_one_step_cell, dataset_parallel, forward_step)
 
 
 def extra_args_provider(inner_parser):
+    """ extra args provider """
     inner_parser.add_argument('--run_mode', type=str, default='pp',
                               help="pp: run pp process standalone: run standalone process")
     return inner_parser
 
+
+# pylint: disable=W0621
+def set_vars(var_name, var_value, args, config):
+    """ set var for args and config """
+    setattr(args, var_name, var_value)
+    setattr(config, var_name, var_value)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -218,68 +284,69 @@ if __name__ == '__main__':
     parser.add_argument('--yaml-cfg', type=str, default=None,
                         help="yaml file path")
     extra_args = parser.parse_args()
-    args = parse_args(extra_args_provider=extra_args_provider)
-    args.wrap_with_ddp = False
+    args, defaults = parse_args(extra_args_provider=extra_args_provider)
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
     args.data_layout = "BSH"
+    args.wrap_with_ddp = False
 
     config = core_transformer_config_from_yaml(args)
 
     if extra_args.run_mode == 'standalone_without_share':
         run_standalone(config, args)
     elif extra_args.run_mode == 'standalone_with_share':
-        args.untie_embeddings_and_output_weights = False
+        set_vars("untie_embeddings_and_output_weights", False, args, config)
         run_standalone(config, args)
     elif extra_args.run_mode == 'standalone_with_ddp':
-        args.untie_embeddings_and_output_weights = False
-        args.wrap_with_ddp = True
-        args.use_distributed_optimizer = True
-        args.ddp_bucket_size = 10
+        set_vars("untie_embeddings_and_output_weights", False, args, config)
+        set_vars("wrap_with_ddp", True, args, config)
+        set_vars("use_distributed_optimizer", True, args, config)
+        set_vars("ddp_bucket_size", 10, args, config)
         run_standalone(config, args)
     elif extra_args.run_mode == 'pp_without_share':
         run_pipeline(config, args)
     elif extra_args.run_mode == 'pp_with_share':
-        args.untie_embeddings_and_output_weights = False
+        set_vars("untie_embeddings_and_output_weights", False, args, config)
         run_pipeline(config, args)
     elif extra_args.run_mode == 'custom_pp_with_share':
-        args.untie_embeddings_and_output_weights = False
-        config.num_layer_list = [2, 3, 1, 2]
+        set_vars("untie_embeddings_and_output_weights", False, args, config)
+        set_vars("num_layer_list", [2, 3, 1, 2], args, config)
         run_pipeline(config, args)
     elif extra_args.run_mode == 'pp_interleaved':
-        config.virtual_pipeline_model_parallel_size = 2
-        args.untie_embeddings_and_output_weights = False
+        set_vars("virtual_pipeline_model_parallel_size", 2, args, config)
+        set_vars("untie_embeddings_and_output_weights", False, args, config)
         run_pipeline(config, args)
     elif extra_args.run_mode == 'pp_with_ddp':
-        args.untie_embeddings_and_output_weights = False
-        args.wrap_with_ddp = True
-        args.use_distributed_optimizer = True
-        args.ddp_bucket_size = 10
+        set_vars("untie_embeddings_and_output_weights", False, args, config)
+        set_vars("wrap_with_ddp", True, args, config)
+        set_vars("use_distributed_optimizer", True, args, config)
+        set_vars("ddp_bucket_size", 10, args, config)
         run_pipeline(config, args)
     elif extra_args.run_mode == 'custom_pp_interleaved':
-        config.virtual_pipeline_model_parallel_size = 2
-        args.untie_embeddings_and_output_weights = False
-        config.num_layer_list = [[1, 1], [1, 1], [1, 1], [1, 1]]
+        set_vars("virtual_pipeline_model_parallel_size", 2, args, config)
+        set_vars("untie_embeddings_and_output_weights", False, args, config)
+        set_vars("num_layer_list", [[1, 1], [1, 1], [1, 1], [1, 1]], args, config)
         run_pipeline(config, args)
     elif extra_args.run_mode == 'pp_with_standalone_embedding_stage':
-        args.untie_embeddings_and_output_weights = False
-        args.standalone_embedding_stage = True
-        config.pipeline_model_parallel_size = 2
-        config.virtual_pipeline_model_parallel_size = 2
+        set_vars("virtual_pipeline_model_parallel_size", 2, args, config)
+        set_vars("pipeline_model_parallel_size", 2, args, config)
+        set_vars("untie_embeddings_and_output_weights", False, args, config)
+        set_vars("standalone_embedding_stage", True, args, config)
         run_pipeline(config, args)
     elif extra_args.run_mode == 'pp_with_noop_layers':
-        args.untie_embeddings_and_output_weights = False
-        config.virtual_pipeline_model_parallel_size = 2
-        config.pipeline_model_parallel_size = 2
-        config.num_layers += 2
-        config.noop_layers = [4, 5]
-        print(f"config.noop_layers = {config.noop_layers}")
+        set_vars("virtual_pipeline_model_parallel_size", 2, args, config)
+        set_vars("pipeline_model_parallel_size", 2, args, config)
+        set_vars("untie_embeddings_and_output_weights", False, args, config)
+        set_vars("num_layers", config.num_layers + 2, args, config)
+        set_vars("noop_layers", [4, 5], args, config)
         run_pipeline(config, args)
     elif extra_args.run_mode == 'pp_interleaved_with_variable_seq_length':
-        config.virtual_pipeline_model_parallel_size = 2
-        args.untie_embeddings_and_output_weights = False
-        config.variable_seq_lengths = True
+        set_vars("virtual_pipeline_model_parallel_size", 2, args, config)
+        set_vars("untie_embeddings_and_output_weights", False, args, config)
+        set_vars("variable_seq_lengths", True, args, config)
         run_pipeline(config, args)
     elif extra_args.run_mode == 'pp_interleaved_with_variable_seq_length_dynamic_data':
-        config.virtual_pipeline_model_parallel_size = 2
-        args.untie_embeddings_and_output_weights = False
-        config.variable_seq_lengths = True
+        set_vars("virtual_pipeline_model_parallel_size", 2, args, config)
+        set_vars("untie_embeddings_and_output_weights", False, args, config)
+        set_vars("variable_seq_lengths", True, args, config)
         run_pipeline(config, args, dynamic_dataset=True)

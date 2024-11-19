@@ -14,28 +14,90 @@
 # ============================================================================
 """run parallel ddp zero3"""
 
+import os
 import argparse
+from functools import partial
 import numpy as np
 
 import mindspore as ms
 import mindspore.common.dtype as mstype
 import mindspore.dataset as ds
 import mindspore.ops as ops
+from mindspore import mint
 from mindspore import Tensor
 from mindspore.communication.management import init
 from mindspore.nn import CrossEntropyLoss
 
-from mindspeed_ms.training import TrainOneStepCell, train, get_model
+from mindspeed_ms.training import TrainOneStepCell, train, get_model, get_args
+from mindspeed_ms.training.utils import average_losses_across_data_parallel_group
+from mindspeed_ms.training.global_vars import set_global_variables
+from mindspeed_ms.training.yaml_arguments import core_transformer_config_from_yaml, validate_yaml
+from mindspeed_ms.training.arguments import parse_args
 from mindspeed_ms.core.parallel_state import initialize_model_parallel
+from mindspeed_ms.core.dist_checkpointing import save_checkpoint, load_checkpoint
 from mindspeed_ms.core.optimizer import optimizer_config_from_args
+from mindspeed_ms.core.tensor_parallel.mappings import ReduceFromContextParallelRegion
 from mindspeed_ms.legacy.model import ParallelMLP
 from mindspeed_ms.legacy.model.module import Module
-from mindspeed_ms.core.dist_checkpointing import save_checkpoint, load_checkpoint
-from mindspeed_ms.training.yaml_arguments import core_transformer_config_from_yaml
-from mindspeed_ms.training.arguments import parse_args
 
 from tests.st.test_distri_core.utils import _transform_ckpt_helper
 from tests.st.test_distri_core.utils import TestData
+
+
+def get_batch(data_iterator):
+    """ get micro batch data """
+    if data_iterator is not None:
+        data = next(data_iterator)
+    else:
+        data = None
+    return data.values()
+
+
+def loss_func(loss_mask, output_tensor):
+    """ loss reduction function. """
+    args = get_args()
+
+    losses = output_tensor.float()
+    loss_mask = loss_mask.view(-1).float()
+
+    if args.context_parallel_size > 1:
+        loss = mint.cat([mint.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
+        loss = ReduceFromContextParallelRegion()(loss)
+        loss = loss[0] / loss[1]
+    else:
+        loss = mint.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+
+    print(f"final micro loss: {loss}")
+
+    if args.check_for_nan_in_loss_and_grad:
+        global_rank = ms.communication.get_rank()
+        if loss.isnan():
+            raise RuntimeError(f"Rank {global_rank}: found NaN in local forward loss calculation. "
+                               f"Device: {ms.hal.get_device_name()}, node: {os.uname()[1]}")
+
+    # Reduce loss for logging
+    average_loss = average_losses_across_data_parallel_group([loss])
+    return loss * args.context_parallel_size, {'lm loss': average_loss[0]}
+
+
+def forward_step(data_iterator, model):
+    """Forward training step
+
+    Args:
+        data_iterator: Input data iterator.
+        model: The model.
+    """
+    # get batch data
+    input_data, labels = get_batch(data_iterator)
+    loss_mask = mint.ones_like(labels)
+    input_tensor = (input_data, labels)
+
+    def core_forward_func(*args):
+        input_data, labels = args
+        output_tensor = model(input_data, labels)
+        return output_tensor
+
+    return input_tensor, core_forward_func, partial(loss_func, loss_mask)
 
 
 class ParallelMLPNet(Module):
@@ -57,6 +119,7 @@ class ParallelMLPNet(Module):
         self.loss = CrossEntropyLoss()
         self.cast = ops.Cast()
         self.dtype = config.compute_dtype
+        self.config = config
 
     def construct(self, input_ids, labels):
         """ do construct and calc mean loss """
@@ -95,7 +158,7 @@ def run_parallel_ddp_zero3(golden, first, args):
     label_data = np.zeros((dataset_size, args.seq_length)).astype(np.float32)
     dataset = TestData(input_data=input_data, label_data=label_data)
     dataset = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels'])
-    dataset = dataset.batch(args.batch_size)
+    dataset = dataset.batch(args.micro_batch_size)
 
     # pylint: disable=W0613
     def model_provider_func(pre_process=True, post_process=True):
@@ -124,7 +187,7 @@ def run_parallel_ddp_zero3(golden, first, args):
         load_ckpt_path = args.save if golden else "./dst_ckpt"
         load_checkpoint(model_config, train_one_step_cell.network_with_loss, optimizer=train_one_step_cell.optimizer,
                         opt_param_scheduler=train_one_step_cell.opt_param_scheduler, ckpt_path=load_ckpt_path)
-    train(train_one_step_cell, dataset, model_config)
+    train(train_one_step_cell, dataset, forward_step)
     if first:
         save_checkpoint(model_config,
                         train_one_step_cell.network_with_loss,
@@ -145,5 +208,7 @@ if __name__ == '__main__':
         inner_parser.add_argument('--first', default=False, type=bool)
         return inner_parser
 
-    main_args = parse_args(extra_args_provider=extra_parser_provider)
+    main_args, defaults = parse_args(extra_args_provider=extra_parser_provider)
+    main_args = validate_yaml(main_args, defaults, {})
+    set_global_variables(main_args, False)
     run_parallel_ddp_zero3(extra_args.golden, extra_args.first, main_args)

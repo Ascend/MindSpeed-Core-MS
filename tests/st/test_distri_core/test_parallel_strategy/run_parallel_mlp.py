@@ -28,6 +28,8 @@ from mindspore.communication.management import init, get_rank
 from mindspore.nn import AdamWeightDecay, SoftmaxCrossEntropyWithLogits
 
 from mindspeed_ms.training import parse_args, core_transformer_config_from_yaml
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.core.parallel_state import initialize_model_parallel
 from mindspeed_ms.legacy.model import ParallelMLP
 from mindspeed_ms.legacy.model.module import Module
@@ -159,7 +161,9 @@ if __name__ == '__main__':
         inner_parser.add_argument('--generate_src_strategy', action='store_true', help="Generate src strategy.")
         return inner_parser
 
-    main_args = parse_args(extra_args_provider=extra_parser_provider)
+    main_args, defaults = parse_args(extra_args_provider=extra_parser_provider)
+    main_args = validate_yaml(main_args, defaults, {})
+    set_global_variables(main_args, False)
     used_config = core_transformer_config_from_yaml(main_args)
     if extra_args.generate_src_strategy:
         run_parallel_mlp_src(used_config, main_args)

@@ -13,19 +13,17 @@
 # limitations under the License.
 # ============================================================================
 """ Save Checkpoint """
-import random
 import numpy as np
 
-import mindspore as ms
 import mindspore.dataset as ds
 from mindspore import Tensor
-from mindspore.communication.management import init
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.initialize import initialize_mindspeed_ms
 
 from mindspeed_ms.training import (
     get_model,
     get_loss_func,
     parse_args,
-    get_args,
     TrainOneStepCell,
     core_transformer_config_from_args,
     core_transformer_config_from_yaml
@@ -36,17 +34,6 @@ from mindspeed_ms.core.optimizer import (
     get_optimizer_param_scheduler
 )
 from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
-from mindspeed_ms.core.parallel_state import (
-    get_data_parallel_group,
-    get_data_parallel_rank,
-    get_expert_model_parallel_group,
-    get_expert_model_parallel_rank,
-    get_pipeline_model_parallel_group,
-    get_pipeline_model_parallel_rank,
-    get_tensor_model_parallel_group,
-    get_tensor_model_parallel_rank,
-    initialize_model_parallel
-)
 from mindspeed_ms.core.dist_checkpointing import save_checkpoint
 from tests.st.test_distri_core.utils import MixtralModel
 
@@ -73,44 +60,10 @@ class TestData:
 
 
 # pylint: disable=W0621
-def main(config: TransformerConfig):
+def main(config: TransformerConfig, args):
     """ Test ParallelTransformer. """
-    args = get_args()
     print(f"config is:\n{config}")
-    tp = config.tensor_model_parallel_size
-    ep = config.expert_model_parallel_size
-    pp = config.pipeline_model_parallel_size
-    vpp = config.virtual_pipeline_model_parallel_size
-
-    ms.set_context(
-        device_target="Ascend",
-        mode=ms.PYNATIVE_MODE,
-        max_device_memory="58GB",
-        deterministic='ON',
-        pynative_synchronize=True)
-
-    init()
-    initialize_model_parallel(
-        tensor_model_parallel_size=tp,
-        expert_model_parallel_size=ep,
-        pipeline_model_parallel_size=pp,
-        virtual_pipeline_model_parallel_size=vpp)
-
-    dp_group = get_data_parallel_group()
-    ep_group = get_expert_model_parallel_group()
-    tp_group = get_tensor_model_parallel_group()
-    pp_group = get_pipeline_model_parallel_group()
-    dp_rank = get_data_parallel_rank()
-    ep_rank = get_expert_model_parallel_rank()
-    tp_rank = get_tensor_model_parallel_rank()
-    pp_rank = get_pipeline_model_parallel_rank()
-
-    print(f"dp_group is {dp_group}, ep_group is {ep_group}, tp_group is {tp_group}, pp_group is {pp_group}", flush=True)
-    print(f"dp_rank is {dp_rank}, ep_rank is {ep_rank}, tp_rank is {tp_rank}, pp_rank is {pp_rank}", flush=True)
-
-    random.seed(args.seed)
-    ms.set_seed(args.seed)
-    np.random.seed(args.seed)
+    initialize_mindspeed_ms()
 
     input_data = np.random.randint(
         low=1, high=args.vocab_size,
@@ -140,7 +93,7 @@ def main(config: TransformerConfig):
         )
         return network
 
-    network = get_model(model_provider_func, config)
+    network = get_model(model_provider_func, config, wrap_with_ddp=args.wrap_with_ddp)
 
     optimizer = get_optimizer(
         optimizer_config,
@@ -165,10 +118,12 @@ def main(config: TransformerConfig):
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+    args.deterministic_mode = True
     args.data_layout = "BSH"
     if args.yaml_cfg is None:
         config = core_transformer_config_from_args(args)
     else:
         config = core_transformer_config_from_yaml(args)
-    main(config)
+    main(config, args)

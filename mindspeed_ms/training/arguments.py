@@ -28,8 +28,7 @@ from mindspeed_ms.core.models.retro.utils import (
     get_gpt_data_dir as get_retro_data_dir,
 )
 from mindspeed_ms.tools import logger
-from mindspeed_ms.training.global_vars import set_global_variables, get_args
-from mindspeed_ms.training.yaml_arguments import load_yaml, validate_yaml, _check_list_is_validate
+from mindspeed_ms.training.yaml_arguments import load_yaml, _check_list_is_validate
 from mindspeed_ms.core.transformer.transformer_config import TransformerConfig, _SUPPORT_INIT_METHOD
 
 str_dtype_to_ms = {
@@ -40,7 +39,7 @@ str_dtype_to_ms = {
 
 
 # pylint: disable=W0102
-def parse_args(extra_args_provider=None, args_defaults={}, ignore_unknown_args=False):
+def parse_args(extra_args_provider=None, ignore_unknown_args=False):
     """Parse all arguments."""
     parser = argparse.ArgumentParser(description='MindSpeed-MS Arguments',
                                      allow_abbrev=False)
@@ -93,25 +92,8 @@ def parse_args(extra_args_provider=None, args_defaults={}, ignore_unknown_args=F
     args.world_size = int(os.getenv("MS_WORKER_NUM", '1'))
 
     defaults = parser.parse_args(args=[])
-    if args.yaml_cfg is not None:
-        args = validate_yaml(args, defaults, args_defaults)
-    else:
-        setattr(defaults, "num_moe_experts", defaults.num_experts)
-        setattr(defaults, "layernorm_epsilon", defaults.norm_epsilon)
-        del defaults.num_experts
-        del defaults.norm_epsilon
-        validate_args(args, defaults, args_defaults)
 
-    # set global args, build tokenizer, and set adlr-autoresume,
-    # tensorboard-writer, and timers.
-    set_global_variables(args, build_tokenizer=False)
-
-    # stay fool.
-    args = get_args()
-    if args.lazy_mpu_init:
-        args.use_cpu_initialization = True
-
-    return args
+    return args, defaults
 
 
 def load_retro_config(retro_project_dir):
@@ -592,10 +574,6 @@ def validate_args(args, default_args, defaults={}):
     # Activation function mapping.
     _init_activation_func(args)
 
-    # Optimizer
-    if args.optimizer == 'adam':
-        args.optimizer = 'SpeedAdamW'
-
     # DDP and zero_level
     args.wrap_with_ddp = True
     if args.zero_level is not None:
@@ -604,8 +582,6 @@ def validate_args(args, default_args, defaults={}):
                 "zero_level must be None or 'z3' when use_distributed_optimizer is ON"
         else:
             args.wrap_with_ddp = False
-
-    args.wrap_with_ddp = False
 
     # Activation recomputing.
     if args.distribute_saved_activations:
@@ -1613,8 +1589,8 @@ def _add_distributed_args(parser):
     group.add_argument('--no-overlap-p2p-communication', action='store_false',
                        help='overlap pipeline parallel communication with forward and backward chunks',
                        dest='overlap_p2p_comm')
-    group.add_argument('--distributed-backend', default='nccl',
-                       choices=['nccl', 'gloo'],
+    group.add_argument('--distributed-backend', default='hccl',
+                       choices=['hccl'],
                        help='Which backend to use for distributed training.')
     group.add_argument('--distributed-timeout-minutes', type=int, default=10,
                        help='Timeout minutes for torch.distributed.')

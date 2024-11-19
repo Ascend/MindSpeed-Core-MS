@@ -22,7 +22,6 @@ import glob
 import numpy as np
 
 import mindspore as ms
-from mindspore import mint
 import mindspore.common.dtype as mstype
 import mindspore.ops as ops
 from mindspore import Parameter, Tensor
@@ -646,11 +645,6 @@ class MixtralModel(Module):
 
         position_ids = None
 
-        if loss_mask is None:
-            if self.pad_token is None:
-                raise RuntimeError("If 'pad_token' is not specified, 'loss_mask' must be provided.")
-            loss_mask = mint.ne(input_ids, self.pad_token).astype(self.compute_dtype)
-
         hidden_states = self.language_model(
             input_ids,
             position_ids,
@@ -666,8 +660,7 @@ class MixtralModel(Module):
             loss = self.post_language_model_processing(
                 hidden_states,
                 labels,
-                logit_weights,
-                loss_mask
+                logit_weights
                 )
             return loss
         else:
@@ -677,15 +670,14 @@ class MixtralModel(Module):
             self,
             lm_output,
             labels,
-            logit_weights,
-            loss_mask):
+            logit_weights):
         """define post language model process"""
         logits = self.head(lm_output, logit_weights, self.parallel_output)
 
         logits = logits.reshape(-1, logits.shape[-1]).to(mstype.float32)
         labels = labels.reshape(-1,).to(mstype.int32)
 
-        loss = self.loss(logits, labels, loss_mask)
+        loss = self.loss(logits, labels)
 
         return loss
 
@@ -695,7 +687,7 @@ def read_loss_from_log(file_path):
     losses = []
     with open(file_path, 'r') as file:
         for line in file:
-            loss_str = re.search(r'Loss: (\d+\.\d+)', line)
+            loss_str = re.search(r'lm loss: (\d+\.\d+)', line)
             if loss_str:
                 loss_value = float(loss_str.group(1))
                 losses.append(loss_value)

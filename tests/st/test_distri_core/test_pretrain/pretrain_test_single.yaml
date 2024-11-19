@@ -1,26 +1,24 @@
 model_parallel:
-  bf16: True
   # model parallelism
-  tensor_model_parallel_size: 2
-  pipeline_model_parallel_size: 2
+  tensor_model_parallel_size: 1
+  pipeline_model_parallel_size: 1
   context_parallel_size: 1
   expert_model_parallel_size: 1
   virtual_pipeline_model_parallel_size: null
+  sequence_parallel: False
+  deterministic_mode: True
 
-  # training
+  # mixed precision
   params_dtype: "float32"
   compute_dtype: "float32"
-
-  # pipeline parallel
-  sequence_parallel: True
-  pipeline_dtype: "float32"
+  softmax_compute_dtype: "float32"
 
 language_model:
   # model architecture
-  num_layers: 2
-  hidden_size: 32
+  num_layers: 8
+  hidden_size: 64
   ffn_hidden_size: 128
-  num_attention_heads: 16
+  num_attention_heads: 8
   num_query_groups: 8
   hidden_dropout: 0.0
   attention_dropout: 0.0
@@ -29,66 +27,75 @@ language_model:
   mask_func_type: "attn_mask_fill"
   gated_linear_unit: True
   activation_func: "swiglu"
-  num_moe_experts: 1
   apply_residual_connection_post_layernorm: False
-  normalization: 'FusedRMSNorm'
+  normalization: "FusedRMSNorm"
   layernorm_epsilon: 1.e-5
 
-  # initialization
+  # param init method
   init_method: "normal"
   init_method_std: 0.01
 
-  # miscellaneous
+  # MoE
+  moe_router_topk: 2
+  moe_router_load_balancing_type: "aux_loss"
+  moe_token_dispatcher_type: "alltoall"
+  moe_z_loss_coeff: 1.e-3
+  moe_aux_loss_coeff: 1.e-2
+  moe_input_jitter_eps: null
+  moe_expert_capacity_factor: -1
+  moe_token_drop_policy: null
+  moe_pad_expert_input_to_capacity: False
+
   clone_scatter_output_in_embedding: False
 
 # training
+wrap_with_ddp: True
+use_distributed_optimizer: True
 transformer_impl: "local"
-seed: 2024
-global_batch_size: 1
+seed: 1024
+max_position_embeddings: 32
+global_batch_size: 4
 micro_batch_size: 1
-train_iters: 10
+train_iters: 5
 eval_interval: null
-group_query_attention: True
+data_layout: "SBH"
+group_query_attention: False
 untie_embeddings_and_output_weights: True
 position_embedding_type: "rope"
 check_for_nan_in_loss_and_grad: False
-max_position_embeddings: 4
-shape_order: "BSH"
-pre_tockens: 2147483647
-next_tockens: 2147483647
-tokenizer_type: 'NullTokenizer'
 
 # data
-vocab_size: 64
-padded_vocab_size: 64
-seq_length: 4
+tokenizer_type: NullTokenizer
+vocab_size: 128
+padded_vocab_size: 128
+seq_length: 32
 shuffle: False
 pad_token: 0
+data_path: ""
 
-# checkpointing arguments
-save: "output"
-save_interval: 5
+# checkpoint
+save: null
+save_interval: null
 dist_ckpt_format: "ckpt"
+no_load_rng: True
 
 # optimizer
-optimizer: "adam"
-clip_grad: 0.0
-eps: 1.0e-8
-lr: 2.0e-5
+optimizer: "mint.AdamW"
+lr: 1.e-2
 adam_beta1: 0.9
-adam_beta1: 0.999
+adam_beta2: 0.95
+weight_decay: 0.0
 lr_decay_style: "constant"
-weight_decay_incr_style: "constant"
-use_distributed_optimizer: True
+weight_decay_incre_style: "constant"
+clip_grad: 0.0
 
 # loss arguments
-loss_scale: 1
+loss_scale: 1.0
 initial_loss_scale: null
-loss_reduction: "mean"
 loss_func_kwargs:
   loss_func_type: "CrossEntropyLoss"
 
-# distributed arguments
+# speedup
 delay_grad_reduce: False
 
 # logging

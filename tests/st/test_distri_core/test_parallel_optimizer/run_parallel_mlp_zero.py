@@ -30,6 +30,8 @@ from mindspeed_ms.core.parallel_state import initialize_model_parallel, \
     get_data_parallel_world_size, get_data_parallel_group
 from mindspeed_ms.core.optimizer import get_optimizer, optimizer_config_from_args
 from mindspeed_ms.training import parse_args, core_transformer_config_from_yaml
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
 from tests.st.test_distri_core.utils import TestData
 
 ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
@@ -229,7 +231,9 @@ if __name__ == '__main__':
     def extra_parser_provider(inner_parser):
         inner_parser.add_argument('--generate_golden', default=False, type=bool)
         return inner_parser
-
-    args = parse_args(extra_args_provider=extra_parser_provider)
+    args, defaults = parse_args(extra_args_provider=extra_parser_provider)
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
+    # init config
     used_config = core_transformer_config_from_yaml(args)
     run_parallel_mlp(used_config, args, extra_args.generate_golden)

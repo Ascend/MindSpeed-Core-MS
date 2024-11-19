@@ -381,6 +381,11 @@ class DistributedDataParallel(Module):
         for buffer in self.buffers + self.expert_parallel_buffers:
             buffer.issue_grad_reduce()
 
+    def scale_gradients(self, scaling_factor):
+        """ scale all gradients inside the buffers by `scaling_factor`."""
+        for buffer in self.buffers + self.expert_parallel_buffers:
+            buffer.scale_gradients(scaling_factor)
+
     def final_grad_reduce(self):
         """ finalize grad reduce for each buffer. """
         for buffer in self.buffers + self.expert_parallel_buffers:

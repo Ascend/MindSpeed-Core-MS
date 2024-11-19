@@ -10,15 +10,16 @@ from mindspore import nn
 from mindspore.communication import init
 
 # common Interface/Class
-from mindspeed_ms.training import get_model
+from mindspeed_ms.training import get_model, parse_args, get_args
+from mindspeed_ms.training.global_vars import set_global_variables
+from mindspeed_ms.training.arguments import core_transformer_config_from_args
+from mindspeed_ms.training.yaml_arguments import core_transformer_config_from_yaml, validate_yaml
+
+from mindspeed_ms.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
 from mindspeed_ms.core.parallel_state import initialize_model_parallel, \
     get_pipeline_model_parallel_world_size, get_tensor_model_parallel_world_size, \
     get_tensor_model_parallel_rank, get_data_parallel_rank, \
     get_data_parallel_group, get_data_parallel_world_size
-from mindspeed_ms.training import core_transformer_config_from_args, core_transformer_config_from_yaml
-from mindspeed_ms.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
-from mindspeed_ms.training import parse_args, get_args
-
 from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
 # transformer V1
 from mindspeed_ms.legacy.model.module import Module as LegacyModule
@@ -126,8 +127,6 @@ class CrossAttentionNet(McoreModule):
 
 def run_legacy(data_dir, ckpt_dir, save_output_dir):
     """ test transformer v1, i.g. legacy """
-
-    args = parse_args()
     if args.yaml_cfg is not None:
         config = core_transformer_config_from_yaml(args)
     else:
@@ -228,7 +227,6 @@ def run_legacy(data_dir, ckpt_dir, save_output_dir):
 
 def run_mcore(data_dir, ckpt_dir, save_output_dir):
     """ test mindspore v2, i.g. core """
-    args = parse_args()
     if args.yaml_cfg is not None:
         config = core_transformer_config_from_yaml(args)
     else:
@@ -237,7 +235,8 @@ def run_mcore(data_dir, ckpt_dir, save_output_dir):
     ms.set_seed(seed)
 
     # set env
-    ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
+    ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON',
+                   pynative_synchronize=True)
     init()
     # init context
     tp = config.tensor_model_parallel_size
@@ -434,23 +433,31 @@ def load_ckpt_and_data(batch_size,
     return data_dict, ckpt_dict
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--run_mode', type=str, default='megatron')
-    parser.add_argument('--layout', type=str, default='SBH',
-                        help="layout")
-    parser.add_argument('--data_dir', type=str, default="data/parallel/random_data/",
-                        help="load data path")
-    parser.add_argument('--ckpt_dir', type=str, default="data/parallel/random_ckpt/",
-                        help="load ckpt path")
-    parser.add_argument('--output_dir', type=str, default="data/parallel/output/",
-                        help="load ckpt path")
-    arg, _ = parser.parse_known_args()
-    clean_args()
+def extra_args_provider(inner_parser):
+    """ extra args provider """
+    inner_parser.add_argument('--run_mode', type=str, default='megatron')
+    inner_parser.add_argument('--layout', type=str, default='SBH',
+                              help="layout")
+    inner_parser.add_argument('--data_dir', type=str, default="data/parallel/random_data/",
+                              help="load data path")
+    inner_parser.add_argument('--ckpt_dir', type=str, default="data/parallel/random_ckpt/",
+                              help="load ckpt path")
+    inner_parser.add_argument('--output_dir', type=str, default="data/parallel/output/",
+                              help="load ckpt path")
+    return inner_parser
 
-    if arg.run_mode == 'test_legacy':
-        run_legacy(arg.data_dir, arg.ckpt_dir, arg.output_dir)
-    elif arg.run_mode == 'test_mcore':
-        run_mcore(arg.data_dir, arg.ckpt_dir, arg.output_dir)
+
+if __name__ == '__main__':
+    parser = extra_args_provider(argparse.ArgumentParser())
+    extra_args, _ = parser.parse_known_args()
+
+    args, defaults = parse_args(extra_args_provider=extra_args_provider)
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
+
+    if extra_args.run_mode == 'test_legacy':
+        run_legacy(extra_args.data_dir, extra_args.ckpt_dir, extra_args.output_dir)
+    elif extra_args.run_mode == 'test_mcore':
+        run_mcore(extra_args.data_dir, extra_args.ckpt_dir, extra_args.output_dir)
     else:
         raise TypeError("Wrong run mode!")

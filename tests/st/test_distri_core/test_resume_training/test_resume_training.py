@@ -17,13 +17,24 @@ import os
 
 import pytest
 import numpy as np
+from tests.st.test_distri_core.utils import read_loss_from_log
 
 
-@pytest.mark.level0
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_single
 class TestResumeTraining:
     """A test class for testing Linear."""
+    env_list = {
+        # 'ASCEND_RT_VISIBLE_DEVICES': '0,1,2,3',
+        # 'ASCEND_RT_VISIBLE_DEVICES': '4,5,6,7',
+        # 'ASCEND_GLOBAL_LOG_LEVEL': '3',
+        # 'ASCEND_SLOG_PRINT_TO_STDOUT': '1',
+        # 'ASCEND_GLOBAL_EVENT_ENABLE': '1',
+        # 'GLOG_v': '0',
+        # 'PYTHONPATH': f"/path/to/your/mindspore:{os.getenv('PYTHONPATH')}",
+        }
+    for k, v in env_list.items():
+        os.environ[k] = v
     def extract_loss_from_log(self, pynative_log_path: str):
         '''extract loss from log_path'''
         assert os.path.exists(pynative_log_path), f"{pynative_log_path} did not exits"
@@ -45,6 +56,7 @@ class TestResumeTraining:
 
         return pynative_loss
 
+    @pytest.mark.level0
     @pytest.mark.run(order=0)
     def test_resume_training_pynative_ep1tp2pp2_step10(self):
         """
@@ -80,6 +92,7 @@ class TestResumeTraining:
         os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
 
+    @pytest.mark.level0
     @pytest.mark.run(order=1)
     def test_resume_training_pynative_ep1tp2pp2_resume_from_step5(self):
         """
@@ -121,10 +134,10 @@ class TestResumeTraining:
 
         # check loss with golden loss
         resume_log_path = f'msrun_log_pynative{postfix}/worker_2.log'
-        resume_loss = self.extract_loss_from_log(resume_log_path)
+        resume_loss = read_loss_from_log(resume_log_path)
 
         golden_log_path = f'msrun_log_pynative_ep1tp2pp2_step10/worker_2.log'
-        golden_loss = self.extract_loss_from_log(golden_log_path)
+        golden_loss = read_loss_from_log(golden_log_path)
 
         resume_loss = np.array(resume_loss)
         print(f"resume_loss are:\n{resume_loss}")
@@ -137,6 +150,120 @@ class TestResumeTraining:
                f"and golden loss:\n{golden_loss},\n" + \
                "please check your code."
 
+
+    @pytest.mark.level0
+    @pytest.mark.run(order=0)
+    def test_resume_training_pynative_dp2tp1pp2_step10(self):
+        """
+        Feature: test mixtral pynative
+        Description: run pynative mode mixtral to generate pynative loss
+        Expectation: test success
+        """
+        scripts_name = "run_resume_training.py"
+        device_num = 4
+        postfix = "_dp2tp1pp2_step10"
+        rm_list = ["npy_pynative*", f"msrun_log_pynative{postfix}*", "kernel_meta*", f"output{postfix}"]
+        print("")
+        for rm_path in rm_list:
+            rm_path = os.path.join(os.getcwd(), rm_path)
+            print(f"removing {rm_path}")
+            os.system(f"rm -rf {rm_path}")
+        sh_path = os.path.split(os.path.realpath(__file__))[0]
+        scripts_path = os.path.join(sh_path, scripts_name)
+
+        scripts_cmd = (
+            f"{scripts_path} "
+            "--yaml-cfg=./config_resume_training.yaml "
+            "--crc_check "
+            f"--output_dir=output{postfix} "
+            "--training_iters=10 "
+            "--save_interval=6 "
+            "--tp=1 "
+            "--pp=2 "
+            "--gbs=4 "
+            "--epochs=2"
+        )
+        cmd = f"msrun --worker_num={device_num} "+\
+                    f"--local_worker_num={device_num} "+\
+                    f"--master_port=8311 "+\
+                    f"--log_dir=msrun_log_pynative{postfix} "+\
+                    f"--join=True "+\
+                    f"--cluster_time_out=300 "+\
+                    f"{scripts_cmd}"
+        print(f"run cmd is:\n{cmd}\n")
+        ret = os.system(cmd)
+        os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
+        assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
+
+
+    @pytest.mark.level0
+    @pytest.mark.run(order=0)
+    def test_resume_training_pynative_dp2tp1pp2_resume_from_step6(self):
+        """
+        Feature: test mixtral pynative
+        Description: run pynative mode mixtral to generate pynative loss
+        Expectation: test success
+        """
+        scripts_name = "run_resume_training.py"
+        device_num = 4
+        postfix = "_dp2tp1pp2_resume_from_step6"
+        rm_list = ["npy_pynative*", f"msrun_log_pynative{postfix}*", "kernel_meta*", f"output{postfix}"]
+        print("")
+        for rm_path in rm_list:
+            rm_path = os.path.join(os.getcwd(), rm_path)
+            print(f"removing {rm_path}")
+            os.system(f"rm -rf {rm_path}")
+        sh_path = os.path.split(os.path.realpath(__file__))[0]
+        scripts_path = os.path.join(sh_path, scripts_name)
+
+        scripts_cmd = (
+            f"{scripts_path} "
+            "--yaml-cfg=./config_resume_training.yaml "
+            "--crc_check "
+            f"--output_dir=output{postfix} "
+            "--resume_training "
+            "--load_checkpoint=./output_dp2tp1pp2_step10 "
+            "--latest_epoch_step='1_5' "
+            "--load_epoch_step='1_1' "
+            "--training_iters=10 "
+            "--save_interval=11 "
+            "--tp=1 "
+            "--pp=2 "
+            "--gbs=4 "
+            "--epochs=2 "
+        )
+        cmd = f"msrun --worker_num={device_num} "+\
+                    f"--local_worker_num={device_num} "+\
+                    f"--master_port=8311 "+\
+                    f"--log_dir=msrun_log_pynative{postfix} "+\
+                    f"--join=True "+\
+                    f"--cluster_time_out=300 "+\
+                    f"{scripts_cmd}"
+        print(f"run cmd is:\n{cmd}\n")
+        ret = os.system(cmd)
+        os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
+        assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
+
+        # check loss with golden loss
+        resume_log_path = f'msrun_log_pynative{postfix}/worker_3.log'
+        resume_loss = read_loss_from_log(resume_log_path)
+
+        golden_log_path = f'msrun_log_pynative_dp2tp1pp2_step10/worker_3.log'
+        golden_loss = read_loss_from_log(golden_log_path)
+
+        resume_loss = np.array(resume_loss)
+        print(f"resume_loss are:\n{resume_loss}")
+        golden_loss = np.array(golden_loss)[len(golden_loss)-len(resume_loss):]
+        print(f"golden_loss are:\n{golden_loss}")
+
+        assert np.allclose(golden_loss, resume_loss, atol=1.e-4, rtol=1e-4), \
+               f"Expect relative error between resume and golden loss below 1e-4,\n" + \
+               f"but got resume loss:\n{resume_loss},\n" + \
+               f"and golden loss:\n{golden_loss},\n" + \
+               "please check your code."
+
+
+    @pytest.mark.level1
     @pytest.mark.run(order=2)
     def test_resume_training_pynative_ep1tp2pp2_resume_from_step5_no_load_optim(self):
         """
@@ -176,9 +303,9 @@ class TestResumeTraining:
 
         # check loss with golden loss
         resume_log_path = f'msrun_log_pynative{postfix}/worker_2.log'
-        resume_loss = self.extract_loss_from_log(resume_log_path)
+        resume_loss = read_loss_from_log(resume_log_path)
         golden_log_path = f'msrun_log_pynative_ep1tp2pp2_step10/worker_2.log'
-        golden_loss = self.extract_loss_from_log(golden_log_path)
+        golden_loss = read_loss_from_log(golden_log_path)
         resume_loss = np.array(resume_loss)
         print(f"resume_loss are:\n{resume_loss}")
         golden_loss = np.array(golden_loss)[len(golden_loss)-len(resume_loss):]
@@ -191,6 +318,8 @@ class TestResumeTraining:
             f"and golden loss:\n{golden_loss},\n" + \
             "please check your code."
 
+
+    @pytest.mark.level1
     @pytest.mark.run(order=3)
     def test_resume_training_pynative_ep1tp2pp2_resume_from_step5_override_scheduler(self):
         """
@@ -234,9 +363,9 @@ class TestResumeTraining:
 
         # check loss with golden loss
         resume_log_path = f'msrun_log_pynative{postfix}/worker_2.log'
-        resume_loss = self.extract_loss_from_log(resume_log_path)
+        resume_loss = read_loss_from_log(resume_log_path)
         golden_log_path = f'msrun_log_pynative_ep1tp2pp2_step10/worker_2.log'
-        golden_loss = self.extract_loss_from_log(golden_log_path)
+        golden_loss = read_loss_from_log(golden_log_path)
         resume_loss = np.array(resume_loss)
         print(f"resume_loss are:\n{resume_loss}")
         golden_loss = np.array(golden_loss)[len(golden_loss)-len(resume_loss):]
@@ -250,6 +379,7 @@ class TestResumeTraining:
             f"and golden loss:\n{golden_loss},\n" + \
             "please check your code."
 
+    @pytest.mark.level1
     @pytest.mark.run(order=4)
     def test_resume_training_pynative_ep1tp2pp2_resume_from_step5_new_dataset(self):
         """
@@ -292,9 +422,9 @@ class TestResumeTraining:
 
         # check loss with golden loss
         resume_log_path = f'msrun_log_pynative{postfix}/worker_2.log'
-        resume_loss = self.extract_loss_from_log(resume_log_path)
+        resume_loss = read_loss_from_log(resume_log_path)
         golden_log_path = f'msrun_log_pynative_ep1tp2pp2_step10/worker_2.log'
-        golden_loss = self.extract_loss_from_log(golden_log_path)
+        golden_loss = read_loss_from_log(golden_log_path)
         resume_loss = np.array(resume_loss)
         print(f"resume_loss are:\n{resume_loss}")
         golden_loss = np.array(golden_loss)[len(golden_loss)-len(resume_loss):]

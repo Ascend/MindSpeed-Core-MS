@@ -29,8 +29,8 @@ class OptimizerConfig:
     ##############
     # General
     ##############
-    optimizer: str = "SpeedAdamW"
-    """Optimizer to use (one of Adam or SGD)."""
+    optimizer: str = "adam"
+    """Optimizer to use (one of adam or SGD)."""
 
     lr: Optional[float] = None
     """Initial learning rate. Depending on decay style and initial warmup, the learning rate at each

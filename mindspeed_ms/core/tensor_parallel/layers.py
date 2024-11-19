@@ -1041,7 +1041,6 @@ class VocabParallelEmbedding(nn.Cell):
 
     Raises:
         ValueError: The vocabulary size is not divisible by size of tensor parallel.
-        NotImplementedError: `config.deterministic_mode` is not supported for now.
         NotImplementedError: `config.use_cpu_initialization` is not supported for now.
 
     Supported Platforms:
@@ -1135,8 +1134,6 @@ class VocabParallelEmbedding(nn.Cell):
             params_dtype=None
     ):
         super().__init__()
-        if config.deterministic_mode:
-            raise NotImplementedError("`config.deterministic_mode` is not supported for now.")
         if config.use_cpu_initialization:
             raise NotImplementedError("`config.use_cpu_initialization` is not supported for now.")
 

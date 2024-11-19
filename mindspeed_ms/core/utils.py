@@ -445,9 +445,9 @@ def pp_layer_rename(raw_name, need_drop_suffix=False):
         name_match = re.search(r'layers\.(\d+)\.', raw_name)
         global_id = name_match.group(1)
         if global_id not in layer_str_dict:
-            raise ValueError(f"get global_id {global_id} from name {raw_name} "
-                             f"but not found in layer_str_dict {layer_str_dict}")
-        new_name = raw_name.replace(f"layers.{global_id}", f"layers.{layer_str_dict[global_id]}")
+            new_name = raw_name
+        else:
+            new_name = raw_name.replace(f"layers.{global_id}", f"layers.{layer_str_dict[global_id]}")
     return new_name
 
 # pylint: disable=W0621, W0212
@@ -468,3 +468,7 @@ def log_single_rank(logger: logging.Logger, *args: Any, rank: int = 0, **kwargs:
             logger.log(*args, **kwargs)
     else:
         logger.log(*args, **kwargs)
+
+def get_model_config(model):
+    """ get model_config. """
+    return getattr(model, 'config')

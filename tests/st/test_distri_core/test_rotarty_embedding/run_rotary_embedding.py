@@ -22,6 +22,9 @@ from mindspeed_ms.training import (
     core_transformer_config_from_args,
     core_transformer_config_from_yaml
 )
+from mindspeed_ms.training.arguments import validate_args
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
 from mindspeed_ms.training import get_model
 from mindspeed_ms.core.transformer import TransformerConfig
@@ -83,9 +86,13 @@ def run_rotary_embedding(config: TransformerConfig):
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args, defaults = parse_args()
     if args.yaml_cfg is not None:
+        args = validate_yaml(args, defaults, {})
+        set_global_variables(args, False)
         config = core_transformer_config_from_yaml(args)
     else:
+        validate_args(args, defaults)
+        set_global_variables(args, False)
         config = core_transformer_config_from_args(args)
     run_rotary_embedding(config)

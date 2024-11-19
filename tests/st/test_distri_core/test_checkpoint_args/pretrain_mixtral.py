@@ -13,12 +13,12 @@
 # limitations under the License.
 # ============================================================================
 """ Pretrain Mixtral """
-import random
+from functools import partial
 import numpy as np
 
 import mindspore as ms
 import mindspore.dataset as ds
-from mindspore import Tensor
+from mindspore import Tensor, mint
 from mindspore.communication.management import init
 
 from mindspeed_ms.training import (
@@ -29,20 +29,71 @@ from mindspeed_ms.training import (
     core_transformer_config_from_args,
     core_transformer_config_from_yaml
 )
+from mindspeed_ms.training.utils import average_losses_across_data_parallel_group
+from mindspeed_ms.training.yaml_arguments import validate_yaml
 from mindspeed_ms.core.optimizer import optimizer_config_from_args
 from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
-from mindspeed_ms.core.parallel_state import (
-    get_data_parallel_group,
-    get_data_parallel_rank,
-    get_expert_model_parallel_group,
-    get_expert_model_parallel_rank,
-    get_pipeline_model_parallel_group,
-    get_pipeline_model_parallel_rank,
-    get_tensor_model_parallel_group,
-    get_tensor_model_parallel_rank,
-    initialize_model_parallel
-)
 from tests.st.test_distri_core.utils import MixtralModel
+
+
+dataset = None
+
+def get_batch(data_iterator):
+    """ get micro batch data """
+    if data_iterator is not None:
+        data = next(data_iterator)
+    else:
+        data = None
+    return data.values()
+
+
+def loss_func(loss_mask, output_tensor):
+    """ loss reduction function. """
+    # pylint: disable=W0621
+    args = get_args()
+
+    losses = output_tensor.float()
+    loss_mask = loss_mask.view(-1).float()
+
+    if args.context_parallel_size > 1:
+        loss = mint.cat([mint.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
+        loss = ReduceFromContextParallelRegion()(loss)
+        loss = loss[0] / loss[1]
+    else:
+        loss = mint.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+
+    print(f"final micro loss: {loss}")
+
+    if args.check_for_nan_in_loss_and_grad:
+        global_rank = ms.communication.get_rank()
+        if loss.isnan():
+            raise RuntimeError(f"Rank {global_rank}: found NaN in local forward loss calculation. "
+                               f"Device: {ms.hal.get_device_name()}, node: {os.uname()[1]}")
+
+    # Reduce loss for logging
+    average_loss = average_losses_across_data_parallel_group([loss])
+    return loss * args.context_parallel_size, {'lm loss': average_loss[0]}
+
+
+def forward_step(data_iterator, model):
+    """Forward training step
+
+    Args:
+        data_iterator: Input data iterator.
+        model: The model.
+    """
+    # get batch data
+    input_data, labels, attention_mask = get_batch(data_iterator)
+    loss_mask = mint.ones_like(labels[:, 1:])
+    input_tensor = (input_data, labels, attention_mask)
+
+    # pylint: disable=W0621
+    def core_forward_func(*args):
+        input_data, labels, attention_mask = args
+        output_tensor = model(input_data, labels, attention_mask)
+        return output_tensor
+
+    return input_tensor, core_forward_func, partial(loss_func, loss_mask)
 
 
 class TestData:
@@ -65,46 +116,23 @@ class TestData:
     def __len__(self):
         return self.dataset_size
 
+# pylint: disable=W0613
+def train_valid_test_dataset_provider(unuse_args):
+    """ get dataset """
+    return dataset
+
 
 # pylint: disable=W0621
-def main(config: TransformerConfig):
+def main(config: TransformerConfig, args):
     """ Test ParallelTransformer. """
-    args = get_args()
+    global dataset
     print(f"config is:\n{config}")
-    tp = config.tensor_model_parallel_size
-    ep = config.expert_model_parallel_size
-    pp = config.pipeline_model_parallel_size
-    vpp = config.virtual_pipeline_model_parallel_size
-
-    ms.set_context(
-        device_target="Ascend",
-        mode=ms.PYNATIVE_MODE,
-        max_device_memory="58GB",
-        deterministic='ON',
-        pynative_synchronize=True)
 
     init()
-    initialize_model_parallel(
-        tensor_model_parallel_size=tp,
-        expert_model_parallel_size=ep,
-        pipeline_model_parallel_size=pp,
-        virtual_pipeline_model_parallel_size=vpp)
 
-    dp_group = get_data_parallel_group()
-    ep_group = get_expert_model_parallel_group()
-    tp_group = get_tensor_model_parallel_group()
-    pp_group = get_pipeline_model_parallel_group()
-    dp_rank = get_data_parallel_rank()
-    ep_rank = get_expert_model_parallel_rank()
-    tp_rank = get_tensor_model_parallel_rank()
-    pp_rank = get_pipeline_model_parallel_rank()
-
-    print(f"dp_group is {dp_group}, ep_group is {ep_group}, tp_group is {tp_group}, pp_group is {pp_group}", flush=True)
-    print(f"dp_rank is {dp_rank}, ep_rank is {ep_rank}, tp_rank is {tp_rank}, pp_rank is {pp_rank}", flush=True)
-
-    random.seed(args.seed)
-    ms.set_seed(args.seed)
-    np.random.seed(args.seed)
+    # random.seed(args.seed)
+    # ms.set_seed(args.seed)
+    # np.random.seed(args.seed)
 
     input_data = np.random.randint(
         low=1, high=args.vocab_size,
@@ -134,14 +162,25 @@ def main(config: TransformerConfig):
         )
         return network
 
-    pretrain(None, model_provider_func, None, train_data_loader=dataset)
+    pretrain(
+        train_valid_test_dataset_provider=train_valid_test_dataset_provider,
+        model_provider=model_provider_func,
+        model_type=None,
+        forward_step_func=forward_step,
+        process_non_loss_data_func=None,
+        extra_args_provider=None,
+        args_defaults={},
+    )
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+
+    args.deterministic_mode = True
     args.data_layout = "BSH"
     if args.yaml_cfg is None:
         config = core_transformer_config_from_args(args)
     else:
         config = core_transformer_config_from_yaml(args)
-    main(config)
+    main(config, args)

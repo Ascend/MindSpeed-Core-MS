@@ -64,7 +64,7 @@ betas:
 lr_decay_style: "constant"
 weight_decay_incr_style: "constant"
 clip_grad: 0.0
-lr: 1.25e-4
+lr: 1.25e-2
 weight_decay: 1.e-1
 
 # distributed arguments

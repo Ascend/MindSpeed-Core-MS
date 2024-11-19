@@ -21,10 +21,12 @@ import mindspore as ms
 import mindspore.common.dtype as mstype
 import mindspore.dataset as ds
 import mindspore.nn as nn
-from mindspore import Tensor, ops
+from mindspore import Tensor, ops, mint
 from mindspore.communication.management import init
 from mindspore.nn import AdamWeightDecay
 
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.training import parse_args, core_transformer_config_from_yaml
 from mindspeed_ms.core.optimizer import optimizer_config_from_args
 from mindspeed_ms.core.parallel_state import (initialize_model_parallel, get_tensor_model_parallel_world_size,
@@ -60,8 +62,18 @@ class ColumnParallelLinearNet(nn.Cell):
         output = self.linear(x)[0]
         labels = labels.reshape(-1)
         output = output.reshape(output.shape[1:])
-        loss = self.loss(output, labels, input_mask)
+        losses = self.loss(output, labels)
+        loss = self.loss_reduce(input_mask, losses)
         return loss
+
+    def loss_reduce(self, loss_mask, output_tensor):
+        if output_tensor.ndim == 2:
+            output_tensor = output_tensor.swapaxes(0, 1).contiguous()
+        losses = output_tensor.float()
+        loss_mask = loss_mask.view(-1).float()
+        total_tokens = loss_mask.sum()
+        loss = mint.cat([mint.sum(losses.view(-1) * loss_mask).view(1), total_tokens.view(1)])
+        return loss[0] / loss[1]
 
 
 def run_parallel_cross_entropy_loss(config, args):
@@ -111,28 +123,28 @@ if __name__ == '__main__':
     parser.add_argument('--yaml-cfg', type=str, default=None,
                         help="yaml file path")
     extra_args = parser.parse_args()
-    main_args = parse_args(extra_args_provider=extra_args_provider)
+    main_args, defaults = parse_args(extra_args_provider=extra_args_provider)
+    main_args = validate_yaml(main_args, defaults, {})
+    set_global_variables(main_args, False)
+    # init config
+    used_config = core_transformer_config_from_yaml(main_args)
 
     if extra_args.run_mode == 'cross_entropy_loss':
-        used_config = core_transformer_config_from_yaml(main_args)
         used_config.tensor_model_parallel_size = 2
+        main_args.tensor_model_parallel_size = 2
         run_parallel_cross_entropy_loss(used_config, main_args)
     elif extra_args.run_mode == 'vocab_parallel_cross_entropy_loss':
         main_args.loss_func_kwargs.loss_func_type = "VocabParallelCrossEntropy"
-        used_config = core_transformer_config_from_yaml(main_args)
         used_config.tensor_model_parallel_size = 2
+        main_args.tensor_model_parallel_size = 2
         run_parallel_cross_entropy_loss(used_config, main_args)
     elif extra_args.run_mode == 'cross_entropy_loss_single':
-        used_config = core_transformer_config_from_yaml(main_args)
         run_parallel_cross_entropy_loss(used_config, main_args)
     elif extra_args.run_mode == 'vocab_parallel_cross_entropy_loss_single':
         main_args.loss_func_kwargs.loss_func_type = "VocabParallelCrossEntropy"
-        used_config = core_transformer_config_from_yaml(main_args)
         run_parallel_cross_entropy_loss(used_config, main_args)
     elif extra_args.run_mode == 'cross_entropy_loss_dp2':
-        used_config = core_transformer_config_from_yaml(main_args)
         run_parallel_cross_entropy_loss(used_config, main_args)
     elif extra_args.run_mode == 'vocab_parallel_cross_entropy_loss_dp2':
         main_args.loss_func_kwargs.loss_func_type = "VocabParallelCrossEntropy"
-        used_config = core_transformer_config_from_yaml(main_args)
         run_parallel_cross_entropy_loss(used_config, main_args)

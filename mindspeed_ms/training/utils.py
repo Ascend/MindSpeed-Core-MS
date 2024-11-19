@@ -17,17 +17,20 @@
 import numpy as np
 import mindspore as ms
 from mindspore import mint, Tensor
+import mindspore.communication.comm_func as comm_func
 from mindspore.communication.management import init
 from mindspore.communication.comm_func import broadcast
 from mindspore.communication import get_rank
 from mindspeed_ms.training import get_args
 from mindspeed_ms.tools import logger
-from mindspeed_ms.core.parallel_state import get_data_parallel_world_size, initialize_model_parallel, \
-    get_context_parallel_for_hybrid_ring_rank, \
-    get_context_parallel_for_hybrid_ulysses_rank, \
-    get_context_parallel_for_hybrid_ring_world_size, \
-    get_context_parallel_for_hybrid_ulysses_world_size
 from mindspeed_ms.core.parallel_state import (
+    get_data_parallel_world_size,
+    initialize_model_parallel,
+    get_context_parallel_for_hybrid_ring_rank,
+    get_context_parallel_for_hybrid_ulysses_rank,
+    get_context_parallel_for_hybrid_ring_world_size,
+    get_context_parallel_for_hybrid_ulysses_world_size,
+    get_data_parallel_group,
     get_tensor_model_parallel_world_size,
     get_context_parallel_rank,
     get_context_parallel_world_size
@@ -267,3 +270,13 @@ def get_tensor_model_parallel_src_rank_ms():
     global_rank = get_rank()
     local_world_size = get_tensor_model_parallel_world_size()
     return (global_rank // local_world_size) * local_world_size
+
+
+def average_losses_across_data_parallel_group(losses):
+    """Reduce a tensor of losses across all GPUs."""
+    averaged_losses = mint.cat(
+        [loss.copy().view(1) for loss in losses])
+    averaged_losses = comm_func.all_reduce(averaged_losses, group=get_data_parallel_group())[0]
+    averaged_losses = averaged_losses / get_data_parallel_world_size()
+
+    return averaged_losses

@@ -46,10 +46,9 @@ __all__.extend(zero.__all__)
 __all__.extend(lr_scheduler.__all__)
 
 
-ModuleRegistry.register(Adam, ModuleType.OPTIMIZER)
 ModuleRegistry.register(SGD, ModuleType.OPTIMIZER)
 ModuleRegistry.register(mint.optim.AdamW, ModuleType.OPTIMIZER, item_name='mint.AdamW')
-ModuleRegistry.register(SpeedAdamW, ModuleType.OPTIMIZER, item_name='SpeedAdamW')
+ModuleRegistry.register(SpeedAdamW, ModuleType.OPTIMIZER, item_name='adam')
 
 
 def get_ditributed_optimizer(optimizer, optimizer_config, model_chunks):
@@ -79,7 +78,8 @@ def get_ditributed_optimizer(optimizer, optimizer_config, model_chunks):
         data_parallel_group=data_parallel_group,
     )
     args = get_args()
-    ckpt_file, _ = get_checkpoint_name(os.path.join(args.save, 'opt_shard_info'),
+    save_path = args.save if args.save is not None else './output'
+    ckpt_file, _ = get_checkpoint_name(os.path.join(save_path, 'opt_shard_info'),
                                        format='json', prefix='dist_opt_shard_info', epoch_num=0, step_num=0)
 
     distributed_optimizer.save_opt_shard_strategy(ckpt_file)
@@ -104,7 +104,7 @@ def get_non_distributed_mixed_precision_optimizer(optimizer, optimizer_config):
 
 def _set_group_lr_and_weight_decay(optimizer_config, params, lr, weight_decay):
     if isinstance(params[0], dict) and not optimizer_config.optimizer.startswith("mint") \
-        and not optimizer_config.optimizer.startswith("Speed"):
+        and not optimizer_config.optimizer.startswith("adam"):
         using_group_lr = any("lr" in param for param in params)
         for param in params:
             if "order_params" not in param:
@@ -147,7 +147,7 @@ def _prepare_optimizer_kwargs(optimizer_config, params, network, optimizer_cls, 
     _set_group_lr_and_weight_decay(optimizer_config, params, learning_rate, weight_decay)
 
     optimizer_kwargs = optimizer_config.get_needed_params_for_class(optimizer_cls)
-    if optimizer_config.optimizer.startswith("mint") or optimizer_config.optimizer.startswith("Speed"):
+    if optimizer_config.optimizer.startswith("mint") or optimizer_config.optimizer.startswith("adam"):
         optimizer_kwargs["lr"] = learning_rate
         optimizer_kwargs["betas"] = tuple([optimizer_config.adam_beta1, optimizer_config.adam_beta2])
     else:

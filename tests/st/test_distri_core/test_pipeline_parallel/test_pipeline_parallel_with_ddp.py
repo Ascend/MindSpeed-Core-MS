@@ -90,16 +90,16 @@ class TestPipelineParallel:
         """
         Feature: test_compare_loss_with_ddp
         Description: compare relative error between pipeline loss and golden loss which with ddp
-        Expectation: relative error smaller than 1e-3
+        Expectation: relative error smaller than 1e-7
         """
         pp_log_path = './pp_with_ddp_log/worker_3.log'
         pp_loss = read_loss_from_log(pp_log_path)
 
         pp_loss = np.array(pp_loss, np.float32)
-        golden_loss = np.array([6.1131716, 6.1252866], np.float32)
+        golden_loss = np.array([6.113171577453613, 6.12528657913208], np.float32)
 
         print(f"pp loss with ddp: {pp_loss}", flush=True)
         print(f"golden loss with ddp: {golden_loss}", flush=True)
-        assert np.allclose(pp_loss, golden_loss, atol=1e-3), "Pipeline parallel loss ddp" \
+        assert np.allclose(pp_loss, golden_loss, atol=1e-7), "Pipeline parallel loss ddp" \
                                                                 "weight accuracy test fail !"
         print("============== Pipeline parallel loss with ddp accuracy test pass !!! ==============")

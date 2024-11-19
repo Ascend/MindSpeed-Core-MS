@@ -26,6 +26,8 @@ from mindspore.communication.management import init
 
 from mindspeed_ms.tools import DictConfig
 from mindspeed_ms.training import parse_args, core_transformer_config_from_yaml
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.core.parallel_state import initialize_model_parallel, get_rank
 from mindspeed_ms.legacy.model import ParallelTransformer
 from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
@@ -126,6 +128,9 @@ if __name__ == '__main__':
                                   help="0 full, 1 select, 2 select comm, -1 not recompute")
         return inner_parser
 
-    main_args = parse_args(extra_args_provider=extra_parser_provider)
+
+    main_args, defaults = parse_args(extra_args_provider=extra_parser_provider)
+    main_args = validate_yaml(main_args, defaults, {})
+    set_global_variables(main_args, False)
     used_config = core_transformer_config_from_yaml(main_args)
     run_parallel_transformer(used_config, main_args, extra_args.recompute_method)

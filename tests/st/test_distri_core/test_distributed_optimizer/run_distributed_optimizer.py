@@ -27,6 +27,8 @@ from mindspore.communication.management import init
 from mindspore.nn import SoftmaxCrossEntropyWithLogits
 from mindspore.mint.optim import AdamW
 from mindspeed_ms.training import parse_args, core_transformer_config_from_yaml
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.core.tensor_parallel.layers import ColumnParallelLinear, RowParallelLinear
 from mindspeed_ms.core.parallel_state import (initialize_model_parallel, get_data_parallel_world_size,
                                               get_data_parallel_rank, get_data_parallel_group)
@@ -89,20 +91,19 @@ def run_golden_optimizer():
     Description: test DDP with DistributedOptimizer
     Expectation: test success
     """
-    used_args = parse_args()
-    config = core_transformer_config_from_yaml(used_args)
+    config = core_transformer_config_from_yaml(args)
     dataset_size = 6
 
     ms.set_context(device_target='Ascend', mode=ms.PYNATIVE_MODE)
     ms.set_seed(2024)
     init()
     initialize_model_parallel(tensor_model_parallel_size=1, order='tp-dp-pp')
-    input_data = np.random.random((dataset_size, used_args.seq_length, config.hidden_size)).astype(np.float32)
-    label_data = np.zeros((dataset_size, used_args.seq_length)).astype(np.float32)
+    input_data = np.random.random((dataset_size, args.seq_length, config.hidden_size)).astype(np.float32)
+    label_data = np.zeros((dataset_size, args.seq_length)).astype(np.float32)
     dataset = TestData(input_data=input_data, label_data=label_data)
     dataset = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels'],
                                   num_shards=get_data_parallel_world_size(), shard_id=get_data_parallel_rank())
-    dataset = dataset.batch(used_args.global_batch_size)
+    dataset = dataset.batch(args.global_batch_size)
     network_golden = TestNet2(config=config)
     optimizer_golden = AdamW(params=network_golden.get_parameters(), lr=1.0)
 
@@ -115,8 +116,7 @@ def run_distributed_optimizer():
     Description: test DDP with DistributedOptimizer
     Expectation: test success
     """
-    used_args = parse_args()
-    config = core_transformer_config_from_yaml(used_args)
+    config = core_transformer_config_from_yaml(args)
     dataset_size = 6
     bucket_size = 10
 
@@ -124,12 +124,12 @@ def run_distributed_optimizer():
     ms.set_seed(2024)
     init()
     initialize_model_parallel(tensor_model_parallel_size=1)
-    input_data = np.random.random((dataset_size, used_args.seq_length, config.hidden_size)).astype(np.float32)
-    label_data = np.zeros((dataset_size, used_args.seq_length)).astype(np.float32)
+    input_data = np.random.random((dataset_size, args.seq_length, config.hidden_size)).astype(np.float32)
+    label_data = np.zeros((dataset_size, args.seq_length)).astype(np.float32)
     dataset = TestData(input_data=input_data, label_data=label_data)
     dataset = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels'],
                                   num_shards=get_data_parallel_world_size(), shard_id=get_data_parallel_rank())
-    dataset = dataset.batch(used_args.global_batch_size)
+    dataset = dataset.batch(args.global_batch_size)
     ddp_config = DistributedDataParallelConfig(
         overlap_grad_reduce=True,
         use_distributed_optimizer=True,
@@ -143,7 +143,7 @@ def run_distributed_optimizer():
                                                module=network)
 
     optimizer = AdamW(params=network_with_ddp.get_parameters(), lr=1.0)
-    optimizer_config = optimizer_config_from_args(used_args)
+    optimizer_config = optimizer_config_from_args(args)
     optimizer = DistributedOptimizer(optimizer=optimizer,
                                      config=optimizer_config,
                                      grad_scaler=None,
@@ -166,14 +166,21 @@ def run_distributed_optimizer():
     assert np.allclose(losses, golden_losses, atol=1.e-3, rtol=1.e-3)
 
 
+def extra_args_provider(inner_parser):
+    inner_parser.add_argument('--golden', default=False, type=bool)
+    return inner_parser
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--golden', default=False, type=bool)
     parser.add_argument('--yaml-cfg', default=None, type=str)
-    args, _ = parser.parse_known_args()
-    clean_args()
+    extra_args, _ = parser.parse_known_args()
+    args, defaults = parse_args(extra_args_provider=extra_args_provider)
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
 
-    if args.golden:
+    if extra_args.golden:
         run_golden_optimizer()
     else:
         run_distributed_optimizer()
