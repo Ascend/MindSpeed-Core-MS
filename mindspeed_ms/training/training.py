@@ -300,7 +300,7 @@ def get_model(model_provider_func, config: TransformerConfig):
             grad_reduce_in_fp32=args.accumulate_allreduce_grads_in_fp32,
             overlap_grad_reduce=args.overlap_grad_reduce,
             use_distributed_optimizer=args.use_distributed_optimizer,
-            bucket_size=args.bucket_size,
+            bucket_size=args.ddp_bucket_size,
             average_in_collective=(args.loss_reduction == 'mean'),
             check_for_nan_in_grad=args.check_for_nan_in_loss_and_grad,
             enable_mem_align=args.enable_mem_align,
