@@ -14,16 +14,17 @@
 # ============================================================================
 """ Language Model """
 import mindspore as ms
-from mindspore import mint
+from mindspore import mint, ops, Parameter
 from mindspore.nn import Cell
-import mindspore.ops as P
 import mindspore.nn as nn
+import mindspore.ops.functional as F
 
 from mindspeed_ms.training.global_vars import get_args
+from mindspeed_ms.core import tensor_parallel
 from mindspeed_ms.core.tensor_parallel import GatherFromSequenceParallelRegion, \
     VocabParallelEmbedding, ScatterToSequenceParallelRegion, ColumnParallelLinear
 from mindspeed_ms.core.tensor_parallel.random import get_rng_tracer
-from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_world_size
+from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_world_size, get_tensor_model_parallel_world_size
 from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
 
 from .module import Module
@@ -31,6 +32,112 @@ from .transformer import ParallelTransformer
 from .enums import ModelType, AttnMaskType
 from .mlp import ParallelMLP
 
+class ParallelLMLogits(nn.Cell):
+    r"""
+    Head to get the logits of each token in the vocab.
+
+    Args:
+        config (dict): Parallel configuration.
+        bias (bool): Specifies whether the layer uses a bias vector. Default: ``False``.
+        compute_dtype (dtype.Number): The computation type. Default: ``None``.
+
+    Inputs:
+        - **input_** (Tensor) - Tensor of hidden states.
+        - **word_embedding_table** (Parameter) - Weight matrix passed from embedding layer.
+        - **parallel_output** (bool) - Specifies whether return paralleled output on each tensor parallel rank.
+          Default: True.
+        - **bias** (Tensor) - The trainable bias parameter.
+
+    Outputs:
+        - **logits_parallel** (Tensor) - If ``parallel_output`` is ``True``, the output is a paralleled logits tensor
+          on each tensor parallel rank, else the output will be a logits tensor gathering all the parallel output.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        .. note::
+            Before running the following examples, you need to configure the communication environment variables.
+
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
+        >>> import os
+        >>> import numpy as np
+        >>> import mindspore as ms
+        >>> import mindspore.common.dtype as mstype
+        >>> from mindspore import Tensor
+        >>> from mindspore.communication.management import init
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model import ParallelLMLogits
+        >>> init()
+        >>> initialize_model_parallel()
+        >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=tensor_parallel)
+        >>> config = TransformerConfig      #The config of Transformer model. For details, please refer to TransformerConfig
+        >>> model = ParallelLMLogits(config=config, bias=False, compute_dtype=ms.float32)
+        >>> input = Tensor(np.random.random((2, 3, 3)).astype(np.float32))
+        >>> weight = Tensor(np.random.random((3, 3)).astype(np.float32))
+        >>> logits = model(input, weight, parallel_output=True)
+        >>> print(logits)
+    """
+
+    def __init__(self, config, bias=False, compute_dtype=None):
+        super(ParallelLMLogits, self).__init__()
+        args = get_args()
+        self.compute_dtype = (
+            compute_dtype if compute_dtype else config.compute_dtype
+        )
+        self.config = config
+        self.is_tensor_parallel = get_tensor_model_parallel_world_size() > 1
+        if self.is_tensor_parallel or self.config.sequence_parallel:
+            self.allreduce_dgrad = self.is_tensor_parallel and not config.sequence_parallel
+        else:
+            self.allreduce_dgrad = False
+
+        self.gradient_accumulation_fusion = config.gradient_accumulation_fusion
+        self.forward_impl_ = tensor_parallel.LinearWithGradAccumulationAndAsyncCommunication(
+            bias=bias,
+            gradient_accumulation_fusion=self.gradient_accumulation_fusion,
+            sequence_parallel=self.config.sequence_parallel,
+            allreduce_dgrad=self.allreduce_dgrad,
+            data_layout=args.data_layout
+        )
+        self.copy_to_mp_region = tensor_parallel.CopyToModelParallelRegion()
+        self.gather_from_mp_region = tensor_parallel.GatherFromModelParallelRegion()
+
+    def construct(self, input_, word_embeddings_weight, parallel_output=True, bias=None
+                  ):
+        """LM logits using word embedding table"""
+        if self.is_tensor_parallel or self.config.sequence_parallel:
+            input_parallel = input_
+        else:
+            input_parallel = self.copy_to_mp_region(input_)
+
+        origin_dtype = F.dtype(input_parallel)
+        weight = ops.cast(word_embeddings_weight, self.compute_dtype)
+        weight_param = None
+        if self.gradient_accumulation_fusion and isinstance(word_embeddings_weight, Parameter
+                                                            ):
+            weight_param = word_embeddings_weight
+        input_parallel = ops.cast(input_parallel, self.compute_dtype)
+
+        bias = ops.cast(bias, self.compute_dtype) if bias else None
+
+        # Matrix multiply.
+        logits_parallel = self.forward_impl_(
+            input_parallel, weight, bias, weight_param=weight_param
+        )
+        logits_parallel = ops.cast(logits_parallel, origin_dtype)
+
+        # Gather if needed.
+        if parallel_output:
+            return logits_parallel
+
+        return self.gather_from_mp_region(logits_parallel)
 
 class Pooler(Cell):
     """
@@ -210,13 +317,13 @@ class Embedding(Module):
 
     def zero_parameters(self):
         """ set zero value for all embedding parameters """
-        P.assign(self.word_embeddings, P.zeros_like(self.word_embeddings))
+        ops.assign(self.word_embeddings, ops.zeros_like(self.word_embeddings))
         self.word_embeddings.weight.shared = True
         if self.use_position_embedding:
-            P.assign(self.position_embeddings, P.zeros_like(self.position_embeddings))
+            ops.assign(self.position_embeddings, ops.zeros_like(self.position_embeddings))
             self.position_embeddings.weight.shared = True
         if self.num_tokentypes > 0:
-            P.assign(self.tokentype_embeddings, P.zeros_like(self.tokentype_embeddings))
+            ops.assign(self.tokentype_embeddings, ops.zeros_like(self.tokentype_embeddings))
             self.tokentype_embeddings.weight.shared = True
 
     def construct(self, input_ids, position_ids, tokentype_ids=None):
@@ -406,7 +513,7 @@ class TransformerLanguageModel(Module):
         post_norm = args.use_post_norm
         param_init_dtype = config.params_dtype
         self.hidden_size = config.hidden_size
-        padded_vocab_size = args.vocab_size
+        padded_vocab_size = args.padded_vocab_size
         hidden_dropout_rate = config.hidden_dropout
 
         if self.pre_process:
@@ -496,8 +603,8 @@ class TransformerLanguageModel(Module):
             mix_embedding = []
             image_num = int(len(delimiter_position[cur_batch]) / 2)
             image_delimiter_position = [i + 1 for i in range(image_num)]
-            split_text_embedding = P.tensor_split(text_embedding[cur_batch], delimiter_position[cur_batch], axis=0)
-            split_image_embedding = P.tensor_split(image_embedding[cur_batch], image_delimiter_position, axis=0)
+            split_text_embedding = ops.tensor_split(text_embedding[cur_batch], delimiter_position[cur_batch], axis=0)
+            split_image_embedding = ops.tensor_split(image_embedding[cur_batch], image_delimiter_position, axis=0)
             split_image_embedding = [split_image_embedding[i][0] for i in range(image_num)]
             for i, embedding in enumerate(split_text_embedding):
                 mix_embedding.append(embedding if i % 2 == 0 else split_image_embedding[int((i - 1) / 2)])

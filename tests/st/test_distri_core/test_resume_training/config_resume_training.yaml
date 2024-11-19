@@ -43,6 +43,7 @@ language_model:
 # data
 seq_length: 4
 vocab_size: 64
+padded_vocab_size: 64
 eod_id: -100
 seed: 1921
 pad_token: 0

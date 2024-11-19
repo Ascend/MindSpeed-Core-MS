@@ -16,12 +16,15 @@
 
 __all__ = ["RotaryEmbedding", "apply_rotary_pos_emb"]
 
+import math
 import mindspore as ms
 from mindspore import Tensor, ops, mint
+from mindspeed_ms.training.global_vars import get_args
 
 from mindspeed_ms.legacy.model.module import Module
 from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.core.transformer.transformer_block import TransformerBlock
+from mindspeed_ms.core import parallel_state
 
 
 class RotaryEmbedding(Module):
@@ -134,8 +137,13 @@ class RotaryEmbedding(Module):
             rotary_interleaved=False,
             seq_len_interpolation_factor=None,
             rotary_base=10000,
-        ):
+    ):
         super().__init__()
+        args = get_args()
+        if args.rotary_base:
+            self.rotary_base = args.rotary_base
+        else:
+            self.rotary_base = rotary_base
 
         dim = kv_channels
         if rotary_percent < 1.0:
@@ -143,9 +151,12 @@ class RotaryEmbedding(Module):
         self.rotary_interleaved = rotary_interleaved
 
         self.seq_len_interpolation_factor = seq_len_interpolation_factor
-        self.inv_freq = 1.0 / (
-            rotary_base ** (mint.arange(0, dim, 2)[: (dim // 2)].astype(ms.float32) / dim)
-        )
+        self.inv_freq = 1.0 / (self.rotary_base ** (mint.arange(0, dim, 2)[: (dim // 2)].astype(ms.float32) / dim))
+
+        if hasattr(args, "rope_scaling_type") and args.rope_scaling_type == "llama3":
+            self.inv_freq = apply_llama3_scaling(self.inv_freq)
+        elif hasattr(args, "rope_scaling_type") and args.rope_scaling_type == "yarn":
+            raise NotImplementedError('rope-scaling-type is not supported yarn for now.')
 
     def construct(self, max_seq_len, offset=0):
         """ Construct function of rotary embedding. """
@@ -163,6 +174,9 @@ class RotaryEmbedding(Module):
             )
         # emb [S, ..., D]
         emb = emb[:, None, None, :]
+        if parallel_state.get_context_parallel_world_size() > 1:
+            raise NotImplementedError('Rotary is not supported context parallel for now.')
+
         return Tensor(emb)
 
     def get_rotary_seq_len(
@@ -171,7 +185,7 @@ class RotaryEmbedding(Module):
             transformer: TransformerBlock,
             transformer_input: Tensor,
             transformer_config: TransformerConfig,
-        ) -> float:
+    ) -> float:
         """Function to get the rotary sequence length.
 
         Args:
@@ -197,6 +211,32 @@ class RotaryEmbedding(Module):
         rotary_seq_len *= transformer_config.context_parallel_size
 
         return rotary_seq_len
+
+
+def apply_llama3_scaling(freqs: ms.Tensor):
+    """ apply llama3 scaling """
+    args = get_args()
+    original_length = args.original_max_position_embeddings
+
+    low_freq_wavelen = original_length / args.low_freq_factor
+    high_freq_wavelen = original_length / args.high_freq_factor
+    new_freqs = []
+    for freq in freqs:
+        wavelen = 2 * math.pi / freq
+        if wavelen < high_freq_wavelen:
+            freq = freq.tolist()
+            new_freqs.append(freq)
+        elif wavelen > low_freq_wavelen:
+            freq = freq / args.rope_scaling_factor
+            freq = freq.tolist()
+            new_freqs.append(freq)
+        else:
+            smooth = (original_length / wavelen - args.low_freq_factor) / (args.high_freq_factor - args.low_freq_factor)
+            freq = (1 - smooth) * freq / args.rope_scaling_factor + smooth * freq
+            freq = freq.tolist()
+            new_freqs.append(freq)
+
+    return ms.Tensor(new_freqs, dtype=freqs.dtype)
 
 
 def _rotate_half(x, rotary_interleaved):
@@ -248,7 +288,8 @@ def _apply_fused_rotary_pos_emb(t: Tensor, freqs: Tensor, rotary_interleaved: bo
 # pylint: disable=W0613
 def apply_rotary_pos_emb(t, freqs, config, cu_seqlens=None) -> Tensor:
     if cu_seqlens is None:
-        if config.apply_rope_fusion:
+        args = get_args()
+        if args.use_fused_rotary_pos_emb:
             return _apply_fused_rotary_pos_emb(t, freqs)
         return apply_rotary_pos_emb_bnsd(t, freqs, rotary_interleaved=False)
 

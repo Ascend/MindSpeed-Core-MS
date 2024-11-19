@@ -56,9 +56,11 @@ max_position_embeddings: 4
 shape_order: "BSH"
 pre_tockens: 2147483647
 next_tockens: 2147483647
+tokenizer_type: 'NullTokenizer'
 
 # data
 vocab_size: 64
+padded_vocab_size: 64
 seq_length: 4
 shuffle: False
 pad_token: 0

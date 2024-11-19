@@ -22,6 +22,7 @@ from .transformer import ParallelLMLogits
 from .language_model import TransformerLanguageModel, VocabParallelEmbedding
 from .mlp import ParallelMLP
 from . import moe
+from .gpt_model import GPTModel
 
 __all__ = [
     "get_attention_mask",

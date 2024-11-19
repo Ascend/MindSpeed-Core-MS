@@ -136,11 +136,13 @@ def get_norm(config, scale=1.0):
             config.hidden_size,
             eps=config.layernorm_epsilon,
             params_dtype=config.params_dtype)
+
     if config.normalization == "RMSNorm":
         return RMSNorm(dim=config.hidden_size,
                        eps=config.layernorm_epsilon,
                        params_dtype=config.params_dtype,
                        scale=scale)
+
     if config.normalization == "FusedRMSNorm":
         return FusedRMSNorm(dim=config.hidden_size, eps=config.layernorm_epsilon, params_dtype=config.params_dtype,
                             scale=scale)

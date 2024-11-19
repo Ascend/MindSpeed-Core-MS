@@ -18,8 +18,10 @@
 import re
 import math
 from collections import OrderedDict
+from typing import Any
+import logging
 import yaml
-
+import mindspore
 import mindspore.ops as P
 import mindspore.nn as nn
 from mindspore.communication import get_group_size
@@ -34,6 +36,9 @@ from mindspeed_ms.core.parallel_state import (
     is_pipeline_last_stage
 )
 from mindspeed_ms.training.global_vars import get_args
+
+
+logger = logging.getLogger(__name__)
 
 
 class DictWithValueError(dict):
@@ -59,7 +64,7 @@ def divide(numerator, denominator):
     ensure_divisibility(numerator, denominator)
     return numerator // denominator
 
-
+# pylint: disable=W1203
 def calculate_dividable_vocab_size(vocab_size, denominator=128):
     """
     Calculate the nearest dividable vocab size by the denominator.
@@ -129,7 +134,7 @@ def get_default_dict_for_optimizer(optimizer, model_sharded_state_dict):
                 }
     return state_dict
 
-
+# pylint: disable=W1203
 def generate_state_dict(network: "Module", optimizer: Optimizer, include_optim: bool = True):
     r"""
     Generete the sharded stated dict for the network and optimizer.
@@ -180,7 +185,7 @@ def generate_state_dict(network: "Module", optimizer: Optimizer, include_optim: 
             state_dict['optimizer'] = get_default_dict_for_optimizer(optimizer, state_dict['model'])
     return state_dict
 
-
+# pylint: disable=W1203
 def save_strategy_file(state_dict, strategy_file_name):
     r"""
     Save the strategy file according to the state_dict and strategy_file_name
@@ -293,7 +298,7 @@ def load_yaml(stream, yaml_loader=yaml.SafeLoader, object_pairs_hook=OrderedDict
     OrderedLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_mapping)
     return yaml.load(stream, OrderedLoader)
 
-
+# pylint: disable=W1203
 def valid_lora_config(config, params):
     """valid target_cells in lora_config by params of the pretrain checkpoint.
 
@@ -339,7 +344,7 @@ def valid_lora_config(config, params):
     config.lora_module = lora_module
     return config
 
-
+# pylint: disable=W1203
 def _check_target_linear(key):
     """check the cell is the Linear module"""
     if any(p in key for p in ['norm', 'embedding']):
@@ -444,3 +449,22 @@ def pp_layer_rename(raw_name, need_drop_suffix=False):
                              f"but not found in layer_str_dict {layer_str_dict}")
         new_name = raw_name.replace(f"layers.{global_id}", f"layers.{layer_str_dict[global_id]}")
     return new_name
+
+# pylint: disable=W0621, W0212
+def log_single_rank(logger: logging.Logger, *args: Any, rank: int = 0, **kwargs: Any):
+    """If torch distributed is initialized, log only on rank
+
+    Args:
+        logger (logging.Logger): The logger to write the logs
+
+        args (Tuple[Any]): All logging.Logger.log positional arguments
+
+        rank (int, optional): The rank to write on. Defaults to 0.
+
+        kwargs (Dict[str, Any]): All logging.Logger.log keyword arguments
+    """
+    if mindspore.communication._comm_helper._is_initialized():
+        if mindspore.communication.get_rank() == rank:
+            logger.log(*args, **kwargs)
+    else:
+        logger.log(*args, **kwargs)

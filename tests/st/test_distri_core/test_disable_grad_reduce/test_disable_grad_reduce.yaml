@@ -33,6 +33,7 @@ global_batch_size: 1
 micro_batch_size: 1
 transformer_impl: "local" 
 check_for_nan_in_loss_and_grad: False
+max_position_embeddings: 32
 
 # logging
 log_interval: 1

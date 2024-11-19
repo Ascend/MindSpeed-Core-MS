@@ -159,7 +159,7 @@ class TestConfig:
         try:
             _ = get_args()
         except AssertionError as e:
-            assert str(e) == "global arguments is not initialized."
+            assert str(e) == "args is not initialized."
             error = True
         assert error
 
