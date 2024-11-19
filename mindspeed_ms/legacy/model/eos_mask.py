@@ -15,7 +15,7 @@
 """EosMask"""
 
 import numpy as np
-from mindspore import Tensor, nn, ops, mint
+from mindspore import Tensor, nn, ops, mint, _no_grad
 import mindspore.common.dtype as mstype
 
 
@@ -27,8 +27,9 @@ class EosMask(nn.Cell):
         batch_size (int): batch_size from config
         seq_len (int): seq_len from config
         eod_token_id (int): eod_token_id from config
+        reset_position_ids (bool): reset_position_ids from config
     """
-    def __init__(self, batch_size, seq_len, eod_token_id):
+    def __init__(self, batch_size, seq_len, eod_token_id, reset_position_ids):
         """Cal attention mask in device."""
         super().__init__()
         self.seq_len = seq_len
@@ -38,7 +39,9 @@ class EosMask(nn.Cell):
         self.cast = ops.Cast()
         self.expand_dim = ops.ExpandDims()
         self.eod_token = eod_token_id
+        self.reset_position_ids = reset_position_ids
 
+    @_no_grad
     def construct(self, input_ids):
         """construct method"""
         # input_ids: [bs, seq_len]
@@ -52,5 +55,23 @@ class EosMask(nn.Cell):
         mat = self.cast(mat, mstype.uint8)
         mask = self.tril(mat)
         # [bs, seq_len, seq_len]
+        if self.reset_position_ids:
+            reset_position_ids = self.position_ids.copy()
+            for i, eod_idx_ in enumerate(eod_idx):
+                p_id_offset = mint.zeros(self.seq_len, dtype=mstype.float16)
+                eod_idx_ = mint.nonzero(eod_idx_).reshape(-1)
+                if eod_idx_.shape[0] == 0:
+                    continue
+                eod_index_offset = eod_idx_ + 1
+                eod_index_offset[1:] = eod_index_offset[1:] - eod_index_offset[:-1]
+                if eod_idx_[-1]+1 < self.seq_len:
+                    p_id_offset[eod_idx_+1] = eod_index_offset
+                else:
+                    if len(eod_index_offset) == 1:
+                        continue
+                    p_id_offset[eod_idx_[:-1]+1] = eod_index_offset[:-1]
+                p_id_offset = mint.cumsum(p_id_offset, 0)
+                reset_position_ids[i] -= p_id_offset
+            return reset_position_ids, mint.sub(1, mask)
 
         return self.position_ids, mint.sub(1, mask)

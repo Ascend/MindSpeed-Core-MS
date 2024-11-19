@@ -55,8 +55,9 @@ class GPTModel(Module):
         self.batch_size = config.dataset_config.batch_size
 
         self.eod = kwargs['eod'] if 'eod' in kwargs else None
+        self.reset_position_ids = kwargs['reset_position_ids']
         if self.eod:
-            self.eod_mask = EosMask(self.batch_size, config.seq_length, self.eod)
+            self.eod_mask = EosMask(self.batch_size, config.seq_length, self.eod, self.reset_position_id)
 
         self.set_model_key()
 
