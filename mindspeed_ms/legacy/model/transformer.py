@@ -881,7 +881,7 @@ class ParallelTransformerLayer(Module):
             self.post_inter_attention_norm = get_norm(config)
 
         # MLP
-        if self.config.num_moe_experts > 1:
+        if args.num_experts is not None and args.num_experts > 1:
             moe_config = copy.deepcopy(config)
             self.mlp = MoELayer(moe_config)
         else:
