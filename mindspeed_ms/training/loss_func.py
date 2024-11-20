@@ -15,6 +15,8 @@
 """loss function"""
 from mindspore import nn, mint
 
+from mindspeed_ms.core.tensor_parallel import ReduceFromContextParallelRegion
+from mindspeed_ms.core.parallel_state import get_context_parallel_world_size
 from mindspeed_ms.core.register import ModuleType, ModuleRegistry
 
 __all__ = ['get_loss_func']
@@ -56,13 +58,29 @@ class LossWithMask(nn.Cell):
     def __init__(self, loss_func, *args, **kwargs):
         super(LossWithMask, self).__init__()
         self.loss_func = loss_func
+        self.reduce_from_context_parallel_region = ReduceFromContextParallelRegion()
 
-    def construct(self, logits, label, input_mask):
-        loss_reduce = self.loss_func(logits, label)
-        loss_reduce = loss_reduce.view(-1)
-        input_mask = input_mask.view(-1)
-        loss = mint.sum(loss_reduce * input_mask) / input_mask.sum()
-        return loss
+    def construct(self, logits, label, loss_mask):
+        "Calculate the loss with mask and mean reduction."
+        output_tensor = self.loss_func(logits, label)
+        losses = output_tensor.view(-1).float()
+        loss_mask = loss_mask.view(-1).float()
+        cp_world_size = get_context_parallel_world_size()
+        if cp_world_size > 1:
+            loss = mint.cat([mint.sum(losses * loss_mask).view(1), loss_mask.sum().view(1)])
+            loss = self.reduce_from_context_parallel_region(loss)
+            loss = loss[0] / loss[1]
+        else:
+            if loss_mask.sum() == 0:
+                loss = mint.sum(losses * loss_mask) / 1
+                print("==NAN, loss mask sum 0", flush=True)
+            else:
+                loss = mint.sum(losses * loss_mask) / loss_mask.sum()
+            if loss.isnan():
+                loss = mint.sum(losses * loss_mask) / 1
+                print("==NAN, dd", flush=True)
+
+        return loss * cp_world_size
 
 
 def get_loss_func(training_config, return_instance: bool = True, **kwargs):

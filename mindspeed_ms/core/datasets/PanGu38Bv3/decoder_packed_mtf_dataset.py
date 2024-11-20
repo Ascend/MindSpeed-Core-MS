@@ -211,8 +211,9 @@ def _build_index_mappings(
     # parallel case
     dp_size = parallel_state.get_data_parallel_world_size()
     pp_size = parallel_state.get_pipeline_model_parallel_world_size()
+    cp_size = parallel_state.get_context_parallel_world_size()
     item = get_group_size() // parallel_state.get_tensor_model_parallel_world_size()
-    check_equal(dp_size * pp_size, item)
+    check_equal(dp_size * pp_size * cp_size, item)
 
     # Load mappings.
     start_time = time.time()

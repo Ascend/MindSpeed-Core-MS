@@ -29,6 +29,8 @@ from mindspeed_ms.core.parallel_state import (
     get_tensor_model_parallel_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
+    get_context_parallel_group,
+    get_context_parallel_world_size,
 )
 
 
@@ -407,6 +409,26 @@ class GatherFromSequenceParallelRegion(nn.Cell):
             output = output.swapaxes(0, 1)
 
         return (output,)
+
+
+class ReduceFromContextParallelRegion(nn.Cell):
+    "All reduce the input from the context parallel region."
+
+    def __init__(self):
+        super(ReduceFromContextParallelRegion, self).__init__()
+        self.world_size = get_context_parallel_world_size()
+        if self.world_size > 1:
+            self.cp_group = get_context_parallel_group()
+
+    def construct(self, input_):
+        if self.world_size == 1:
+            return ops.stop_gradient(input_)
+        output = comm_func.all_reduce(input_, group=self.cp_group)[0]
+        return output
+
+    # pylint: disable=W0613, C0111
+    def bprop(self, x, out, dout):
+        return (dout,)
 
 
 class AllGatherFromTensorParallelRegion(nn.Cell):
