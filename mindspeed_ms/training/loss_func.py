@@ -14,7 +14,11 @@
 # ============================================================================
 """loss function"""
 from mindspore import nn, mint
+from mindspore.communication.management import get_rank
 
+from mindspeed_ms.core.tensor_parallel import ReduceFromContextParallelRegion
+from mindspeed_ms.core.parallel_state import get_context_parallel_world_size
+from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.register import ModuleType, ModuleRegistry
 from mindspeed_ms.core.optimizer.optimizer_config import OptimizerConfig
 
@@ -57,12 +61,30 @@ class LossWithMask(nn.Cell):
     def __init__(self, loss_func, *args, **kwargs):
         super(LossWithMask, self).__init__()
         self.loss_func = loss_func
+        self.reduce_from_context_parallel_region = ReduceFromContextParallelRegion()
 
-    def construct(self, logits, label, input_mask):
-        loss_reduce = self.loss_func(logits, label)
-        input_mask = input_mask.view(-1)
-        loss = mint.sum(loss_reduce * input_mask) / input_mask.sum()
-        return loss
+    def construct(self, logits, label, loss_mask):
+        "Calculate the loss with mask and mean reduction."
+        args = get_args()
+        output_tensor = self.loss_func(logits, label)
+        if output_tensor.ndim == 2:
+            output_tensor = output_tensor.swapaxes(0, 1).contiguous()
+        losses = output_tensor.float()
+        loss_mask = loss_mask.view(-1).float()
+        total_tokens = loss_mask.sum()
+        loss = mint.cat([mint.sum(losses.view(-1) * loss_mask).view(1), total_tokens.view(1)])
+
+        cp_world_size = get_context_parallel_world_size()
+        if cp_world_size > 1:
+            loss = self.reduce_from_context_parallel_region(loss)
+
+        # Check individual rank losses are not NaN prior to DP all-reduce.
+        if args.check_for_nan_in_loss_and_grad:
+            global_rank = get_rank()
+            if loss[0].isnan():
+                raise ValueError(f"Rank {global_rank}: found NaN in local forward loss calculation")
+
+        return loss[0] * cp_world_size / loss[1]
 
 
 def get_loss_func(optimizer_config: OptimizerConfig, return_instance: bool = True, **kwargs):

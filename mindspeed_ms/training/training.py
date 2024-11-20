@@ -55,7 +55,8 @@ from mindspeed_ms.core.parallel_state import (
     get_zero_shard_group,
     get_zero_shard_grad_group,
     get_pipeline_model_parallel_rank,
-    get_tensor_model_parallel_rank
+    get_tensor_model_parallel_rank,
+    get_context_parallel_world_size
 )
 from mindspeed_ms.core.distributed import DistributedDataParallelConfig, \
     DistributedDataParallel
@@ -892,6 +893,8 @@ def train(
         start_time = time.time()
         profiler.step_begin(global_step)
         loss, is_finite, loss_scale, learning_rate, global_norm = train_one_step_cell(**data)
+        cp_world_size = get_context_parallel_world_size()
+        loss = loss / cp_world_size
         end_time = time.time()
         if args.log_interval is not None and global_step % args.log_interval == 0:
             if not correct_metric_flag:
