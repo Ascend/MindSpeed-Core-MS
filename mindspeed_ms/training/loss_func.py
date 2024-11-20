@@ -59,6 +59,7 @@ class LossWithMask(nn.Cell):
 
     def construct(self, logits, label, input_mask):
         loss_reduce = self.loss_func(logits, label)
+        loss_reduce = loss_reduce.view(-1)
         input_mask = input_mask.view(-1)
         loss = mint.sum(loss_reduce * input_mask) / input_mask.sum()
         return loss
