@@ -711,7 +711,7 @@ class TrainOneStepCell(nn.Cell):
             grads_tuple = tuple(grads)
             self.optimizer(grads_tuple)
         else:
-            self.optimizer()
+            _, global_norm, _ = self.optimizer()
         return global_norm
 
 def train(
@@ -891,7 +891,7 @@ def train(
         logger.debug(f"step {global_step} input data are:\n{data}")
         start_time = time.time()
         profiler.step_begin(global_step)
-        loss, is_finite, loss_scale, learning_rate, _ = train_one_step_cell(**data)
+        loss, is_finite, loss_scale, learning_rate, global_norm = train_one_step_cell(**data)
         end_time = time.time()
         if args.log_interval is not None and global_step % args.log_interval == 0:
             if not correct_metric_flag:
@@ -907,7 +907,8 @@ def train(
                 f"Epoch: {current_epoch}, Step: {epoch_step}, Loss: {loss}, "
                 + f"Finite_grads: {is_finite}, "
                 + f"Loss_scale: {loss_scale.value() if loss_scale is not None else None}, "
-                + f"Learning_rate: {report_learning_rate}, Time: {(end_time - start_time) * 1000:.2f} ms"
+                + f"Learning_rate: {report_learning_rate}, Grad_norm: {global_norm}, "
+                + f"Time: {(end_time - start_time) * 1000:.2f} ms"
             )
 
         if evaluation_flag and global_step % args.eval_interval == 0:
