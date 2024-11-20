@@ -19,6 +19,7 @@ import dataclasses
 import json
 import os
 import types
+from typing import List
 
 import mindspore.common.dtype as mstype
 
@@ -33,6 +34,7 @@ from mindspeed_ms.training.unused_args import (
     UNUSED_TRANSFORMER_CONFIG,
     UNUSED_GLOBAL_ARGS
 )
+from mindspeed_ms.training.yaml_arguments import load_yaml, validate_yaml, _check_list_is_validate
 from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 
 
@@ -87,7 +89,6 @@ def parse_args(extra_args_provider=None, args_defaults={}, ignore_unknown_args=F
 
     # Experimental yaml
     if args.yaml_cfg is not None:
-        from mindspeed_ms.training.yaml_arguments import load_yaml
         assert args.yaml_cfg and not args.use_legacy_models, \
             "Yaml config is not supported with legacy models."
         args = load_yaml(args.yaml_cfg)
@@ -99,7 +100,6 @@ def parse_args(extra_args_provider=None, args_defaults={}, ignore_unknown_args=F
 
     defaults = parser.parse_args(args=[])
     if args.yaml_cfg is not None:
-        from mindspeed_ms.training.yaml_arguments import validate_yaml
         args = validate_yaml(args, defaults, args_defaults)
     else:
         setattr(defaults, "num_moe_experts", defaults.num_experts)
@@ -321,30 +321,54 @@ def validate_args(args, default_args, defaults={}):
             print('setting global batch size to {}'.format(
                 args.global_batch_size), flush=True)
     assert args.global_batch_size > 0
-    if args.num_layers_per_virtual_pipeline_stage is not None:
-        if args.overlap_p2p_comm:
-            assert args.pipeline_model_parallel_size > 1, \
-                'when interleaved schedule is used, pipeline-model-parallel size '\
-                'should be greater than 1'
+
+    # num layer list
+    if args.num_layer_list is not None:
+        args.num_layer_list = json.loads(args.num_layer_list)
+        assert isinstance(args.num_layer_list, List), \
+            f"num_layer_list must be List, but got {type(args.num_layer_list)}"
+
+    if args.virtual_pipeline_model_parallel_size is None:
+        if args.num_layers_per_virtual_pipeline_stage is not None:
+            # check num_layer_list is None
+            assert args.num_layer_list is None, \
+                "num_layer_list is not None when num_layers_per_virtual_pipeline_stage is specified"
+
+            if args.overlap_p2p_comm:
+                assert args.pipeline_model_parallel_size > 1, \
+                    'when interleaved schedule is used, pipeline-model-parallel size '\
+                    'should be greater than 1'
+            else:
+                assert args.pipeline_model_parallel_size > 2, \
+                    'when interleaved schedule is used and p2p communication overlap is disabled, '\
+                    'pipeline-model-parallel size should be greater than 2 to avoid having multiple '\
+                    'p2p sends and recvs between same 2 ranks per communication batch'
+            assert args.num_layers % args.transformer_pipeline_model_parallel_size == 0, \
+                'number of layers should be divisible by the pipeline parallel size'
+            num_layers_per_pipeline_stage = args.num_layers // args.transformer_pipeline_model_parallel_size
+            assert num_layers_per_pipeline_stage % args.num_layers_per_virtual_pipeline_stage == 0, \
+                'number of layers per pipeline stage must be divisible number of layers per virtual pipeline stage'
+            args.virtual_pipeline_model_parallel_size = num_layers_per_pipeline_stage // \
+                args.num_layers_per_virtual_pipeline_stage
         else:
-            assert args.pipeline_model_parallel_size > 2, \
-                'when interleaved schedule is used and p2p communication overlap is disabled, '\
-                'pipeline-model-parallel size should be greater than 2 to avoid having multiple '\
-                'p2p sends and recvs between same 2 ranks per communication batch'
-        assert args.num_layers % args.transformer_pipeline_model_parallel_size == 0, \
-            'number of layers should be divisible by the pipeline parallel size'
-        num_layers_per_pipeline_stage = args.num_layers // args.transformer_pipeline_model_parallel_size
-        assert num_layers_per_pipeline_stage % args.num_layers_per_virtual_pipeline_stage == 0, \
-            'number of layers per pipeline stage must be divisible number of layers per virtual pipeline stage'
-        args.virtual_pipeline_model_parallel_size = num_layers_per_pipeline_stage // \
-            args.num_layers_per_virtual_pipeline_stage
+            args.virtual_pipeline_model_parallel_size = None
+            # Overlap P2P communication is disabled if not using the interleaved schedule.
+            args.overlap_p2p_comm = False
+            if args.rank == 0:
+                print('WARNING: Setting args.overlap_p2p_comm to False since non-interleaved '
+                    'schedule does not support overlapping p2p communication')
     else:
-        args.virtual_pipeline_model_parallel_size = None
-        # Overlap P2P communication is disabled if not using the interleaved schedule.
-        args.overlap_p2p_comm = False
-        if args.rank == 0:
-            print('WARNING: Setting args.overlap_p2p_comm to False since non-interleaved '
-                  'schedule does not support overlapping p2p communication')
+        assert args.num_layers_per_virtual_pipeline_stage is None, \
+            "num_layers_per_virtual_pipeline_stage must be None when virtual_pipeline_model_parallel_size is specified"
+        # check noop_layers
+        if args.noop_layers is not None:
+            assert args.num_layers % \
+                (args.virtual_pipeline_model_parallel_size * args.pipeline_model_parallel_size) == 0, \
+                'number of layers should be divisible by the pipeline parallel size * virtual pipeline parallel size'
+
+        _check_list_is_validate("num_layer_list", args.num_layer_list,
+                                args.virtual_pipeline_model_parallel_size,
+                                args.pipeline_model_parallel_size)
 
     if args.overlap_param_gather:
         assert args.use_distributed_optimizer, \
@@ -1596,7 +1620,8 @@ def _add_distributed_args(parser):
                        help='Shard size for ZeRo optimizer, if -1 will shard in dp size otherwise will shard in the '
                             'given size')
     group.add_argument('--zero-without-ddp', action='store_true')
-    group.add_argument('--num-layer-list', nargs='+', type=int, default=None,
+    group.add_argument('--virtual-pipeline-model-parallel-size', type=int, default=None)
+    group.add_argument('--num-layer-list', type=str, default=None,
                        help='User-defined pipeline parallel model layer division')
     group.add_argument('--wrap-with-ddp', action='store_true', help='Using DistributedDataParallel to wrap model')
     group.add_argument('--disable-mem-align', action='store_false', dest='enable_mem_align')
