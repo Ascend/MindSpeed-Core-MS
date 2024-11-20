@@ -22,7 +22,7 @@ import logging
 import numpy as np
 import torch
 import mindspore
-from mindspore.communication import get_group_size, get_rank
+from mindspore.communication import get_group_size, get_rank, get_local_rank_size
 from mindspore.communication.comm_func import barrier
 
 from mindspeed_ms.core import parallel_state
@@ -186,7 +186,7 @@ def _build_index_mappings(
     shuffle_idx_filename = tmp_filename + '_decoder_packed_shuffle_idx.npy'
 
     # Build the indexed mapping if not exist.
-    if get_rank() % torch.cuda.device_count() == 0:
+    if get_rank() % get_local_rank_size() == 0:
         if not os.path.isfile(shuffle_idx_filename):
 
             print_rank_0(' > WARNING: could not find index map files, building '
