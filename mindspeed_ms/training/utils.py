@@ -39,9 +39,9 @@ def set_weight_decay(params, weight_decay=1e-1):
     other_params = list(filter(lambda x: not decay_filter(x), params))
     group_params = []
     if decay_params:
-        group_params.append({"params": decay_params, "weight_decay": weight_decay})
+        group_params.append({"params": decay_params, "weight_decay": weight_decay, "wd_mult": 1.0})
     if other_params:
-        group_params.append({"params": other_params, "weight_decay": 0.0})
+        group_params.append({"params": other_params, "weight_decay": 0.0, "wd_mult": 0.0})
     return group_params
 
 
