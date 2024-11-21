@@ -25,7 +25,7 @@ import mindspore.communication.comm_func as comm_func
 from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_rank, \
     get_pipeline_model_parallel_world_size, get_context_parallel_world_size, get_tensor_model_parallel_world_size, \
     is_pipeline_last_stage, is_pipeline_first_stage, is_rank_in_embedding_group, get_embedding_group, \
-    set_virtual_pipeline_model_parallel_rank, get_stream, get_data_parallel_group, get_data_parallel_world_size
+    set_virtual_pipeline_model_parallel_rank, get_data_parallel_group, get_data_parallel_world_size
 
 from .p2p_communication import P2PPrimitive
 
@@ -1124,7 +1124,7 @@ def all_reduce_share_embedding(grads, weights, model, wrap_with_ddp=False):
                     shared_weight_index.append(i)
             if shared_weight_index:
                 if wrap_with_ddp:
-                    hal.current_stream().wait_stream(get_stream())
+                    hal.current_stream().wait_stream(hal.communication_stream())
                 weight_grad.copy_(comm_func.all_reduce(weight_grad, group=get_embedding_group())[0])
     return grads
 
@@ -1153,7 +1153,7 @@ def calculate_loss_and_logits(accumulate_loss,
                     accumulate_loss,
                     group=get_data_parallel_group(),
                 )[0] / get_data_parallel_world_size()
-                accumulate_loss = mint.sum(accumulate_loss / num_microbatches)
+                accumulate_loss = sum(accumulate_loss) / num_microbatches
         # concat micro logits
         logits = mint.cat(logits, dim=0) if logits else None
     else:
