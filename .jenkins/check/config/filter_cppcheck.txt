@@ -1,0 +1,2 @@
+"mindspeed-core-ms/mindspeed_ms/core/datasets/helpers.cpp"    "variableScope"
+"mindspeed-core-ms/mindspeed_ms/core/datasets/helpers.cpp"    "constParameter"
