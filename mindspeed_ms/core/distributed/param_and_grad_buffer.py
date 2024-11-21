@@ -105,7 +105,8 @@ class Bucket:
             self.grad_reducer(src, 'sum', self.data_parallel_group, async_op=self.ddp_config.overlap_grad_reduce)
         if self.zero_comm_group is not None:
             # make sure reducescatter + allreduce is in order
-            self.communication_handle.wait()
+            if self.communication_handle is not None:
+                self.communication_handle.wait()
             self.communication_result, self.communication_handle = (
                 comm_func.all_reduce(self.communication_result, group=self.zero_shard_grad_group,
                                      async_op=self.ddp_config.overlap_grad_reduce))

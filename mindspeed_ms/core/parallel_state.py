@@ -823,7 +823,7 @@ def get_zero_shard_tp_group():
     """Get the data parallel group the caller rank belongs to."""
     z3_group = get_group_info("dp")
     if not get_zero_full_shard_flag():
-        z3_group = get_group_info("dp-zero-grad")
+        z3_group = get_group_info("dp-zero")
     # DP [0, 2, 4, 6] --> z3_group [0, 4] [2, 6]
     # DP [1, 3, 5, 7] --> tp_group [1, 3] [5, 7]
     # TP [0, 1] [2, 3] [4, 5] [6, 7]
