@@ -13,6 +13,7 @@
 # limitations under the License.
 # ============================================================================
 """Test ParallelRandom"""
+from typing import Dict, List
 import sys
 
 import mindspore.common.dtype as mstype
@@ -284,3 +285,29 @@ class TestConfig:
             except AssertionError as _:
                 error = True
             assert error
+
+
+    def test_parse_lora_yaml(self):
+        """test parser complex lora_target_cells"""
+        yaml_file = "lora.yaml"
+        sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
+        args = parse_args()
+        config = core_transformer_config_from_yaml(args)
+        assert isinstance(config.lora_target_cells, List), \
+            f"lora_target_cells's type is: {config.lora_target_cells}, not List"
+        target_cells_lst = config.lora_target_cells[0]
+        specific_lora_cell = config.lora_target_cells[1]
+        assert isinstance(target_cells_lst, Dict), \
+            f"lora_target_cells[0]'s type is: {target_cells_lst}, not Dict"
+        assert isinstance(specific_lora_cell, Dict), \
+            f"lora_target_cells[1]'s type is: {specific_lora_cell}, not Dict"
+        assert target_cells_lst['lora_target_cells'][0] == '.*.projection.*'
+        assert target_cells_lst['lora_target_cells'][1] == '.*.out_proj.*'
+        assert target_cells_lst.lora_target_cells[0] == '.*.projection.*'
+        assert target_cells_lst.lora_target_cells[1] == '.*.out_proj.*'
+        assert specific_lora_cell['cell'] == 'transformer.layer.0.attention.out_proj'
+        assert specific_lora_cell['rank'] == 4
+        assert specific_lora_cell['alpha'] == 16
+        assert specific_lora_cell.cell == 'transformer.layer.0.attention.out_proj'
+        assert specific_lora_cell.rank == 4
+        assert specific_lora_cell.alpha == 16
