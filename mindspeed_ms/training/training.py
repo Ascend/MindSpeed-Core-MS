@@ -17,6 +17,7 @@
 import time
 import contextlib
 import os
+import gc
 import numpy as np
 
 import mindspore as ms
@@ -929,6 +930,7 @@ def train(
                             step_num=epoch_step,
                             crc_check=training_config.crc_check,
                             keep_checkpoint_max=training_config.keep_checkpoint_max)
+            gc.collect()
         profiler.step_end(global_step)
         epoch_step += 1
         global_step += 1
@@ -964,6 +966,7 @@ def train(
                         step_num=epoch_step,
                         crc_check=training_config.crc_check,
                         keep_checkpoint_max=training_config.keep_checkpoint_max)
+        gc.collect()
     logger.info("Training success!")
 
 
@@ -1038,7 +1041,8 @@ def pretrain(train_valid_test_datasets_provider,
         resume_dict = load_checkpoint(
             config=model_config,
             model=network_with_loss,
-            optimizer=optimizer if not training_config.no_load_optim else None,
+            optimizer=optimizer if ((not training_config.no_load_optim)
+                                    or training_config.use_distributed_optimizer) else None,
             opt_param_scheduler=opt_param_scheduler,
             ckpt_path=ckpt_path,
             format=training_config.ckpt_format
