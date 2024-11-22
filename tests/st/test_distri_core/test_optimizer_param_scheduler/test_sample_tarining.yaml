@@ -1,0 +1,57 @@
+model_parallel:
+  tensor_model_parallel_size: 1
+  pipeline_model_parallel_size: 4
+  context_parallel_size: 1
+  expert_model_parallel_size: 1
+  sequence_parallel: False
+  pipeline_dtype: "float32"
+  compute_dtype: "float32"
+
+language_model:
+  num_layers: 8
+  hidden_size: 128
+  num_attention_heads: 1
+  ffn_hidden_size: 1
+
+# data
+seq_length: 64
+vocab_size: 256
+pad_token_id: -100
+
+# trainging
+global_batch_size: 16
+micro_batch_size: 2
+train_samples: 10000
+train_iters: 0
+
+
+# optimizer
+lr: 0.0009
+lr_decay_iters: 7000
+lr_wsd_decay_iters: 7000
+lr_warmup_fraction: 0.0005
+lr_warmup_iters: 10000
+lr_decay_samples: 7000
+lr_wsd_decay_samples: 7000
+lr_warmup_samples: 10000
+lr_warmup_init: 0.0009
+min_lr: 0.00001
+lr_decay_style: "WSD"
+start_weight_decay: 0.00001
+end_weight_decay: 0.0009
+weight_decay_incr_style: "cosine"
+use_checkpoint_opt_param_scheduler: False
+override_opt_param_scheduler: True
+lr_wsd_decay_style: "exponential"
+
+# loss arguments
+epochs: 10
+log_interval: 1
+initial_loss_scale: 1
+hysteresis: 2
+loss_scale_window: 1000
+loss_reduction: "mean"
+
+model_customize_staged: False
+overlap_grad_reduce: False
+untie_embeddings_and_output_weights: True
