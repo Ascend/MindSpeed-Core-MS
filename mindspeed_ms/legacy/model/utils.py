@@ -106,3 +106,26 @@ def get_num_layer_list(config):
                     f"for pp {pp_stage} vpp {vpp_stage}, and last model chunk has no layer."
                 )
     return num_layer_list
+
+
+def get_layers_and_offset(num_layer_array, pp_stage, pp_rank, vpp_stage=None, vpp_rank=0):
+    """get transformer layers nums for current rank according to num layer list"""
+    pp_layout = (1,)
+    if vpp_stage is not None:
+        pp_layout = (pp_stage, vpp_stage)
+    elif pp_stage is not None:
+        pp_layout = (pp_stage,)
+    if num_layer_array.shape != pp_layout:
+        raise ValueError("The shape of num_layer_list {} must equal to "
+                         "pp_layout {}".format(num_layer_array.shape, pp_layout))
+    if vpp_stage is None:
+        num_layers = num_layer_array[pp_rank]
+        offset = num_layer_array[:pp_rank].sum()
+        return num_layers, offset
+
+    offset = 0
+    for i in range(vpp_rank):
+        offset += num_layer_array[:, i].sum()
+    offset += num_layer_array[:pp_rank, vpp_rank].sum()
+    num_layers = num_layer_array[pp_rank][vpp_rank]
+    return num_layers, offset

@@ -54,7 +54,7 @@ from mindspeed_ms.core.tensor_parallel.lora_layers import (
     ColumnParallelLoRA,
     RowParallelLoRA
 )
-from mindspeed_ms.legacy.model.utils import get_attn_mask_func, get_num_layer_list
+from mindspeed_ms.legacy.model.utils import get_attn_mask_func, get_num_layer_list, get_layers_and_offset
 from mindspeed_ms.legacy.model.norm import get_norm
 from mindspeed_ms.legacy.model.moe.moe_layer import MoELayer
 
@@ -1005,29 +1005,6 @@ class ParallelTransformerLayer(Module):
         return output
 
 
-def _get_layers_and_offset(num_layer_array, pp_stage, pp_rank, vpp_stage=None, vpp_rank=0):
-    """get transformer layers nums for current rank according to num layer list"""
-    pp_layout = (1,)
-    if vpp_stage is not None:
-        pp_layout = (pp_stage, vpp_stage)
-    elif pp_stage is not None:
-        pp_layout = (pp_stage,)
-    if num_layer_array.shape != pp_layout:
-        raise ValueError("The shape of num_layer_list {} must equal to "
-                         "pp_layout {}".format(num_layer_array.shape, pp_layout))
-    if vpp_stage is None:
-        num_layers = num_layer_array[pp_rank]
-        offset = num_layer_array[:pp_rank].sum()
-        return num_layers, offset
-
-    offset = 0
-    for i in range(vpp_rank):
-        offset += num_layer_array[:, i].sum()
-    offset += num_layer_array[:pp_rank, vpp_rank].sum()
-    num_layers = num_layer_array[pp_rank][vpp_rank]
-    return num_layers, offset
-
-
 # pylint: disable=W0613
 def _get_num_layers(config, model_type, is_decoder=False):
     """get transformer layers nums for current rank"""
@@ -1063,7 +1040,7 @@ def _get_num_layers(config, model_type, is_decoder=False):
             if not np.all(num_layer_array > 0):
                 raise ValueError(f"All elements of num_layer_list should be larger than 0, "
                                  f"but got {num_layer_array}.")
-            num_layers, offset = _get_layers_and_offset(num_layer_array,
+            num_layers, offset = get_layers_and_offset(num_layer_array,
                                                         pp_stage, pp_rank,
                                                         get_virtual_pipeline_model_parallel_world_size(), vpp_rank)
             if get_virtual_pipeline_model_parallel_world_size() is not None:
