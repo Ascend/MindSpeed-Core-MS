@@ -58,10 +58,7 @@ UNUSED_MODEL_PARALLEL_CONFIG = {
 
 UNUSED_TRANSFORMER_CONFIG = {
     "activation_func_fp8_input_store",
-    "window_size",
     "qk_layernorm",
-    "test_mode",
-    "output_layer_init_method",
     "bias_activation_fusion",
     "persist_layer_norm",
     "memory_efficient_layer_norm",
@@ -136,7 +133,6 @@ UNUSED_GLOBAL_ARGS = {
     "dataloader_type",
     "no_persist_layer_norm",
     "use_mcore_models",
-    "use_legacy_models",
     "manual_gc",
     "manual_gc_interval",
     "manual_gc_eval",
