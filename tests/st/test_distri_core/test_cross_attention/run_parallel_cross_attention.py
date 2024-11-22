@@ -1,0 +1,456 @@
+"""CrossAttention test case"""
+import glob
+import os
+import argparse
+import sys
+import numpy as np
+
+import mindspore as ms
+from mindspore import nn
+from mindspore.communication import init
+
+# common Interface/Class
+from mindspeed_ms.training import get_model
+from mindspeed_ms.core.parallel_state import initialize_model_parallel, \
+    get_pipeline_model_parallel_world_size, get_tensor_model_parallel_world_size, \
+    get_tensor_model_parallel_rank, get_data_parallel_rank, \
+    get_data_parallel_group, get_data_parallel_world_size
+from mindspeed_ms.training import core_transformer_config_from_args, core_transformer_config_from_yaml
+from mindspeed_ms.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
+from mindspeed_ms.training import parse_args, get_args
+
+from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
+# transformer V1
+from mindspeed_ms.legacy.model.module import Module as LegacyModule
+from mindspeed_ms.legacy.model.transformer import ParallelAttention
+from mindspeed_ms.legacy.model.enums import AttnType as LegacyAttnType
+from mindspeed_ms.legacy.model.enums import AttnMaskType as LegacyAttnMaskType
+
+# transformer V2
+from mindspeed_ms.core.transformer.module import Module as McoreModule
+from mindspeed_ms.core.transformer.attention import CrossAttentionSubmodules, CrossAttention
+from mindspeed_ms.core.transformer.dot_product_attention import DotProductAttention
+from mindspeed_ms.core.transformer.spec_utils import ModuleSpec, build_module
+from mindspeed_ms.core.transformer.enums import AttnMaskType
+
+from tests.st.test_distri_core.utils import save_output_data
+
+seed = 2024
+np.random.seed(seed)
+BASE_DIR = os.path.split(os.path.realpath(__file__))[0]
+
+
+def clean_args():
+    """ clean args for megatron """
+    option_to_remove = ('--run_mode',
+                        '--data_dir',
+                        '--ckpt_dir',
+                        '--output_dir',
+                        '--layout')
+    # Process and remove the option from sys.argv
+    # Start at 1 to skip the script name
+    i = 1
+    while i < len(sys.argv):
+        if sys.argv[i] in option_to_remove:
+            # Remove the option and its value
+            if i + 1 < len(sys.argv):
+                del sys.argv[i:i + 2]
+            else:
+                del sys.argv[i]
+        else:
+            i += 1
+
+
+class ParallelAttentionNet(LegacyModule):
+    """ cross attention of legacy """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.use_rope = get_args().position_embedding_type == 'rope'
+        self.parallel_attention = ParallelAttention(
+            config,
+            1,
+            attention_type=LegacyAttnType.cross_attn,
+            attn_mask_type=LegacyAttnMaskType.causal)
+
+    def construct(self, hidden_states, attention_mask,
+                  encoder_output=None, inference_params=None,
+                  rotary_pos_emb=None):
+        """ net forward """
+        if encoder_output is None:
+            encoder_output = hidden_states
+        if not self.use_rope:
+            rotary_pos_emb = None
+        output, _ = self.parallel_attention(hidden_states, attention_mask,
+                                            encoder_output=encoder_output,
+                                            inference_params=inference_params,
+                                            rotary_pos_emb=rotary_pos_emb)
+        loss = output.astype(ms.float32).abs().mean()
+        return loss, output
+
+
+class CrossAttentionNet(McoreModule):
+    """ mindspore v2 net """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.use_rope = get_args().position_embedding_type == 'rope'
+        attention = ModuleSpec(
+            module=CrossAttention,
+            params={"attn_mask_type": AttnMaskType.causal},
+            submodules=CrossAttentionSubmodules(
+                linear_q=ColumnParallelLinear,
+                linear_kv=ColumnParallelLinear,
+                core_attention=DotProductAttention,
+                linear_proj=RowParallelLinear,
+            ),
+        )
+        self.parallel_attention = build_module(attention, config=self.config, layer_number=1)
+
+    def construct(self, hidden_states, attention_mask,
+                  encoder_output=None, inference_params=None,
+                  rotary_pos_emb=None):
+        """ net forward """
+        if encoder_output is None:
+            encoder_output = hidden_states
+        if not self.use_rope:
+            rotary_pos_emb = None
+        output, _ = self.parallel_attention(hidden_states, attention_mask,
+                                            key_value_states=encoder_output,
+                                            inference_params=inference_params,
+                                            rotary_pos_emb=rotary_pos_emb,
+                                            packed_seq_params=None)
+        loss = output.astype(ms.float32).abs().mean()
+        return loss, output
+
+
+def run_legacy(data_dir, ckpt_dir, save_output_dir):
+    """ test transformer v1, i.g. legacy """
+
+    args = parse_args()
+    if args.yaml_cfg is not None:
+        config = core_transformer_config_from_yaml(args)
+    else:
+        config = core_transformer_config_from_args(args)
+
+    ms.set_seed(seed)
+
+    # set env
+    ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON',
+                   pynative_synchronize=True)
+    init()
+    # init context
+    tp = config.tensor_model_parallel_size
+    initialize_model_parallel(tensor_model_parallel_size=tp)
+    global_batch_size = args.global_batch_size
+
+    # init model
+    # pylint: disable=W0613
+    def model_provider_func(pre_process=True, post_process=True):
+        """ model provider func """
+        net = ParallelAttentionNet(config)
+        return net
+
+    network = get_model(model_provider_func, config)
+    if isinstance(network, nn.CellList) and len(network) == 1:
+        network = network[0]
+    network.set_train(True)
+
+    # get ckpt and dataset
+    data_dict, ckpt_dict = load_ckpt_and_data(global_batch_size,
+                                              args.seq_length,
+                                              config.hidden_size,
+                                              config.num_attention_heads,
+                                              config.compute_dtype,
+                                              config.compute_dtype,
+                                              data_dir,
+                                              ckpt_dir,
+                                              network,
+                                              config.sequence_parallel)
+    print(f"all of inputs for model: {data_dict.keys()}")
+    grad_position = list(data_dict.keys()).index("hidden_states")
+
+    # load ckpt into network
+    if 'parallel_attention.linear_kv.weight' in ckpt_dict and 'parallel_attention.linear_proj.weight' in ckpt_dict and \
+            'parallel_attention.linear_q.weight' in ckpt_dict:
+        ckpt_dict['parallel_attention.kv_proj.weight'] = ckpt_dict['parallel_attention.linear_kv.weight']
+        ckpt_dict['parallel_attention.out_proj.weight'] = ckpt_dict['parallel_attention.linear_proj.weight']
+        ckpt_dict['parallel_attention.q_proj.weight'] = ckpt_dict['parallel_attention.linear_q.weight']
+    ms.load_param_into_net(network, ckpt_dict)
+
+    # run model
+    trainable_params = network.trainable_params()
+    if get_pipeline_model_parallel_world_size() == 1:
+        forward_backward_func = ms.value_and_grad(network,
+                                                  grad_position=grad_position,
+                                                  weights=trainable_params,
+                                                  has_aux=True)
+        (loss, output), (dout, dw) = forward_backward_func(**data_dict)
+        if get_data_parallel_world_size() > 1:
+            # reduce loss
+            loss = (ms.communication.comm_func.all_reduce(loss, group=get_data_parallel_group())[0]
+                    / get_data_parallel_world_size())
+            # reduce dout
+            dout = (ms.communication.comm_func.all_reduce(dout, group=get_data_parallel_group())[0]
+                    / get_data_parallel_world_size())
+            # reduce dw
+            dw = list(dw)
+            for idx, cur_dw in enumerate(dw):
+                cur_dw = (ms.communication.comm_func.all_reduce(cur_dw, group=get_data_parallel_group())[0]
+                          / get_data_parallel_world_size())
+                dw[idx] = cur_dw
+    else:
+        raise NotImplementedError("Need to be Implemented when pp_size > 1")
+
+    dp_rank = get_data_parallel_rank() if get_data_parallel_world_size() > 1 else 0
+    tp_rank = get_tensor_model_parallel_rank() if get_tensor_model_parallel_world_size() > 1 else 0
+
+    print(f"dp rank: {dp_rank}, tp rank: {tp_rank}, loss: {loss.asnumpy()}")
+
+    # save forward
+    save_output_data(output.astype(ms.float32).asnumpy(),
+                     os.path.join(save_output_dir, 'legacy_forward'),
+                     'output',
+                     f'dp{dp_rank}_tp{tp_rank}')
+    # save dout
+    save_output_data(dout.astype(ms.float32).asnumpy(),
+                     os.path.join(save_output_dir, 'legacy_backward'),
+                     'dout',
+                     f'tp{tp_rank}')
+    # save dw
+    weight_names = [param.name for param in trainable_params]
+    for idx, cur_dw in enumerate(dw):
+        save_output_data(cur_dw.astype(ms.float32).asnumpy(),
+                         os.path.join(save_output_dir, 'legacy_backward'),
+                         weight_names[idx] + '_dw',
+                         f'tp{tp_rank}')
+
+
+def run_mcore(data_dir, ckpt_dir, save_output_dir):
+    """ test mindspore v2, i.g. core """
+    args = parse_args()
+    if args.yaml_cfg is not None:
+        config = core_transformer_config_from_yaml(args)
+    else:
+        config = core_transformer_config_from_args(args)
+
+    ms.set_seed(seed)
+
+    # set env
+    ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
+    init()
+    # init context
+    tp = config.tensor_model_parallel_size
+    initialize_model_parallel(tensor_model_parallel_size=tp)
+    global_batch_size = args.micro_batch_size
+
+    # init model
+    # pylint: disable=W0613
+    def model_provider_func(pre_process=True, post_process=True):
+        """ model provider func """
+        net = CrossAttentionNet(config)
+        return net
+
+    network = get_model(model_provider_func, config)
+    if isinstance(network, nn.CellList) and len(network) == 1:
+        network = network[0]
+    network.set_train(True)
+
+    # get ckpt and dataset
+    data_dict, ckpt_dict = load_ckpt_and_data(global_batch_size,
+                                              args.seq_length,
+                                              config.hidden_size,
+                                              config.num_attention_heads,
+                                              config.params_dtype,
+                                              config.compute_dtype,
+                                              data_dir,
+                                              ckpt_dir,
+                                              network,
+                                              config.sequence_parallel)
+    print(f"all of inputs for model: {data_dict.keys()}")
+    grad_position = list(data_dict.keys()).index("hidden_states")
+
+    # load ckpt
+    if 'parallel_attention.kv_proj.weight' in ckpt_dict and 'parallel_attention.out_proj.weight' in ckpt_dict and \
+            'parallel_attention.q_proj.weight' in ckpt_dict:
+        ckpt_dict['parallel_attention.linear_kv.weight'] = ckpt_dict['parallel_attention.kv_proj.weight']
+        ckpt_dict['parallel_attention.linear_q.weight'] = ckpt_dict['parallel_attention.q_proj.weight']
+        ckpt_dict['parallel_attention.linear_proj.weight'] = ckpt_dict['parallel_attention.out_proj.weight']
+    ms.load_param_into_net(network, ckpt_dict)
+
+    # run model
+    trainable_params = network.trainable_params()
+    if get_pipeline_model_parallel_world_size() == 1:
+        forward_backward_func = ms.value_and_grad(network,
+                                                  grad_position=grad_position,
+                                                  weights=trainable_params,
+                                                  has_aux=True)
+        (loss, output), (dout, dw) = forward_backward_func(**data_dict)
+        if get_data_parallel_world_size() > 1:
+            # reduce loss
+            loss = (ms.communication.comm_func.all_reduce(loss, group=get_data_parallel_group())[0]
+                    / get_data_parallel_world_size())
+            # reduce dout
+            dout = (ms.communication.comm_func.all_reduce(dout, group=get_data_parallel_group())[0]
+                    / get_data_parallel_world_size())
+            # reduce dw
+            dw = list(dw)
+            for idx, cur_dw in enumerate(dw):
+                cur_dw = (ms.communication.comm_func.all_reduce(cur_dw, group=get_data_parallel_group())[0]
+                          / get_data_parallel_world_size())
+                dw[idx] = cur_dw
+    else:
+        raise NotImplementedError("Need to be Implemented when pp_size > 1")
+
+    dp_rank = get_data_parallel_rank() if get_data_parallel_world_size() > 1 else 0
+    tp_rank = get_tensor_model_parallel_rank() if get_tensor_model_parallel_world_size() > 1 else 0
+
+    print(f"dp rank: {dp_rank}, tp rank: {tp_rank}, loss: {loss.asnumpy()}")
+
+    # save forward
+    save_output_data(output.astype(ms.float32).asnumpy(),
+                     os.path.join(save_output_dir, 'mcore_forward'),
+                     'output',
+                     f'dp{dp_rank}_tp{tp_rank}')
+    # save dout
+    save_output_data(dout.astype(ms.float32).asnumpy(),
+                     os.path.join(save_output_dir, 'mcore_backward'),
+                     'dout',
+                     f'tp{tp_rank}')
+    # save dw
+    weight_names = [param.name for param in trainable_params]
+    for idx, cur_dw in enumerate(dw):
+        save_output_data(cur_dw.astype(ms.float32).asnumpy(),
+                         os.path.join(save_output_dir, 'mcore_backward'),
+                         weight_names[idx] + '_dw',
+                         f'tp{tp_rank}')
+
+
+def save_random_ckpt(model, save_path="data/parallel/random_ckpt/"):
+    """ save random ckpt """
+    state_dict = model.parameters_dict()
+    tp_rank = get_tensor_model_parallel_rank() if get_tensor_model_parallel_world_size() > 1 else 0
+    dp_rank = get_data_parallel_rank() if get_data_parallel_world_size() > 1 else 0
+    barrier_method = ms.communication.comm_func.barrier
+
+    if dp_rank == 0:
+        for name, value in state_dict.items():
+            if value is None:
+                continue
+            print(f"tp rank{tp_rank}, saving weight:{name}, shape:{value.shape}")
+            np_value = np.random.randn(*value.shape).astype(np.float32)
+            save_name = save_path + name + f"_tp{tp_rank}.npy"
+            np.save(save_name, np_value)
+    barrier_method()
+
+
+def save_random_data(batch_size,
+                     seq_length,
+                     hidden_size,
+                     head,
+                     save_path="data/parallel/random_data/",
+                     sequence_parallel=False):
+    """ save random data """
+    tp_size = get_tensor_model_parallel_world_size()
+    dp_rank = get_data_parallel_rank() if get_data_parallel_world_size() > 1 else 0
+    tp_rank = get_tensor_model_parallel_rank() if get_tensor_model_parallel_world_size() > 1 else 0
+    barrier_method = ms.communication.comm_func.barrier
+    get_rotary_embedding = RotaryEmbedding(hidden_size // head, rotary_percent=1.0)
+
+    shape = (seq_length, batch_size, hidden_size)  # layout is 'SBH'
+    if sequence_parallel:
+        shape = (seq_length // tp_size, batch_size, hidden_size)
+        print("in seq_parallel")
+    print("tp_size", tp_size)
+    mask_shape = (batch_size, 1, seq_length, seq_length)
+    if tp_rank == 0:
+        hidden_states = np.random.randn(*shape).astype(np.float32) * (dp_rank + 1)
+        attention_mask = 1 - np.tril(np.ones(mask_shape)).astype(np.float32)
+        rotary_pos_emb = get_rotary_embedding(seq_length).asnumpy()
+
+        hidden_states_save_name = save_path + f'hidden_states_dp{dp_rank}.npy'
+        attention_mask_save_name = save_path + f'attention_mask_dp{dp_rank}.npy'
+        rotary_pos_emb_save_name = save_path + f'rotary_pos_emb_dp{dp_rank}.npy'
+        np.save(hidden_states_save_name, hidden_states)
+        np.save(attention_mask_save_name, attention_mask)
+        np.save(rotary_pos_emb_save_name, rotary_pos_emb)
+    barrier_method()
+
+
+def load_ckpt_and_data(batch_size,
+                       seq_length,
+                       hidden_size,
+                       head,
+                       params_dtype,
+                       compute_dtype,
+                       data_dir="data/parallel/random_data/",
+                       ckpt_dir="data/parallel/random_ckpt/",
+                       model=None,
+                       sequence_parallel=False):
+    """ load ckpt and data. """
+    tensor_method = ms.Tensor
+    tp_size = get_tensor_model_parallel_world_size()
+    dp_size = get_data_parallel_world_size()
+    tp_rank = get_tensor_model_parallel_rank() if tp_size > 1 else 0
+    dp_rank = get_data_parallel_rank() if dp_size > 1 else 0
+    barrier_method = ms.communication.comm_func.barrier
+
+    # save random ckpt
+    if not os.path.exists(ckpt_dir):
+        raise FileNotFoundError(f"{ckpt_dir} is not exists !")
+    num_files = len(glob.glob(os.path.join(ckpt_dir, "*.npy")))
+    if num_files == 0:
+        barrier_method()
+        save_random_ckpt(model, ckpt_dir)
+
+    # save random data
+    if not os.path.exists(data_dir):
+        raise FileNotFoundError(f"{data_dir} is not exists !")
+    num_files = len(glob.glob(os.path.join(data_dir, "*.npy")))
+    if num_files == 0:
+        barrier_method()
+        save_random_data(batch_size, seq_length, hidden_size, head, data_dir, sequence_parallel)
+
+    # loading data
+    data_dict = {}
+    data_npy_files = glob.glob(os.path.join(data_dir, f"*_dp{dp_rank}.npy"))
+    ori_compute_dtype = compute_dtype
+    for cur_npy_file in data_npy_files:
+        cur_name = cur_npy_file.split('/')[-1].replace(f"_dp{dp_rank}.npy", "")
+        if 'attention_mask' in cur_name:
+            compute_dtype = ms.bool_
+        else:
+            compute_dtype = ori_compute_dtype
+        cur_data = tensor_method(np.load(cur_npy_file), dtype=compute_dtype)
+        data_dict[cur_name] = cur_data
+
+    # loading ckpt
+    ckpt_dict = {}
+    ckpt_npy_files = glob.glob(os.path.join(ckpt_dir, f"*_tp{tp_rank}.npy"))
+    for cur_ckpt_npy_file in ckpt_npy_files:
+        cur_name = cur_ckpt_npy_file.split('/')[-1].replace(f"_tp{tp_rank}.npy", "")
+        cur_ckpt = ms.Parameter(tensor_method(np.load(cur_ckpt_npy_file), dtype=params_dtype), name=cur_name)
+        ckpt_dict[cur_name] = cur_ckpt
+    return data_dict, ckpt_dict
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--run_mode', type=str, default='megatron')
+    parser.add_argument('--layout', type=str, default='SBH',
+                        help="layout")
+    parser.add_argument('--data_dir', type=str, default="data/parallel/random_data/",
+                        help="load data path")
+    parser.add_argument('--ckpt_dir', type=str, default="data/parallel/random_ckpt/",
+                        help="load ckpt path")
+    parser.add_argument('--output_dir', type=str, default="data/parallel/output/",
+                        help="load ckpt path")
+    arg, _ = parser.parse_known_args()
+    clean_args()
+
+    if arg.run_mode == 'test_legacy':
+        run_legacy(arg.data_dir, arg.ckpt_dir, arg.output_dir)
+    elif arg.run_mode == 'test_mcore':
+        run_mcore(arg.data_dir, arg.ckpt_dir, arg.output_dir)
+    else:
+        raise TypeError("Wrong run mode!")
