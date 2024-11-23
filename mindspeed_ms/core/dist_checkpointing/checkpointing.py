@@ -159,15 +159,14 @@ def _save_process_pp_layers(shard_info, params_dict):
         return shard_info, params_dict
     model_shard_info = shard_info["model"]
     optimizer_shard_info = shard_info["optimizer"]
-    for name, _ in list(params_dict.items()):
-        if "layers." not in name:
-            continue
-        target_shard_info = model_shard_info if name in model_shard_info else optimizer_shard_info
-        new_name = pp_layer_rename(name, need_drop_suffix=True)
-        local_pp_param = params_dict.pop(name).asnumpy()
-        shard_dict = target_shard_info.pop(name)
-        params_dict[new_name] = ms.Parameter(ms.Tensor(local_pp_param))
-        target_shard_info[new_name] = shard_dict
+    need_process_dicts = [params_dict, model_shard_info, optimizer_shard_info]
+    for process_dict in need_process_dicts:
+        for name, _ in list(process_dict.items()):
+            if "layers." not in name:
+                continue
+            new_name = pp_layer_rename(name, need_drop_suffix=True)
+            local_param = process_dict.pop(name)
+            process_dict[new_name] = local_param
     return shard_info, params_dict
 
 # pylint: disable=W0212
@@ -380,6 +379,9 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
     load_rng_state(param_dict)
     if opt_param_scheduler is not None:
         opt_param_scheduler.load_state_dict(param_dict)
+
+    # restore native optimizer/model
+    param_dict = load_post_process(config, param_dict, optimizer)
     if isinstance(optimizer, MixedPrecisionOptimizer):
         # restore distributed optimizer
         optimizer.load_state_dict(param_dict)
@@ -390,9 +392,6 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
                 new_param = param_dict[param.name]
                 _update_param(param, new_param, False)
     else:
-        # restore native optimizer/model
-        param_dict = load_post_process(config, param_dict, optimizer)
-
         param_not_load, ckpt_not_load = ms.load_param_into_net(model, param_dict)
         if param_not_load:
             logger.warning(f"When loading ckpt into the model, param_not_load:{param_not_load}")
