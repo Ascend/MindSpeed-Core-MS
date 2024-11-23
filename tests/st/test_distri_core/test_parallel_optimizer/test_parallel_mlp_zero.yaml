@@ -63,7 +63,6 @@ delay_grad_reduce: False
 initial_loss_scale: 1  # loss_scale_value
 hysteresis: 2   # loss_scale_factor
 loss_scale_window: 1000
-loss_reduction: "mean"
 fp16_lm_cross_entropy: False # need add
 
 # pangu arguments

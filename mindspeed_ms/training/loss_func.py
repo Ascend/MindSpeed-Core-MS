@@ -101,7 +101,7 @@ def get_loss_func(optimizer_config: OptimizerConfig, return_instance: bool = Tru
         ValueError: If the specified loss function type is not supported.
     """
     loss_func_kwargs = optimizer_config.loss_func_kwargs
-    loss_func_kwargs["reduction"] = optimizer_config.loss_reduction
+    loss_func_kwargs["reduction"] = "mean"
     loss_func_type = loss_func_kwargs['loss_func_type']
     if "CrossEntropyLoss" in loss_func_type:
         loss_func_kwargs["reduction"] = 'none'
