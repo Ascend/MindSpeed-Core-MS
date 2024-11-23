@@ -41,7 +41,7 @@ class EosMask(nn.Cell):
         self.eod_token = eod_token_id
         self.reset_position_ids = reset_position_ids
 
-    @_no_grad
+    @_no_grad()
     def construct(self, input_ids):
         """construct method"""
         # input_ids: [bs, seq_len]
