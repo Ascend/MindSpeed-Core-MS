@@ -15,10 +15,15 @@
 """utils"""
 
 import mindspore as ms
+from mindspore import mint
 from mindspore.communication.management import init
 
 from mindspeed_ms.tools import logger
-from mindspeed_ms.core.parallel_state import get_data_parallel_world_size, initialize_model_parallel
+from mindspeed_ms.core.parallel_state import get_data_parallel_world_size, initialize_model_parallel, \
+    get_context_parallel_for_hybrid_ring_rank, \
+    get_context_parallel_for_hybrid_ulysses_rank, \
+    get_context_parallel_for_hybrid_ring_world_size, \
+    get_context_parallel_for_hybrid_ulysses_world_size
 
 
 def decay_filter(x):
@@ -87,3 +92,31 @@ def set_seed(seed):
     ms.set_seed(seed)
     # set rng seed
     ms.manual_seed(seed)
+
+def _get_batch_on_this_cp_rank_in_hybrid_cp(batch):
+    """
+    Transformed batch data to support hybrid context parallelism.
+    """
+    u_size = get_context_parallel_for_hybrid_ulysses_world_size()
+    r_size = get_context_parallel_for_hybrid_ring_world_size()
+
+    u_rank = get_context_parallel_for_hybrid_ulysses_rank()
+    r_rank = get_context_parallel_for_hybrid_ring_rank()
+
+    for key, val in batch.items():
+        if key == 'attention_mask':
+            continue
+        if val is not None:
+            seq_dim = 1 if key != 'attention_mask' else 2
+            val = val.view(
+                *val.shape[0:seq_dim],
+                2 * r_size,
+                val.shape[seq_dim] // (2 * r_size),
+                *val.shape[(seq_dim + 1):],
+            )
+            index = tensor([r_rank, (2 * r_size - r_rank - 1)])
+            val = mint.index_select(val, seq_dim, index)
+            val = val.view(*val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2):])
+            val = val.chunk(u_size, seq_dim)[u_rank]
+            batch[key] = val
+    return batch
