@@ -71,7 +71,7 @@ class SequentialMLP(Module):
     def construct(self, permuted_local_hidden_states, tokens_per_expert):
         """forward process"""
         if not permuted_local_hidden_states.shape:
-            return permuted_local_hidden_states
+            return permuted_local_hidden_states, None
         output_local = ops.zeros_like(permuted_local_hidden_states)
 
         start_idx = 0

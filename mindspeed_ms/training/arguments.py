@@ -685,6 +685,18 @@ def validate_args(args, default_args, defaults={}):
         assert not args.fp16, \
             "Expert parallelism is not supported with fp16 training."
 
+    # Pipe expert layer check
+    if args.use_pipe_expert_layer:
+        assert args.expert_model_parallel_size > 1, "Pipe expert is only supported with ep > 1."
+        assert not (args.use_pipe_expert_recompute and args.use_pipe_expert_swap), \
+            "Do not support recompute and swap at the same time now."
+        assert args.tensor_model_parallel_size == 1, "Pipe expert is only supported with tp == 1 currently."
+    else:
+        assert not args.use_pipe_expert_recompute, \
+            "Pipe expert recompute is only supported when using pipe expert layer."
+        assert not args.use_pipe_expert_swap, \
+            "Pipe expert swap is only supported when using pipe expert layer."
+
     # Distributed checkpointing checks
     if args.use_dist_ckpt and args.use_legacy_models:
         raise RuntimeError('--use-dist-ckpt is not supported in legacy models.')
@@ -2016,6 +2028,12 @@ def _add_moe_args(parser):
                        help='Enable checkpointing for moe_layer, should be used when memory is not sufficient.')
     group.add_argument('--moe-extended-tp', action='store_true',
                        help='Alternative to expert parallelism, all experts are sharded across TPXEP domain.')
+    group.add_argument('--use-pipe-expert-layer', type=bool, default=False,
+                       help='When set to true, ep-communication is overlapped by computing via pipe experts.')
+    group.add_argument('--use-pipe-expert-recompute', type=bool, default=False,
+                       help='When set to true, activations of silu and mul are recomputed.')
+    group.add_argument('--use-pipe-expert-swap', type=bool, default=False,
+                       help='When set to true, weights and activations selected are copied to host.')
 
     return parser
 
