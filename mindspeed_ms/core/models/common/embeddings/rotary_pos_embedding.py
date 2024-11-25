@@ -19,7 +19,9 @@ __all__ = ["RotaryEmbedding", "apply_rotary_pos_emb"]
 import mindspore as ms
 from mindspore import Tensor, ops, mint
 
-from .module import Module
+from mindspeed_ms.legacy.model.module import Module
+from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
+from mindspeed_ms.core.transformer.transformer_block import TransformerBlock
 
 
 class RotaryEmbedding(Module):
@@ -67,7 +69,7 @@ class RotaryEmbedding(Module):
         >>> from mindspore.communication import init
         >>> from mindspore import ops
         >>> from mindspeed_ms.core.config import TransformerConfig
-        >>> from mindspeed_ms.legacy.model.rotary_pos_embedding import (
+        >>> from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import (
         ...     RotaryEmbedding,
         ...     apply_rotary_pos_emb
         ... )
@@ -163,6 +165,39 @@ class RotaryEmbedding(Module):
         # emb [S, ..., D]
         emb = emb[:, None, None, :]
         return Tensor(emb)
+
+    def get_rotary_seq_len(
+            self,
+            inference_params,
+            transformer: TransformerBlock,
+            transformer_input: Tensor,
+            transformer_config: TransformerConfig,
+        ) -> float:
+        """Function to get the rotary sequence length.
+
+        Args:
+            inference_params : Used during Inference time
+            transformer (TransformerBlock): The transformer block (decoder/encoder) used by the model
+            transformer_input (Tensor): _description_
+            transformer_config (TransformerConfig): Transformer config used by the model
+
+        Returns:
+            float: The rotary sequence length
+        """
+        if inference_params is not None:
+            rotary_seq_len = inference_params.max_sequence_length
+        else:
+            if transformer.set_hidden_states is not None:
+                rotary_seq_len = transformer.set_hidden_states.value().shape[0]
+            else:
+                rotary_seq_len = transformer_input.shape[0]
+
+            if transformer_config.sequence_parallel:
+                rotary_seq_len *= transformer_config.tensor_model_parallel_size
+
+        rotary_seq_len *= transformer_config.context_parallel_size
+
+        return rotary_seq_len
 
 
 def _rotate_half(x, rotary_interleaved):

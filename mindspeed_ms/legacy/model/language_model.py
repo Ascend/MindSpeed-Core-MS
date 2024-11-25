@@ -24,12 +24,12 @@ from mindspeed_ms.core.tensor_parallel import GatherFromSequenceParallelRegion, 
     VocabParallelEmbedding, ScatterToSequenceParallelRegion, ColumnParallelLinear
 from mindspeed_ms.core.tensor_parallel.random import get_rng_tracer
 from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_world_size
+from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
 
 from .module import Module
 from .transformer import ParallelTransformer
 from .enums import ModelType, AttnMaskType
 from .mlp import ParallelMLP
-from .rotary_pos_embedding import RotaryEmbedding
 
 
 class Pooler(Cell):
@@ -117,7 +117,7 @@ class Embedding(Module):
         >>> from mindspeed_ms.core.parallel_core import Embedding
         >>> from mindspore.common.initializer import initializer
         >>> from mindspore.numpy import array_equal
-        >>> from mindspeed_ms.legacy.model.rotary_pos_embedding import (
+        >>> from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import (
         ...     apply_rotary_pos_emb as pynative_apply_rotary_pos_emb
         ... )
         >>> from mindspeed_ms.core.parallel_core import apply_rotary_pos_emb
