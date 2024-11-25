@@ -26,7 +26,6 @@ __all__ = [
 ]
 
 import os
-import gc
 import stat
 import glob
 import json
@@ -313,7 +312,6 @@ def save_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
         ms.save_checkpoint(params_dict, ckpt_file, append_dict=append_dict, format=format, crc_check=crc_check)
         record_last_ckpt_to_json(epoch=epoch_num, step=step_num, ckpt_file=os.path.basename(ckpt_file),
                                  meta_json=os.path.join(rank_path, 'meta.json'))
-        gc.collect()
     logger.info("ckpt saved")
 
 
@@ -368,6 +366,7 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
         raise ValueError(f"There is no *.{format} in {ckpt_path}, load failed.")
     for key in kwargs:
         logger.warning(f"The parameter '{key}' is not used in load_checkpoint.")
+    args = get_args()
 
     logger.info(f"Loading latest checkpoint: {src_ckpt_file}, this may take a while.")
     param_dict = ms.load_checkpoint(src_ckpt_file, format=format, crc_check=crc_check)
@@ -387,9 +386,14 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
         optimizer.load_state_dict(param_dict)
         # synchronize parameters in optimizer to model
         optimizer.reload_main_params()
+        if (args.fp16 or args.bf16) and args.no_load_optim:
+            optimizer.reload_model_params()
         for _, param in model.parameters_and_names():
             if not param.requires_grad and "set_hidden_states" not in param.name:
-                new_param = param_dict[param.name]
+                new_param = param_dict.get(param.name)
+                if new_param is None:
+                    logger.warning(f"Fail to get the weight of '{param.name}' from state dict.")
+                    continue
                 _update_param(param, new_param, False)
     else:
         param_not_load, ckpt_not_load = ms.load_param_into_net(model, param_dict)

@@ -24,6 +24,7 @@ import mindspore as ms
 import mindspore.ops as ops
 from mindspore import _no_grad
 from mindspore.common import dtype as mstype
+from mindspore.common.initializer import Zero
 from mindspore.communication.management import get_group_size, get_rank
 import mindspore.communication.comm_func as comm_func
 
@@ -31,6 +32,7 @@ from mindspeed_ms.tools import logger
 from mindspeed_ms.core.distributed import ParamAndGradBuffer
 from mindspeed_ms.core.parallel_state import get_tensor_model_parallel_world_size
 from mindspeed_ms.core.utils import pp_layer_rename
+from mindspeed_ms.training.global_vars import get_args
 
 from .optimizer import MixedPrecisionOptimizer
 
@@ -498,6 +500,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
 
     def _load_state_from_fs_model_space(self, state_dict):
         """ load state from fully sharded parameter state. """
+        args = get_args()
         # Build a mapping from sharded param to sharded state
         param_to_state = zip(self.optimizer.parameters, self.optimizer.exp_avg, self.optimizer.exp_avg_sq)
         shard_param_to_state_map = {
@@ -514,13 +517,16 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
 
             # Get sharded param & state
             shard_param = param.main_param
-            shard_state = shard_param_to_state_map.get(shard_param.name, tuple())
-            if len(shard_state) != 2:
-                raise ValueError(f"Fail to get sharded states of '{param.name}'.")
-            shard_exp_avg, shard_exp_avg_sq = shard_state
+            load_list = [shard_param]
+            if not args.no_load_optim:
+                shard_state = shard_param_to_state_map.get(shard_param.name, tuple())
+                if len(shard_state) != 2:
+                    raise ValueError(f"Fail to get sharded states of '{param.name}'.")
+                shard_exp_avg, shard_exp_avg_sq = shard_state
+                load_list += [shard_exp_avg, shard_exp_avg_sq]
 
             # Get weight from state dict
-            for ele in [shard_param, shard_exp_avg, shard_exp_avg_sq]:
+            for ele in load_list:
                 weight = state_dict.get(ele.name)
                 if weight is None:
                     logger.warning(f"Fail to get the weight of '{ele.name}' from state dict.")
@@ -528,13 +534,14 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
                 ele.copy_(
                     ms.Tensor(
                         weight.asnumpy().reshape(-1)[param_start:param_end],
-                        dtype=weight.dtype,
+                        dtype=ele.dtype,
                     )
                 )
 
     def _load_state_dict_from_dp_zero(self, state_dict):
         """ load state dict from dp splited bucket state. """
-        param_type = ["", "exp_avg.", "exp_avg_sq."]
+        args = get_args()
+        param_type = ["", "exp_avg.", "exp_avg_sq."] if not args.no_load_optim else [""]
         for buffer_index, bucket_index, _, _ in self.param_buffer_dp_views:
             param_range_map_this_bucket = self.param_ranges_map[buffer_index][bucket_index]
             shard_name = 'buffer_{}_bucket_{}'.format(buffer_index, bucket_index)
@@ -550,24 +557,26 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
                 self.optimizer.parameters[param_id_in_opt].copy_(
                     ms.Tensor(
                         state_dict[shard_name].asnumpy()[start_idx:end_idx],
-                        dtype=state_dict[shard_name].dtype,
+                        dtype=self.optimizer.parameters[param_id_in_opt].dtype,
                     )
                 )
-                self.optimizer.exp_avg[param_id_in_opt].copy_(
-                    ms.Tensor(
-                        state_dict['exp_avg.' + shard_name].asnumpy()[start_idx:end_idx],
-                        dtype=state_dict['exp_avg.' + shard_name].dtype,
+                if not args.no_load_optim:
+                    self.optimizer.exp_avg[param_id_in_opt].copy_(
+                        ms.Tensor(
+                            state_dict['exp_avg.' + shard_name].asnumpy()[start_idx:end_idx],
+                            dtype=self.optimizer.exp_avg[param_id_in_opt].dtype,
+                        )
                     )
-                )
-                self.optimizer.exp_avg_sq[param_id_in_opt].copy_(
-                    ms.Tensor(
-                        state_dict['exp_avg_sq.' + shard_name].asnumpy()[start_idx:end_idx],
-                        dtype=state_dict['exp_avg_sq.' + shard_name].dtype,
+                    self.optimizer.exp_avg_sq[param_id_in_opt].copy_(
+                        ms.Tensor(
+                            state_dict['exp_avg_sq.' + shard_name].asnumpy()[start_idx:end_idx],
+                            dtype=self.optimizer.exp_avg_sq[param_id_in_opt].dtype,
+                        )
                     )
-                )
 
     def load_state_dict(self, state_dict):
         """ load the state dict. """
+        args = get_args()
         sharding_type = 'fully_sharded_model_space'
         for key in state_dict.keys():
             if 'buffer' in key and 'bucket' in key:
@@ -586,6 +595,10 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
             param_id_in_opt = self.param_idx_in_opt[param.name]
             self.optimizer.exp_avg[param_id_in_opt].copy_(state_dict['exp_avg.' + param.name].view(-1))
             self.optimizer.exp_avg_sq[param_id_in_opt].copy_(state_dict['exp_avg_sq.' + param.name].view(-1))
+
+        # if no load optim, skip load lr, wd and state_step
+        if args.no_load_optim:
+            return
 
         if 'state_step' in state_dict.keys():
             self.optimizer.state_step.assign_value(state_dict['state_step'].value())
@@ -848,9 +861,21 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
             for param, range_map in param_range_map_this_bucket.items():
                 start_idx, end_idx = range_map['range_in_shard']
                 param_id_in_opt = self.param_idx_in_opt.get(param.name)
-                param_shard[start_idx:end_idx] = self.optimizer.parameters[param_id_in_opt].contiguous().asnumpy()
-                exp_avg_shard[start_idx:end_idx] = self.optimizer.exp_avg[param_id_in_opt].contiguous().asnumpy()
-                exp_avg_sq_shard[start_idx:end_idx] = self.optimizer.exp_avg_sq[param_id_in_opt].contiguous().asnumpy()
+                param_shard[start_idx:end_idx] = ms.Tensor(
+                    shape=self.optimizer.parameters[param_id_in_opt].shape,
+                    dtype=self.optimizer.parameters[param_id_in_opt].dtype,
+                    init=Zero(),
+                ).assign_value(self.optimizer.parameters[param_id_in_opt]).copy().asnumpy()
+                exp_avg_shard[start_idx:end_idx] = ms.Tensor(
+                    shape=self.optimizer.exp_avg[param_id_in_opt].shape,
+                    dtype=self.optimizer.exp_avg[param_id_in_opt].dtype,
+                    init=Zero(),
+                ).assign_value(self.optimizer.exp_avg[param_id_in_opt]).copy().asnumpy()
+                exp_avg_sq_shard[start_idx:end_idx] = ms.Tensor(
+                    shape=self.optimizer.exp_avg_sq[param_id_in_opt].shape,
+                    dtype=self.optimizer.exp_avg_sq[param_id_in_opt].dtype,
+                    init=Zero(),
+                ).assign_value(self.optimizer.exp_avg_sq[param_id_in_opt]).copy().asnumpy()
             shard_name = 'buffer_{}_bucket_{}'.format(buffer_index, bucket_index)
             param_dict[shard_name] = ms.Parameter(
                 ms.Tensor(param_shard),

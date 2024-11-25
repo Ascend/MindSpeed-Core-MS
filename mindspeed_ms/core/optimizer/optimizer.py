@@ -197,7 +197,7 @@ class MixedPrecisionOptimizer(nn.Cell):
         inv_scale = mint.reciprocal(self.grad_scaler).astype(mstype.float32)
         self.grad_scale_func(self.grads, inv_scale)
         for grad in self.grads:
-            self.found_inf = mint.logical_and(self.found_inf, mint.logical_not(mint.isfinite(grad)).all())
+            self.found_inf = mint.logical_not(mint.isfinite(grad).all())
         self.found_inf = comm_func.all_reduce(
             self.found_inf.astype(mstype.float32), 'max', get_model_parallel_group())[0]
         return mint.greater(self.found_inf, self._scale_zero)
@@ -357,9 +357,11 @@ class Float16OptimizerWithFloat16Params(MixedPrecisionOptimizer):
 
     def load_state_dict(self, state_dict):
         """ load state dict into optimizer. """
-        param_dict = list(self.optimizer.parameters) + \
-                     list(self.optimizer.exp_avg) + \
-                     list(self.optimizer.exp_avg_sq)
+        args = get_args()
+        param_dict = list(self.optimizer.parameters)
+        if args.no_load_optim:
+            param_dict += list(self.optimizer.exp_avg) + \
+                          list(self.optimizer.exp_avg_sq)
         for param in param_dict:
             if param.name not in state_dict:
                 logger.warning(f"No state data found for '{param.name}' and it won't be loaded.")
