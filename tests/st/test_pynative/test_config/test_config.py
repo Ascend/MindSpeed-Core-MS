@@ -229,7 +229,8 @@ class TestConfig:
             "--initial-loss-scale", "1",
             "--log-interval", "1",
             "--extra-flag", "test",
-            "--absent-flag", "aaa"
+            "--absent-flag", "aaa",
+            "--num-layer-list", "[[1, 1], [2, 2], [3, 3], [4, 4]]"
         ]
 
         args_default = {
@@ -250,6 +251,7 @@ class TestConfig:
         assert args.epochs == 1
         assert args.a == 1
         assert args.b == 2
+        assert args.num_layer_list == [[1, 1], [2, 2], [3, 3], [4, 4]]
 
         for key, val in VERIFY_CONFIG_DICT.items():
             assert getattr(config, key) == val, f"{getattr(config, key)} != {val}"
@@ -265,3 +267,20 @@ class TestConfig:
         except TypeError as _:
             error = True
         assert error
+
+
+    def test_parse_vpp_yaml(self):
+        """test parse vpp arguments from yaml file"""
+        yaml_file = "vpp.yaml"
+        sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
+        _ = parse_args()
+
+        for i in range(1, 4):
+            yaml_file = f"illegal_vpp{i}.yaml"
+            sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
+            error = False
+            try:
+                _ = parse_args()
+            except AssertionError as _:
+                error = True
+            assert error

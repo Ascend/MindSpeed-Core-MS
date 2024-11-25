@@ -20,6 +20,7 @@ import json
 import os
 import re
 from types import SimpleNamespace
+from typing import List
 import yaml
 
 import mindspore.common.dtype as mstype
@@ -171,25 +172,56 @@ def validate_yaml(args, args_default, defaults={}):
                 args.global_batch_size), flush=True)
     assert args.global_batch_size > 0
 
-    # num_layers_per_virtual_pipeline_stage is not inside model parallel for checkpointing
-    if args.num_layers_per_virtual_pipeline_stage is not None:
-        assert args.model_parallel.pipeline_model_parallel_size > 2, \
-            'pipeline-model-parallel size should be greater than 2 with ' \
-            'interleaved schedule'
-        assert args.language_model.num_layers % args.model_parallel.transformer_pipeline_model_parallel_size == 0, \
-            'number of layers should be divisible by the pipeline parallel size'
-        num_layers_per_pipeline_stage = args.language_model.num_layers // args.model_parallel.transformer_pipeline_model_parallel_size
-        assert num_layers_per_pipeline_stage % args.num_layers_per_virtual_pipeline_stage == 0, \
-            'number of layers per pipeline stage must be divisible number of layers per virtual pipeline stage'
-        args.model_parallel.virtual_pipeline_model_parallel_size = num_layers_per_pipeline_stage // \
-            args.num_layers_per_virtual_pipeline_stage
+    if args.model_parallel.virtual_pipeline_model_parallel_size is None:
+        # num_layers_per_virtual_pipeline_stage is not inside model parallel for checkpointing
+        if args.num_layers_per_virtual_pipeline_stage is not None:
+            # check num_layer_list, full_recompute_list and select_recompute_list is None
+            assert args.model_parallel.num_layer_list is None, \
+                "num_layer_list is not None when num_layers_per_virtual_pipeline_stage is specified"
+            if hasattr(args.language_model, 'recompute_config') and args.language_model.recompute_config is not None:
+                required_args = ['recompute', 'select_recompute', 'select_comm_recompute']
+                for arg in required_args:
+                    if hasattr(args.language_model.recompute_config, arg):
+                        _check_arg_is_none(args.language_model.recompute_config, arg)
+
+            assert args.model_parallel.pipeline_model_parallel_size > 2, \
+                'pipeline-model-parallel size should be greater than 2 with ' \
+                'interleaved schedule'
+            assert args.language_model.num_layers % args.model_parallel.transformer_pipeline_model_parallel_size == 0, \
+                'number of layers should be divisible by the pipeline parallel size'
+            num_layers_per_pipeline_stage = args.language_model.num_layers // args.model_parallel.transformer_pipeline_model_parallel_size
+            assert num_layers_per_pipeline_stage % args.num_layers_per_virtual_pipeline_stage == 0, \
+                'number of layers per pipeline stage must be divisible number of layers per virtual pipeline stage'
+            args.model_parallel.virtual_pipeline_model_parallel_size = num_layers_per_pipeline_stage // \
+                args.num_layers_per_virtual_pipeline_stage
+        else:
+            args.model_parallel.virtual_pipeline_model_parallel_size = None
+            # Overlap P2P communication is disabled if not using the interleaved schedule.
+            args.model_parallel.overlap_p2p_comm = False
+            if args.rank == 0:
+                print('WARNING: Setting args.overlap_p2p_comm to False since non-interleaved '
+                      'schedule does not support overlapping p2p communication')
     else:
-        args.model_parallel.virtual_pipeline_model_parallel_size = None
-        # Overlap P2P communication is disabled if not using the interleaved schedule.
-        args.model_parallel.overlap_p2p_comm = False
-        if args.rank == 0:
-            print('WARNING: Setting args.overlap_p2p_comm to False since non-interleaved '
-                  'schedule does not support overlapping p2p communication')
+        assert args.num_layers_per_virtual_pipeline_stage is None, \
+            "num_layers_per_virtual_pipeline_stage must be None when virtual_pipeline_model_parallel_size is specified"
+        # check noop_layers
+        if args.model_parallel.noop_layers is not None:
+            assert args.language_model.num_layers % \
+                (args.model_parallel.virtual_pipeline_model_parallel_size * \
+                    args.model_parallel.pipeline_model_parallel_size) == 0, \
+                'number of layers should be divisible by the pipeline parallel size times virtual pipeline parallel size'
+
+        _check_list_is_validate("num_layer_list", args.model_parallel.num_layer_list,
+                                args.model_parallel.virtual_pipeline_model_parallel_size,
+                                args.model_parallel.pipeline_model_parallel_size)
+        if hasattr(args.language_model, 'recompute_config') and args.language_model.recompute_config is not None:
+            required_args = ['recompute', 'select_recompute', 'select_comm_recompute']
+            for arg in required_args:
+                if hasattr(args.language_model.recompute_config, arg):
+                    _check_list_is_validate(arg, getattr(args.language_model.recompute_config, arg),
+                                            args.model_parallel.virtual_pipeline_model_parallel_size,
+                                            args.model_parallel.pipeline_model_parallel_size)
+
 
     if args.overlap_param_gather:
         assert args.use_distributed_optimizer, \
@@ -502,6 +534,20 @@ def core_config_from_args(args, dataclass=TransformerConfig):
 
 def _check_arg_is_not_none(args, arg):
     assert getattr(args, arg) is not None, '{} argument is None'.format(arg)
+
+
+def _check_arg_is_none(args, arg):
+    assert getattr(args, arg) is None, '{} argument is not None'.format(arg)
+
+
+def _check_list_is_validate(arg_name, arg, vpp, pp):
+    assert arg is not None, f'{arg_name} must not be None'
+    assert isinstance(arg, List), f'{arg_name} is not instance of List type'
+    assert len(arg) == pp, f"{arg_name}'s length is not equal to pipeline parallel size: {pp}"
+    for index, sub_list in enumerate(arg):
+        assert isinstance(sub_list, List), f"{arg_name}[{index}] is not instance of List type"
+        assert len(sub_list) == vpp,  \
+            f"{arg_name}[{index}]'s length is not equal to virtual pipeline parallel size: {vpp}"
 
 
 def core_transformer_config_from_yaml(args, transfomer_key="language_model"):
