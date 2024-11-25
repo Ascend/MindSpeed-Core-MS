@@ -24,6 +24,7 @@ import torch
 import mindspore
 from mindspore.communication import get_group_size, get_rank, get_local_rank_size
 from mindspore.communication.comm_func import barrier
+from mindspore.common.api import _pynative_executor
 
 from mindspeed_ms.core import parallel_state
 from mindspeed_ms.legacy.data.dataset_utils import get_train_valid_test_split_
@@ -206,6 +207,7 @@ def _build_index_mappings(
             print_rank_0(' > elasped time to build and save shuffle-idx and sample-idx mapping'
                          ' (seconds): {:4f}'.format(time.time() - start_time))
     barrier()
+    _pynative_executor.sync()
     # This should be a barrier but nccl barrier assumes
     # device_index=rank which is not the case for model
     # parallel case
