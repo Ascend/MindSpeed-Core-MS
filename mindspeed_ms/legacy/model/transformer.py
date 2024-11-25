@@ -404,6 +404,8 @@ class ParallelAttention(Module):
         self.use_lora = self.config.use_lora
         self.data_layout = args.data_layout
 
+        self.repeat_kv_outside = args.repeat_kv_outside
+
         if self.group_query_attention:
             if self.num_query_groups % tp_group_size != 0:
                 raise ValueError(
@@ -605,7 +607,7 @@ class ParallelAttention(Module):
 
         # expand the key_layer and value_layer [B, S, kv_N_per_tp, D]
         # to [B, S, N_per_tp, D]
-        if self.num_heads_per_partition // self.kv_num_heads_per_partition > 1:
+        if self.num_heads_per_partition // self.kv_num_heads_per_partition > 1 and self.repeat_kv_outside:
             repeat_num = divide(
                 self.num_heads_per_partition, self.kv_num_heads_per_partition
             )
@@ -619,6 +621,12 @@ class ParallelAttention(Module):
             key = apply_rotary_pos_emb(key, k_pos_emb, self.config)
 
         if not self.use_flash_attention:
+            if self.num_heads_per_partition // self.kv_num_heads_per_partition > 1 and not self.repeat_kv_outside:
+                repeat_num = divide(
+                    self.num_heads_per_partition, self.kv_num_heads_per_partition
+                )
+                key = mint.repeat_interleave(key, repeat_num, dim=2)
+                value = mint.repeat_interleave(value, repeat_num, dim=2)
             context_layer = self.core_attention(query, key, value, attention_mask)
         elif get_context_parallel_world_size() <= 1:
             if attention_mask.ndim == 3:

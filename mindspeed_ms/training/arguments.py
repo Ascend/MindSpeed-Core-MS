@@ -2016,4 +2016,6 @@ def _add_network_args(parser):
 
     group.add_argument("--noop-layers", type=str,
                        help='Specity the noop layers.')
+    group.add_argument('--repeat-kv-outside', action='store_true',
+                       help='Repeat kv before rotary position embedding for core attention')
     return parser
