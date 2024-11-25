@@ -21,6 +21,7 @@ import mindspore
 from mindspore.communication import create_group, destroy_group, get_group_size, get_rank
 from mindspore import hal
 from mindspeed_ms.tools import logger
+from mindspeed_ms.training.global_vars import get_args
 
 _GLOBAL_STREAM = None
 _SP_SEND_STREAM = None
@@ -34,7 +35,7 @@ group_info_maps = {}
 # special_groups has a different initialization process compared to normal_groups
 normal_groups = ['tp', 'dp', 'pp', 'cp', 'dp-cp', 'tp-pp', 'tp-dp-cp', 'tp-dp', 'tp-cp']
 special_groups = ['ep', 'tp-ep', 'tp-ep-pp', 'dp-independent_ep', 'vpp', 'embedding', 'position_embedding',
-                  "dp-zero", "dp-zero-grad", "dp-zero-tp"]
+                  "dp-zero", "dp-zero-grad", "dp-zero-tp", "cp_ulysses", "cp_ring"]
 valid_groups = normal_groups + special_groups
 
 # A list of global ranks for pipeline group
@@ -196,6 +197,29 @@ class CreateCommGroups():
                 position_embedding_group.group = group
                 position_embedding_group.global_ranks = position_embedding_ranks
 
+    def init_hybrid_cp_group(self, ulysses_degree, ring_degree):
+        """"Init hybrid context parallel group."""
+        cp_ring_mode = "cp_ring"
+        cp_ulysses_mode = "cp_ulysses"
+        org_comm_group = get_group_info("cp")
+        global_ranks = org_comm_group.global_ranks
+        for m in range(ring_degree):
+            ulysses_ranks = [global_ranks[idx] for idx in range(m * ulysses_degree, (m + 1) * ulysses_degree)]
+            if self.rank in ulysses_ranks:
+                common_group = get_group_info(cp_ulysses_mode)
+                group_name = cp_ulysses_mode + "-" + '-'.join([str(i) for i in ulysses_ranks])
+                common_group.group = group_name
+                common_group.global_ranks = ulysses_ranks
+                common_group.world_size = len(ulysses_ranks)
+        for m in range(ulysses_degree):
+            ring_ranks = [global_ranks[idx] for idx in range(m, len(global_ranks), ulysses_degree)]
+            if self.rank in ring_ranks:
+                common_group = get_group_info(cp_ring_mode)
+                group_name = cp_ring_mode + "-" + '-'.join([str(i) for i in ring_ranks])
+                common_group.group = group_name
+                common_group.global_ranks = ring_ranks
+                common_group.world_size = len(ring_ranks)
+
     def _dispatch_comm_ranks(self, world_size, parallel_size, mask):
         """dispatch comm ranks"""
         def prefix_product(a, init=1):
@@ -355,6 +379,8 @@ def initialize_model_parallel(tensor_model_parallel_size=1,
         get_zero_shard_group()
         get_zero_shard_grad_group()
     get_zero_shard_tp_group()
+    # initialize hybrid context parallel group
+    initialize_context_parallel_group_for_hybrid_cp(context_parallel_size, rank_generator)
 
 
 def is_initialized():
@@ -455,6 +481,13 @@ def get_tensor_and_data_parallel_group(with_context_parallel=False):
 def get_tensor_and_context_parallel_group():
     return _get_group_helper('tp-cp')
 
+def get_context_parallel_group_for_hybrid_ulysses():
+    """Get the hybrid context parallel ulysses group the caller rank belongs to."""
+    return _get_group_helper('cp_ulysses')
+
+def get_context_parallel_group_for_hybrid_ring():
+    """Get the hybrid context parallel ring group the caller rank belongs to."""
+    return _get_group_helper('cp_ring')
 
 ### get global ranks
 def _get_global_ranks_helper(mode, check_initialized=True):
@@ -524,6 +557,13 @@ def get_tensor_and_context_parallel_world_size():
 def get_data_modulo_expert_parallel_world_size():
     return _get_world_size_helper('dp-independent_ep')
 
+def get_context_parallel_for_hybrid_ulysses_world_size():
+    """Return world size for the hybrid context parallel ulysses group."""
+    return _get_world_size_helper('cp_ulysses')
+
+def get_context_parallel_for_hybrid_ring_world_size():
+    """Return world size for the hybrid context parallel ring group."""
+    return _get_world_size_helper('cp_ring')
 
 ### get rank
 def _get_rank_helper(mode):
@@ -569,6 +609,13 @@ def get_pipeline_model_parallel_rank():
     """Return my rank for the pipeline model parallel group."""
     return _get_rank_helper('pp')
 
+def get_context_parallel_for_hybrid_ulysses_rank():
+    """Return my rank for the hybrid context parallel ulysses group."""
+    return _get_rank_helper('cp_ulysses')
+
+def get_context_parallel_for_hybrid_ring_rank():
+    """Return my rank for the hybrid context parallel ring group."""
+    return _get_rank_helper('cp_ring')
 
 def get_pipeline_model_parallel_first_rank():
     """Return the global rank of the first precess in the pipeline"""
@@ -844,3 +891,15 @@ def get_zero_shard_tp_group():
     comm_group.world_size = len(new_rank_list)
     comm_group.rank = z3_group.rank
     return _get_group_helper("dp-zero-tp")
+
+def initialize_context_parallel_group_for_hybrid_cp(context_parallel_size, rank_generator):
+    if not is_hybrid_cp():
+        return
+    ulysses_degree = get_args().ulysses_degree_in_cp
+    assert (context_parallel_size > ulysses_degree and context_parallel_size % ulysses_degree == 0)
+    ring_degree = context_parallel_size // ulysses_degree
+    rank_generator.init_hybrid_cp_group(ulysses_degree, ring_degree)
+
+def is_hybrid_cp() -> bool:
+    return hasattr(get_args(), 'context_parallel_algo') and \
+        get_args().context_parallel_algo == "hybrid_cp_algo"

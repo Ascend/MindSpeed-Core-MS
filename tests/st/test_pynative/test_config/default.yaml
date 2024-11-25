@@ -1,8 +1,8 @@
 language_model:
   # model architecture
-  num_layers: null
-  hidden_size: null
-  num_attention_heads: null
+  num_layers: 2
+  hidden_size: 128
+  num_attention_heads: 2
   num_query_groups: 32
   hidden_dropout: 0.0
   attention_dropout: 0.0
@@ -20,6 +20,16 @@ language_model:
   # miscellaneous
   clone_scatter_output_in_embedding: False
 
+model_parallel:
+  # model parallelism
+  tensor_model_parallel_size: 1
+  pipeline_model_parallel_size: 1
+  context_parallel_size: 1
+  context_parallel_algo: "ulysses_cp_algo" # "hybrid_cp_algo" or "ulysses_cp_algo" or "megatron_cp_algo"
+  ulysses_degree_in_cp: 2
+  expert_model_parallel_size: 1
+  virtual_pipeline_model_parallel_size: null
+
 # training
 transformer_impl: "local"
 seed: null
@@ -29,6 +39,9 @@ train_iters: 0
 eval_interval: null
 train_samples: 0
 check_for_nan_in_loss_and_grad: False
+
+# data
+seq_length: 4096
 
 # optimization
 optimizer: "AdamWeightDecay"

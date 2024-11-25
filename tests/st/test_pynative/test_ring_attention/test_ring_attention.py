@@ -37,7 +37,7 @@ class TestRingAttention:
         sh_path = os.path.split(os.path.realpath(__file__))[0]
         scripts_path = os.path.join(sh_path, scripts_name)
 
-        scripts_cmd = f"{scripts_path}"
+        scripts_cmd = f"{scripts_path} --yaml-cfg ../test_config/default.yaml"
         cmd = f"msrun --worker_num={device_num} " + \
                     f"--local_worker_num={device_num} " + \
                     f"--master_port=8118 " + \
@@ -64,7 +64,7 @@ class TestRingAttention:
         sh_path = os.path.split(os.path.realpath(__file__))[0]
         scripts_path = os.path.join(sh_path, scripts_name)
 
-        scripts_cmd = f"{scripts_path}"
+        scripts_cmd = f"{scripts_path} --yaml-cfg ../test_config/default.yaml"
         cmd = f"msrun --worker_num={device_num} " + \
                     f"--local_worker_num={device_num} " + \
                     f"--master_port=8118 " + \

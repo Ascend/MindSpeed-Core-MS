@@ -14,7 +14,6 @@
 # ============================================================================
 """run parallel linear"""
 import time
-import argparse
 import numpy as np
 
 
@@ -26,7 +25,7 @@ except ImportError:
 from mindspore import mint, Tensor, grad
 import mindspore.nn as nn
 from mindspore.communication.management import init, get_rank, get_group_size
-from mindspeed_ms.training import train
+from mindspeed_ms.training import parse_args
 from mindspeed_ms.core.parallel_state import initialize_model_parallel
 from mindspeed_ms.core.tensor_parallel.random import (
     RNGStateTracer,
@@ -149,11 +148,12 @@ def run_recompute_parallel():
 
     assert result[0] == result[1]
 
+def extra_args_provider(parser):
+    parser.add_argument('--testcase', type=int, default=0, choices=[0, 1], help='choose testcase in [0, 1]')
+    return parser
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--testcase', type=int, default=0, choices=[0, 1], help='choose testcase in [0, 1]')
-    args = parser.parse_args()
+    args = parse_args(extra_args_provider=extra_args_provider)
     if args.testcase == 0:
         run_random_tracer_parallel()
     else:

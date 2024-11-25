@@ -57,6 +57,13 @@ class ModelParallelConfig:
     context_parallel_size: int = 1
     """Splits network input along sequence dimension across GPU ranks."""
 
+    context_parallel_algo: str = "ulysses_cp_algo"
+    """Context parallelism algorithm."""
+
+    ulysses_degree_in_cp: int = None
+    """Define the degree of ulysses parallelism when the `--context-parallel-algo`
+       is set to `hybrid_cp_algo`, and the ring-attention parallelism is set wo `cp//ulysses`"""
+
     expert_model_parallel_size: int = 1
     """Distributes Moe Experts across sub data parallel dimension."""
 
