@@ -17,18 +17,17 @@ def post_language_model_processing(parallel_lm_logits, loss_fn, lm_output, label
 
     if labels is None:
         # [s b h] -> [b s h]
-        return output.swapaxes(0, 1)
+        return output.swapaxes(0, 1).contiguous()
 
     # [s b] -> [b s]
-    output = output.swapaxes(0, 1)
-    loss_mask = loss_mask.reshape(-1)
+    output = output.swapaxes(0, 1).contiguous()
 
     if fp16_lm_cross_entropy:
         if output.dtype != mstype.float16:
             raise ValueError(f"When fp16_lm_cross_entropy=True, output should be float16, but got {output.dtype}")
         loss = loss_fn(output, labels, loss_mask)
     else:
-        loss = loss_fn(output.astype(mstype.float32), labels, loss_mask)
+        loss = loss_fn(output.float(), labels, loss_mask)
 
     return loss
 

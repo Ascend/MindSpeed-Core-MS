@@ -24,6 +24,7 @@ from .mappings import ReduceScatterToSequenceParallelRegion
 from .mappings import ReduceScatterToTensorParallelRegion
 from .mappings import ScatterToSequenceParallelRegion
 from .mappings import GatherFromSequenceParallelRegion
+from .mappings import ReduceFromContextParallelRegion
 from .mappings import AllGatherFromTensorParallelRegion
 from .mappings import GatherFromTensorAndExpertParallelRegion
 from .mappings import AllToAll, AllToAllSP2HP
@@ -48,6 +49,7 @@ __all__ = [
     'ReduceScatterToSequenceParallelRegion',
     'ReduceScatterToTensorParallelRegion',
     'ScatterToSequenceParallelRegion',
+    'ReduceFromContextParallelRegion',
     'GatherFromSequenceParallelRegion',
     'AllGatherFromTensorParallelRegion',
     'GatherFromTensorAndExpertParallelRegion',
