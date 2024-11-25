@@ -369,7 +369,7 @@ def forward_backward_pipelining_with_interleaving(
         accumulate_grads_list[model_chunk_id] = accumulate_grads
 
         # if delay_grad_reduce=True, reduce all bucket grad after run_backward
-        if wrap_with_ddp:
+        if wrap_with_ddp and overlap_grad_reduce:
             if delay_grad_reduce:
                 grad_sync_microbatch_id = microbatch_id - pp_world_size
                 is_last_microbatch_sync_chunk = is_last_microbatch_for_model_chunk(grad_sync_microbatch_id,
