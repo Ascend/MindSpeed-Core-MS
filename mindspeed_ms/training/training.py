@@ -413,11 +413,12 @@ def get_forward_backward_func(network_with_loss, params, config: TransformerConf
                 inputs_tuple_micro = [
                     input_data[idx * micro_batch_size : (idx + 1) * micro_batch_size] for input_data in inputs_tuple
                 ]
-                inputs_dict_micro = {
-                    key: value[idx * micro_batch_size : (idx + 1) * micro_batch_size]
-                    for key, value in inputs_dict.items()
-                }
-
+                inputs_dict_micro = {}
+                for key, value in inputs_dict.items():
+                    if value is not None:
+                        inputs_dict_micro[key] = value[idx * micro_batch_size : (idx + 1) * micro_batch_size]
+                    else:
+                        inputs_dict_micro[key] = None
                 # step on micro batch
                 if forward_only:
                     loss_micro, logits_micro = forward_with_loss_scale(
