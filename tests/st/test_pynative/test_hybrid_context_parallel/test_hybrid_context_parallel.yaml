@@ -1,0 +1,31 @@
+training_config:
+  epochs: 1
+  training_iters: 2
+  log_interval: 1
+  loss_scale_value: 1
+  loss_scale_factor: 2
+  loss_scale_window: 1000
+  loss_reduction: "mean"
+
+parallel_config:
+  tensor_model_parallel_size: 1
+  pipeline_model_parallel_size: 1
+  context_parallel_size: 8
+  context_parallel_algo: "hybrid_cp_algo" # "hybrid_cp_algo" or "ulysses_cp_algo" or "megatron_cp_algo"
+  ulysses_degree_in_cp: 2
+  expert_model_parallel_size: 1
+  virtual_pipeline_model_parallel_size: null
+
+dataset_config:
+  micro_batch_size: 1
+  eod_id: -100
+  batch_size: 8
+  micro_batch_num: 1
+
+model_config:
+  seq_length: 8192
+  vocab_size: 128
+  num_layers: 4
+  num_attention_heads: 32
+  hidden_size: 64
+  ffn_hidden_size: 256

@@ -145,7 +145,6 @@ class UlyssesContextAttention(mindspore.nn.Cell):
         value_layer = self.seq_all_to_all(value)
         # out shape : e.g., [s:h/p:]
         context_layer = self.local_attn(query_layer, key_layer, value_layer, *args, **kwargs)
-        context_layer = context_layer[3]
         output = self.seq_all_to_all2(context_layer)
         # out e.g., [s/p::h]
         return output

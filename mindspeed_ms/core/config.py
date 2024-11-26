@@ -166,6 +166,8 @@ mapping_dict = {
     # parallel config
     'tensor_model_parallel_size': 'parallel_config.tensor_model_parallel_size',
     'context_parallel_size': 'parallel_config.context_parallel_size',
+    'context_parallel_algo': 'parallel_config.context_parallel_algo',
+    'ulysses_degree_in_cp': 'parallel_config.ulysses_degree_in_cp',
     'expert_model_parallel_size': 'parallel_config.expert_model_parallel_size',
     'virtual_pipeline_model_parallel_size': 'parallel_config.virtual_pipeline_model_parallel_size',
     'num_layers_per_virtual_pipeline_stage': 'parallel_config.num_layers_per_virtual_pipeline_stage',
@@ -890,6 +892,11 @@ class ModelParallelConfig(BaseConfig):
         tensor_model_parallel_size (int): Dimensionality of tensor parallel. Default: 1.
         pipeline_model_parallel_size (int): Number of stages when using pipeline parallel. Default: 1.
         context_parallel_size (int): Dimensionality of context parallel. Default: 1.
+        context_parallel_algo (str): Context parallelism algorithm. Default: 'ulysses_cp_algo'.
+                                     Choices: ['ulysses_cp_algo', 'megatron_cp_algo', 'hybrid_cp_algo'].
+        ulysses_degree_in_cp (int): Define the degree of ulysses parallelism' when the `--context-parallel-algo`
+                                    is set to `hybrid_cp_algo`, and the ring-attention parallelism
+                                    is set wo `cp//ulysses`.
         expert_model_parallel_size (int): Dimensionality of expert parallel. Default: 1.
         virtual_pipeline_model_parallel_size (int): Number of virtual stages when using pipeline parallel.
             Default: None.
@@ -913,6 +920,8 @@ class ModelParallelConfig(BaseConfig):
             tensor_model_parallel_size: int = 1,
             pipeline_model_parallel_size: int = 1,
             context_parallel_size: int = 1,
+            context_parallel_algo: str = "ulysses_cp_algo",
+            ulysses_degree_in_cp: int = None,
             expert_model_parallel_size: int = 1,
             virtual_pipeline_model_parallel_size: int = None,
             sequence_parallel: bool = False,
@@ -937,6 +946,8 @@ class ModelParallelConfig(BaseConfig):
         self.tensor_model_parallel_size = tensor_model_parallel_size
         self.pipeline_model_parallel_size = pipeline_model_parallel_size
         self.context_parallel_size = context_parallel_size
+        self.context_parallel_algo = context_parallel_algo
+        self.ulysses_degree_in_cp = ulysses_degree_in_cp
         self.expert_model_parallel_size = expert_model_parallel_size
         self.virtual_pipeline_model_parallel_size = virtual_pipeline_model_parallel_size
         self.sequence_parallel = sequence_parallel
@@ -983,6 +994,24 @@ def validate_context_parallel_size(config_instance, context_parallel_size):
     Validator.check_positive_int(context_parallel_size, "context_parallel_size")
     return context_parallel_size
 
+@ModelParallelConfig.validator("context_parallel_algo")
+def validate_context_parallel_algo(config_instance, context_parallel_algo):
+    """Validate context_parallel_algo."""
+    Validator.check_string(context_parallel_algo,
+                           ["ulysses_cp_algo", "megatron_cp_algo", "hybrid_cp_algo"],
+                           "context_parallel_algo")
+    return context_parallel_algo
+
+@ModelParallelConfig.validator("ulysses_degree_in_cp")
+def validate_ulysses_degree_in_cp(config_instance, ulysses_degree_in_cp):
+    """Validate ulysses_degree_in_cp."""
+    if config_instance.context_parallel_size > 1 and config_instance.context_parallel_algo == "hybrid_cp_algo":
+        if ulysses_degree_in_cp is None:
+            raise ValueError("ulysses_degree_in_cp must be specified in hybrid_cp_algo.")
+        ring_degree, remainder = divmod(config_instance.context_parallel_size, ulysses_degree_in_cp)
+        if ring_degree <= 1 or remainder != 0:
+            raise ValueError("ulysses_degree_in_cp must be devisible by context_parallel_size.")
+    return ulysses_degree_in_cp
 
 @ModelParallelConfig.validator("expert_model_parallel_size")
 def validate_expert_model_parallel_size(config_instance, expert_model_parallel_size):
@@ -2364,8 +2393,22 @@ def validate_num_layers(config_instance, num_layers):
 def validate_num_attention_heads(config_instance, num_attention_heads):
     """Validate num_attention_heads."""
     Validator.check_positive_int(num_attention_heads, "num_attention_heads")
+    if config_instance.parallel_config is not None and config_instance.parallel_config.context_parallel_size \
+        > 1 and config_instance.parallel_config.context_parallel_algo == "hybrid_cp_algo":
+        head, remainder = divmod(num_attention_heads, config_instance.parallel_config.ulysses_degree_in_cp)
+        if head < 1 or remainder != 0:
+            raise ValueError("num_attention_heads must be devisible by ulysses_degree_in_cp in hybrid cp")
     return num_attention_heads
 
+@TransformerConfig.validator("seq_length")
+def validate_seq_length(config_instance, seq_length):
+    """Validate seq_length."""
+    Validator.check_positive_int(seq_length, "seq_length")
+    if config_instance.parallel_config is not None and config_instance.parallel_config.context_parallel_size \
+        > 1 and config_instance.parallel_config.context_parallel_algo == "hybrid_cp_algo":
+        if seq_length % (2 * config_instance.parallel_config.context_parallel_size) != 0:
+            raise ValueError("sequence length must be devisible by 2 * context_parallel_size in hybrid cp")
+    return seq_length
 
 @TransformerConfig.validator("hidden_size")
 def validate_hidden_size(config_instance, hidden_size):

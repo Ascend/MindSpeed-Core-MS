@@ -21,9 +21,11 @@ from mindspore.ops.auto_generate.gen_ops_prim import FlashAttentionScore
 from mindspore import hal
 from mindspore.ops.auto_generate import FlashAttentionScoreGrad
 
-from mindspeed_ms.core.parallel_state import get_context_parallel_group, \
+from mindspeed_ms.core.parallel_state import is_hybrid_cp, get_context_parallel_group, \
     get_context_parallel_world_size, get_context_parallel_rank, get_sp_send_stream, \
-    get_tensor_model_parallel_world_size, get_data_parallel_world_size
+    get_tensor_model_parallel_world_size, get_data_parallel_world_size, \
+    get_context_parallel_group_for_hybrid_ring, get_context_parallel_for_hybrid_ring_world_size, \
+    get_context_parallel_for_hybrid_ring_rank
 
 
 class RingAttention(nn.Cell):
@@ -129,7 +131,10 @@ class RingAttention(nn.Cell):
         self.use_mqa = use_mqa
         self.dp = get_data_parallel_world_size()
         self.mp = get_tensor_model_parallel_world_size()
-        self.sp = get_context_parallel_world_size()
+        if not is_hybrid_cp():
+            self.sp = get_context_parallel_world_size()
+        else:
+            self.sp = get_context_parallel_for_hybrid_ring_world_size()
 
         if sparse_mode != 0:
             raise ValueError(f"Only sparse_mode = 0 is supported")
@@ -513,6 +518,21 @@ class RingAttention(nn.Cell):
                 dv = dv.add(cur_dv)
         return dq, dk, dv
 
+    def get_cp_parallel_data(self):
+        '''get context parallel groups'''
+        in_hybrid_cp_mode = True
+        if not is_hybrid_cp():
+            in_hybrid_cp_mode = False
+        if not in_hybrid_cp_mode:
+            sp_group = get_context_parallel_group()
+            cp_size = get_context_parallel_world_size()
+            rank = get_context_parallel_rank()
+        else:
+            sp_group = get_context_parallel_group_for_hybrid_ring()
+            cp_size = get_context_parallel_for_hybrid_ring_world_size()
+            rank = get_context_parallel_for_hybrid_ring_rank()
+        return sp_group, cp_size, rank
+
     def construct(self, q, k, v, attn_mask=None, alibi_mask=None, prefix=None,
                   padding_mask=None, attn_mask_type="causal"):
         '''Forward of RingAttention block'''
@@ -526,9 +546,7 @@ class RingAttention(nn.Cell):
             padding_mask,
             attn_mask_type)
 
-        sp_group = get_context_parallel_group()
-        cp_size = get_context_parallel_world_size()
-        rank = get_context_parallel_rank()
+        sp_group, cp_size, rank = self.get_cp_parallel_data()
         send_dst = (rank + 1) % cp_size
         recv_src = (rank + cp_size - 1) % cp_size
         if attn_mask is not None:
@@ -653,9 +671,7 @@ class RingAttention(nn.Cell):
                 (2048, 2048), dtype=mstype.uint8)
             attn_mask = ops.triu(attn_mask, diagonal=1)
 
-        sp_group = get_context_parallel_group()
-        cp_size = get_context_parallel_world_size()
-        rank = get_context_parallel_rank()
+        sp_group, cp_size, rank = self.get_cp_parallel_data()
 
         send_dst = (rank + cp_size - 1) % cp_size
         recv_src = (rank + 1) % cp_size
