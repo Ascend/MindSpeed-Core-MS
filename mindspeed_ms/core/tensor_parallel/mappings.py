@@ -132,7 +132,7 @@ class CopyToModelParallelRegion(nn.Cell):
     def bprop(self, x, out, dout):
         if self.world_size == 1:
             return (dout,)
-        output = comm_func.all_reduce(dout, group=self.tp_group)[0]
+        output = comm_func.all_reduce(dout.contiguous(), group=self.tp_group)[0]
         return (output,)
 
 
@@ -164,7 +164,7 @@ class ScatterToModelParallelRegion(nn.Cell):
 
         # Size and dimension.
         last_dim = dout.ndim - 1
-        output = comm_func.all_gather_into_tensor(dout, group=self.tp_group)[0]
+        output = comm_func.all_gather_into_tensor(dout.contiguous(), group=self.tp_group)[0]
         tensor_list = ops.split(output, dout.shape[0], axis=0)
         output = ops.cat(tensor_list, axis=last_dim).contiguous()
 
@@ -210,7 +210,7 @@ class GatherFromModelParallelRegion(nn.Cell):
         if self.world_size == 1:
             output = input_
         else:
-            output = comm_func.all_gather_into_tensor(input_, group=self.tp_group)[0]
+            output = comm_func.all_gather_into_tensor(input_.contiguous(), group=self.tp_group)[0]
         tensor_list = ops.split(output, input_.shape[0], axis=0)
         output = ops.cat(tensor_list, axis=last_dim).contiguous()
 
@@ -240,7 +240,7 @@ class ReduceFromModelParallelRegion(nn.Cell):
     def construct(self, input_):
         if self.world_size == 1:
             return ops.stop_gradient(input_)
-        output = comm_func.all_reduce(input_, group=self.tp_group)[0]
+        output = comm_func.all_reduce(input_.contiguous(), group=self.tp_group)[0]
         return output
 
     # pylint: disable=W0613, C0111
@@ -264,7 +264,7 @@ class ReduceScatterToSequenceParallelRegion(nn.Cell):
             return ops.stop_gradient(input_)
         if self.need_to_swapaxes:
             input_ = input_.swapaxes(0, 1)
-        output = comm_func.reduce_scatter_tensor(input_, group=self.tp_group)[0]
+        output = comm_func.reduce_scatter_tensor(input_.contiguous(), group=self.tp_group)[0]
         if self.need_to_swapaxes:
             output = output.swapaxes(0, 1)
         return output
@@ -276,7 +276,7 @@ class ReduceScatterToSequenceParallelRegion(nn.Cell):
             return dout
         if self.need_to_swapaxes:
             dout = dout.swapaxes(0, 1)
-        output = comm_func.all_gather_into_tensor(dout, group=self.tp_group)[0]
+        output = comm_func.all_gather_into_tensor(dout.contiguous(), group=self.tp_group)[0]
         if self.need_to_swapaxes:
             output = output.swapaxes(0, 1)
 
@@ -300,7 +300,7 @@ class ReduceScatterToTensorParallelRegion(nn.Cell):
         if self.world_size == 1:
             output = input_
         else:
-            output = comm_func.reduce_scatter_tensor(input_, group=self.tp_group)[0]
+            output = comm_func.reduce_scatter_tensor(input_.contiguous(), group=self.tp_group)[0]
 
         permute_order = tuple(range(1, num_dims)) + (0,)
         output = ops.transpose(output, permute_order).contiguous()
@@ -313,7 +313,7 @@ class ReduceScatterToTensorParallelRegion(nn.Cell):
 
         # Size and dimension.
         last_dim = dout.ndim - 1
-        output = comm_func.all_gather_into_tensor(dout, group=self.tp_group)[0]
+        output = comm_func.all_gather_into_tensor(dout.contiguous(), group=self.tp_group)[0]
         tensor_list = ops.split(output, dout.shape[0], axis=0)
         output = ops.cat(tensor_list, axis=last_dim).contiguous()
 
@@ -380,7 +380,7 @@ class GatherFromSequenceParallelRegion(nn.Cell):
             return ops.stop_gradient(input_)
         if self.need_to_swapaxes:
             input_ = input_.swapaxes(0, 1)
-        output = comm_func.all_gather_into_tensor(input_, group=self.tp_group)[0]
+        output = comm_func.all_gather_into_tensor(input_.contiguous(), group=self.tp_group)[0]
         if self.need_to_swapaxes:
             output = output.swapaxes(0, 1)
         return output
@@ -448,7 +448,7 @@ class AllGatherFromTensorParallelRegion(nn.Cell):
         if self.world_size == 1:
             output = input_
         else:
-            output = comm_func.all_gather_into_tensor(input_, group=self.tp_group)[0]
+            output = comm_func.all_gather_into_tensor(input_.contiguous(), group=self.tp_group)[0]
         tensor_list = ops.split(output, input_.shape[0], axis=0)
         output = ops.cat(tensor_list, axis=last_dim).contiguous()
         return output
@@ -461,7 +461,7 @@ class AllGatherFromTensorParallelRegion(nn.Cell):
         if self.world_size == 1:
             output = dout
         else:
-            output = comm_func.reduce_scatter_tensor(dout, group=self.tp_group)[0]
+            output = comm_func.reduce_scatter_tensor(dout.contiguous(), group=self.tp_group)[0]
 
         permute_order = tuple(range(1, num_dims)) + (0,)
         output = ops.transpose(output, permute_order).contiguous()
@@ -552,6 +552,7 @@ class AllToAll(nn.Cell):
         """
         if self.world_size == 1:
             return ops.stop_gradient(input_)
+        input_ = input_.contiguous()
         output = self.alltoall(self.output_shape,
                                input_,
                                self.output_splits,
@@ -564,6 +565,7 @@ class AllToAll(nn.Cell):
         """define a bprop process"""
         if self.world_size == 1:
             return (dout,)
+        dout = dout.contiguous()
         dout2 = self.alltoall(self.input_shape,
                               dout,
                               self.input_splits,

@@ -1198,7 +1198,7 @@ class VocabParallelEmbedding(nn.Cell):
             )
         if self.reduce_scatter_embeddings:
             if self.data_layout == "SBH":
-                output_parallel = output_parallel.swapaxes(0, 1)    # BSH
+                output_parallel = output_parallel.swapaxes(0, 1).contiguous()    # BSH
             output = self.reduce_scatter_to_sp_region(output_parallel)
         else:
             # Reduce across all the model parallel devices.
