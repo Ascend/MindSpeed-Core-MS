@@ -61,11 +61,13 @@ def set_parallel_context(parallel_config):
         tensor_model_parallel_size=parallel_config.tensor_model_parallel_size,
         pipeline_model_parallel_size=parallel_config.pipeline_model_parallel_size,
         virtual_pipeline_model_parallel_size=parallel_config.virtual_pipeline_model_parallel_size,
+        context_parallel_size=parallel_config.context_parallel_size,
     )
     logger.info(
         f"dp {get_data_parallel_world_size()} | "
         f"pp {parallel_config.pipeline_model_parallel_size} | "
         f"tp {parallel_config.tensor_model_parallel_size} | "
+        f"cp {parallel_config.context_parallel_size} | "
         f"sp {parallel_config.sequence_parallel} | "
         f"vpp {parallel_config.virtual_pipeline_model_parallel_size}"
     )
