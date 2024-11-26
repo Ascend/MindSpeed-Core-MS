@@ -1,0 +1,19 @@
+model_parallel:
+  # model parallelism
+  tensor_model_parallel_size: 1
+  pipeline_model_parallel_size: 1
+  context_parallel_size: 8
+  context_parallel_algo: "hybrid_cp_algo" # "hybrid_cp_algo" or "ulysses_cp_algo" or "megatron_cp_algo"
+  ulysses_degree_in_cp: 2
+  expert_model_parallel_size: 1
+  virtual_pipeline_model_parallel_size: null
+
+language_model:
+  # model architecture
+  num_attention_heads: 32
+
+# training
+micro_batch_size: 1
+
+# data
+seq_length: 8192

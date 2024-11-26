@@ -351,6 +351,17 @@ def validate_yaml(args, args_default, defaults={}):
     if args.decoder_seq_length is not None:
         assert args.max_position_embeddings >= args.decoder_seq_length
     """
+
+    if args.model_parallel.context_parallel_size > 1 and args.model_parallel.context_parallel_algo == 'hybrid_cp_algo':
+        assert args.model_parallel.ulysses_degree_in_cp is not None, "--ulysses-degree-in-cp must be specified in hybrid_cp_algo"
+        ring_degree, remainder = divmod(args.model_parallel.context_parallel_size, args.model_parallel.ulysses_degree_in_cp)
+        assert ring_degree > 1 and remainder == 0, "--ulysses-degree-in-cp must be devisible by --context-parallel-size"
+
+        head, remainder = divmod(args.language_model.num_attention_heads, args.model_parallel.ulysses_degree_in_cp)
+        assert head >= 1 and remainder == 0, "--num-attention-heads must be devisible by --ulysses-degree-in-cp in hybrid cp"
+
+        assert args.seq_length % (2 * args.model_parallel.context_parallel_size) == 0, "sequence length must be devisible by 2 * context-parallel-size in hybrid cp"
+
     if args.lr is not None:
         assert args.min_lr <= args.lr
     if args.save is not None:

@@ -22,7 +22,7 @@ from mindspore import ops
 from mindspore.common.tensor import Tensor
 from mindspore.ops.operations.nn_ops import FlashAttentionScore
 
-from mindspeed_ms.training import train
+from mindspeed_ms.training import parse_args
 from mindspeed_ms.core.context_parallel.utils import get_sp_chuncks
 from mindspeed_ms.core.parallel_state import initialize_model_parallel
 from mindspeed_ms.core.context_parallel.flash_sp import FlashSP
@@ -132,4 +132,5 @@ def run_flash_sp():
 
 
 if __name__ == "__main__":
+    args = parse_args()
     run_flash_sp()

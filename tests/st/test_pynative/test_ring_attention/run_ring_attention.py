@@ -23,7 +23,7 @@ from mindspore import ops
 from mindspore.common.tensor import Tensor
 from mindspore.ops.auto_generate.gen_ops_prim import FlashAttentionScore
 
-from mindspeed_ms.training import train
+from mindspeed_ms.training import parse_args
 from mindspeed_ms.core.context_parallel.utils import get_sp_chuncks, \
     get_sp_chuncks_attn_mask_general, get_sp_chuncks_general
 from mindspeed_ms.core.parallel_state import initialize_model_parallel
@@ -210,4 +210,5 @@ def test_ring_attention():
 
 
 if __name__ == "__main__":
+    args = parse_args()
     test_ring_attention()

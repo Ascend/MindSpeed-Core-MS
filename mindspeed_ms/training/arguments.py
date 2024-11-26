@@ -510,6 +510,19 @@ def validate_args(args, default_args, defaults={}):
     if args.decoder_seq_length is not None:
         assert args.max_position_embeddings >= args.decoder_seq_length
     """
+
+    if args.context_parallel_size > 1 and args.context_parallel_algo == 'hybrid_cp_algo':
+        assert args.ulysses_degree_in_cp is not None, "--ulysses-degree-in-cp must be specified in hybrid_cp_algo"
+        ring_degree, remainder = divmod(args.context_parallel_size, args.ulysses_degree_in_cp)
+        assert ring_degree > 1 and remainder == 0, "--ulysses-degree-in-cp must be devisible by --context-parallel-size"
+
+        head, remainder = divmod(args.num_attention_heads, args.ulysses_degree_in_cp)
+        assert head >= 1 and remainder == 0, \
+            "--num-attention-heads must be devisible by --ulysses-degree-in-cp in hybrid cp"
+
+        assert args.seq_length % (2 * args.context_parallel_size) == 0, \
+            "sequence length must be devisible by 2 * context-parallel-size in hybrid cp"
+
     if args.lr is not None:
         assert args.min_lr <= args.lr
     if args.save is not None:
@@ -1603,6 +1616,10 @@ def _add_distributed_args(parser):
                        help='Use distributed optimizer.')
     group.add_argument('--context-parallel-size', type=int, default=1,
                        help='Degree of context parallelism.')
+    group.add_argument('--context-parallel-algo', type=str, default='ulysses_cp_algo',
+                       choices=['ulysses_cp_algo', 'megatron_cp_algo', 'hybarid_cp_algo'],
+                        help='Context parallelism algorithm')
+    group.add_argument('--ulysses-degree-in-cp', type=int, default=None)
     group.add_argument('--nccl-communicator-config-path', type=str, default=None,
                        help='Path to the yaml file with NCCL communicator '
                        'configurations. The number of min/max thread groups and thread '
