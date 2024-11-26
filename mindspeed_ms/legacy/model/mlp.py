@@ -84,7 +84,7 @@ class ParallelMLP(Module):
         args = get_args()
         self.config = config
         self.add_bias = config.add_bias_linear
-        self.act_type = self.config.activation_func
+        self.act_type = args.activation_func
         self.hidden_size = self.config.hidden_size
         self.has_bias = self.config.add_mlp_bias
         mapping_output_size = self.config.ffn_hidden_size

@@ -578,9 +578,10 @@ def core_transformer_config_from_yaml(args, transfomer_key="language_model"):
     kw_args['pipeline_dtype'] = kw_args['params_dtype']
     kw_args['batch_p2p_comm'] = not args.overlap_p2p_comm
 
-    assert args.activation_func in [
-        "swiglu", "gelu", "silu"], f"{args.activation_func} is not a supported activation function"
+    assert args.activation_func in ["swiglu", "gelu", "fast_gelu", "fused_swiglu", "squared_relu", "silu"], \
+        f"{args.activation_func} is not a supported activation function"
     if args.activation_func == "swiglu":
+        kw_args['activation_func'] = "silu"
         kw_args['gated_linear_unit'] = True
         kw_args['bias_activation_fusion'] = bias_swiglu_fusion
     elif args.activation_func == "gelu":
@@ -588,8 +589,6 @@ def core_transformer_config_from_yaml(args, transfomer_key="language_model"):
             kw_args['bias_activation_fusion'] = False
         else:
             kw_args['bias_activation_fusion'] = args.bias_activation_fusion
-    elif args.activation_func == "silu":
-        kw_args['gated_linear_unit'] = False
 
     config = TransformerConfig(**kw_args)
     logger.warning("Initialize transformer config from yaml: ")

@@ -546,6 +546,9 @@ def validate_args(args, default_args, defaults={}):
         assert args.start_weight_decay is not None
         assert args.end_weight_decay is not None
 
+    # Activation function mapping.
+    _init_activation_func(args)
+
     # Activation recomputing.
     if args.distribute_saved_activations:
         assert args.tensor_model_parallel_size > 1, 'can distribute ' \
@@ -706,6 +709,25 @@ def _check_arg_is_not_none(args, arg):
     assert getattr(args, arg) is not None, '{} argument is None'.format(arg)
 
 
+def _init_activation_func(args):
+    """Init activation mapping"""
+    if sum([args.swiglu, args.squared_relu, args.fast_gelu, args.fused_swiglu, args.silu]) > 1:
+        raise RuntimeError("swiglu, squared_relu, fast_gelu, fused_swiglu and silu must"
+                           " all be False or only one of them be True")
+
+    args.activation_func = "gelu"
+    if args.swiglu:
+        args.activation_func = "swiglu"
+    elif args.squared_relu:
+        args.activation_func = "squared_relu"
+    elif args.fast_gelu:
+        args.activation_func = "fast_gelu"
+    elif args.fused_swiglu:
+        args.activation_func = "fused_swiglu"
+    elif args.silu:
+        args.activation_func = "silu"
+
+
 def core_transformer_config_from_args(args, config_class=None):
     """Transformer config from args"""
     # Config class.
@@ -726,14 +748,11 @@ def core_transformer_config_from_args(args, config_class=None):
     kw_args['rotary_interleaved'] = args.rotary_interleaved
     kw_args['activation_func'] = "gelu"
     if args.swiglu:
-        kw_args['activation_func'] = "swiglu"
+        kw_args['activation_func'] = "silu"
         kw_args['gated_linear_unit'] = True
         kw_args['bias_activation_fusion'] = args.bias_swiglu_fusion
     else:
         kw_args['bias_activation_fusion'] = args.bias_gelu_fusion
-    if args.relu:
-        assert not args.swiglu
-        kw_args['activation_func'] = "relu"
     if args.squared_relu:
         assert not args.swiglu
         kw_args['activation_func'] = "squared_relu"
@@ -941,7 +960,11 @@ def _add_network_size_args(parser):
     group.add_argument('--disable-post-norm', action='store_false',
                        help='Disable final norm after transformer', dest='use_post_norm')
     group.add_argument('--out-hidden-size', type=int, default=None, help='')
-    group.add_argument('--relu', action='store_true')
+    group.add_argument('--silu', action='store_true', help='Use silu activation instead of default gelu')
+    group.add_argument('--fast-gelu', action='store_true',
+                       help='Use fast gelu activation instead of default gelu')
+    group.add_argument('--fused-swiglu', action='store_true',
+                       help='Use fused swiglu activation instead of default gelu')
 
     return parser
 
