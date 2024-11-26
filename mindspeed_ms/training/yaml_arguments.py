@@ -536,6 +536,10 @@ def core_config_from_args(args, dataclass=TransformerConfig):
             val = getattr(args, f.name)
             if isinstance(val, SimpleNamespace):
                 val = namespace_to_dictconfig(val)
+            elif isinstance(val, List):
+                for index, item in enumerate(val):
+                    if isinstance(item, SimpleNamespace):
+                        val[index] = namespace_to_dictconfig(item)
             kw_args[f.name] = val
         else:
             raise Exception(
