@@ -1038,7 +1038,7 @@ def pretrain(train_valid_test_datasets_provider,
                 ckpt_path = os.path.join(rank_path, resume_ckpt_name)
         else:
             pp_rank = get_pipeline_model_parallel_rank()
-            dp_size = get_data_parallel_world_size()
+            dp_size = get_data_parallel_world_size(with_context_parallel=True)
             tp_size = get_tensor_model_parallel_world_size()
             tp_rank = get_tensor_model_parallel_rank()
             local_rank_to_dp0_rank = pp_rank * dp_size * tp_size + tp_rank
