@@ -431,11 +431,9 @@ class TransformerLanguageModel(Module):
             rotary_dim = config.hidden_size // config.num_attention_heads \
                 if config.kv_channels is None else config.kv_channels
             self.rotary_pos_emb = RotaryEmbedding(
-                rotary_dim,
+                kv_channels=rotary_dim,
                 rotary_percent=args.rotary_percent,
-                rotary_interleaved=config.rotary_interleaved,
-                seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor,
-                rotary_base=args.rotary_base)
+                seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor)
 
         # init encoder
 

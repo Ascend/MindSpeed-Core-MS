@@ -729,13 +729,36 @@ class NoopTransformerLayer(Module):
     # pylint: disable=W0613
     def construct(self,
                   hidden_states,
-                  attention_mask=None,
+                  attention_mask,
                   encoder_output=None,
                   enc_dec_attn_mask=None,
                   inference_params=None,
                   **kwargs):
         """Construct function of noop layer."""
         return hidden_states
+
+
+class DropPath(Module):
+    """Drop paths (Stochastic Depth) per sample
+    (when applied in main path of residual blocks).
+    """
+
+    def __init__(self, drop_prob=0.):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
+
+    def construct(self, hidden_state):
+        """Construct function of DropPath."""
+        if self.drop_prob == 0. or not self.training:
+            return hidden_state
+        keep_prob = 1 - self.drop_prob
+        # work with diff dim tensors, not just 2D ConvNets
+        # hidden_state: [s, b, h]
+        shape = (1,) + (hidden_state.shape[1],) + (1,) * (hidden_state.ndim - 2)
+        random_tensor = keep_prob + mint.rand(*shape, dtype=hidden_state.dtype)
+        random_tensor = mint.floor(random_tensor)  # binarize
+        output = mint.div(hidden_state, keep_prob) * random_tensor
+        return output
 
 
 class ParallelTransformerLayer(Module):
@@ -752,7 +775,7 @@ class ParallelTransformerLayer(Module):
             Default: ``1``.
         self_attn_mask_type (int): Attention mask type. Support [AttnMaskType::padding = 1, AttnMaskType::causal = 2].
             Default: ``1``.
-        drop_path_rate（float）：Drop path rate. Currently not supported if greater than 0. Default: ``0.0``
+        drop_path_rate (float): Drop path rate. Default: ``0.0``.
 
     Inputs:
         - **hidden_states** (Tensor) - The shape of hidden_states tensor is :math:`(B, S, H)`.
@@ -865,11 +888,7 @@ class ParallelTransformerLayer(Module):
             raise NotImplementedError(
                 "bias_dropout_fusion is not supported for now."
             )
-        if drop_path_rate > 0.0:
-            raise NotImplementedError(
-                "`drop_path_rate > 0` is not supported for now, "
-                "but got `drop_path_rate={}`".format(drop_path_rate)
-            )
+        self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0.0 else None
 
         # Normalize the attention output
         self.post_attention_norm = get_norm(config)
@@ -915,8 +934,6 @@ class ParallelTransformerLayer(Module):
             raise NotImplementedError(
                 "retro_add_retriever is not supported for now."
             )
-
-        self.hidden_states_dropout = mint.nn.Dropout(p=self.hidden_dropout)
 
         # selective recompute
         if self.config.recompute_granularity == "selective" or self.config.select_recompute:
@@ -978,12 +995,17 @@ class ParallelTransformerLayer(Module):
             attention_output = attention_output + attention_bias
 
         with get_rng_tracer().rng_fork():
-            out = self.hidden_states_dropout(attention_output)
+            out = mint.nn.functional.dropout(attention_output,
+                                             p=self.hidden_dropout,
+                                             training=self.training)
 
         if self.use_sandwich_norm:
             out = self.attn_post_norm(out)
 
-        norm_input = residual + out
+        if self.drop_path is None:
+            norm_input = residual + out
+        else:
+            norm_input = residual + self.drop_path(out)
 
         # layernorm post attention.
         norm_output = self.post_attention_norm(norm_input)
@@ -1003,12 +1025,17 @@ class ParallelTransformerLayer(Module):
             residual = norm_input
 
         with get_rng_tracer().rng_fork():
-            out = self.hidden_states_dropout(mlp_output)
+            out = mint.nn.functional.dropout(mlp_output,
+                                             p=self.hidden_dropout,
+                                             training=self.training)
 
         if self.use_sandwich_norm:
             out = self.ffn_post_norm(out)
 
-        output = residual + out
+        if self.drop_path is None:
+            output = residual + out
+        else:
+            output = residual + self.drop_path(out)
 
         return output
 
@@ -1083,7 +1110,7 @@ class ParallelTransformer(Module):
         post_norm (bool): Insert normalization layer at the end of transformer block. Default: ``True``.
         pre_process (bool): When using pipeline parallel, indicate whether it's the first stage. Default: ``False``.
         post_process (bool): When using pipeline parallel, indicate whether it's the last stage. Default: ``False``.
-        drop_path_rate (float): Drop path rate. Currently not supported if greater than 0. Default: ``0.0``
+        drop_path_rate (float): Drop path rate. Default: ``0.0``.
 
     Inputs:
         - **hidden_states** (Tensor) - The shape of hidden_states tensor is :math:`(B, S, H)`.
@@ -1101,7 +1128,6 @@ class ParallelTransformer(Module):
         - **hidden_states** (Tensor) - The shape of hidden_states tensor is :math:`(B, S, H)`.
 
     Raises:
-        NotImplementedError: If `drop_path_rate` greater than 0.
         NotImplementedError: If 'distribute_saved_activations' in config is true and 'sequence_parallel' in config is
             false.
         NotImplementedError: If `transformer_impl` in config is 'transformer_engine'.
@@ -1166,17 +1192,12 @@ class ParallelTransformer(Module):
                  layer_type=LayerType.encoder,
                  self_attn_mask_type=AttnMaskType.padding,
                  post_norm=True,
-                 pre_process=False,
-                 post_process=False,
+                 pre_process=True,
+                 post_process=True,
                  drop_path_rate=0.0,
                  ):
         super(ParallelTransformer, self).__init__(config)
         args = get_args()
-        if drop_path_rate > 0.0:
-            raise NotImplementedError(
-                "`drop_path_rate > 0` is not supported for now, "
-                "but got `drop_path_rate={}`".format(drop_path_rate)
-            )
         self.layer_type = layer_type
         self.attn_mask_type = self_attn_mask_type
         self.fp32_residual_connection = config.fp32_residual_connection
@@ -1210,6 +1231,8 @@ class ParallelTransformer(Module):
         self.num_layers, offset = _get_num_layers(
             config, model_type=None, is_decoder=False
         )
+
+        self.drop_path_rates = mint.linspace(0, self.drop_path_rate, config.num_layers).tolist()
 
         seq_length = args.seq_length
         if config.sequence_parallel:
@@ -1317,7 +1340,7 @@ class ParallelTransformer(Module):
                     config=layers_index_config[i] if use_lora or recompute_config else layers_config,
                     layer_number=i + 1 + offset,
                     self_attn_mask_type=self_attn_mask_type,
-                    drop_path_rate=drop_path_rate
+                    drop_path_rate=self.drop_path_rates[i + offset],
                 )
         self.layers = nn.SequentialCell(layers_dict)
         args.parameters_id_map = layer_str_dict
@@ -1578,7 +1601,7 @@ class ParallelLMLogits(nn.Cell):
         self.copy_to_mp_region = CopyToModelParallelRegion()
         self.gather_from_mp_region = GatherFromModelParallelRegion()
 
-    def construct(self, input_, word_embeddings_weight, parallel_output=True, bias=None
+    def construct(self, input_, word_embeddings_weight, parallel_output, bias=None
                   ):
         """LM logits using word embedding table"""
         if self.is_tensor_parallel or self.config.sequence_parallel:
