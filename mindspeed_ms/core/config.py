@@ -708,6 +708,7 @@ def _check_arguments(configs):
         if isinstance(configs[key], TransformerConfig):
             transformer_config = configs[key]
             break
+    optimizer_config = configs.get("optimizer_config", None)
     if transformer_config and training_config:
         if training_config.fp16:
             logger.warning("Use fp16, 'params_dtype' and 'compute_dtype' will be set to 'float16' automatically.")
@@ -717,7 +718,8 @@ def _check_arguments(configs):
             logger.warning("Use bf16, 'params_dtype' and 'compute_dtype' will be set to 'bfloat16' automatically.")
             transformer_config.params_dtype = 'bfloat16'
             transformer_config.compute_dtype = 'bfloat16'
-
+    if training_config and optimizer_config:
+        optimizer_config.no_load_optim = training_config.no_load_optim
     if model_config:
         hidden_act = model_config.hidden_act
         if hidden_act == 'swiglu':
