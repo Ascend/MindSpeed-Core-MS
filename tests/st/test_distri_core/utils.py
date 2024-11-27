@@ -18,6 +18,7 @@ import time
 from typing import Dict
 import collections
 import re
+import glob
 import numpy as np
 
 import mindspore as ms
@@ -729,3 +730,134 @@ def _transform_ckpt_helper(config, model, optimizer, src_ckpt_path, dst_ckpt_pat
                                  output_format=output_format)
     else:
         time.sleep(timeout)
+
+
+def count_unequal_element(data_expected, data_our, rtol, atol):
+    """count the unequal elements of tensors"""
+    count = 0
+    data_len = len(data_expected)
+    for i in range(data_len):
+        a = data_expected[i]
+        b = data_our[i]
+        if abs(a - b) > (atol + rtol * abs(b)):
+            print("flatten diff index:", i, " expect: ", a, " our:", b)
+        count = count + 1
+
+    total_count = len(data_expected.flatten())
+    error = np.abs(data_expected - data_our)
+    count = np.count_nonzero(np.less_equal(error, atol + np.abs(data_our) * rtol))
+    print(f"Diff count: {total_count - count}")
+
+
+def allclose_assert(data_expected, data_our, rtol, atol, print_error_point):
+    if not np.allclose(data_expected, data_our, rtol, atol):
+        if print_error_point:
+            count_unequal_element(data_expected, data_our, rtol, atol)
+        assert False, "=============== Accuracy test fail !!! ==============="
+    else:
+        assert True
+
+
+def calculate_error(y_expect, y_pred):
+    """Calculate the relative error and the absolute error."""
+    if y_expect.dtype == np.bool_:
+        y_expect = y_expect.astype(np.int32)
+        y_pred = y_pred.astype(np.int32)
+
+    aerror = np.abs(y_expect - y_pred)
+    aerror = aerror[~np.isnan(aerror)]
+    aerror = aerror[~np.isinf(aerror)]
+    eps = 1e-14
+    rerror = aerror / np.maximum(np.abs(y_expect) + eps, np.abs(y_pred) + eps)
+    return rerror, aerror
+
+
+def compare_data(data_expected,
+                 data_our,
+                 atol=0.001,
+                 rtol=0.001,
+                 print_error_point=False,
+                 save_path='./output/error/'):
+    """compare one tensor"""
+    print(f"'atol' is set to {atol}")
+    print(f"'rtol' is set to {rtol}")
+    print(f"Golden data shape: {data_expected.shape}")
+    print(f"Our data shape: {data_our.shape}")
+    assert data_expected.shape == data_our.shape
+    ori_shape = data_our.shape
+    data_expected = data_expected.flatten()
+    data_our = data_our.flatten()
+
+    # calculate error
+    relative_error, absolute_error = calculate_error(data_expected, data_our)
+    print("============================================")
+    print(f"Max absolute error: {np.max(absolute_error)}")
+    print(f"Mean absolute error: {np.mean(absolute_error)}")
+    print(f"Max relative error: {np.max(relative_error)}")
+    print(f"Mean relative error: {np.mean(relative_error)}")
+    print("============================================")
+
+    # # save error array
+    if np.max(absolute_error) > 0.0 or np.max(relative_error) > 0.0:
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        np.save(save_path + 'absolute_error.npy', absolute_error.reshape(ori_shape))
+        np.save(save_path + 'relative_error.npy', relative_error.reshape(ori_shape))
+
+    # assert data
+    allclose_assert(data_expected, data_our, rtol, atol, print_error_point)
+
+
+def save_output_data(data, save_dir="data/parallel/output/test_mindspore/", name='temp', rank='0'):
+    """ save output data """
+    if not os.path.exists(save_dir):
+        raise FileNotFoundError(f"{save_dir} is not exists !")
+
+    # name: output dout dw
+    save_path = os.path.join(save_dir, name + '_' + rank + '.npy')
+    np.save(save_path, data)
+
+
+def compare_all_data(data_dir, compare_types=None, atol=0.0, rtol=0.0, print_error_point=False,
+                     weight_dict=None, prefix=("legacy", "mcore")):
+    """ compare all output data for the networks """
+    output_dir = os.path.join(data_dir, prefix[0])
+    output_dir_2 = os.path.join(data_dir, prefix[1])
+
+    if compare_types is None:
+        compare_types = ["_forward", "_backward"]
+    for test_type in compare_types:
+        # loading mindspore v1 output npy file
+        output_dict = {}
+        output_files = glob.glob(os.path.join(output_dir + test_type, "*.npy"))
+        for cur_npy_file in output_files:
+            cur_name = os.path.basename(cur_npy_file).replace(".npy", "")
+            if weight_dict is not None and "_dw" in cur_name:
+                for pattern in cur_name.split(".")[1:-1]:
+                    if pattern in weight_dict.keys():
+                        cur_name = cur_name.replace(pattern, weight_dict[pattern])
+
+            cur_output = np.load(cur_npy_file)
+            output_dict[cur_name] = cur_output
+
+        # loading mindspore v2 output npy file
+        output_dict_2 = {}
+        output_files_2 = glob.glob(os.path.join(output_dir_2 + test_type, "*.npy"))
+        for cur_npy_file in output_files_2:
+            cur_name = os.path.basename(cur_npy_file).replace(".npy", "")
+            cur_output = np.load(cur_npy_file)
+            output_dict_2[cur_name] = cur_output
+
+        if len(output_dict) != len(output_dict_2):
+            raise ValueError("The output of legacy and mcore have different size!")
+        if not output_dict_2:
+            raise ValueError("there is not output of legacy and mcore!")
+
+        for name, value in output_dict.items():
+            save_name = os.path.join(data_dir, f"error/{name}_")
+            print("========================", name, "\n")
+            print("legacy (v1): ", value, "\n")
+            print("mcore (v2): ", output_dict_2[name])
+            compare_data(value, output_dict_2[name], atol, rtol, print_error_point, save_name)
+
+    print("=============== Accuracy test pass !!! ===============")
