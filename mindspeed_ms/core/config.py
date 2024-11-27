@@ -733,6 +733,8 @@ def _check_arguments(configs):
                            "automatically.")
             model_config.parallel_config.recv_dtype = model_config.compute_dtype
 
+        if model_config.fp32_residual_connection:
+            raise NotImplementedError("'fp32_residual_connection=True' is not supported for now.")
 
 # pylint: disable=W0102
 def init_configs_from_dict(raw_dict: dict, config_classes=None):
