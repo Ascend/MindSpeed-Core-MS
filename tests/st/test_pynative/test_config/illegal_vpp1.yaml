@@ -15,7 +15,6 @@ model_parallel:
   sequence_parallel: True
   pipeline_dtype: "float32"
 
-  num_layer_list: [[1,1], [2,2], [3,3], [4,4]]
   noop_layers: [1, 2, 3]
 
 language_model:
@@ -58,7 +57,7 @@ language_model:
 
   recompute_config:
     recompute: [[1,1], [2,2], [3,3], [4,4]]
-    select_recompute: null # set null is not available
+    select_recompute: [[1, 2, 3]]
     select_comm_recompute:  [[1,1], [2,2], [3,3], [4,4]]
 
 # training

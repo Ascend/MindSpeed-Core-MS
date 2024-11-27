@@ -214,7 +214,7 @@ def validate_yaml(args, args_default, defaults={}):
         _check_list_is_validate("num_layer_list", args.model_parallel.num_layer_list,
                                 args.model_parallel.virtual_pipeline_model_parallel_size,
                                 args.model_parallel.pipeline_model_parallel_size)
-        if hasattr(args.language_model, 'recompute_config') and args.language_model.recompute_config is not None:
+        if args.language_model.recompute_config is not None:
             required_args = ['recompute', 'select_recompute', 'select_comm_recompute']
             for arg in required_args:
                 if hasattr(args.language_model.recompute_config, arg):
@@ -554,13 +554,13 @@ def _check_arg_is_none(args, arg):
 
 
 def _check_list_is_validate(arg_name, arg, vpp, pp):
-    assert arg is not None, f'{arg_name} must not be None'
-    assert isinstance(arg, List), f'{arg_name} is not instance of List type'
-    assert len(arg) == pp, f"{arg_name}'s length is not equal to pipeline parallel size: {pp}"
-    for index, sub_list in enumerate(arg):
-        assert isinstance(sub_list, List), f"{arg_name}[{index}] is not instance of List type"
-        assert len(sub_list) == vpp,  \
-            f"{arg_name}[{index}]'s length is not equal to virtual pipeline parallel size: {vpp}"
+    if arg is not None:
+        assert isinstance(arg, List), f'{arg_name} is not instance of List type'
+        assert len(arg) == pp, f"{arg_name}'s length is not equal to pipeline parallel size: {pp}"
+        for index, sub_list in enumerate(arg):
+            assert isinstance(sub_list, List), f"{arg_name}[{index}] is not instance of List type"
+            assert len(sub_list) == vpp,  \
+                f"{arg_name}[{index}]'s length is not equal to virtual pipeline parallel size: {vpp}"
 
 
 def core_transformer_config_from_yaml(args, transfomer_key="language_model"):
