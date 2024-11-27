@@ -46,5 +46,5 @@ class TestHybridAttnCP:
         ret = os.system(cmd)
         time.sleep(90)
         # Check the success message in the logs
-        os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log/worker_0.log -C 3")
+        os.system(f"grep -E 'ERROR|error|Error' {sh_path}/msrun_log/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check {log_dir}/worker_*.log"
