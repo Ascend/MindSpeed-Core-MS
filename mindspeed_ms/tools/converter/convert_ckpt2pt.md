@@ -14,6 +14,7 @@ convert_ckpt2pt.py
 ```text
 --num-layers:        int, 总层数
 --dp-size:           int, dp数
+--cp-size:           int, cp数
 --tp-size:           int, 模型并行数
 --pp-size:           int, 流水线并行数
 --vpp-per-size:      int, vpp数，每个pp stage下有几个vpp
@@ -29,6 +30,7 @@ convert_ckpt2pt.py
 ```shell
 python convert_ckpt2pt_v4_update_newer_v2.py --num-layers 8 \
     --dp-size 1 \
+    --cp-size 1 \
     --tp-size 2 \
     --pp-size 4 \
     --vpp-per-stage 2 \

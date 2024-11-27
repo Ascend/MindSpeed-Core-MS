@@ -37,6 +37,7 @@ megatron_path = ''
 src_model_format = ''
 num_layers = 0
 dp_size = 0
+cp_size = 0
 tp_size = 0
 pp_size = 0
 vpp_per_stage = 0
@@ -79,6 +80,8 @@ def parse_args():
                        help='Number of layers in models')
     group.add_argument('--dp-size', type=int, default=0, required=True,
                        help='Degree of data model parallelism.')
+    group.add_argument('--cp-size', type=int, default=1, required=True,
+                       help='Degree of context model parallelism.')
     group.add_argument('--tp-size', type=int, default=0, required=True,
                        help='Degree of tensor model parallelism.')
     group.add_argument('--pp-size', type=int, default=0, required=True,
@@ -104,13 +107,14 @@ def parse_args():
 
 def set_args(args):
     '''set args tool'''
-    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_per_stage, noop, \
-           src_model_format
+    global ms_path, param_map_path, megatron_path, num_layers, dp_size, cp_size, tp_size, pp_size, \
+           vpp_per_stage, noop, src_model_format
     ms_path = args.ms_path
     param_map_path = args.param_map_path
     megatron_path = args.megatron_path
     num_layers = args.num_layers
     dp_size = args.dp_size
+    cp_size = args.cp_size
     tp_size = args.tp_size
     pp_size = args.pp_size
     vpp_per_stage = args.vpp_per_stage
@@ -124,6 +128,7 @@ def set_args(args):
     print(f"> megatron_path = {megatron_path}")
     print(f"> num_layers = {num_layers}")
     print(f"> dp_size = {dp_size}")
+    print(f"> cp_size = {cp_size}")
     print(f"> tp_size = {tp_size}")
     print(f"> pp_size = {pp_size}")
     print(f"> vpp_per_stage = {vpp_per_stage}")
@@ -133,12 +138,12 @@ def set_args(args):
 
 def get_ckpt():
     '''load ckpt and save tp/pp info, replace param name and layer id, no optim state included'''
-    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_per_stage, noop, \
-           src_model_format
+    global ms_path, param_map_path, megatron_path, num_layers, dp_size, cp_size, tp_size, pp_size, \
+           vpp_per_stage, noop, src_model_format
     rst_list = []
     for pp in range(pp_size):
         for tp in range(tp_size):
-            dir_name = f"rank_{pp*dp_size*tp_size+tp}"
+            dir_name = f"rank_{pp*dp_size*cp_size*tp_size+tp}"
             save_dir_name = f"mp_rank_{tp:02d}_{pp:03d}"
             ckpt_dir = os.path.join(ms_path, dir_name)
             if src_model_format == "ckpt":
