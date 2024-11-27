@@ -1565,9 +1565,6 @@ def _add_mixed_precision_args(parser):
                        help='Move the cross entropy unreduced loss calculation'
                        'for lm head to fp16.')
 
-    # Additional arguments
-    group.add_argument('--loss-reduction', type=str, default='mean', help='Loss reduction method')
-
     return parser
 
 

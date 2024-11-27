@@ -95,10 +95,6 @@ class OptimizerConfig:
     """Hysteresis for dynamic loss scaling."""
 
     # Additional parameter
-    loss_reduction: str = "mean"
-    """Loss reduction method, additional arguments"""
-
-    # Additional parameter
     loss_func_kwargs: dict = None
     """Loss function args"""
 

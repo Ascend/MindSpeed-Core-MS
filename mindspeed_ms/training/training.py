@@ -145,7 +145,6 @@ class ParallelTrainingReducer:
         self.sp_reduce_params = get_sp_params(config)
         self.expert_params = ["mlp.experts.local_experts"]
 
-        self.batch_reduction = args.loss_reduction
         # dp
         if get_data_parallel_world_size() > 1:
             self.enable_loss_reduce["dp"] = True
@@ -192,18 +191,12 @@ class ParallelTrainingReducer:
                         continue
                     group = self.get_reduce_group(idx)
                     param.grad = comm_func.all_reduce(param.grad, "sum", group)[0]
-                    if self.batch_reduction == "mean":
-                        param.grad = mint.div(param.grad, get_data_parallel_world_size())
+                    param.grad = mint.div(param.grad, get_data_parallel_world_size())
             else:
-                if self.batch_reduction == "mean":
-                    for idx, grad in enumerate(grads):
-                        group = self.get_reduce_group(idx)
-                        grads[idx] = mint.div(
-                            comm_func.all_reduce(grad, "sum", group)[0], get_data_parallel_world_size())
-                elif self.batch_reduction == "sum":
-                    for idx, grad in enumerate(grads):
-                        group = self.get_reduce_group(idx)
-                        grads[idx] = comm_func.all_reduce(grad, "sum", group)[0]
+                for idx, grad in enumerate(grads):
+                    group = self.get_reduce_group(idx)
+                    grads[idx] = mint.div(
+                        comm_func.all_reduce(grad, "sum", group)[0], get_data_parallel_world_size())
 
     def inplace_reduce_sp_grad(self, grads, params=None):
         """Reduce the gradients in sequence parallel mode over tp group."""
@@ -226,11 +219,8 @@ class ParallelTrainingReducer:
     def reduce_dp_loss(self, loss):
         """Reduce the loss in data parallel mode."""
         if self.enable_loss_reduce["dp"]:
-            if self.batch_reduction == "mean":
-                loss = mint.div(
-                    comm_func.all_reduce(loss, "sum", get_data_parallel_group())[0], get_data_parallel_world_size())
-            else:
-                loss = comm_func.all_reduce(loss, "sum", get_data_parallel_group())[0]
+            loss = mint.div(
+                comm_func.all_reduce(loss, "sum", get_data_parallel_group())[0], get_data_parallel_world_size())
         return loss
 
     def reduce_overflow(self, overflow):
@@ -314,7 +304,7 @@ def get_model(model_provider_func, config: TransformerConfig):
             overlap_grad_reduce=args.overlap_grad_reduce,
             use_distributed_optimizer=args.use_distributed_optimizer,
             bucket_size=args.ddp_bucket_size,
-            average_in_collective=(args.loss_reduction == 'mean'),
+            average_in_collective=args.ddp_average_in_collective,
             check_for_nan_in_grad=args.check_for_nan_in_loss_and_grad,
             enable_mem_align=args.enable_mem_align,
             use_zero3=(config.zero_level == "z3"),
@@ -394,7 +384,7 @@ def get_forward_backward_func(network_with_loss, params, config: TransformerConf
             model_zero_grad_buffer(network_with_loss, args.wrap_with_ddp)
 
             # fuse loss scale and grad accumulation if do grad acc
-            if args.loss_reduction == "mean" and micro_batch_num > 1:
+            if micro_batch_num > 1:
                 if loss_scale is None:
                     loss_scale = Tensor(1, mstype.float32)
                 actual_loss_scale = mint.div(loss_scale, micro_batch_num)
@@ -1024,7 +1014,7 @@ def pretrain(train_valid_test_datasets_provider,
         config,
         group_params,
         network_with_loss,
-        grad_allreduce_op=optimizer_config.loss_reduction
+        grad_allreduce_op="mean"
     )
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
 

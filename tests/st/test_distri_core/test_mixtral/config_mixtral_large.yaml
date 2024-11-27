@@ -89,7 +89,6 @@ clip_grad: 0.0
 # loss arguments
 loss_scale: 1
 initial_loss_scale: null
-loss_reduction: "mean"
 loss_func_kwargs:
   loss_func_type: "CrossEntropyLoss"
 
