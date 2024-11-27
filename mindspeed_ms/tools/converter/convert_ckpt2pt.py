@@ -42,6 +42,7 @@ tp_size = 0
 pp_size = 0
 vpp_per_stage = 0
 noop = []
+convert_param_only = False
 
 
 param_key_mapping = {
@@ -100,6 +101,9 @@ def parse_args():
                        help='Path to param_map files.')
     group.add_argument('--megatron-path', type=str, default=None, required=True,
                        help='Path for saving Mindspore Ckpt.')
+    group.add_argument('--convert-param-only',
+                       action='store_true', default=False,
+                       help='Convert only the model parameter without optimizer params;')
 
     # Parse.
     return parser.parse_args()
@@ -108,7 +112,7 @@ def parse_args():
 def set_args(args):
     '''set args tool'''
     global ms_path, param_map_path, megatron_path, num_layers, dp_size, cp_size, tp_size, pp_size, \
-           vpp_per_stage, noop, src_model_format
+           convert_param_only, vpp_per_stage, noop, src_model_format
     ms_path = args.ms_path
     param_map_path = args.param_map_path
     megatron_path = args.megatron_path
@@ -118,6 +122,7 @@ def set_args(args):
     tp_size = args.tp_size
     pp_size = args.pp_size
     vpp_per_stage = args.vpp_per_stage
+    convert_param_only = args.convert_param_only
     noop = args.noop
     src_model_format = args.src_model_format
     if noop is None:
@@ -210,9 +215,10 @@ def save_pt(megatron_model_path, dir_name, distrib_model, model_optim_rng):
     os.makedirs(save_dir, exist_ok=True)
 
     # save optim
-    distrib_save_path = os.path.join(save_dir, "distrib_optim.pt")
-    torch.save(distrib_model, distrib_save_path)
-    log_with_time(f"-------successful saved {distrib_save_path}----------")
+    if not convert_param_only:
+        distrib_save_path = os.path.join(save_dir, "distrib_optim.pt")
+        torch.save(distrib_model, distrib_save_path)
+        log_with_time(f"-------successful saved {distrib_save_path}----------")
 
     # save param
     model_optim_save_path = os.path.join(save_dir, "model_optim_rng.pt")
@@ -230,16 +236,18 @@ def add_args(model_optim, tp, pp, curr_iter):
     model_optim_with_args = {}
 
     model_optim_with_args['args'] = pt_args['args']
-    model_optim_with_args['args'].curr_iteration = curr_iter.value
-    model_optim_with_args['args'].consumed_train_samples = 0
 
     model_optim_with_args['checkpoint_version'] = pt_args['checkpoint_version']
     model_optim_with_args['iteration'] = curr_iter.value
-    for i in range(len(model_optim)):
-        model_optim_with_args[f'model{i}'] = model_optim[f'model{i}']
-    model_optim_with_args['optimizer'] = pt_args['optimizer']
-    for i in range(len(pt_args['optimizer']['optimizer']['param_groups'])):
-        model_optim_with_args['optimizer']['optimizer']['param_groups'][i]['step'] = curr_iter.value
+    if len(model_optim) == 1:
+        model_optim_with_args[f'model'] = model_optim[f'model0']
+    else:
+        for i in range(len(model_optim)):
+            model_optim_with_args[f'model{i}'] = model_optim[f'model{i}']
+    if not convert_param_only:
+        model_optim_with_args['optimizer'] = pt_args['optimizer']
+        for i in range(len(pt_args['optimizer']['optimizer']['param_groups'])):
+            model_optim_with_args['optimizer']['optimizer']['param_groups'][i]['step'] = curr_iter.value
     model_optim_with_args['opt_param_scheduler'] = pt_args['opt_param_scheduler']
     model_optim_with_args['opt_param_scheduler']['num_steps'] = curr_iter.value * \
         pt_args['args'].global_batch_size
@@ -333,8 +341,9 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
 
     per_bucket_numel = []
     per_bucket_numel_unpadded = []
-    distrib_optim_model["per_bucket_numel"] = per_bucket_numel
-    distrib_optim_model["per_bucket_numel_unpadded"] = per_bucket_numel_unpadded
+    if not convert_param_only:
+        distrib_optim_model["per_bucket_numel"] = per_bucket_numel
+        distrib_optim_model["per_bucket_numel_unpadded"] = per_bucket_numel_unpadded
 
     model_curr = []
     for vpp in range(vpp_per_stage):
@@ -347,19 +356,22 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
         bucket_num = cal_bucket_num(param_map)
         param = [torch.tensor([], dtype=torch.float32)
                  for i in range(bucket_num)]
-        exp_avg = [torch.tensor([], dtype=torch.float32)
-                   for i in range(bucket_num)]
-        exp_avg_sq = [torch.tensor([], dtype=torch.float32)
-                      for i in range(bucket_num)]
-        # 4.创建megatron的模型中以vpp为索引的对象（此处需要循环），根据param_map从ms中读取需要的数据，此处需要计算对应的层关系
-        distrib_optim_model[vpp] = {}
-        distrib_optim_model[vpp][(torch.bfloat16, torch.float32)] = {}
-        distrib_optim_model[vpp][(
-            torch.bfloat16, torch.float32)]["param"] = param
-        distrib_optim_model[vpp][(
-            torch.bfloat16, torch.float32)]["exp_avg"] = exp_avg
-        distrib_optim_model[vpp][(
-            torch.bfloat16, torch.float32)]["exp_avg_sq"] = exp_avg_sq
+
+        if not convert_param_only:
+            exp_avg = [torch.tensor([], dtype=torch.float32)
+                       for i in range(bucket_num)]
+            exp_avg_sq = [torch.tensor([], dtype=torch.float32)
+                          for i in range(bucket_num)]
+
+            # 4.创建megatron的模型中以vpp为索引的对象（此处需要循环），根据param_map从ms中读取需要的数据，此处需要计算对应的层关系
+            distrib_optim_model[vpp] = {}
+            distrib_optim_model[vpp][(torch.bfloat16, torch.float32)] = {}
+            distrib_optim_model[vpp][(
+                torch.bfloat16, torch.float32)]["param"] = param
+            distrib_optim_model[vpp][(
+                torch.bfloat16, torch.float32)]["exp_avg"] = exp_avg
+            distrib_optim_model[vpp][(
+                torch.bfloat16, torch.float32)]["exp_avg_sq"] = exp_avg_sq
 
         cur_bucket_numel = [0 for i in range(bucket_num)]
         cur_bucket_numel_unpadded = [0 for i in range(bucket_num)]
@@ -386,17 +398,19 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
                 np.float32), dtype=torch.bfloat16)
             # todo: 需要有shape信息
             model_curr_vpp.append({key: weight_value_for_megatron})
-            exp_avg_value = torch.tensor(ckpt["exp_avg." + ms_key].asnumpy().astype(
-                np.float32).reshape(newshape), dtype=torch.float32)
-            exp_avg_sq_value = torch.tensor(
-                ckpt["exp_avg_sq." + ms_key].asnumpy().astype(np.float32).reshape(newshape), dtype=torch.float32
-            )
+            if not convert_param_only:
+                exp_avg_value = torch.tensor(ckpt["exp_avg." + ms_key].asnumpy().astype(
+                    np.float32).reshape(newshape), dtype=torch.float32)
+                exp_avg_sq_value = torch.tensor(
+                    ckpt["exp_avg_sq." + ms_key].asnumpy().astype(np.float32).reshape(newshape), dtype=torch.float32
+                )
             # 5.创建buffer，根据数据名及所在bucket进行数据填充，构造buffer
             param[bucket_id] = torch.cat((param[bucket_id], weight_value), 0)
-            exp_avg[bucket_id] = torch.cat(
-                (exp_avg[bucket_id], exp_avg_value), 0)
-            exp_avg_sq[bucket_id] = torch.cat(
-                (exp_avg_sq[bucket_id], exp_avg_sq_value), 0)
+            if not convert_param_only:
+                exp_avg[bucket_id] = torch.cat(
+                    (exp_avg[bucket_id], exp_avg_value), 0)
+                exp_avg_sq[bucket_id] = torch.cat(
+                    (exp_avg_sq[bucket_id], exp_avg_sq_value), 0)
 
             # bucket_id/shape
             cur_bucket_numel[bucket_id] += newshape[0]

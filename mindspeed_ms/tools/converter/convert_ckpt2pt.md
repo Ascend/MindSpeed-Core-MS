@@ -23,6 +23,7 @@ convert_ckpt2pt.py
 --ms-path:           str, ms模型路径，此路径下为rank_xx的模型文件夹
 --param-map-dir:     str, param_map及args.pt对应的文件夹
 --megatron-path:     str, 需要保存的转换后的megatron模型路径
+--convert-param-only:arg, 设定是否只转换模型参数而忽略优化器参数
 ```
 
 #### 示例：
