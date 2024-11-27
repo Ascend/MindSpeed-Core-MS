@@ -215,7 +215,10 @@ def get_pt2ms_info(para_map_path: str, pt_path):
         raise ValueError("param_map not found, may be wrong '--param-map-path'?")
     log_info(f"Param_map files: {files}")
     pt_dir_parts = Path(pt_path).parts[-2].split("_")
-    pp = int(pt_dir_parts[-1])
+    if len(pt_dir_parts) == 4:
+        pp = int(pt_dir_parts[-1])
+    elif len(pt_dir_parts) == 3:
+        pp = 0
     param_keymap = {}
     for f in files:
         f_pp = int(f.split('vpp')[0].split("pp")[-1])
