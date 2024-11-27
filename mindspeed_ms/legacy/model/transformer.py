@@ -430,7 +430,6 @@ class ParallelAttention(Module):
                 self.hidden_size + 2 * self.kv_hidden_size,
                 cell_name="qkv_proj",
             )
-
         else:
             if self.attn_type != AttnType.cross_attn:
                 raise ValueError(

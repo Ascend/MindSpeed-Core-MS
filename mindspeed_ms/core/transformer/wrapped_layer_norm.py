@@ -44,4 +44,5 @@ class WrappedLayerNorm(LayerNorm):
         super().__init__(
             normalized_shape=hidden_size,  # applied to last len(normalized_shape.size) dimensions
             eps=eps,
+            params_dtype=config.params_dtype
         )
