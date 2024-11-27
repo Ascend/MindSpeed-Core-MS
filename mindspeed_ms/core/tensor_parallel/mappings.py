@@ -236,6 +236,7 @@ class ReduceFromModelParallelRegion(nn.Cell):
         self.world_size = get_tensor_model_parallel_world_size()
         if self.world_size > 1:
             self.tp_group = get_tensor_model_parallel_group()
+        self.used_bprop_inputs = [2]
 
     def construct(self, input_):
         if self.world_size == 1:
