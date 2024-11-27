@@ -72,7 +72,7 @@ group_query_attention: True
 untie_embeddings_and_output_weights: True
 position_embedding_type: "rope"
 check_for_nan_in_loss_and_grad: False
-num_layers_per_virtual_pipeline_stage: 2 # illegal set
+num_layers_per_virtual_pipeline_stage: 2
 
 # data
 vocab_size: 64
