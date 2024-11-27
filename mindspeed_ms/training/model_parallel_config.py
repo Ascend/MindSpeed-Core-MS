@@ -159,10 +159,6 @@ class ModelParallelConfig:
     """Compute data type of linear module"""
 
     # Additional argument
-    softmax_compute_dtype: Union[Float, BFloat] = mstype.float32
-    """Compute data type of softmax layer"""
-
-    # Additional argument
     zero_level: str = None
     """Zero level for ZeRO optimizer, if None, will not use ZeRO optimizer"""
 
@@ -381,7 +377,6 @@ class ModelParallelConfig:
         self.params_dtype = self._init_dtype("params_dtype", self.params_dtype)
         self.pipeline_dtype = self._init_dtype("pipeline_dtype", self.pipeline_dtype)
         self.compute_dtype = self._init_dtype("compute_dtype", self.compute_dtype)
-        self.softmax_compute_dtype = self._init_dtype("softmax_compute_dtype", self.softmax_compute_dtype)
         self.autocast_dtype = self._init_dtype("autocast_dtype", self.autocast_dtype)
 
         if self.pipeline_model_parallel_size > 1:

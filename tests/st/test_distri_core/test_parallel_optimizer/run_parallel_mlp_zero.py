@@ -74,7 +74,7 @@ class ParallelMLP(Module):
     def __init__(self, config, is_expert=False):
         super(ParallelMLP, self).__init__(config)
         self.config = config
-        self.has_bias = self.config.add_mlp_bias
+        self.has_bias = self.config.add_bias_linear
         self.hidden_size = self.config.hidden_size
         self.ffn_hidden_size = self.config.ffn_hidden_size
         # if config.model.model_config.gated_linear_unit:

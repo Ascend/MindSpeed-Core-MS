@@ -701,6 +701,18 @@ def read_loss_from_log(file_path):
     return losses
 
 
+def read_loss_from_log_list(file_path):
+    """ reading loss from log """
+    losses = []
+    with open(file_path, 'r') as file:
+        for line in file:
+            loss_str = re.search(r'Loss: \[(\d+\.\d+)\]', line)
+            if loss_str:
+                loss_value = float(loss_str.group(1))
+                losses.append(loss_value)
+    return losses
+
+
 def _transform_ckpt_helper(config, model, optimizer, src_ckpt_path, dst_ckpt_path, ckpt_prefix="network", timeout=15,
                            output_format='safetensors'):
     """ helper function for transform ckpt """

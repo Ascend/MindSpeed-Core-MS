@@ -232,8 +232,6 @@ def validate_yaml(args, args_default, defaults={}):
     # Parameters dtype.
     if isinstance(args.model_parallel.pipeline_dtype, str):
         args.model_parallel.pipeline_dtype = str_dtype_to_ms[args.model_parallel.pipeline_dtype]
-    if isinstance(args.model_parallel.softmax_compute_dtype, str):
-        args.model_parallel.softmax_compute_dtype = str_dtype_to_ms[args.model_parallel.softmax_compute_dtype]
 
     if isinstance(args.model_parallel.params_dtype, str):
         args.model_parallel.params_dtype = str_dtype_to_ms[args.model_parallel.params_dtype]

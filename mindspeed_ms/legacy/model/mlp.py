@@ -31,7 +31,7 @@ from mindspeed_ms.core.tensor_parallel.lora_layers import (
 
 from .activation import get_act_func
 from .module import Module
-
+from .utils import openai_gelu, erf_gelu
 
 class ParallelMLP(Module):
     r"""
@@ -82,46 +82,46 @@ class ParallelMLP(Module):
     def __init__(self, config, is_expert=False):
         super(ParallelMLP, self).__init__(config)
         args = get_args()
-        self.config = config
         self.add_bias = config.add_bias_linear
         self.act_type = args.activation_func
-        self.hidden_size = self.config.hidden_size
-        self.has_bias = self.config.add_mlp_bias
-        mapping_output_size = self.config.ffn_hidden_size
-        if self.config.gated_linear_unit:
+        self.hidden_size = config.hidden_size
+        mapping_output_size = config.ffn_hidden_size
+        if config.gated_linear_unit:
             mapping_output_size *= 2
 
         self.mapping = ColumnParallelLinear(
             self.hidden_size,
             mapping_output_size,
-            config=self.config,
-            init_method=self.config.init_method,
-            bias=self.has_bias,
+            config=config,
+            init_method=config.init_method,
+            bias=self.add_bias,
             gather_output=False,
             is_expert=is_expert,
-            bias_init=self.config.bias_init,
+            bias_init=config.bias_init,
         )
 
         self.bias_gelu_fusion = False
 
-        if self.act_type == "swiglu" and args.apply_swiglu_fusion:
-            self.act_type = "fused_swiglu"
-        self.act_func = get_act_func(self.act_type)
+        if args.openai_gelu:
+            self.act_func = openai_gelu
+        elif args.onnx_safe:
+            self.act_func = erf_gelu
+        else:
+            if self.act_type == "swiglu" and args.apply_swiglu_fusion:
+                self.act_type = "fused_swiglu"
+            self.act_func = get_act_func(self.act_type)
 
         # Project back to h.
-        if config.out_hidden_size is None:
-            out_hidden_size = self.hidden_size
-        else:
-            out_hidden_size = config.out_hidden_size
         self.projection = RowParallelLinear(
-            self.config.ffn_hidden_size,
-            out_hidden_size,
-            config=self.config,
-            init_method=self.config.init_method,
-            bias=self.has_bias,
+            config.ffn_hidden_size,
+            self.hidden_size,
+            config=config,
+            init_method=config.init_method,
+            bias=self.add_bias,
+            skip_bias_add=True,
             input_is_parallel=True,
             is_expert=is_expert,
-            bias_init=self.config.bias_init,
+            bias_init=config.bias_init,
         )
         use_lora = config.use_lora
         if use_lora:
@@ -130,12 +130,12 @@ class ParallelMLP(Module):
                 self.mapping = ColumnParallelLoRA(
                     self.hidden_size,
                     mapping_output_size,
-                    config=self.config,
-                    init_method=self.config.init_method,
-                    bias=self.has_bias,
+                    config=config,
+                    init_method=config.init_method,
+                    bias=self.add_bias,
                     gather_output=False,
                     is_expert=is_expert,
-                    bias_init=self.config.bias_init,
+                    bias_init=config.bias_init,
                     lora_rank=mapping_lora['rank'],
                     lora_alpha=mapping_lora['alpha'],
                     lora_dropout=mapping_lora['dropout'],
@@ -143,15 +143,15 @@ class ParallelMLP(Module):
             projection_lora = self._get_cell_lora_config(config, 'projection')
             if projection_lora is not None:
                 self.projection = RowParallelLoRA(
-                    self.config.ffn_hidden_size,
-                    out_hidden_size,
-                    config=self.config,
-                    init_method=self.config.init_method,
-                    bias=self.has_bias,
+                    config.ffn_hidden_size,
+                    self.hidden_size,
+                    config=config,
+                    init_method=config.init_method,
+                    bias=self.add_bias,
                     input_is_parallel=True,
                     skip_bias_add=False,
                     is_expert=is_expert,
-                    bias_init=self.config.bias_init,
+                    bias_init=config.bias_init,
                     lora_rank=projection_lora['rank'],
                     lora_alpha=projection_lora['alpha'],
                 )

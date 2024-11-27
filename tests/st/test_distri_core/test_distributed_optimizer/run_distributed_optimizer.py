@@ -59,7 +59,7 @@ class TestNet2(nn.Cell):
                                                  output_size=hidden_size,
                                                  config=config,
                                                  init_method=config.init_method,
-                                                 bias=config.add_mlp_bias,
+                                                 bias=config.add_bias_linear,
                                                  gather_output=False,
                                                  skip_bias_add=False,
                                                  bias_init=config.bias_init)
@@ -67,7 +67,7 @@ class TestNet2(nn.Cell):
                                            output_size=hidden_size,
                                            config=config,
                                            init_method=config.init_method,
-                                           bias=config.add_mlp_bias,
+                                           bias=config.add_bias_linear,
                                            input_is_parallel=True,
                                            skip_bias_add=False,
                                            bias_init=config.bias_init)

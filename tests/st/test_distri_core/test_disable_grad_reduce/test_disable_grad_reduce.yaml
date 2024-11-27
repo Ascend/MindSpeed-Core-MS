@@ -1,0 +1,38 @@
+model_parallel:
+  tensor_model_parallel_size: 2
+  pipeline_model_parallel_size: 1
+  context_parallel_size: 1
+  expert_model_parallel_size: 1
+  sequence_parallel: True
+  pipeline_dtype: "float32"
+  params_dtype: "float32"
+  compute_dtype: "float32"
+
+language_model:
+  num_layers: 1
+  num_attention_heads: 2
+  hidden_size: 32
+  hidden_dropout: 0.0
+  attention_dropout: 0.0
+  init_method: 'normal'
+  init_method_std: 0.01
+  add_bias_linear: False
+
+# data
+seq_length: 32
+vocab_size: 64
+pad_token: 0
+shuffle: False
+data_layout: BSH
+
+# training
+seed: 2024
+epochs: 1
+train_iters: 2
+global_batch_size: 1
+micro_batch_size: 1
+transformer_impl: "local" 
+check_for_nan_in_loss_and_grad: False
+
+# logging
+log_interval: 1

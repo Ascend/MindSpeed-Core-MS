@@ -8,7 +8,6 @@ model_parallel:
   pipeline_dtype: "float32"
   params_dtype: "float32"
   compute_dtype: "float32"
-  softmax_compute_dtype: "float32"
   variable_seq_lengths: False
 
 language_model:

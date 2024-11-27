@@ -509,7 +509,7 @@ class ColumnParallelLinear(nn.Cell):
             tp_comm_buffer_name=None,
             disable_grad_reduce=False,
             bias_init=Zero(),
-            param_init_dtype=None,
+            params_dtype=None,
             compute_dtype=None,
             transpose_b=True,
         ):
@@ -527,8 +527,6 @@ class ColumnParallelLinear(nn.Cell):
             raise NotImplementedError("`grad_output_buffer` is not supported for now.")
         if tp_comm_buffer_name:
             raise NotImplementedError("`tp_comm_buffer_name` is not supported for now.")
-        if disable_grad_reduce:
-            raise NotImplementedError("`disable_grad_reduce=True` is not supported for now.")
         if config.use_cpu_initialization:
             raise NotImplementedError("`config.use_cpu_initialization` is not supported for now.")
         args = get_args()
@@ -544,14 +542,13 @@ class ColumnParallelLinear(nn.Cell):
 
         self.is_expert = is_expert
         self.skip_weight_param_allocation = skip_weight_param_allocation
-        self.config = config
-        self.param_init_dtype = param_init_dtype if param_init_dtype else self.config.params_dtype
-        self.compute_dtype = compute_dtype if compute_dtype else self.config.compute_dtype
+        self.param_init_dtype = params_dtype if params_dtype else config.params_dtype
+        self.compute_dtype = compute_dtype if compute_dtype else config.compute_dtype
         self.transpose_b = transpose_b
 
-        self.expert_parallel = self.config.expert_model_parallel_size > 1
-        self.sequence_parallel = self.config.sequence_parallel
-        self.use_zero3 = self.config.zero_level == 'z3'
+        self.expert_parallel = config.expert_model_parallel_size > 1
+        self.sequence_parallel = config.sequence_parallel
+        self.use_zero3 = config.zero_level == 'z3'
         if self.use_zero3:
             try:
                 dp_size = get_group_size(get_zero_shard_group(with_context_parallel=False))
@@ -841,13 +838,13 @@ class RowParallelLinear(nn.Cell):
             init_method,
             bias,
             input_is_parallel,
-            skip_bias_add=True,
+            skip_bias_add,
             stride=1,
             keep_master_weight_for_test=False,
             is_expert=False,
             tp_comm_buffer_name=None,
             bias_init=Zero(),
-            param_init_dtype=None,
+            params_dtype=None,
             compute_dtype=None,
             transpose_b=True,
         ):
@@ -871,13 +868,12 @@ class RowParallelLinear(nn.Cell):
         tensor_parallel_group_size = get_tensor_model_parallel_world_size()
         self.input_size_per_partition = divide(input_size, tensor_parallel_group_size)
 
-        self.config = config
-        self.param_init_dtype = param_init_dtype if param_init_dtype else self.config.params_dtype
-        self.compute_dtype = compute_dtype if compute_dtype else self.config.compute_dtype
+        self.param_init_dtype = params_dtype if params_dtype else config.params_dtype
+        self.compute_dtype = compute_dtype if compute_dtype else config.compute_dtype
         self.is_expert = is_expert
-        self.expert_parallel = self.config.expert_model_parallel_size > 1
-        self.sequence_parallel = self.config.sequence_parallel
-        self.use_zero3 = self.config.zero_level == 'z3'
+        self.expert_parallel = config.expert_model_parallel_size > 1
+        self.sequence_parallel = config.sequence_parallel
+        self.use_zero3 = config.zero_level == 'z3'
         self.transpose_b = transpose_b
 
         if self.use_zero3:
@@ -1136,7 +1132,7 @@ class VocabParallelEmbedding(nn.Cell):
             init_method,
             reduce_scatter_embeddings=False,
             config,
-            param_init_dtype=None
+            params_dtype=None
     ):
         super().__init__()
         if config.deterministic_mode:
@@ -1148,7 +1144,7 @@ class VocabParallelEmbedding(nn.Cell):
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
         self.reduce_scatter_embeddings = reduce_scatter_embeddings
-        self.param_init_dtype = param_init_dtype if param_init_dtype else config.params_dtype
+        self.param_init_dtype = params_dtype if params_dtype else config.params_dtype
         self.data_layout = args.data_layout
 
         self.tensor_model_parallel_size = get_tensor_model_parallel_world_size()

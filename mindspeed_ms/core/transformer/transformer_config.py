@@ -113,18 +113,6 @@ class TransformerConfig(ModelParallelConfig):
     global batch, versus the default behavior of assuming all tokens are non-padded."""
 
     # Additional argument
-    out_hidden_size: int = None
-    "Output hidden size,"
-
-    # Additional argument
-    add_mlp_bias: bool = True
-    """Linears in MLP block have bias parameters"""
-
-    # Additional argument
-    add_out_proj_bias: bool = True
-    """Linear apply on output of core attention block has bias parameter"""
-
-    # Additional argument
     mask_func_type: str = "attn_mask_add"
     """Attention mask compute method"""
 

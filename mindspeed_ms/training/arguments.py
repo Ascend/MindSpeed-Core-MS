@@ -379,7 +379,6 @@ def validate_args(args, default_args, defaults={}):
             '--overlap-param-gather only supported with MCore models'
 
     # Parameters & compute & pipeline dtype.
-    args.softmax_compute_dtype = str_dtype_to_ms[args.softmax_compute_dtype]
     args.params_dtype = str_dtype_to_ms[args.params_dtype]
     args.compute_dtype = str_dtype_to_ms[args.compute_dtype]
     if args.fp16:
@@ -959,7 +958,6 @@ def _add_network_size_args(parser):
                        help='Apply parallel vocab embedding layer when using absolute position embedding')
     group.add_argument('--disable-post-norm', action='store_false',
                        help='Disable final norm after transformer', dest='use_post_norm')
-    group.add_argument('--out-hidden-size', type=int, default=None, help='')
     group.add_argument('--silu', action='store_true', help='Use silu activation instead of default gelu')
     group.add_argument('--fast-gelu', action='store_true',
                        help='Use fast gelu activation instead of default gelu')
@@ -1345,14 +1343,7 @@ def _add_training_args(parser):
         'float32', 'float16', 'bfloat16'], help='Parameter initialize data type')
     group.add_argument('--compute-dtype', type=str, default='float32', choices=[
                        'float32', 'float16', 'bfloat16'], help='Compute data type of linear module')
-    group.add_argument('--softmax-compute-dtype', type=str, default='float32', choices=[
-        'float32', 'float16', 'bfloat16'], help='Compute data type of softmax layer')
     group.add_argument('--resume-training', action='store_true', help='Resume training')
-    group.add_argument('--disable-mlp-bias', action='store_false',
-                       help='Linears in MLP block have bias parameters', dest='add_mlp_bias')
-    group.add_argument('--disable-out-proj-bias', action='store_false',
-                       help='Linear apply on output of core attention block has bias parameter',
-                       dest='add_out_proj_bias')
     group.add_argument('--encoder-attn-mask-type', type=str, default=None, help='')
     group.add_argument('--mask-func-type', type=str, default='attn_mask_add', help='')
     group.add_argument('--use-flash-sp', action='store_true', help='')

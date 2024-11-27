@@ -7,7 +7,6 @@ model_parallel:
   pipeline_dtype: "float32"
   params_dtype: "float32"
   compute_dtype: "float32"
-  softmax_compute_dtype: "float32" # need add
   bf16: True
   zero_level: z3
   finalize_model_grads_func: null
@@ -20,8 +19,6 @@ language_model:
   hidden_dropout: 0.0
   attention_dropout: 0.0
   init_method: 'normal'
-  add_out_proj_bias: False
-  add_mlp_bias: False
   normalization: "FusedRMSNorm"
   layernorm_epsilon: 1.e-5  # norm_epsilon
   activation_func: "gelu"  # hidden_act
