@@ -43,7 +43,7 @@ class ColumnNet(nn.Cell):
                                            bias=config.add_bias_linear,
                                            gather_output=True,
                                            skip_bias_add=False,
-                                           param_init_dtype=config.params_dtype,
+                                           params_dtype=config.params_dtype,
                                            compute_dtype=config.compute_dtype,
                                            disable_grad_reduce=disable_grad_reduce)
         self.loss = SoftmaxCrossEntropyWithLogits()

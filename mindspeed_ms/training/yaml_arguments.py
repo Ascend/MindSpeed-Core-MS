@@ -32,7 +32,7 @@ from mindspeed_ms.training.unused_args import (
     UNUSED_GLOBAL_ARGS
 )
 from mindspeed_ms.training.model_parallel_config import ModelParallelConfig
-from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
+from mindspeed_ms.core.transformer.transformer_config import TransformerConfig, _SUPPORT_INIT_METHOD
 
 
 str_dtype_to_ms = {
@@ -95,7 +95,6 @@ def validate_yaml(args, args_default, defaults={}):
         if len(split_data_path) != 1:
             args.data_path = split_data_path
 
-    """
     # Tensor model parallel size.
     args.model_parallel.tensor_model_parallel_size = min(
         args.model_parallel.tensor_model_parallel_size, args.world_size)
@@ -106,7 +105,6 @@ def validate_yaml(args, args_default, defaults={}):
     args.model_parallel.pipeline_model_parallel_size = min(
         args.model_parallel.pipeline_model_parallel_size,
         (args.world_size // args.model_parallel.tensor_model_parallel_size))
-    """
     args.model_parallel.transformer_pipeline_model_parallel_size = (
         args.model_parallel.pipeline_model_parallel_size - 1
         if args.standalone_embedding_stage else
@@ -116,18 +114,14 @@ def validate_yaml(args, args_default, defaults={}):
     # Checks.
     model_parallel_size = args.model_parallel.pipeline_model_parallel_size * \
         args.model_parallel.tensor_model_parallel_size
-    """
     assert args.world_size % (model_parallel_size * args.model_parallel.context_parallel_size) == 0, \
         'world size ({}) is not divisible by tensor parallel size ({}) times ' \
         'pipeline parallel size ({}) times context parallel size ({})'.format(
-        args.world_size, args.model_parallel.tensor_model_parallel_size,
-        args.model_parallel.pipeline_model_parallel_size, args.model_parallel.context_parallel_size)
-    """
+            args.world_size, args.model_parallel.tensor_model_parallel_size,
+            args.model_parallel.pipeline_model_parallel_size, args.model_parallel.context_parallel_size)
     # data_parallel_size is not in model parallel config
     args.data_parallel_size = args.world_size // (
         model_parallel_size * args.model_parallel.context_parallel_size)
-    # We ignore world size, so data_parallel_size may be zero
-    args.data_parallel_size = args.data_parallel_size if args.data_parallel_size > 0 else 1
 
     if args.rank == 0:
         print('using world size: {}, data-parallel size: {}, '
@@ -230,13 +224,6 @@ def validate_yaml(args, args_default, defaults={}):
             '--overlap-grad-reduce should be turned on when using --overlap-param-gather'
 
     # Parameters dtype.
-    if isinstance(args.model_parallel.pipeline_dtype, str):
-        args.model_parallel.pipeline_dtype = str_dtype_to_ms[args.model_parallel.pipeline_dtype]
-
-    if isinstance(args.model_parallel.params_dtype, str):
-        args.model_parallel.params_dtype = str_dtype_to_ms[args.model_parallel.params_dtype]
-    if isinstance(args.model_parallel.compute_dtype, str):
-        args.model_parallel.compute_dtype = str_dtype_to_ms[args.model_parallel.compute_dtype]
     if args.model_parallel.fp16:
         assert not args.model_parallel.bf16
         args.model_parallel.params_dtype = mstype.half
@@ -270,7 +257,6 @@ def validate_yaml(args, args_default, defaults={}):
     # during pipeline parallelism, it should not be set if sequence length
     # is constant during training.
 
-    """
     # Iteration-based training.
     if args.train_iters:
         # If we use iteration-based training, make sure the
@@ -301,7 +287,6 @@ def validate_yaml(args, args_default, defaults={}):
             assert args.lr_warmup_samples == 0, \
                 'can only specify one of lr-warmup-fraction ' \
                 'and lr-warmup-samples'
-    """
 
     # How to handle this better
     if args.language_model.num_layers is not None:
@@ -343,12 +328,10 @@ def validate_yaml(args, args_default, defaults={}):
         assert args.encoder_seq_length is not None
         args.seq_length = args.encoder_seq_length
 
-    """
     if args.seq_length is not None:
         assert args.max_position_embeddings >= args.seq_length
     if args.decoder_seq_length is not None:
         assert args.max_position_embeddings >= args.decoder_seq_length
-    """
 
     if args.model_parallel.context_parallel_size > 1 and args.model_parallel.context_parallel_algo == 'hybrid_cp_algo':
         assert args.model_parallel.ulysses_degree_in_cp is not None, "--ulysses-degree-in-cp must be specified in hybrid_cp_algo"
@@ -366,17 +349,13 @@ def validate_yaml(args, args_default, defaults={}):
         assert args.save_interval is not None
     # Mixed precision checks.
     if args.fp16_lm_cross_entropy:
-        assert args.fp16, 'lm cross entropy in fp16 only support in fp16 mode.'
+        assert args.model_parallel.fp16, 'lm cross entropy in fp16 only support in fp16 mode.'
     if args.language_model.fp32_residual_connection:
         assert args.model_parallel.fp16 or args.model_parallel.bf16, \
             'residual connection in fp32 only supported when using fp16 or bf16.'
 
-    """
     if args.language_model.moe_grouped_gemm:
         assert args.model_parallel.bf16, 'Currently GroupedGEMM for MoE only supports bf16 dtype.'
-        dc = torch.cuda.get_device_capability()
-        assert dc[0] >= 8, "Unsupported compute capability for GroupedGEMM kernels."
-    """
 
     if args.weight_decay_incr_style == 'constant':
         assert args.start_weight_decay is None
@@ -387,40 +366,67 @@ def validate_yaml(args, args_default, defaults={}):
         assert args.start_weight_decay is not None
         assert args.end_weight_decay is not None
 
-    """
-    TORCH_MAJOR = int(torch.__version__.split('.')[0])
-    TORCH_MINOR = int(torch.__version__.split('.')[1])
-    # Persistent fused layer norm.
-    if TORCH_MAJOR < 1 or (TORCH_MAJOR == 1 and TORCH_MINOR < 11):
-        args.language_model.persist_layer_norm = False
-        if args.rank == 0:
-            print('Persistent fused layer norm kernel is supported from '
-                  'pytorch v1.11 (nvidia pytorch container paired with v1.11). '
-                  'Defaulting to no_persist_layer_norm=True')
-    """
+    # clone_scatter_output_in_embedding not supported yet
+    if args.language_model.clone_scatter_output_in_embedding:
+        logger.warning('clone_scatter_output_in_embedding would be set False')
+        args.language_model.clone_scatter_output_in_embedding = False
+
+    # bias_dropout_fusion not supported yet
+    if args.language_model.bias_dropout_fusion:
+        logger.warning('bias_dropout_fusion would be set False')
+        args.language_model.bias_dropout_fusion = False
+
+    # normalization
+    if args.use_fused_rmsnorm:
+        if args.language_model.normalization != "RMSNorm":
+            raise AssertionError(
+                'use_fused_rmsnorm must enable with '
+                'normalization=RMSNorm, but got normalization'
+                '={}.'.format(args.normalization))
+        args.language_model.normalization = "FusedRMSNorm"
+
+    # We only support SBH
+    args.data_layout = 'SBH'
+
+    # Use mcore or legacy
+    args.use_legacy_models = not args.use_mcore_models
+
+    # Optimizer
+    if args.optimizer == 'adam':
+        args.optimizer = 'SpeedAdamW'
+
+    # DDP and zero_level
+    args.wrap_with_ddp = True
+    if args.model_parallel.zero_level is not None:
+        if args.use_distributed_optimizer:
+            assert args.model_parallel.zero_level == 'z3', \
+                "zero_level must be None or 'z3' when use_distributed_optimizer is ON"
+        else:
+            args.wrap_with_ddp = False
 
     # Activation recomputing.
-    if args.language_model.distribute_saved_activations:
-        assert args.model_parallel.tensor_model_parallel_size > 1, 'can distribute ' \
-            'recomputed activations only across tensor model ' \
-            'parallel groups'
-        assert args.language_model.recompute_granularity == 'full', \
-            'distributed recompute activations is only '\
-            'application to full recompute granularity'
-        assert args.language_model.recompute_method is not None, \
-            'for distributed recompute activations to work you '\
-            'need to use a recompute method '
-        """
-        assert (TORCH_MAJOR, TORCH_MINOR) >= (1, 10), \\
-            'distributed recompute activations are supported for pytorch ' \\
-            'v1.10 and above (Nvidia Pytorch container >= 21.07). Current ' \\
-            'pytorch version is v%s.%s.' % (TORCH_MAJOR, TORCH_MINOR)
-        """
+    if args.language_model.recompute_config is None:
+        if args.language_model.distribute_saved_activations:
+            assert args.model_parallel.tensor_model_parallel_size > 1, 'can distribute ' \
+                'recomputed activations only across tensor model ' \
+                'parallel groups'
+            assert args.language_model.recompute_granularity == 'full', \
+                'distributed recompute activations is only '\
+                'application to full recompute granularity'
+            assert args.language_model.recompute_method is not None, \
+                'for distributed recompute activations to work you '\
+                'need to use a recompute method '
 
-    if args.language_model.recompute_granularity == 'selective':
-        assert args.language_model.recompute_method is None, \
-            'recompute method is not yet supported for ' \
-            'selective recomputing granularity'
+        if args.language_model.recompute_granularity == 'selective':
+            assert args.language_model.recompute_method is None, \
+                'recompute method is not yet supported for ' \
+                'selective recomputing granularity'
+    else:
+        logger.info('recompute_config is specified, recompute_granularity, ' \
+            'recompute_method and recompute_num_layers would be None')
+        args.language_model.recompute_granularity = None
+        args.language_model.recompute_method = None
+        args.language_model.recompute_num_layers = None
 
     # disable sequence parallelism when tp=1
     # to avoid change in numerics when
@@ -432,18 +438,6 @@ def validate_yaml(args, args_default, defaults={}):
     # model parallel memory optimization is enabled
     if args.model_parallel.sequence_parallel:
         args.model_parallel.async_tensor_model_parallel_allreduce = False
-
-    """
-    if os.environ.get('CUDA_DEVICE_MAX_CONNECTIONS') != "1":
-        if args.model_parallel.sequence_parallel:
-            raise RuntimeError(
-                "Using sequence parallelism requires setting the environment variable "
-                "CUDA_DEVICE_MAX_CONNECTIONS to 1")
-        if args.model_parallel.async_tensor_model_parallel_allreduce:
-            raise RuntimeError(
-                "Using async gradient all reduce requires setting the environment "
-                "variable CUDA_DEVICE_MAX_CONNECTIONS to 1")
-    """
 
     # Retro checks.
     if getattr(args, 'retro_add_retriever', False):
@@ -588,10 +582,14 @@ def core_transformer_config_from_yaml(args, transfomer_key="language_model"):
         else:
             kw_args['bias_activation_fusion'] = args.bias_activation_fusion
 
-    config = TransformerConfig(**kw_args)
-    logger.warning("Initialize transformer config from yaml: ")
-    logger.warning(config)
-    return config
+    if args.init_method is not None:
+        kw_args['init_method'] = _SUPPORT_INIT_METHOD[args.init_method]()
+
+    if args.bias_init is not None:
+        kw_args['bias_init'] = _SUPPORT_INIT_METHOD[args.bias_init]()
+
+    # Return Transformer config.
+    return TransformerConfig(**kw_args)
 
 
 def load_yaml(yaml_path):

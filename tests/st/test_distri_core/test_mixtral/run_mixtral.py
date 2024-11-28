@@ -76,6 +76,7 @@ class TestData:
 def run_mixtral(config: TransformerConfig):
     """ Test ParallelTransformer. """
     args = get_args()
+    args.wrap_with_ddp = False
     print(f"config is:\n{config}")
     tp = config.tensor_model_parallel_size
     ep = config.expert_model_parallel_size
@@ -190,6 +191,7 @@ def run_mixtral(config: TransformerConfig):
 
 if __name__ == '__main__':
     args = parse_args()
+    args.data_layout = "BSH"
     if args.yaml_cfg is None:
         config = core_transformer_config_from_args(args)
     else:

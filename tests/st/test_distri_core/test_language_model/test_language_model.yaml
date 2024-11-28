@@ -40,19 +40,19 @@ eod_id: -100
 
 # training
 position_embedding_type: 'rope'
-max_position_embeddings: 4096
+max_position_embeddings: 32
 epochs: 1
 train_iters: 2
 untie_embeddings_and_output_weights: False
 global_batch_size: 8
 micro_batch_size: 8
 clip_grad: 0.0
-train_samples: 0
 transformer_impl: "local"
-use_post_norm: False    
+use_post_norm: False
+shape_order: "BSH"
 
 # optimizer
-optimizer: "AdamWeightDecay"
+optimizer: "mint.AdamW"
 lr_decay_style: "constant"
 weight_decay_incr_style: "constant"
 clip_grad: 0.0
@@ -65,10 +65,6 @@ initial_loss_scale: 1  # loss_scale_value
 hysteresis: 2   # loss_scale_factor
 loss_scale_window: 1000
 fp16_lm_cross_entropy: False # need add
-
-# pangu arguments
-use_query_layer: False
-use_visual_encoder: False
 
 # logging
 log_interval: 1

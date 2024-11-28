@@ -29,7 +29,7 @@ class OptimizerConfig:
     ##############
     # General
     ##############
-    optimizer: str = "adam"
+    optimizer: str = "SpeedAdamW"
     """Optimizer to use (one of Adam or SGD)."""
 
     lr: Optional[float] = None
@@ -52,10 +52,6 @@ class OptimizerConfig:
 
     weight_decay: float = 0.01
     """Weight decay coefficient for L2 regularization."""
-
-    # Additional parameter
-    weight_decay_kwargs: dict = None
-    """Weight decay kwargs"""
 
     # Additional parameter
     lr_scheduler_kwargs: dict = None

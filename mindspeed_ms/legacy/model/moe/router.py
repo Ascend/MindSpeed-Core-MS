@@ -52,7 +52,7 @@ class TopKRouter(nn.Cell):
         self.param_init_dtype = config.params_dtype
         self.compute_dtype = config.compute_dtype
         self.gating = mint.nn.Linear(config.hidden_size,
-                                     self.config.num_moe_experts,
+                                     config.num_moe_experts,
                                      bias=False,
                                      dtype=self.param_init_dtype)
         self.topk = self.config.moe_router_topk

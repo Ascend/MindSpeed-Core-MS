@@ -68,13 +68,6 @@ language_model:
   moe_input_jitter_eps: null
   moe_token_dropping: False
 
-  # complex struct
-  fa_config:
-    input_layout: "BSH"
-    nest:
-      a: 1
-      b: 2
-
 model_parallel:
   # Model parallelism
   tensor_model_parallel_size: 1

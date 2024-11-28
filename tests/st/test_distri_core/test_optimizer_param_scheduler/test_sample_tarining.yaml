@@ -22,18 +22,19 @@ pad_token_id: -100
 global_batch_size: 16
 micro_batch_size: 2
 train_samples: 10000
-train_iters: 0
+train_iters: null
+max_position_embeddings: 64
 
 
 # optimizer
 lr: 0.0009
-lr_decay_iters: 7000
+lr_decay_iters: null
 lr_wsd_decay_iters: 7000
 lr_warmup_fraction: 0.0005
-lr_warmup_iters: 10000
+lr_warmup_iters: 0
 lr_decay_samples: 7000
 lr_wsd_decay_samples: 7000
-lr_warmup_samples: 10000
+lr_warmup_samples: 0
 lr_warmup_init: 0.0009
 min_lr: 0.00001
 lr_decay_style: "WSD"

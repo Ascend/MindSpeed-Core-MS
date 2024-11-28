@@ -53,18 +53,16 @@ class MoEAlltoAllTokenDispatcher():
         ValueError: If the length of `local_expert_indices` is not equal to `num_local_experts`.
     """
     def __init__(self, num_local_experts: int, local_expert_indices: List[int], config: TransformerConfig):
-        self.config = config
         self.hidden_shape = None
-        self.hidden_size = self.config.hidden_size
+        self.hidden_size = config.hidden_size
         self.num_local_experts = num_local_experts
         if self.num_local_experts <= 0:
             raise ValueError("expect num_local_experts > 0")
 
-        self.router_topk = self.config.moe_router_topk
-        self.add_bias = self.config.add_bias_linear
-        self.en = self.config.num_moe_experts
-        self.ep = self.config.expert_model_parallel_size
-        self.use_self_defined_alltoall = self.config.use_self_defined_alltoall
+        self.router_topk = config.moe_router_topk
+        self.add_bias = config.add_bias_linear
+        self.en = config.num_moe_experts
+        self.ep = config.expert_model_parallel_size
         self.local_expert_indices = local_expert_indices
         if len(self.local_expert_indices) != self.num_local_experts:
             raise ValueError(f"expect len(self.local_expert_indices) == {self.num_local_experts}, "
@@ -170,9 +168,9 @@ class MoEAlltoAllTokenDispatcher():
                 self.expert_ids_per_ep_rank, count_dp_group_tokens_per_local_expert.flatten())
 
         self.alltoall = AllToAll(self.ep_group, self.output_shape, self.input_shape,
-                                 self.local_output_splits, self.local_input_splits, self.use_self_defined_alltoall)
+                                 self.local_output_splits, self.local_input_splits)
         self.alltoall_reverse = AllToAll(self.ep_group, self.input_shape, self.output_shape, self.local_input_splits,
-                                         self.local_output_splits, self.use_self_defined_alltoall)
+                                         self.local_output_splits)
 
         return count_tokens_per_local_expert
 

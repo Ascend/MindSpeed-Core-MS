@@ -67,7 +67,7 @@ global_batch_size: 2
 micro_batch_size: 1
 train_iters: 10
 eval_interval: null
-train_samples: 0
+train_samples: null
 group_query_attention: True
 untie_embeddings_and_output_weights: True
 position_embedding_type: "rope"

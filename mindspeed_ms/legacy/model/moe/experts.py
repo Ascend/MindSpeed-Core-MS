@@ -61,11 +61,10 @@ class SequentialMLP(Module):
         super(SequentialMLP, self).__init__()
         if submodules is not None:
             raise NotImplementedError("`submodules` is not supported for now.")
-        self.config = config
         self.num_local_experts = num_local_experts
         self.local_experts = nn.SequentialCell()
         for _ in range(self.num_local_experts):
-            expert = ParallelMLP(self.config, is_expert=True)
+            expert = ParallelMLP(config, is_expert=True)
             self.local_experts.append(expert)
         self.cast = ops.Cast()
 

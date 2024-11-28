@@ -219,6 +219,8 @@ if __name__ == '__main__':
                         help="yaml file path")
     extra_args = parser.parse_args()
     args = parse_args(extra_args_provider=extra_args_provider)
+    args.wrap_with_ddp = False
+    args.data_layout = "BSH"
 
     config = core_transformer_config_from_yaml(args)
 
@@ -231,7 +233,7 @@ if __name__ == '__main__':
         args.untie_embeddings_and_output_weights = False
         args.wrap_with_ddp = True
         args.use_distributed_optimizer = True
-        args.bucket_size = 10
+        args.ddp_bucket_size = 10
         run_standalone(config, args)
     elif extra_args.run_mode == 'pp_without_share':
         run_pipeline(config, args)
@@ -250,7 +252,7 @@ if __name__ == '__main__':
         args.untie_embeddings_and_output_weights = False
         args.wrap_with_ddp = True
         args.use_distributed_optimizer = True
-        args.bucket_size = 10
+        args.ddp_bucket_size = 10
         run_pipeline(config, args)
     elif extra_args.run_mode == 'custom_pp_interleaved':
         config.virtual_pipeline_model_parallel_size = 2

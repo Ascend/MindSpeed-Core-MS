@@ -170,14 +170,13 @@ class ColumnParallelLoRA(nn.Cell):
         self.output_size_per_partition = divide(output_size, tensor_parallel_group_size)
         self.is_expert = is_expert
         self.skip_weight_param_allocation = skip_weight_param_allocation
-        self.config = config
-        self.param_init_dtype = param_init_dtype if param_init_dtype else self.config.params_dtype
-        self.compute_dtype = compute_dtype if compute_dtype else self.config.compute_dtype
+        self.param_init_dtype = param_init_dtype if param_init_dtype else config.params_dtype
+        self.compute_dtype = compute_dtype if compute_dtype else config.compute_dtype
         self.transpose_b = transpose_b
 
-        self.expert_parallel = self.config.expert_model_parallel_size > 1
-        self.sequence_parallel = self.config.sequence_parallel
-        self.use_zero3 = self.config.zero_level == 'z3'
+        self.expert_parallel = config.expert_model_parallel_size > 1
+        self.sequence_parallel = config.sequence_parallel
+        self.use_zero3 = config.zero_level == 'z3'
         if self.use_zero3:
             try:
                 dp_size = get_data_parallel_world_size()
@@ -426,13 +425,12 @@ class RowParallelLoRA(nn.Cell):
         self.scaling = Tensor(self.lora_alpha / self.lora_rank)
 
         self.input_size_per_partition = divide(input_size, tensor_parallel_group_size)
-        self.config = config
-        self.param_init_dtype = param_init_dtype if param_init_dtype else self.config.params_dtype
-        self.compute_dtype = compute_dtype if compute_dtype else self.config.compute_dtype
+        self.param_init_dtype = param_init_dtype if param_init_dtype else config.params_dtype
+        self.compute_dtype = compute_dtype if compute_dtype else config.compute_dtype
         self.is_expert = is_expert
-        self.expert_parallel = self.config.expert_model_parallel_size > 1
-        self.sequence_parallel = self.config.sequence_parallel
-        self.use_zero3 = self.config.zero_level == 'z3'
+        self.expert_parallel = config.expert_model_parallel_size > 1
+        self.sequence_parallel = config.sequence_parallel
+        self.use_zero3 = config.zero_level == 'z3'
         self.transpose_b = transpose_b
 
         if self.use_zero3:

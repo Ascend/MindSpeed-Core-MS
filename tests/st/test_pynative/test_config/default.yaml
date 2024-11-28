@@ -37,14 +37,14 @@ global_batch_size: 1
 micro_batch_size: 1
 train_iters: 0
 eval_interval: null
-train_samples: 0
 check_for_nan_in_loss_and_grad: False
 
 # data
 seq_length: 4096
+max_position_embeddings: 4096
 
 # optimization
-optimizer: "AdamWeightDecay"
+optimizer: "mint.AdamW"
 lr_decay_style: "constant"
 weight_decay_incr_style: "constant"
 clip_grad: 0.0
@@ -57,6 +57,7 @@ initial_loss_scale: null
 
 # distributed arguments
 delay_grad_reduce: False
+wrap_with_ddp: False
 
 # logging
 log_interval: null

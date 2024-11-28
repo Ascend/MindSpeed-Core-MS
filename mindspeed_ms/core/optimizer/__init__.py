@@ -234,9 +234,6 @@ def get_optimizer(optimizer_config, config, params=None, network=None, return_in
 
     params = _append_order_param_group(params, network, optimizer_cls)
 
-    if optimizer_config.weight_decay_kwargs is not None:
-        raise NotImplementedError("weight_decay_kwargs is not supported yet.")
-
     optimizer_kwargs = _prepare_optimizer_kwargs(optimizer_config, params, network, optimizer_cls, kwargs)
     return_item = optimizer_cls(**optimizer_kwargs)
     if args.wrap_with_ddp and optimizer_config.use_distributed_optimizer:

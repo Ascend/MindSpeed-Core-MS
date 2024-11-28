@@ -33,7 +33,7 @@ def get_optimizer_param_scheduler(optimizer):
     # Iteration-based training.
     args = get_args()
     global_batch_size = args.global_batch_size
-    if args.train_iters > 0:
+    if args.train_iters is not None and args.train_iters > 0:
         if args.lr_decay_iters is None:
             args.lr_decay_iters = args.train_iters
 

@@ -18,9 +18,8 @@ import math
 
 import mindspore as ms
 from mindspore import Tensor, ops, mint
-import mindspore.common.dtype as mstype
 
-from mindspeed_ms.legacy.model.scale_mask_softmax import ScaleMaskSoftmax
+from mindspeed_ms.legacy.model.scale_mask_softmax import FusedScaleMaskSoftmax
 
 from mindspeed_ms.core import parallel_state
 from mindspeed_ms.core.utils import divide
@@ -84,11 +83,14 @@ class DotProductAttention(Module):
             coeff = self.layer_number
             self.norm_factor *= coeff
 
-        compute_type = mstype.float32 if self.config.attention_softmax_in_fp32 else self.config.softmax_compute_dtype
-        self.scale_mask_softmax = ScaleMaskSoftmax(
+        self.scale_mask_softmax = FusedScaleMaskSoftmax(
+            input_in_fp16=self.config.fp16,
+            input_in_bf16=self.config.bf16,
+            attn_mask_type=self.attn_mask_type,
+            scaled_masked_softmax_fusion=self.config.masked_softmax_fusion,
             mask_func=attention_mask_func,
-            scale=coeff,
-            softmax_compute_type=compute_type
+            softmax_in_fp32=self.config.attention_softmax_in_fp32,
+            scale=coeff
         )
 
         # Dropout. Note that for a single iteration, this layer will generate

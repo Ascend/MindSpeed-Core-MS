@@ -33,6 +33,7 @@ ms.set_seed(2024)
 def run_lr_scheduler():
     """main function."""
     args = parse_args()
+    args.wrap_with_ddp = False
     config = core_transformer_config_from_yaml(args)
     ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE)
     init()

@@ -37,6 +37,10 @@ train_iters: 2
 untie_embeddings_and_output_weights: True
 global_batch_size: 16
 micro_batch_size: 2
+max_position_embeddings: 64
+shape_order: "BSH"
+pre_tockens: 2147483647
+next_tockens: 2147483647
 
 # loss arguments
 initial_loss_scale: 1  # loss_scale_value
@@ -44,9 +48,8 @@ hysteresis: 2   # loss_scale_factor
 loss_scale_window: 1000
 fp16_lm_cross_entropy: False # need add
 
-# pangu arguments
-use_query_layer: False
-use_visual_encoder: False
+# distributed arguments
+wrap_with_ddp: False
 
 # logging
 log_interval: 1
