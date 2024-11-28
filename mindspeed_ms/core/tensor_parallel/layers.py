@@ -631,7 +631,7 @@ class ColumnParallelLinear(nn.Cell):
             allreduce_dgrad=False if self.explicit_expert_comm else self.allreduce_dgrad,
             transpose_b=self.transpose_b,
             data_layout=args.data_layout,
-            recompute_comm=args.select_comm_recompute,
+            recompute_comm=config.select_comm_recompute,
             need_gather_param_in_bw=self.use_zero3,
         )
 

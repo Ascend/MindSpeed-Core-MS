@@ -571,6 +571,9 @@ def validate_args(args, default_args, defaults={}):
                 '={}.'.format(args.normalization))
         args.normalization = "FusedRMSNorm"
 
+    # Disable new_dataset
+    args.new_dataset = False
+
     # We only support SBH
     args.data_layout = 'SBH'
 
@@ -1801,10 +1804,6 @@ def _add_data_args(parser):
     # additional arguments
     group.add_argument('--shuffle', action='store_true',
                        help='Shuffle dataset')
-    group.add_argument('--enable-compile-cache', action='store_true',
-                       help='Save compile cache. Enable this may cause low train performance')
-    group.add_argument('--compile-cache-path', type=str,
-                       default='./output_dir/compile_cache')
     group.add_argument('--eos-token-id', type=int, default=0, help='The id for <eos>')
     group.add_argument('--pad-token-id', type=int, default=0, help='The id for <pad>')
     group.add_argument('--pad-token', type=int, default=0, help='<unk>')
@@ -1985,7 +1984,6 @@ def _add_moe_args(parser):
                        help='.')
     group.add_argument('--moe-per-layer-logging', action='store_true',
                        help='Enable per-layer logging for MoE, currently supports auxiliary loss and z loss.')
-    group.add_argument('--use-self-defined-alltoall', action='store_true', help='')
     # Token dropping arguments
     group.add_argument('--moe-expert-capacity-factor', type=float, default=None,
                        help='The capacity factor for each expert, None means no token will be dropped.')
