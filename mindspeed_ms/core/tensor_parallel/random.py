@@ -35,7 +35,8 @@ from mindspeed_ms.core.parallel_state import (
     get_data_parallel_rank,
     get_pipeline_model_parallel_rank,
     get_zero_parallel_rank,
-    get_zero_shard_size
+    get_zero_shard_size,
+    get_zero_full_shard_flag
 )
 
 
@@ -118,7 +119,6 @@ def get_rng_tracer():
 def parallel_mode_manual_seed(seed):
     "parallel_mode_manual_seed"
     dp_seed = seed
-    zero_seed = seed + get_zero_parallel_rank() + get_tensor_model_parallel_rank() * get_zero_shard_size() + 1024
     tp_seed = seed + get_tensor_model_parallel_rank() + 2048
     exp_seed = seed + 1024 * 1 \
         + get_tensor_model_parallel_rank() + 2012
@@ -130,8 +130,9 @@ def parallel_mode_manual_seed(seed):
     tracer.init_mode(DATA_PARALLEL_GENERATOR, dp_seed)
     tracer.init_mode(TENSOR_PARALLEL_GENERATOR, tp_seed)
     tracer.init_mode(EXPERT_PARALLEL_GENERATOR, exp_seed)
-    tracer.init_mode(ZERO_PARALLEL_GENERATOR, zero_seed)
-
+    if not get_zero_full_shard_flag():
+        zero_seed = seed + get_zero_parallel_rank() + get_tensor_model_parallel_rank() * get_zero_shard_size() + 1024
+        tracer.init_mode(ZERO_PARALLEL_GENERATOR, zero_seed)
 
 def set_rng_seed(seed, dp_random_init=False):
     seed = int(seed)
