@@ -245,47 +245,37 @@ class OptimizerParamScheduler():
                     new_sd[k] = v.item()
                 sd.pop(k)
 
-        max_lr_ = new_sd.get('max_lr')
-        self.max_lr = self._check_and_set(self.max_lr, max_lr_,
-                                          'learning rate')
+        def _get_sd_value(key):
+            if key not in new_sd:
+                raise KeyError(
+                    f"Fail to get the weight of '{key}' from state dict. "
+                    f"Specify --no-load-optim or --finetune to prevent "
+                    f"attempting to load the optimizer state."
+                )
+            return new_sd[key]
 
-        self.min_lr = self._check_and_set(self.min_lr, new_sd.get('min_lr'),
-                                          'minimum learning rate')
-
-        lr_warmup_steps_ = new_sd.get('lr_warmup_steps')
+        self.max_lr = self._check_and_set(
+            self.max_lr, _get_sd_value('max_lr'), 'learning rate')
+        self.min_lr = self._check_and_set(
+            self.min_lr, _get_sd_value('min_lr'), 'minimum learning rate')
         self.lr_warmup_steps = self._check_and_set(
-            self.lr_warmup_steps,
-            lr_warmup_steps_,
-            'warmup iterations'
-            )
-
-        lr_decay_steps_ = new_sd.get('lr_decay_steps')
+            self.lr_warmup_steps, _get_sd_value('lr_warmup_steps'), 'warmup iterations')
         self.lr_decay_steps = self._check_and_set(
-            self.lr_decay_steps, lr_decay_steps_,
-            'total number of iterations'
-            )
-
-        lr_decay_style_ = new_sd.get('lr_decay_style')
-
+            self.lr_decay_steps, _get_sd_value('lr_decay_steps'), 'total number of iterations')
         self.lr_decay_style = self._check_and_set(
-            self.lr_decay_style,
-            lr_decay_style_list[lr_decay_style_],
-            'learning rate decay style'
-            )
-
-        num_steps = new_sd.get('num_steps')
-        self.step(increment=num_steps)
+            self.lr_decay_style, lr_decay_style_list[_get_sd_value('lr_decay_style')],
+            'learning rate decay style')
+        self.step(increment=_get_sd_value('num_steps'))
 
         if 'start_wd' in new_sd:
-            self.start_wd = self._check_and_set(self.start_wd,
-                                                new_sd.get('start_wd'),
-                                                "start weight decay")
-            self.end_wd = self._check_and_set(self.end_wd,
-                                              new_sd.get('end_wd'),
-                                              "end weight decay")
-            self.wd_incr_steps = self._check_and_set(self.wd_incr_steps,
-                                                     new_sd.get('wd_incr_steps'),
-                                                     "total number of weight decay iterations")
-            self.wd_incr_style = self._check_and_set(self.wd_incr_style,
-                                                     wd_incr_style_list[new_sd.get('wd_incr_style')],
-                                                     "weight decay incr style")
+            self.start_wd = self._check_and_set(
+                self.start_wd, _get_sd_value('start_wd'), "start weight decay")
+            self.end_wd = self._check_and_set(
+                self.end_wd, _get_sd_value('end_wd'), "end weight decay")
+            self.wd_incr_steps = self._check_and_set(
+                self.wd_incr_steps, _get_sd_value('wd_incr_steps'),
+                "total number of weight decay iterations")
+            self.wd_incr_style = self._check_and_set(
+                self.wd_incr_style,
+                wd_incr_style_list[_get_sd_value('wd_incr_style')],
+                "weight decay incr style")

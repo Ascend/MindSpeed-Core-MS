@@ -1,0 +1,93 @@
+model_parallel:
+  bf16: True
+  # model parallelism
+  tensor_model_parallel_size: 2
+  pipeline_model_parallel_size: 2
+  context_parallel_size: 1
+  expert_model_parallel_size: 1
+  virtual_pipeline_model_parallel_size: null
+
+  # training
+  params_dtype: "float32"
+  compute_dtype: "float32"
+
+  # pipeline parallel
+  sequence_parallel: True
+  pipeline_dtype: "float32"
+
+language_model:
+  # model architecture
+  num_layers: 2
+  hidden_size: 32
+  ffn_hidden_size: 128
+  num_attention_heads: 16
+  num_query_groups: 8
+  hidden_dropout: 0.0
+  attention_dropout: 0.0
+  add_bias_linear: False
+  add_qkv_bias: False
+  mask_func_type: "attn_mask_fill"
+  gated_linear_unit: True
+  activation_func: "swiglu"
+  num_moe_experts: 1
+  apply_residual_connection_post_layernorm: False
+  normalization: 'FusedRMSNorm'
+  layernorm_epsilon: 1.e-5
+
+  # initialization
+  init_method: "normal"
+  init_method_std: 0.01
+
+  # miscellaneous
+  clone_scatter_output_in_embedding: False
+
+# training
+transformer_impl: "local"
+seed: 2024
+global_batch_size: 1
+micro_batch_size: 1
+train_iters: 10
+eval_interval: null
+group_query_attention: True
+untie_embeddings_and_output_weights: True
+position_embedding_type: "rope"
+check_for_nan_in_loss_and_grad: False
+max_position_embeddings: 4
+shape_order: "BSH"
+pre_tockens: 2147483647
+next_tockens: 2147483647
+
+# data
+vocab_size: 64
+seq_length: 4
+shuffle: False
+pad_token: 0
+
+# checkpointing arguments
+save: "output"
+save_interval: 5
+dist_ckpt_format: "ckpt"
+
+# optimizer
+optimizer: "SpeedAdamW"
+clip_grad: 0.0
+eps: 1.0e-8
+lr: 2.0e-5
+adam_beta1: 0.9
+adam_beta1: 0.999
+lr_decay_style: "constant"
+weight_decay_incr_style: "constant"
+use_distributed_optimizer: True
+
+# loss arguments
+loss_scale: 1
+initial_loss_scale: null
+loss_reduction: "mean"
+loss_func_kwargs:
+  loss_func_type: "CrossEntropyLoss"
+
+# distributed arguments
+delay_grad_reduce: False
+
+# logging
+log_interval: 1
