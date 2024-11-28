@@ -130,7 +130,7 @@ def get_default_dict_for_optimizer(optimizer, model_sharded_state_dict):
     return state_dict
 
 
-def generate_state_dict(network: "Module", optimizer: Optimizer):
+def generate_state_dict(network: "Module", optimizer: Optimizer, include_optim: bool = True):
     r"""
     Generete the sharded stated dict for the network and optimizer.
 
@@ -172,13 +172,12 @@ def generate_state_dict(network: "Module", optimizer: Optimizer):
     else:
         state_dict['model'].update(network.sharded_state_dict())
     state_dict['optimizer'] = {}
-    if optimizer is not None:
+    if include_optim and optimizer is not None:
         if hasattr(optimizer, 'sharded_state_dict'):
             state_dict['optimizer'] = optimizer.sharded_state_dict(state_dict['model'])
         else:
             logger.warning(f"The optimizer {type(optimizer).__name__} has no sharded_state_dict overridden")
             state_dict['optimizer'] = get_default_dict_for_optimizer(optimizer, state_dict['model'])
-
     return state_dict
 
 

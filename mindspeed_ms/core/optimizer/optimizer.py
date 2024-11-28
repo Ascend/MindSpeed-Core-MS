@@ -355,17 +355,27 @@ class Float16OptimizerWithFloat16Params(MixedPrecisionOptimizer):
         """ reload main params to model params. """
         self._copy_main_params_to_model_params()
 
-    def load_state_dict(self, state_dict):
+    def load_state_dict(self, state_dict, load_optim: bool = True):
         """ load state dict into optimizer. """
-        args = get_args()
-        param_dict = list(self.optimizer.parameters)
-        if args.no_load_optim:
-            param_dict += list(self.optimizer.exp_avg) + \
-                          list(self.optimizer.exp_avg_sq)
+        state_list = list(self.optimizer.exp_avg) + list(self.optimizer.exp_avg_sq)
+        param_dict = list(self.optimizer.parameters) + state_list
+        state_name = list(map(lambda x: x.name, state_list))
         for param in param_dict:
+            if not load_optim and param.name in state_name:
+                continue
             if param.name not in state_dict:
-                logger.warning(f"No state data found for '{param.name}' and it won't be loaded.")
+                logger.warning(
+                    f"No state data found for '{param.name}' and it won't be loaded." + (
+                        " Specify --no-load-optim or --finetune to prevent"
+                        " attempting to load the optimizer state."
+                        if param.name in state_name else ""
+                    )
+                )
+                continue
             param.copy_(state_dict[param.name])
+
+        if not load_optim:
+            return
 
         if 'state_step' in state_dict.keys():
             self.optimizer.state_step.assign_value(state_dict['state_step'].value())
@@ -380,7 +390,7 @@ class Float16OptimizerWithFloat16Params(MixedPrecisionOptimizer):
             if wd_name in state_dict.keys():
                 self.optimizer.param_groups[group_idx]['weight_decay'] = state_dict.get(wd_name).item()
 
-    def state_dict(self):
+    def state_dict(self, include_optim: bool = True):
         """ get optimizer state dict for saving checkpoint. """
         param_dict = OrderedDict()
 
@@ -392,6 +402,9 @@ class Float16OptimizerWithFloat16Params(MixedPrecisionOptimizer):
             else:
                 raise TypeError("Instance in optimizer.parameters should be mindspore.Parameter or "
                                 "mindspore.Tensor, but got {}".format(type(param)))
+
+        if not include_optim:
+            return param_dict
 
         for param in self.optimizer.exp_avg:
             param_dict[param.name] = param
@@ -415,7 +428,6 @@ class Float16OptimizerWithFloat16Params(MixedPrecisionOptimizer):
                 name=wd_name,
                 requires_grad=False,
             )
-
         return param_dict
 
     def _collect_main_grad_data(self):

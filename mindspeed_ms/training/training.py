@@ -1019,11 +1019,23 @@ def pretrain(train_valid_test_datasets_provider,
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
 
     resume_dict = None
+    load_dir = None
     if args.resume_training is True and \
        args.load is not None and \
        os.path.exists(args.load):
+        load_dir = args.load
+        args.finetune = False
 
-        rank_path = os.path.join(args.load, f"rank_{get_rank()}")
+    pretrain_dir = args.pretrained_checkpoint
+    if load_dir is None and pretrain_dir is not None:
+        if not os.path.exists(pretrain_dir):
+            raise FileNotFoundError(f"Pretrained checkpoint not exists: {pretrain_dir}")
+        load_dir = pretrain_dir
+        args.finetune = True
+        args.resume_training = False
+
+    if load_dir is not None:
+        rank_path = os.path.join(load_dir, f"rank_{get_rank()}")
         if os.path.exists(rank_path):
             meta_path = os.path.join(rank_path, "meta.json")
             resume_by_meta = True
@@ -1031,13 +1043,13 @@ def pretrain(train_valid_test_datasets_provider,
                 logger.warning(f"Could not find meta.json in directory {rank_path}, using latest ckpt in {rank_path}")
                 resume_by_meta = False
             resume_ckpt_name = get_resume_checkpoint(
-                checkpoint_dir=args.load,
+                checkpoint_dir=load_dir,
                 resume_training=args.resume_training,
                 resume_by_meta=resume_by_meta
                 )
             logger.debug(f"resume_ckpt_name is {resume_ckpt_name}")
             if resume_ckpt_name is True:
-                ckpt_path = args.load
+                ckpt_path = load_dir
             elif isinstance(resume_ckpt_name, str):
                 ckpt_path = os.path.join(rank_path, resume_ckpt_name)
         else:
@@ -1047,7 +1059,7 @@ def pretrain(train_valid_test_datasets_provider,
             tp_rank = get_tensor_model_parallel_rank()
             local_rank_to_dp0_rank = pp_rank * dp_size * tp_size + tp_rank
             logger.warning(f"global rank_{get_rank()} ckpt not found, will load rank_{local_rank_to_dp0_rank} ckpt.")
-            rank_path = os.path.join(args.load, f"rank_{local_rank_to_dp0_rank}")
+            rank_path = os.path.join(load_dir, f"rank_{local_rank_to_dp0_rank}")
             if not os.path.exists(rank_path):
                 raise FileNotFoundError(f"Path {rank_path} not exists, please check your ckpt path.")
             ckpt_path = get_last_checkpoint(rank_path)
@@ -1057,20 +1069,21 @@ def pretrain(train_valid_test_datasets_provider,
         resume_dict = load_checkpoint(
             config=config,
             model=network_with_loss,
-            optimizer=optimizer if ((not args.no_load_optim)
-                                    or optimizer_config.use_distributed_optimizer) else None,
+            optimizer=optimizer,
             opt_param_scheduler=opt_param_scheduler,
             ckpt_path=ckpt_path,
             format=args.dist_ckpt_format
-            )
-        logger.info(f"Checkpoint has trained {resume_dict.get('epoch_num', 0)} epochs, " + \
+        )
+        logger.info(f"Checkpoint has trained {resume_dict.get('epoch_num', 0)} epochs, "
                     f"{resume_dict.get('step_num', 0)} steps.")
-    train_one_step_cell = TrainOneStepCell(network_with_loss, optimizer, opt_param_scheduler,
-                                           config)
+
+    train_one_step_cell = TrainOneStepCell(
+        network_with_loss, optimizer, opt_param_scheduler, config)
 
     metrics = {
         "perplexity": Perplexity(),
     }
+
     train(
         train_one_step_cell=train_one_step_cell,
         train_dataloader=train_data_loader,
@@ -1078,5 +1091,5 @@ def pretrain(train_valid_test_datasets_provider,
         metrics=metrics,
         resume_dict=resume_dict,
         get_batch_func=get_batch_func,
-        loss_func_type=optimizer_config.loss_func_kwargs.loss_func_type,
+        loss_func_type=optimizer_config.loss_func_kwargs["loss_func_type"],
     )

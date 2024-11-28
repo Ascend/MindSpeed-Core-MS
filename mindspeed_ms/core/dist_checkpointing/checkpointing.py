@@ -26,6 +26,7 @@ __all__ = [
 ]
 
 import os
+import sys
 import stat
 import glob
 import json
@@ -118,10 +119,20 @@ def load_rng_state(param_dict):
         if mode in param_dict
     }
     get_rng_tracer().set_state(target_state)
+    loaded = list(target_state)
+    no_loaded = list(filter(lambda x: x not in loaded, CANDIDATE_MODES))
     # set default generator state
     if "default_generator" in param_dict:
         default_generator_loaded = param_dict.pop("default_generator")
         set_rng_state(default_generator_loaded)
+        loaded.append("default_generator")
+    else:
+        no_loaded.append("default_generator")
+    if not loaded and no_loaded:
+        raise KeyError(
+            f"Unable to get the weight of {no_loaded} from state dict. "
+            f"Specify --no-load-rng or --finetune to prevent "
+            f"attempting to load the rng.")
 
 
 def _update_zero(params_dict, shard_info, param, group):
@@ -132,18 +143,18 @@ def _update_zero(params_dict, shard_info, param, group):
     shard_info[param.name]['opt_weight_shard_step'] = 0
 
 
-def _get_params_dict(model, optimizer):
+def _get_params_dict(model, optimizer, include_optim: bool = True):
     """ get params dict for saving checkpoint. """
     params_dict = None
     if optimizer is None:
         params_dict = model.parameters_dict()
     elif isinstance(optimizer, MixedPrecisionOptimizer):
-        params_dict = optimizer.state_dict()
+        params_dict = optimizer.state_dict(include_optim)
         for _, param in model.parameters_and_names():
             if not param.requires_grad and "set_hidden_states" not in param.name:
                 params_dict[param.name] = param
     else:
-        params_dict = optimizer.parameters_dict()
+        params_dict = optimizer.parameters_dict() if include_optim else {}
         for _, param in model.parameters_and_names():
             if not param.requires_grad and "set_hidden_states" not in param.name:
                 params_dict[param.name] = param
@@ -168,17 +179,18 @@ def _save_process_pp_layers(shard_info, params_dict):
             process_dict[new_name] = local_param
     return shard_info, params_dict
 
+
 # pylint: disable=W0212
-def save_pre_process(shard_info, model, optimizer, config):
+def save_pre_process(shard_info, model, optimizer, config, include_optim: bool = True):
     """ preprocess before saving, split qkv and handle pp embedding share """
     model_shard_info = shard_info["model"]
     optimizer_shard_info = shard_info["optimizer"]
-    params_dict = _get_params_dict(model, optimizer)
+    params_dict = _get_params_dict(model, optimizer, include_optim)
     # ZeRO DP
     if optimizer is not None and hasattr(optimizer, "zero_level") and optimizer.zero_level in ["z1", "z2", "z3"]:
         dp_tp_group = get_data_parallel_group(with_context_parallel=optimizer.with_context_parallel)
         for idx, param in enumerate(optimizer._parameters):
-            if optimizer._status_splited[idx] or optimizer._parameter_splited[idx]:
+            if include_optim and (optimizer._status_splited[idx] or optimizer._parameter_splited[idx]):
                 _update_zero(params_dict, optimizer_shard_info, optimizer.moments1[idx], dp_tp_group)
                 _update_zero(params_dict, optimizer_shard_info, optimizer.moments2[idx], dp_tp_group)
             if optimizer.zero_level == "z3" and optimizer._parameter_splited[idx]:
@@ -217,7 +229,7 @@ def save_pre_process(shard_info, model, optimizer, config):
 
 
 # pylint: disable=W0212
-def load_post_process(config, params_dict, optimizer=None):
+def load_post_process(config, params_dict, optimizer=None, load_optim: bool = True):
     """ load post processing, concat qkv """
     for name, param in list(params_dict.items()):
         ### moe layer
@@ -238,26 +250,28 @@ def load_post_process(config, params_dict, optimizer=None):
     if optimizer is not None and hasattr(optimizer, "zero_level") and optimizer.zero_level in ["z1", "z2", "z3"]:
         shard_id = get_data_parallel_rank()
         split = P.Split(0, get_data_parallel_world_size())
+
+        def _split_param(name, is_optim_state):
+            if name not in params_dict:
+                raise KeyError(
+                    f"Unable to get the weight of '{name}' from state dict." + (
+                        " Specify --no-load-optim or --finetune to prevent"
+                        " attempting to load the optimizer state."
+                        if is_optim_state else ""
+                    )
+                )
+            splited_tensor = split(params_dict[name])[shard_id]
+            params_dict[moments1_name] = ms.Parameter(splited_tensor, name=name)
+
         for idx, param in enumerate(optimizer._parameters):
-            if optimizer._status_splited[idx] or optimizer._parameter_splited[idx]:
-                # moments1
-                moments1_name = optimizer.moments1[idx].name
-                moments1 = params_dict[moments1_name]
-                splited_tensor = split(moments1)[shard_id]
-                params_dict[moments1_name] = ms.Parameter(splited_tensor, name=moments1_name)
-                # moments2
-                moments2_name = optimizer.moments2[idx].name
-                moments2 = params_dict[moments2_name]
-                splited_tensor = split(moments2)[shard_id]
-                params_dict[moments2_name] = ms.Parameter(splited_tensor, name=moments2_name)
+            if load_optim and (optimizer._status_splited[idx] or optimizer._parameter_splited[idx]):
+                _split_param(optimizer.moments1[idx].name, True)
+                _split_param(optimizer.moments2[idx].name, True)
             if optimizer.zero_level == "z3" and optimizer._parameter_splited[idx]:
                 # param
                 if "norm" in param.name or "embedding" in param.name:
                     continue
-                cell_param = params_dict[param.name]
-                splited_tensor = split(cell_param)[shard_id]
-                params_dict[param.name] = ms.Parameter(splited_tensor, name=param.name)
-
+                _split_param(param.name, False)
     return params_dict
 
 
@@ -279,6 +293,7 @@ def save_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
         TypeError: If the type of parameter `optimizer` is not nn.Cell.
         TypeError: If the type of parameter `ckpt_path` is not str.
     """
+    args = get_args()
     if crc_check and format == "safetensors":
         raise ValueError("crc_check does not support format 'safetensors' for now.")
     if keep_checkpoint_max < 1:
@@ -294,17 +309,17 @@ def save_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
     logger.info(f"Saving model to {ckpt_file}")
 
     # generate sharded info
-    shard_info = generate_state_dict(model, optimizer)
-    shard_info, params_dict = save_pre_process(shard_info, model, optimizer, config)
+    shard_info = generate_state_dict(model, optimizer, not args.no_save_optim)
+    shard_info, params_dict = save_pre_process(shard_info, model, optimizer, config, not args.no_save_optim)
 
     # saving
     save_strategy_file(shard_info, strategy_file)
     if not only_save_strategy:
-        rng_state_dict = save_rng_state()
-        append_dict = rng_state_dict.copy()
-        if opt_param_scheduler is not None:
-            opt_state_dict = opt_param_scheduler.state_dict()
-            append_dict.update(opt_state_dict)
+        append_dict = dict()
+        if not args.no_save_rng:
+            append_dict.update(save_rng_state())
+        if not args.no_save_optim and opt_param_scheduler is not None:
+            append_dict.update(opt_param_scheduler.state_dict())
         append_dict.update({"epoch_num": epoch_num, "step_num": step_num})
         # ensure ckpt number is less than `keep_checkpoint_max` after saving,
         # so make 1 free space for incoming ckpt
@@ -354,6 +369,7 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
         TypeError: If the type of parameter `model` is not nn.Cell.
         TypeError: If the type of parameter `optimizer` is not nn.Cell. Default: ``None``.
     """
+    args = get_args()
     if crc_check and format == "safetensors":
         raise ValueError("crc_check does not support format 'safetensors' for now.")
     validator.check_value_type("model", model, [nn.Cell], "load_checkpoint")
@@ -363,27 +379,43 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
     elif os.path.isfile(ckpt_path):
         src_ckpt_file = ckpt_path
     else:
-        raise ValueError(f"There is no *.{format} in {ckpt_path}, load failed.")
+        src_ckpt_file = None
+
+    if src_ckpt_file is None:
+        logger.warning(f"There is no *.{format} in {ckpt_path}, load failed.")
+        if args.exit_on_missing_checkpoint:
+            logger.error("--exit-on-missing-checkpoint is set and exit now")
+            sys.exit()
+        logger.warning("Unable to load any checkpoint and will start from random.")
+        return None
+
     for key in kwargs:
         logger.warning(f"The parameter '{key}' is not used in load_checkpoint.")
     args = get_args()
 
     logger.info(f"Loading latest checkpoint: {src_ckpt_file}, this may take a while.")
     param_dict = ms.load_checkpoint(src_ckpt_file, format=format, crc_check=crc_check)
-    resume_dict = {
-        "epoch_num": int(param_dict.pop("epoch_num", 0)),
-        "step_num": int(param_dict.pop("step_num", 0))
-    }
+    if args.finetune:
+        resume_dict = {"epoch_num": 0, "step_num": 0}
+    else:
+        resume_dict = {
+            "epoch_num": int(param_dict.pop("epoch_num", 0)),
+            "step_num": int(param_dict.pop("step_num", 0))
+        }
 
-    load_rng_state(param_dict)
-    if opt_param_scheduler is not None:
+    load_rng = not (args.finetune or args.no_load_rng)
+    if load_rng:
+        load_rng_state(param_dict)
+
+    load_optim = not(args.finetune or args.no_load_optim)
+    if load_optim and opt_param_scheduler is not None:
         opt_param_scheduler.load_state_dict(param_dict)
 
     # restore native optimizer/model
-    param_dict = load_post_process(config, param_dict, optimizer)
+    param_dict = load_post_process(config, param_dict, optimizer, load_optim)
     if isinstance(optimizer, MixedPrecisionOptimizer):
         # restore distributed optimizer
-        optimizer.load_state_dict(param_dict)
+        optimizer.load_state_dict(param_dict, load_optim)
         # synchronize parameters in optimizer to model
         optimizer.reload_main_params()
         if (args.fp16 or args.bf16) and args.no_load_optim:
@@ -395,13 +427,15 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
                     logger.warning(f"Fail to get the weight of '{param.name}' from state dict.")
                     continue
                 _update_param(param, new_param, False)
+        if (args.fp16 and args.bf16) and not load_optim:
+            optimizer.reload_model_params()
     else:
         param_not_load, ckpt_not_load = ms.load_param_into_net(model, param_dict)
         if param_not_load:
             logger.warning(f"When loading ckpt into the model, param_not_load:{param_not_load}")
         if ckpt_not_load:
             logger.warning(f"When loading ckpt into the model, ckpt_not_load:{ckpt_not_load}")
-        if optimizer is not None:
+        if load_optim and optimizer is not None:
             param_not_load, ckpt_not_load = ms.load_param_into_net(optimizer, param_dict)
             if param_not_load:
                 logger.warning(f"When loading ckpt into the optimizer, param_not_load:{param_not_load}")
@@ -409,7 +443,6 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
                 logger.warning(f"When loading ckpt into the optimizer, ckpt_not_load:{ckpt_not_load}")
 
     logger.info(f"Checkpoint: {src_ckpt_file} is loaded successfully!")
-
     return resume_dict
 
 
