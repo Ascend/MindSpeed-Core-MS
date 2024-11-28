@@ -28,8 +28,8 @@ class LayerNorm(nn.Cell):
 
     Args:
         normalized_shape (tuple): The shape of the input tensor
-        eps (float): The epsilon value of the denominator. Default 1e-5.
-        param_init_type: The param init type.
+        eps (float): The epsilon value of the denominator. Default: ``1e-5``.
+        params_dtype: The param init type. Default: ``mstype.float32``.
 
     Inputs:
         - **x** (Tensor) - Tensor of shape (batch, seq_length, hidden_size).
@@ -38,14 +38,14 @@ class LayerNorm(nn.Cell):
         - Tensor with shape (batch, seq_length, hidden_size).
     """
 
-    def __init__(self, normalized_shape, eps=1e-5, param_init_type=mstype.float32):
+    def __init__(self, normalized_shape, eps=1e-5, params_dtype=mstype.float32):
         super(LayerNorm, self).__init__()
-        if param_init_type not in [mstype.float32, mstype.float16, mstype.bfloat16]:
-            raise TypeError("The type of parameter 'param_init_type' should in [float32, float16], "
-                            "but got the type : {}.".format(type(param_init_type)))
-        self.gamma = Parameter(initializer('ones', normalized_shape, param_init_type), name="gamma",
+        if params_dtype not in [mstype.float32, mstype.float16, mstype.bfloat16]:
+            raise TypeError("The type of parameter 'params_dtype' should in [float32, float16], "
+                            "but got the type : {}.".format(type(params_dtype)))
+        self.gamma = Parameter(initializer('ones', normalized_shape, params_dtype), name="gamma",
                                parallel_optimizer=False)
-        self.beta = Parameter(initializer('zeros', normalized_shape, param_init_type), name="beta",
+        self.beta = Parameter(initializer('zeros', normalized_shape, params_dtype), name="beta",
                               parallel_optimizer=False)
         self.eps = eps
         self.normalized_shape = normalized_shape
@@ -62,8 +62,11 @@ class RMSNorm(nn.Cell):
 
     Args:
         dim (tuple): The shape of the input tensor
-        eps (float): The epsilon value of the denominator. Default 1e-5.
-        param_init_type: The param init type.
+        eps (float): The epsilon value of the denominator. Default: ``1e-6``.
+        sequence_parallel (bool): Set to true if sequence parallelism is being used,
+          this marks the weights as needing to be allreduced. Default: ``False``.
+        params_dtype (dtype.Number): The param init type. Default: ``mstype.float32``.
+        scale (float): scale number for weight initialization. Default: ``1.0``.
 
     Inputs:
         - **x** (Tensor) - Tensor of shape (batch, seq_length, hidden_size).
@@ -72,23 +75,22 @@ class RMSNorm(nn.Cell):
         - Tensor with shape (batch, seq_length, hidden_size).
     """
 
-    def __init__(self, dim, eps=1e-6, param_init_type=mstype.float32, scale=1.0):
+    def __init__(self, dim, eps=1e-6, sequence_parallel=False, params_dtype=mstype.float32,
+                 scale=1.0):
         super(RMSNorm, self).__init__()
-        self.eps = Tensor(float(eps), dtype=param_init_type)
-        self.weight = Parameter(initializer("ones", (dim,), dtype=param_init_type) * scale)
+        self.eps = Tensor(float(eps), dtype=params_dtype)
+        self.weight = Parameter(mint.ones((dim,), dtype=params_dtype) * scale)
+
+        setattr(self.weight, 'sequence_parallel', sequence_parallel)
+
+    def _norm(self, x):
+        return mint.mul(x, mint.rsqrt(mint.add(mint.mean(mint.square(x), dim=-1, keepdim=True),
+                                               self.eps)))
 
     def construct(self, x):
         """Forward of RMSNorm."""
-        origin_dtype = x.dtype
-        x = ops.cast(x, mstype.float32)
-        norm_factor = mint.square(x)
-        norm_factor = mint.mean(norm_factor, dim=-1, keepdim=True)
-        norm_factor = mint.add(norm_factor, self.eps)
-        norm_factor = mint.rsqrt(norm_factor)
-        output = mint.mul(x, norm_factor)
-        output = ops.cast(output, origin_dtype)
-        output = mint.mul(output, self.weight)
-        return output
+        output = self._norm(x.float()).type_as(x)
+        return mint.mul(output, self.weight)
 
 
 class FusedRMSNorm(nn.Cell):
@@ -97,8 +99,9 @@ class FusedRMSNorm(nn.Cell):
 
     Args:
         dim (tuple): The shape of the input tensor
-        eps (float): The epsilon value of the denominator. Default 1e-5.
-        param_init_type: The param init type.
+        eps (float): The epsilon value of the denominator. Default: ``1e-6``.
+        params_dtype (dtype.Number): The param init type. Default: ``mstype.float32``.
+        scale (float): scale number for weight initialization. Default: ``1.0``.
 
     Inputs:
         - **x** (Tensor) - Tensor of shape (batch, seq_length, hidden_size).
@@ -107,11 +110,10 @@ class FusedRMSNorm(nn.Cell):
         - Tensor with shape (batch, seq_length, hidden_size).
     """
 
-    def __init__(self, dim, eps=1.e-6, compute_type=mstype.float32, scale=1.0):
+    def __init__(self, dim, eps=1.e-6, params_dtype=mstype.float32, scale=1.0):
         super(FusedRMSNorm, self).__init__()
         self.eps = eps
-        self.compute_type = compute_type
-        self.weight = Parameter(initializer("ones", (dim,), dtype=self.compute_type) * scale, parallel_optimizer=False)
+        self.weight = Parameter(mint.ones((dim,), dtype=params_dtype) * scale, parallel_optimizer=False)
 
     def construct(self, x):
         """Forward of FusedRMSNorm."""
@@ -132,13 +134,15 @@ def get_norm(config, scale=1.0):
     if config.normalization == "LayerNorm":
         return LayerNorm(
             config.hidden_size,
-            eps=config.norm_epsilon)
+            eps=config.norm_epsilon,
+            params_dtype=config.params_dtype)
     if config.normalization == "RMSNorm":
         return RMSNorm(dim=config.hidden_size,
                        eps=config.norm_epsilon,
+                       params_dtype=config.params_dtype,
                        scale=scale)
     if config.normalization == "FusedRMSNorm":
-        return FusedRMSNorm(dim=config.hidden_size, eps=config.norm_epsilon, compute_type=config.compute_dtype,
+        return FusedRMSNorm(dim=config.hidden_size, eps=config.norm_epsilon, params_dtype=config.params_dtype,
                             scale=scale)
 
     raise Exception(f"unsupported norm type '{config.normalization}'.")
