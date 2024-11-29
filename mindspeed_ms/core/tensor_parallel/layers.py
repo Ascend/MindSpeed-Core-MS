@@ -343,7 +343,8 @@ class LinearWithFrozenWeight(nn.Cell):
         >>> import mindspore.common.dtype as mstype
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.training import ModelParallelConfig
+        >>> from mindspeed_ms.core.transformer import TransformerConfig
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> from mindspeed_ms.core.tensor_parallel.layers import LinearWithFrozenWeight
         >>> input = Tensor(np.random.random((2, 3, 3)).astype(np.float32))
@@ -458,15 +459,19 @@ class ColumnParallelLinear(nn.Cell):
             <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
             for more details.
 
+            You need to save the following codes as a python file and run command:
+            msrun --worker_num 1 --local_worker_num 1 --master_port 8848 --log_dir log --join True \
+                  --cluster_time_out 300 example.py --micro-batch-size 1 --num-layers 1 --hidden-size 4 \
+                  --num-attention-heads 4 --seq-length 2 --max-position-embeddings 2 --vocab-size 40000 \
+                  --tokenizer-type NullTokenizer
+
         >>> import numpy as np
         >>> import mindspore as ms
         >>> from mindspore import nn, Tensor
         >>> from mindspore.communication.management import init
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
-        >>> from mindspeed_ms.core.config import (
-        ...     ModelParallelConfig,
-        ...     TransformerConfig
-        ... )
+        >>> from mindspeed_ms.training import core_transformer_config_from_args, get_args
+        >>> from mindspeed_ms.training.initialize import initialize_mindspeed_ms
         >>> from mindspeed_ms.core.tensor_parallel import ColumnParallelLinear
         >>> class TestNet(nn.Cell):
         ...     def __init__(self, config):
@@ -476,39 +481,25 @@ class ColumnParallelLinear(nn.Cell):
         ...                                                  output_size=hidden_size,
         ...                                                  config=config,
         ...                                                  init_method=config.init_method,
-        ...                                                  bias=config.add_mlp_bias,
+        ...                                                  bias=config.add_bias_linear,
         ...                                                  gather_output=False,
         ...                                                  skip_bias_add=False,
         ...                                                  bias_init=config.bias_init)
         ...     def construct(self, input_):
         ...         output, _ = self.columnlinear(input_)
         ...         return output
-        >>> dataset_size = 1
-        >>> seq_length = 2
-        >>> hidden_size = 4
-        >>> tensor_parallel = 1
-        >>> ms.set_context(device_target='Ascend', mode=ms.PYNATIVE_MODE)
         >>> ms.set_seed(2024)
         >>> init()
-        >>> initialize_model_parallel(tensor_model_parallel_size=tensor_parallel)
-        >>> input_data = Tensor(np.random.random((dataset_size, seq_length, hidden_size)).astype(np.float32))
-        >>> parallel_config = ModelParallelConfig()
-        >>> model_config = TransformerConfig(vocab_size=40000,
-        ...                                  num_layers=1,
-        ...                                  num_attention_heads=1,
-        ...                                  add_mlp_bias=True,
-        ...                                  gated_linear_unit=False,
-        ...                                  hidden_size=hidden_size,
-        ...                                  ffn_hidden_size=4*hidden_size,
-        ...                                  hidden_act='gelu',
-        ...                                  parallel_config=parallel_config,
-        ...                                  params_dtype='float32',
-        ...                                  compute_dtype='float32')
-        >>> network = TestNet(config=model_config)
+        >>> initialize_mindspeed_ms()
+        >>> args = get_args()
+        >>> config = core_transformer_config_from_args(args)
+        >>> input_data = Tensor(np.random.random((args.global_batch_size, args.seq_length,
+        ...                                       args.hidden_size)).astype(np.float32))
+        >>> network = TestNet(config=config)
         >>> output = network(input_data)
         >>> print(output)
-        [[[ 0.01780816  0.00895902 -0.00554341 -0.00185049]
-          [ 0.02319741 -0.00320548 -0.0062025  -0.0050142 ]]]
+        [[[ 0.01366403 -0.0050447 -0.0151938 0.00403549]
+          [ 0.00787287 -0.0054102 -0.01588849 -0.00074205]]]
     """
     def __init__(
             self,
@@ -797,15 +788,19 @@ class RowParallelLinear(nn.Cell):
             <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
             for more details.
 
+            You need to save the following codes as a python file and run command:
+            msrun --worker_num 1 --local_worker_num 1 --master_port 8848 --log_dir log --join True \
+                  --cluster_time_out 300 example.py --micro-batch-size 1 --num-layers 1 --hidden-size 4 \
+                  --num-attention-heads 1 --seq-length 2 --max-position-embeddings 2 --vocab-size 40000 \
+                  --tokenizer-type NullTokenizer
+
         >>> import numpy as np
         >>> import mindspore as ms
         >>> from mindspore import nn, Tensor
         >>> from mindspore.communication.management import init
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
-        >>> from mindspeed_ms.core.config import (
-        ...     ModelParallelConfig,
-        ...     TransformerConfig
-        ... )
+        >>> from mindspeed_ms.training import core_transformer_config_from_args, get_args
+        >>> from mindspeed_ms.training.initialize import initialize_mindspeed_ms
         >>> from mindspeed_ms.core.tensor_parallel import RowParallelLinear
         >>> class TestNet(nn.Cell):
         ...     def __init__(self, config):
@@ -815,39 +810,25 @@ class RowParallelLinear(nn.Cell):
         ...                                            output_size=hidden_size,
         ...                                            config=config,
         ...                                            init_method=config.init_method,
-        ...                                            bias=config.add_mlp_bias,
+        ...                                            bias=config.add_bias_linear,
         ...                                            input_is_parallel=True,
         ...                                            skip_bias_add=False,
         ...                                            bias_init=config.bias_init)
         ...     def construct(self, input_):
         ...         output, _ = self.rowlinear(input_)
         ...         return output
-        >>> dataset_size = 1
-        >>> seq_length = 2
-        >>> hidden_size = 4
-        >>> tensor_parallel = 1
-        >>> ms.set_context(device_target='Ascend', mode=ms.PYNATIVE_MODE)
         >>> ms.set_seed(2024)
         >>> init()
-        >>> initialize_model_parallel(tensor_model_parallel_size=tensor_parallel)
-        >>> input_data = Tensor(np.random.random((dataset_size, seq_length, hidden_size)).astype(np.float32))
-        >>> parallel_config = ModelParallelConfig()
-        >>> model_config = TransformerConfig(vocab_size=40000,
-        ...                                  num_layers=1,
-        ...                                  num_attention_heads=1,
-        ...                                  add_mlp_bias=True,
-        ...                                  gated_linear_unit=False,
-        ...                                  hidden_size=hidden_size,
-        ...                                  ffn_hidden_size=4*hidden_size,
-        ...                                  hidden_act='gelu',
-        ...                                  parallel_config=parallel_config,
-        ...                                  params_dtype='float32',
-        ...                                  compute_dtype='float32')
-        >>> network = TestNet(config=model_config)
+        >>> initialize_mindspeed_ms()
+        >>> args = get_args()
+        >>> config = core_transformer_config_from_args(args)
+        >>> input_data = Tensor(np.random.random((args.global_batch_size, args.seq_length,
+        ...                                       args.hidden_size)).astype(np.float32))
+        >>> network = TestNet(config=config)
         >>> output = network(input_data)
         >>> print(output)
-        [[[ 0.01780816  0.00895902 -0.00554341 -0.00185049]
-          [ 0.02319741 -0.00320548 -0.0062025  -0.0050142 ]]]
+        [[[ 0.01366403 -0.0050447 -0.0151938 0.00403549]
+          [ 0.00787287 -0.0054102 -0.01588849 -0.00074205]]]
     """
     def __init__(
             self,
@@ -1076,7 +1057,11 @@ class VocabParallelEmbedding(nn.Cell):
             <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
             for more details.
 
-            This example should be run with 4 devices.
+            This example should be run with 4 devices, save the following codes as a python file and run command:
+            msrun --worker_num 4 --local_worker_num 4 --master_port 8848 --log_dir log --join True \
+                  --cluster_time_out 300 example.py --micro-batch-size 1 --num-layers 1 --hidden-size 2560 \
+                  --num-attention-heads 32 --seq-length 1024 --max-position-embeddings 1024 --vocab-size 50304 \
+                  --tensor-model-parallel-size 2 --sequence-parallel --tokenizer-type NullTokenizer
 
         >>> import numpy as np
         >>> import mindspore as ms
@@ -1084,11 +1069,8 @@ class VocabParallelEmbedding(nn.Cell):
         >>> from mindspore.communication.management import init
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> from mindspeed_ms.core.tensor_parallel.layers import VocabParallelEmbedding
-        >>> from mindspeed_ms.core.config import (
-        ...     ModelParallelConfig,
-        ...     DatasetConfig,
-        ...     TransformerConfig
-        ... )
+        >>> from mindspeed_ms.training import core_transformer_config_from_args, get_args
+        >>> from mindspeed_ms.training.initialize import initialize_mindspeed_ms
         >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
         >>> ms.set_context(pynative_synchronize=True)
         >>> ms.set_seed(2024)
@@ -1096,9 +1078,10 @@ class VocabParallelEmbedding(nn.Cell):
         >>> class ParallelTransformerLayerNet(nn.Cell):
         ...     def __init__(self, config):
         ...         super(ParallelTransformerLayerNet, self).__init__()
+        ...         args = get_args()
         ...         self.config = config
         ...         self.embedding = VocabParallelEmbedding(
-        ...             num_embeddings=config.vocab_size,
+        ...             num_embeddings=args.vocab_size,
         ...             embedding_dim=config.hidden_size,
         ...             init_method=config.init_method,
         ...             reduce_scatter_embeddings=config.sequence_parallel,
@@ -1107,40 +1090,21 @@ class VocabParallelEmbedding(nn.Cell):
         ...     def construct(self, x):
         ...         x = self.embedding(x)
         ...         return x
-        >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=2,
-        ...                                       pipeline_model_parallel_size=1,
-        ...                                       context_parallel_size=1,
-        ...                                       expert_model_parallel_size=1,
-        ...                                       sequence_parallel=True)
-        >>> dataset_config = DatasetConfig(batch_size=1,
-        ...                                dataset_size=2,
-        ...                                seq_length=1024)
-        >>> model_config = TransformerConfig(vocab_size=50304,
-        ...                                  num_layers=1,
-        ...                                  num_attention_heads=32,
-        ...                                  hidden_size=2560,
-        ...                                  ffn_hidden_size=7680,
-        ...                                  parallel_config=parallel_config)
-        >>> model_config.dataset_config = dataset_config
-        >>> batch_size = dataset_config.batch_size
-        >>> dataset_size = dataset_config.dataset_size
-        >>> seq_length = dataset_config.seq_length
-        >>> vocab_size = model_config.vocab_size
+        >>> ms.set_seed(2024)
         >>> init()
-        >>> tensor_parallel = parallel_config.tensor_model_parallel_size
-        >>> initialize_model_parallel(tensor_model_parallel_size=tensor_parallel)
-        >>> network = ParallelTransformerLayerNet(config=model_config)
-        >>> input_shape = (batch_size, seq_length)
-        >>> input_ids = Tensor(np.ones(input_shape).astype(np.float32))
+        >>> initialize_mindspeed_ms()
+        >>> args = get_args()
+        >>> config = core_transformer_config_from_args(args)
+        >>> network = ParallelTransformerLayerNet(config=config)
+        >>> input_shape = (args.micro_batch_size, args.seq_length)
+        >>> input_ids = Tensor(np.ones(input_shape).astype(np.int32))
         >>> output = network(input_ids)
         >>> print(output)
-        [[-0.00546161]
-         [ 0.00440422]
-         [ 0.00252223]
-         ...
-         [ 0.00539334]
-         [-0.00625365]
-         [-0.01025379]]
+        [[[ 0.00134593 0.0046291 -0.01733596 ... -0.00405367 0.00336438
+           -0.00582711]]
+        ...
+        [[[ 0.00134593 0.0046291 -0.01733596 ... -0.00405367 0.00336438
+           -0.00582711]]
     """
 
     def __init__(

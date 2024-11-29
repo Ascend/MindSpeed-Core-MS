@@ -23,8 +23,6 @@ language_model:
   layernorm_epsilon: 1.e-5
   apply_residual_connection_post_layernorm: False   # apply_residual_connection_post_norm
   add_qkv_bias: False                     # qkv_has_bias
-  add_mlp_bias: False
-  add_out_proj_bias: False                # out_proj_has_bias
   add_bias_linear: False
   ffn_hidden_size: 1
   fa_config:

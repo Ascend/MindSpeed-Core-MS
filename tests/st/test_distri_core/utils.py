@@ -559,9 +559,9 @@ class MixtralModel(Module):
     ```python
     def model_provider_func(pre_process=True, post_process=True):
         ''' get mixtral model '''
-        loss = get_loss_func(config.training_config)
+        loss = get_loss_func(optimizer_config)
         network = MixtralModel(
-            model_config,
+            config,
             parallel_output=False,
             loss_func=loss,
             pre_process=pre_process,
@@ -569,7 +569,7 @@ class MixtralModel(Module):
             )
         return network
 
-    network = get_model(model_provider_func, parallel_config)
+    network = get_model(model_provider_func, config)
     ```
     """
 

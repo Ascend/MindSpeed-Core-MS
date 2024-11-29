@@ -18,8 +18,6 @@ language_model:
   attention_dropout: 0.0
   init_method: 'normal'
   add_qkv_bias: True
-  add_out_proj_bias: True
-  add_mlp_bias: True
   mask_func_type: "attn_mask_add" # need add
   normalization: "LayerNorm"
   layernorm_epsilon: 0.00001  # norm_epsilon
