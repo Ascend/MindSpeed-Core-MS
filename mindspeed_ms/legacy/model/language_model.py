@@ -242,7 +242,7 @@ class Embedding(Module):
                                    "but 'tokentype_embeddings' layer is initialized")
 
         if self.data_layout == "SBH":
-            embeddings = embeddings.swapaxes(0, 1)
+            embeddings = embeddings.swapaxes(0, 1).contiguous()
 
         if self.fp32_residual_connection:
             embeddings = embeddings.astype(ms.float32)
