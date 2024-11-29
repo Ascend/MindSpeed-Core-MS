@@ -114,9 +114,9 @@ def _get_batch_on_this_cp_rank_in_hybrid_cp(batch):
                 val.shape[seq_dim] // (2 * r_size),
                 *val.shape[(seq_dim + 1):],
             )
-            index = tensor([r_rank, (2 * r_size - r_rank - 1)])
+            index = ms.tensor([r_rank, (2 * r_size - r_rank - 1)])
             val = mint.index_select(val, seq_dim, index)
             val = val.view(*val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2):])
-            val = val.chunk(u_size, seq_dim)[u_rank]
+            val = val.chunk(u_size, seq_dim)[u_rank].contiguous()
             batch[key] = val
     return batch
