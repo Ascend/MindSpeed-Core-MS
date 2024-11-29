@@ -40,7 +40,7 @@ dp_size = 0
 cp_size = 0
 tp_size = 0
 pp_size = 0
-vpp_per_stage = 0
+vpp_size = 0
 noop = []
 convert_param_only = False
 
@@ -87,7 +87,7 @@ def parse_args():
                        help='Degree of tensor model parallelism.')
     group.add_argument('--pp-size', type=int, default=0, required=True,
                        help='Degree of pipeline model parallelism.')
-    group.add_argument('--vpp-per-stage', type=int, default=0, required=True,
+    group.add_argument('--vpp-size', type=int, default=0, required=True,
                        help='Number of virtual pipeline per pipeline stage')
     group.add_argument('--src-model-format', type=str, default="ckpt", required=False,
                        help='Path to param_map files.')
@@ -100,10 +100,12 @@ def parse_args():
     group.add_argument('--param-map-path', type=str, default=None, required=True,
                        help='Path to param_map files.')
     group.add_argument('--megatron-path', type=str, default=None, required=True,
-                       help='Path for saving Mindspore Ckpt.')
+                       help='Path for saving Mindspore ckpt.')
     group.add_argument('--convert-param-only',
                        action='store_true', default=False,
                        help='Convert only the model parameter without optimizer params;')
+    group.add_argument('--process-limit', type=int, default=4,
+                       help='Max num of processes.')
 
     # Parse.
     return parser.parse_args()
@@ -112,7 +114,7 @@ def parse_args():
 def set_args(args):
     '''set args tool'''
     global ms_path, param_map_path, megatron_path, num_layers, dp_size, cp_size, tp_size, pp_size, \
-           convert_param_only, vpp_per_stage, noop, src_model_format
+           convert_param_only, vpp_size, noop, src_model_format
     ms_path = args.ms_path
     param_map_path = args.param_map_path
     megatron_path = args.megatron_path
@@ -121,7 +123,7 @@ def set_args(args):
     cp_size = args.cp_size
     tp_size = args.tp_size
     pp_size = args.pp_size
-    vpp_per_stage = args.vpp_per_stage
+    vpp_size = args.vpp_size
     convert_param_only = args.convert_param_only
     noop = args.noop
     src_model_format = args.src_model_format
@@ -136,7 +138,7 @@ def set_args(args):
     print(f"> cp_size = {cp_size}")
     print(f"> tp_size = {tp_size}")
     print(f"> pp_size = {pp_size}")
-    print(f"> vpp_per_stage = {vpp_per_stage}")
+    print(f"> vpp_size = {vpp_size}")
     print(f"> src_model_format = {src_model_format}")
     print(f"> noop = {noop}")
 
@@ -144,7 +146,7 @@ def set_args(args):
 def get_ckpt():
     '''load ckpt and save tp/pp info, replace param name and layer id, no optim state included'''
     global ms_path, param_map_path, megatron_path, num_layers, dp_size, cp_size, tp_size, pp_size, \
-           vpp_per_stage, noop, src_model_format
+           vpp_size, noop, src_model_format
     rst_list = []
     for pp in range(pp_size):
         for tp in range(tp_size):
@@ -170,7 +172,7 @@ def get_ckpt():
 
 def get_param_map(tp, pp, vpp):
     '''read tp/pp info from param_map'''
-    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_per_stage, noop
+    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_size, noop
     param_map_name = f"param_map_buffer0_dp0tp{tp}pp{pp}vpp{vpp}.json"
     param_map_file = os.path.join(param_map_path, param_map_name)
     with open(param_map_file, "r") as f:
@@ -200,8 +202,8 @@ def update_ms_key(ms_key, vpp_ms_layers, vpp_megatron_layers):
 
 def cal_corr_vpp_layers(vpp, pp):
     '''cal ms vpp layers'''
-    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_per_stage, noop
-    vpp_layers = np.split(np.arange(num_layers), vpp_per_stage, axis=-1)[vpp]
+    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_size, noop
+    vpp_layers = np.split(np.arange(num_layers), vpp_size, axis=-1)[vpp]
     vpp_ms_layers = np.split(vpp_layers, pp_size, axis=-1)[pp].tolist()
     vpp_ms_layers = [layer for layer in vpp_ms_layers if layer not in noop]
     vpp_megatron_layers = np.arange(len(vpp_ms_layers)).tolist()
@@ -210,7 +212,7 @@ def cal_corr_vpp_layers(vpp, pp):
 
 def save_pt(megatron_model_path, dir_name, distrib_model, model_optim_rng):
     '''save pt file'''
-    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_per_stage, noop
+    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_size, noop
     save_dir = os.path.join(megatron_model_path, dir_name)
     os.makedirs(save_dir, exist_ok=True)
 
@@ -228,7 +230,7 @@ def save_pt(megatron_model_path, dir_name, distrib_model, model_optim_rng):
 
 def add_args(model_optim, tp, pp, curr_iter):
     '''add args tool'''
-    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_per_stage, noop
+    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_size, noop
 
     args_path = os.path.join(param_map_path, f"args_tp{tp:02}_pp{pp:03}.pt")
     pt_args = torch.load(args_path, map_location="cpu")
@@ -259,9 +261,9 @@ def add_args(model_optim, tp, pp, curr_iter):
 
 def reconstruct_model_optim(model_optim_rng, tp, pp, curr_iter):
     '''reconstruct model optim'''
-    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_per_stage, noop
+    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_size, noop
     model_optim = {}
-    for vpp in range(vpp_per_stage):
+    for vpp in range(vpp_size):
         lm_dict = {
             'embedding': {},
             'encoder': OrderedDict(),
@@ -317,7 +319,7 @@ def reconstruct_model_optim(model_optim_rng, tp, pp, curr_iter):
 def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
     '''ckpt to pt main process'''
     log_with_time(f"> processing {dir_name}, tp = {tp}, pp = {pp}")
-    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_per_stage, noop, \
+    global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_size, noop, \
            src_model_format
     if src_model_format == "safetensors":
         ckpt = ms.load_checkpoint(ckpt_path, format="safetensors")
@@ -346,11 +348,11 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
         distrib_optim_model["per_bucket_numel_unpadded"] = per_bucket_numel_unpadded
 
     model_curr = []
-    for vpp in range(vpp_per_stage):
+    for vpp in range(vpp_size):
         log_with_time(f"> processing tp = {tp}, pp = {pp}, vpp = {vpp}")
 
         model_curr_vpp = []
-        # 3.根据mp、pp获取对应的param_map信息，vpp>1时有多个param_map文件需要读取
+        # 3. fetch param_map according to to/pp, multiple param_map need to be read when vpp_size > 1
         param_map = get_param_map(tp, pp, vpp)
 
         bucket_num = cal_bucket_num(param_map)
@@ -363,7 +365,7 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
             exp_avg_sq = [torch.tensor([], dtype=torch.float32)
                           for i in range(bucket_num)]
 
-            # 4.创建megatron的模型中以vpp为索引的对象（此处需要循环），根据param_map从ms中读取需要的数据，此处需要计算对应的层关系
+            # 4. build megatron model, read parameter from *.ckpt according to param_map
             distrib_optim_model[vpp] = {}
             distrib_optim_model[vpp][(torch.bfloat16, torch.float32)] = {}
             distrib_optim_model[vpp][(
@@ -376,7 +378,7 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
         cur_bucket_numel = [0 for i in range(bucket_num)]
         cur_bucket_numel_unpadded = [0 for i in range(bucket_num)]
 
-        # 计算pp、vpp与param_map中的layer_num的对应关系
+        # mindspore pp/vpp → megatron layer_num
         vpp_ms_layers, vpp_megatron_layers = cal_corr_vpp_layers(vpp, pp)
 
         for key in param_map:
@@ -396,7 +398,6 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
                 np.float32).reshape(newshape), dtype=torch.float32)
             weight_value_for_megatron = torch.tensor(ckpt[ms_key].asnumpy().astype(
                 np.float32), dtype=torch.bfloat16)
-            # todo: 需要有shape信息
             model_curr_vpp.append({key: weight_value_for_megatron})
             if not convert_param_only:
                 exp_avg_value = torch.tensor(ckpt["exp_avg." + ms_key].asnumpy().astype(
@@ -404,7 +405,7 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
                 exp_avg_sq_value = torch.tensor(
                     ckpt["exp_avg_sq." + ms_key].asnumpy().astype(np.float32).reshape(newshape), dtype=torch.float32
                 )
-            # 5.创建buffer，根据数据名及所在bucket进行数据填充，构造buffer
+            # 5. build buffer
             param[bucket_id] = torch.cat((param[bucket_id], weight_value), 0)
             if not convert_param_only:
                 exp_avg[bucket_id] = torch.cat(
@@ -412,11 +413,11 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
                 exp_avg_sq[bucket_id] = torch.cat(
                     (exp_avg_sq[bucket_id], exp_avg_sq_value), 0)
 
-            # bucket_id/shape
+            # bucket_id ＆ shape
             cur_bucket_numel[bucket_id] += newshape[0]
             cur_bucket_numel_unpadded[bucket_id] += newshape[0]
 
-        # 6.将不同vpp进行合并，同时添加所需的头部信息（per_bucket_numel、per_bucket_numel_unpadded）
+        # 6. merge different vpp，add head information: (per_bucket_numel、per_bucket_numel_unpadded)
         per_bucket_numel.append(
             {(torch.bfloat16, torch.float32): cur_bucket_numel})
         per_bucket_numel_unpadded.append(
@@ -425,7 +426,7 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
         model_curr_vpp.reverse()
         model_curr.append(model_curr_vpp)
 
-    # 7.根据保存distrib weight信息，构造保存megatron的权重模型model_optim_rng.pt
+    # 7. build model_optim_rng.pt
     model_optim_rng_sorted = reconstruct_model_optim(
         model_curr, tp, pp, curr_iter)
 
@@ -451,12 +452,12 @@ if __name__ == "__main__":
     all_args = parse_args()
     set_args(all_args)
 
-    # 2.读取ms文件，保存tp、pp信息（wo 同时替换名称，层数等：主要是为了生成单权重模型，不带优化器参数）
+    # 2. read mindspore ckpt file, save tp/pp info
     rst = get_ckpt()
     curr_iterations = multiprocessing.Value('i', -1)
     lock = multiprocessing.Lock()
 
-    with multiprocessing.Pool(processes=8, initializer=init, initargs=(curr_iterations,)) as pool:
+    with multiprocessing.Pool(processes=all_args.process_limit, initializer=init, initargs=(curr_iterations,)) as pool:
         results = pool.map(process_ckpt_to_pt_wrapper, [(
             ckpt_path, tp, pp, save_dir_name, dir_name) for dir_name, ckpt_path, tp, pp, save_dir_name in rst])
 

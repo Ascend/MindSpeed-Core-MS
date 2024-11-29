@@ -1,16 +1,39 @@
-# 模型转换脚本使用说明
+# Megatron 权重转为 MindSpore 权重
 
-## megatron转为ms
+## 1 获取 param_map
 
-### 前置条件
+在使用 Megatron 框架时，框架会按照 bucket 形式保存分布式优化器权重，此时会丢失参数的排布信息。因此需要在 Megatron 框架中插入代码，
+在保存分布式优化器时将该信息一同保存，也就是 param_map。此信息为 Megatron 优化器权重中，桶具体以何种排布进行数据构造。
 
-在使用 megatron 脚本进行训练时，会保存 param_map 信息，此信息为 megatron 优化器模型中，桶具体以何种排布进行数据构造，
-在 megatron 转 ms 模型以及 ms 模型转 megatron 模型时均依赖此信息；为确保 param_map 信息正确，请在每次执行 megatron 脚本前，
-删除 `/cache/buffers` 及 `--save` 目录。
+### 1.1 具体获取步骤
 
-使用脚本：convert_pt2ckpt.py
+1. 将 patch 文件复制到框架根目录
 
-参数说明：python convert_pt2ckpt.py -h
+```bash
+[ma-user Megatron-LM]$cp MindSpeed-Core-MS/mindspeed_ms/tools/converter/patch/param_map.patch .
+```
+
+注：该 patch 适用于 Megatron-LM 框架 core_r0.6.0 分支，commit cac60ce4，Thu Apr 18 15:07:52，其他分支正在适配中，
+您也可以自行适配。
+
+2. 应用 patch
+
+```bash
+git apply param_map.patch
+```
+
+3. 正常执行 Megatron 训练脚本，并至少执行 1 次正反向训练后，保存训练权重。
+
+在 Megatron 权重转 MindSpore 权重以及 MindSpore 权重转 Megatron 权重时均依赖此信息；为确保 param_map 信息正确，
+请在每次执行 megatron 脚本前，删除 `--save` 目录。
+
+## 2 使用示例
+
+脚本：convert_pt2ckpt.py
+
+### 2.1 参数说明
+
+`python convert_pt2ckpt.py -h`
 
 ```log
 usage: convert_pt2ckpt.py [-h] --megatron-path MEGATRON_PATH --ms-path MS_PATH [--param-map-path PARAM_MAP_PATH] [--pp-size PP_SIZE] [--tp-size TP_SIZE] [--dp-size DP_SIZE]
@@ -61,65 +84,71 @@ Advanced feature:
                         Timeout for each process.
 ```
 
-### 使用示例：
+2.2 使用示例
 
-```python
+```bash
 export PYTHONPATH=/path/to/Megatron-LM:$PYTHONPATH
-python /path/to/mindspeed_ms/tools/converter/convert_pt2ckpt.py \
+python convert_pt2ckpt.py \
        --megatron-path /data/ckpt/torch_baseline_ckpts/iter_0001000/ \
        --param-map-path /home/ma-user/work/ckpt_convertion/param_map \
        --ms-path /cache/ms_save_sandbox_2/ \
        --num-layers 64 \
        --pp-size 4 \
        --dp-size 1 \
-       --vpp-per-stage 4 \
+       --vpp-size 4 \
        --tp-size 8 \
-       --process-limit 4 \
+       --process-limit 8 \
        --debug \
        > convert_ckpt.log 2>&1 &
 ```
 
 - 可以在生成的日志中搜索 `successfully`, 源文件有几个文件夹，就应该有几个 `successfully`，可以依此判断转换是否成功。
 
-- 上述为简化的转换场景，在vpp 打开的场景下，转换 tp*pp 份分布式 pt 文件。测试或debug问题建议添加 `--debug`、 `--multiprocess-off`
+- 脚本默认以多进程模式执行，测试或 debug 问题建议添加 `--debug`、 `--multiprocess-off`
 
-### 默认目录结构示例
+## 3 默认目录结构
+
+以 tp2 pp2 为例
 
 1. 分布式优化器pt
 
 ```text
 pt_path
-├── iter_0000005
-|   ├── mp_rank_00_000
-|   |   ├──distrib_optim.pt
-|   |   ├──model_optim_rng.pt
-|   ├── mp_rank_00_001
-|   |   ...
-|   ├── param_map/buffers
-|   |   ├── param_map_buffer0_dp0tp0pp0vpp0.json
-|   |   ├── param_map_buffer0_dp0tp0pp0vpp1.json
-|   |   ...
+├── iter_0000001
+│   ├── mp_rank_00_000
+│   │   ├── distrib_optim.pt
+│   │   └── model_optim_rng.pt
+│   ├── mp_rank_00_001
+│   │   ├── distrib_optim.pt
+│   │   └── model_optim_rng.pt
+│   ├── mp_rank_01_000
+│   │   ├── distrib_optim.pt
+│   │   └── model_optim_rng.pt
+│   └── mp_rank_01_001
+│       ├── distrib_optim.pt
+│       └── model_optim_rng.pt
+├── latest_checkpointed_iteration.txt
+└── param_map
+    ├── args_tp00_pp000.pt
+    ├── args_tp00_pp001.pt
+    ├── args_tp01_pp000.pt
+    ├── args_tp01_pp001.pt
+    ├── param_map_buffer0_dp0tp0pp0vpp0.json
+    ├── param_map_buffer0_dp0tp0pp1vpp0.json
+    ├── param_map_buffer0_dp0tp1pp0vpp0.json
+    └── param_map_buffer0_dp0tp1pp1vpp0.json
 ```
 
 2. 转换文件保存后
 
 ```text
-ms_path/ms
-├── rank0
-|   ├──network.ckpt
-├── rank1
-|   ├──network.ckpt
-|   ...
-```
-
-3. param_map
-
-```text
-param_map/buffers
-├── args_tp00_pp000.pt
-├── args_tp00_pp001.pt
-├── ...
-├── param_map_buffer0_dp0tp0pp0vpp0.json
-├── param_map_buffer0_dp0tp0pp0vpp1.json
-|   ...
+ms_path
+├── rank_0
+│   └── network.ckpt
+├── rank_1
+│   └── network.ckpt
+├── rank_2
+│   └── network.ckpt
+└── rank_3
+    └── network.ckpt
 ```
