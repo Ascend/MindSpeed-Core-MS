@@ -29,7 +29,7 @@ from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import Rota
 from .module import Module
 from .transformer import ParallelTransformer
 from .enums import ModelType, AttnMaskType
-from .mlp import ParallelMLP
+from .transformer import ParallelMLP
 
 
 class Pooler(Cell):
@@ -426,8 +426,8 @@ class TransformerLanguageModel(Module):
                 self.visual_encoder = None
 
         # init rotary embeddings
-        self.use_rotary_embeddings = args.position_embedding_type == 'rope'
-        if self.use_rotary_embeddings:
+        self.use_rotary_position_embeddings = args.position_embedding_type == 'rope'
+        if self.use_rotary_position_embeddings:
             rotary_dim = config.hidden_size // config.num_attention_heads \
                 if config.kv_channels is None else config.kv_channels
             self.rotary_pos_emb = RotaryEmbedding(
@@ -567,7 +567,7 @@ class TransformerLanguageModel(Module):
 
         # rotary embedding
         rotary_pos_emb = None
-        if self.use_rotary_embeddings:
+        if self.use_rotary_position_embeddings:
             if inference_params is not None:
                 raise NotImplementedError("inference_params is not supported for now.")
             rotary_pos_emb = self.rotary_pos_emb(self.seq_length)

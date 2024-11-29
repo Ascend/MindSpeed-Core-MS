@@ -19,8 +19,8 @@ from .transformer import ParallelAttention
 from .transformer import ParallelTransformerLayer
 from .transformer import ParallelTransformer
 from .transformer import ParallelLMLogits
+from .transformer import ParallelMLP
 from .language_model import TransformerLanguageModel, VocabParallelEmbedding
-from .mlp import ParallelMLP
 from . import moe
 
 __all__ = [
