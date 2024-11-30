@@ -14,10 +14,15 @@
 # ============================================================================
 """Transformer config."""
 
+import re
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
 from mindspore.common.initializer import _INITIALIZER_ALIAS
+try:
+    from mindspore._checkparam import Validator
+except ImportError:
+    import mindspore._checkparam as Validator
 
 from mindspeed_ms.training.model_parallel_config import ModelParallelConfig
 from mindspeed_ms.core.utils import DictWithValueError
@@ -400,6 +405,45 @@ class TransformerConfig(ModelParallelConfig):
         self.lora_module = None if lora_module is None else lora_module.get(
             cell_name, None)
 
+    def _validate_lora_target_cells(self, target_cells):
+        """Validate and assign lora_target_cells"""
+        if target_cells is None:
+            return target_cells
+
+        # valid target_cells
+        target_cells_defined = False
+        for item in target_cells:
+            if 'target_cells' in item.keys():
+                if target_cells_defined:
+                    raise ValueError("'target_cells' cannot not be defined more than once.")
+                target_cells_defined = True
+                Validator.check_value_type("target_cells", item['target_cells'], list)
+                target_cells_lst = item['target_cells']
+                if not target_cells_lst:
+                    raise ValueError("for 'target_cells', the list of target_cells name must be set.")
+        if not target_cells_defined:
+            raise ValueError("for 'target_cells', the list of target_cells name must be set.")
+
+        def _check_in_target_cells(cell_name):
+            target_cell_found = False
+            for target_key in target_cells_lst:
+                match = re.match(target_key, cell_name)
+                if match is not None and match.group() == cell_name:
+                    return target_key
+            return target_cell_found
+
+        # valid rank and alpha for specific cells
+        specific_lora_cell = []
+        for item in target_cells:
+            if 'cell' in item.keys():
+                cell_name = item['cell']
+                if not _check_in_target_cells(cell_name):
+                    raise ValueError(
+                        f"The cell need to set rank or alpha should be in the range "
+                        f"defined by target_cells, but got name '{cell_name}'.")
+                specific_lora_cell.append(item)
+        return target_cells_lst, specific_lora_cell
+
     # pylint: disable=C0330, C0301, R1720, W0105
     def __post_init__(self):
         """Python dataclass method that is used to modify attributes after initialization.
@@ -564,3 +608,5 @@ class TransformerConfig(ModelParallelConfig):
                 raise ValueError(
                     f'ffn_hidden_size: {self.ffn_hidden_size} must be divisible by extended_tp_size {extended_tp_size}'
                 )
+
+        self.lora_target_cells = self._validate_lora_target_cells(self.lora_target_cells)

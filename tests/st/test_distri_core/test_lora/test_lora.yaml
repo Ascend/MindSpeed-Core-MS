@@ -30,6 +30,24 @@ language_model:
   apply_rope_fusion: False
   add_bias_linear: True
 
+  # LoRA
+  use_lora: True
+  lora_target_cells: [
+    {
+      'target_cells': [
+        '.*.out_proj',
+        '.*.mapping',
+        '.*.projection',
+        'transformer.layers.0.attention.qkv_proj'
+      ]
+    },
+    {
+      'cell': 'transformer.layers.0.attention.qkv_proj',
+      'rank': 4,
+      'alpha': 16
+    }
+  ]
+
 # data
 seq_length: 16
 vocab_size: 50304

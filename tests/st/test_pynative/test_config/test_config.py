@@ -286,21 +286,23 @@ class TestConfig:
         sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
         args = parse_args()
         config = core_transformer_config_from_yaml(args)
-        assert isinstance(config.lora_target_cells, List), \
-            f"lora_target_cells's type is: {config.lora_target_cells}, not List"
+        assert isinstance(config.lora_target_cells, tuple), \
+            f"lora_target_cells's type is: {type(config.lora_target_cells)}, not Tuple"
+        assert len(config.lora_target_cells) == 2, f"error length: {len(config.lora_target_cells)}"
         target_cells_lst = config.lora_target_cells[0]
         specific_lora_cell = config.lora_target_cells[1]
-        assert isinstance(target_cells_lst, Dict), \
-            f"lora_target_cells[0]'s type is: {target_cells_lst}, not Dict"
-        assert isinstance(specific_lora_cell, Dict), \
-            f"lora_target_cells[1]'s type is: {specific_lora_cell}, not Dict"
-        assert target_cells_lst['lora_target_cells'][0] == '.*.projection.*'
-        assert target_cells_lst['lora_target_cells'][1] == '.*.out_proj.*'
-        assert target_cells_lst.lora_target_cells[0] == '.*.projection.*'
-        assert target_cells_lst.lora_target_cells[1] == '.*.out_proj.*'
-        assert specific_lora_cell['cell'] == 'transformer.layer.0.attention.out_proj'
-        assert specific_lora_cell['rank'] == 4
-        assert specific_lora_cell['alpha'] == 16
-        assert specific_lora_cell.cell == 'transformer.layer.0.attention.out_proj'
-        assert specific_lora_cell.rank == 4
-        assert specific_lora_cell.alpha == 16
+        assert isinstance(target_cells_lst, List), \
+            f"lora_target_cells[0]'s type is: {type(target_cells_lst)}, not List"
+        assert isinstance(specific_lora_cell, List), \
+            f"lora_target_cells[1]'s type is: {type(specific_lora_cell)}, not List"
+        assert target_cells_lst[0] == '.*.projection.*'
+        assert target_cells_lst[1] == '.*.out_proj.*'
+
+        assert len(specific_lora_cell) == 1
+        assert isinstance(specific_lora_cell[0], Dict)
+        assert specific_lora_cell[0]['cell'] == 'transformer.layers.0.attention.out_proj'
+        assert specific_lora_cell[0]['rank'] == 4
+        assert specific_lora_cell[0]['alpha'] == 16
+        assert specific_lora_cell[0].cell == 'transformer.layers.0.attention.out_proj'
+        assert specific_lora_cell[0].rank == 4
+        assert specific_lora_cell[0].alpha == 16

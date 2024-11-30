@@ -36,13 +36,13 @@ language_model:
 
   lora_target_cells: [
     {
-      'lora_target_cells': [
+      'target_cells': [
         '.*.projection.*',
         '.*.out_proj.*'
       ]
     },
     {
-      'cell': 'transformer.layer.0.attention.out_proj',
+      'cell': 'transformer.layers.0.attention.out_proj',
       'rank': 4,
       'alpha': 16
     }

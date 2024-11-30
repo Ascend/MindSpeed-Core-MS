@@ -118,12 +118,6 @@ def run_parallel_transformer_lora(config, args):
     dataset = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels', "attention_mask"])
     dataset = dataset.batch(1)
 
-    target_cells = [
-        ['.*.out_proj', '.*.mapping', '.*.projection', 'transformer.layers.0.attention.qkv_proj'],
-        [{'cell': 'transformer.layers.0.attention.qkv_proj', 'rank': 4, 'alpha': 16}],
-    ]
-    config.lora_target_cells = target_cells
-    config.use_lora = True
     rank_id = get_rank()
     pretrain_params = ms.load_checkpoint(f'pretrain_rank_{rank_id}.ckpt')
     config = valid_lora_config(config, pretrain_params)
