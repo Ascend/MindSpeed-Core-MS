@@ -284,7 +284,7 @@ class CoreAttention(nn.Cell):
 
         # [b, np, sq, hn] --> [sq, b, np, hn]
         # contiguous()
-        context_layer = context_layer.permute(2, 0, 1, 3)
+        context_layer = context_layer.permute(2, 0, 1, 3).contiguous()
 
         new_context_layer_shape = context_layer.shape[:-2] + \
             (self.hidden_size_per_partition,)
@@ -651,14 +651,14 @@ class ParallelAttention(Module):
                 # SBND -> SBH
                 fa_use_sbh = True
                 query, key, value = [
-                    x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3]) for x in [query, key, value]
+                    x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3]).contiguous() for x in [query, key, value]
                 ]
             else:
                 # SBND -> BNSD
                 fa_use_sbh = False
-                query = query.transpose(1, 2, 0, 3)
-                key = key.transpose(1, 2, 0, 3)
-                value = value.transpose(1, 2, 0, 3)
+                query = query.transpose(1, 2, 0, 3).contiguous()
+                key = key.transpose(1, 2, 0, 3).contiguous()
+                value = value.transpose(1, 2, 0, 3).contiguous()
 
             output = ops.flash_attention_score(
                 query, key, value,
@@ -674,9 +674,9 @@ class ParallelAttention(Module):
             if not fa_use_sbh:
                 context_layer = _merge_heads(output)
                 # BSH -> SBH
-                context_layer = context_layer.swapaxes(0, 1)
+                context_layer = context_layer.swapaxes(0, 1).contiguous()
             else:
-                context_layer = output
+                context_layer = output.contiguous()
 
         else:
             if query.dtype == mstype.float32:
@@ -687,9 +687,9 @@ class ParallelAttention(Module):
                 value = value.astype(mstype.float16)
 
             # SBND -> BNSD
-            query = query.transpose(1, 2, 0, 3)
-            key = key.transpose(1, 2, 0, 3)
-            value = value.transpose(1, 2, 0, 3)
+            query = query.transpose(1, 2, 0, 3).contiguous()
+            key = key.transpose(1, 2, 0, 3).contiguous()
+            value = value.transpose(1, 2, 0, 3).contiguous()
 
             if not self.use_flash_sp:
                 output = self.ring_attention(query, key, value)
@@ -707,7 +707,7 @@ class ParallelAttention(Module):
 
             context_layer = _merge_heads(output)
             # BSH -> SBH
-            context_layer = context_layer.swapaxes(0, 1)
+            context_layer = context_layer.swapaxes(0, 1).contiguous()
 
         if self.data_layout == "BSH":
             context_layer = context_layer.swapaxes(0, 1)
