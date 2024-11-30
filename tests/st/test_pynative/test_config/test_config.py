@@ -265,12 +265,16 @@ class TestConfig:
     def test_parse_vpp_yaml(self):
         """test parse vpp arguments from yaml file"""
         os.environ['MS_WORKER_NUM'] = "8"
-        yaml_file = "vpp.yaml"
+        yaml_file = "vpp/vpp.yaml"
+        sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
+        _ = parse_args()
+
+        yaml_file = "vpp/vpp_standalone.yaml"
         sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
         _ = parse_args()
 
         for i in range(1, 4):
-            yaml_file = f"illegal_vpp{i}.yaml"
+            yaml_file = f"vpp/illegal_vpp{i}.yaml"
             sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
             error = False
             try:
