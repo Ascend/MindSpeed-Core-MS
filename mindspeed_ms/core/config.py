@@ -169,7 +169,7 @@ mapping_dict = {
     'context_parallel_algo': 'parallel_config.context_parallel_algo',
     'ulysses_degree_in_cp': 'parallel_config.ulysses_degree_in_cp',
     'expert_model_parallel_size': 'parallel_config.expert_model_parallel_size',
-    'virtual_pipeline_model_parallel_size': 'parallel_config.virtual_pipeline_model_parallel_size',
+    'virtual_pipeline_model_parallel_size_ms': 'parallel_config.virtual_pipeline_model_parallel_size',
     'num_layers_per_virtual_pipeline_stage': 'parallel_config.num_layers_per_virtual_pipeline_stage',
     'sequence_parallel': 'parallel_config.sequence_parallel',
     'pipeline_model_parallel_size': 'parallel_config.pipeline_model_parallel_size',
