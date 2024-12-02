@@ -385,6 +385,9 @@ def validate_yaml(args, args_default, defaults={}):
                 '={}.'.format(args.normalization))
         args.language_model.normalization = "FusedRMSNorm"
 
+    # Disable new_dataset
+    args.new_dataset = False
+
     # We only support SBH
     args.data_layout = 'SBH'
 
