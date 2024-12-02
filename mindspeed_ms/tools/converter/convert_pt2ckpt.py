@@ -144,11 +144,11 @@ def print_keys(ckpt, s=1):
             print_keys(v, s+1)
 
 
-def get_pt2ms_args(weight_pt_path, para_map_path):
+def get_pt2ms_args(weight_pt_path, save_args_path):
     """convert pt args to ms args"""
     log_info(f"weight_pt_path: {weight_pt_path}")
     pt = torch.load(weight_pt_path, map_location="cpu")
-    save_args(weight_pt_path, para_map_path, pt)
+    save_args(weight_pt_path, save_args_path, pt)
     flatten_param_groups = {}
 
     if 'optimizer' in pt:
@@ -290,7 +290,7 @@ def _convert_param_name(pt_param_name, data_key, pt_path, stage_list, vpp_layer_
                 ms_vpp_layer = vpp_layer_mapping[pp_stage][vpp_stage][pt_layer_num]
             except IndexError:
                 raise IndexError("get 'ms_vpp_layer' failed, may be wrong '--param-map-path' "
-                                 "or wrong tp/pp/vpp/num_layers config? Try to keep '/cache/buffers' and "
+                                 "or wrong tp/pp/vpp/num_layers config? Try to keep "
                                  "'--save' path clean when generate *.pt.")
             parts[i+1] = str(ms_vpp_layer)
         elif pipeline_on and p == "layers":
@@ -300,7 +300,7 @@ def _convert_param_name(pt_param_name, data_key, pt_path, stage_list, vpp_layer_
     return ms_para_name
 
 
-def save_args(weight_pt_path, para_map_path, pt):
+def save_args(weight_pt_path, save_args_path, pt):
     """save args"""
     needed_args = {}
     needed_args['args'] = pt.get('args', None)
@@ -317,7 +317,7 @@ def save_args(weight_pt_path, para_map_path, pt):
     tp = int(dir_name_in_parts[2])
     pp = int(dir_name_in_parts[3]) if len(dir_name_in_parts) == 4 else 0
 
-    args_pt_path = os.path.join(para_map_path, f"args_tp{tp:02}_pp{pp:03}.pt")
+    args_pt_path = os.path.join(save_args_path, f"args_tp{tp:02}_pp{pp:03}.pt")
     torch.save(needed_args, args_pt_path)
 
 
@@ -335,7 +335,7 @@ def convert_pt2ms_param_and_optim(param_keymap: dict, param_dict: dict, pt_path,
             model0_buffer0 = param_dict[vpp_stage][(pt_param_dtype, torch.float32)]
         except IndexError:
             raise IndexError("get 'ms_vpp_layer' failed, may be wrong '--param-map-path' "
-                             "or wrong tp/pp/vpp/num_layers config? Try to keep '/cache/buffers' and "
+                             "or wrong tp/pp/vpp/num_layers config? Try to keep "
                              "'--save' path clean when generate *.pt")
         buffer2bucket_offset = 0
         for para_name, attrs in param_keymap[vpp_stage].items():
@@ -406,7 +406,7 @@ def run(args, dist_path, model_path):
     """main func"""
     log_info(f"start converting: {dist_path}")
     para_map_path = args.param_map_path
-    save_to = args.ms_path
+    ms_path = args.ms_path
     total_layers = args.num_layers
     vpp_size = args.vpp_size
     pp_size = args.pp_size
@@ -466,7 +466,7 @@ def run(args, dist_path, model_path):
                                       dp_rank_0, dp_size, pp_rank, order=args.parallel_init_order)
     ms_path = save_ms_ckpt(
         retrived_data,
-        save_to,
+        ms_path,
         file_prefix=file_prefix,
         format_=format_,
         dir_format=ms_dir_format,
