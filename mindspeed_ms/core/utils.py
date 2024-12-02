@@ -17,8 +17,8 @@
 
 import re
 import math
-import yaml
 from collections import OrderedDict
+import yaml
 
 import mindspore.ops as P
 import mindspore.nn as nn
@@ -152,7 +152,7 @@ def generate_state_dict(network: Module, optimizer: Optimizer):
         pp_size = get_pipeline_model_parallel_world_size()
         pp_rank = get_pipeline_model_parallel_rank()
         ep_size = get_expert_model_parallel_world_size()
-        ep_rank = get_expert_model_parallel_rank()
+        ep_rank = get_expert_model_parallel_rank() if ep_size > 1 else 0
     except AssertionError:
         pp_size = 1
         pp_rank = 0
