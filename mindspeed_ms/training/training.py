@@ -991,7 +991,54 @@ def pretrain(train_valid_test_datasets_provider,
              forward_step_func=None,
              process_non_loss_data_func=None,
              **kwargs):
-    """pretrain function"""
+    """
+    Main training program.
+
+    This function will run the followings in the order provided:
+        1) setup model, optimizer and lr schedule using the model_provider.
+        2) train the model using the forward_step_func.
+
+    Args:
+        train_valid_test_datasets_provider (function): a function that takes the size of
+            train/valid/test dataset and returns `train, valid, test` datasets. Currently not in use.
+        model_provider_func (function): a function that returns a vanilla version of the
+            model. By vanilla we mean a simple model with no fp16 or ddp.
+        model_type (enum): an enum that specifies the type of model being trained. Currently not in use.
+        forward_step_func (function): a function that takes a `data iterator` and `model`,
+            and returns a `loss` scalar with a dictionary with key:values being
+            the info we would like to monitor during training, for example
+            `lm_loss: value`. We also require that this function add
+            `batch generator` to the timers class. Currently not in use. Default: ``None``.
+        process_non_loss_data_func (function): a function to post process outputs of the
+            network. It can be used for dumping output tensors (e.g images) to
+            tensorboard. It takes `collected data`(list of tensors),
+            `current iteration index` and `tensorboard writer` as arguments. Currently not in use.
+            Default: ``None``.
+
+    Raises:
+        ValueError: If all_config is not passed in with kwargs.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        >>> from mindspeed_ms.training.training import pretrain
+        >>> from mindspeed_ms.core.config import TransformerConfig
+        >>> def model_provider_func(pre_process=True, post_process=True):
+        ...     network_with_loss = GPTModel(
+        ...         all_config.model_config,
+        ...         pre_process=pre_process,
+        ...         post_process=post_process
+        ...     )
+        ...     return network_with_loss
+        >>> all_config = TransformerConfig()
+        >>> pretrain(
+        ...     train_valid_test_datasets_provider=None,
+        ...     model_provider_func=model_provider_func,
+        ...     model_type=None,
+        ...     all_config=all_config
+        ... )
+    """
 
     all_config = kwargs.get("all_config", None)
     if all_config is None:
