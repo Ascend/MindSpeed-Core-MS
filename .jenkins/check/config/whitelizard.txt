@@ -4,3 +4,5 @@ mindspeed-core-ms/mindspeed_ms/training/arguments.py:validate_args
 mindspeed-core-ms/mindspeed_ms/training/yaml_arguments.py:validate_yaml
 mindspeed-core-ms/mindspeed_ms/training/arguments.py:_add_training_args
 mindspeed-core-ms/mindspeed_ms/training/arguments.py:_add_data_args
+mindspeed-core-ms/mindspeed_ms/core/datasets/helpers.cpp:build_mapping_impl
+mindspeed-core-ms/mindspeed_ms/core/datasets/helpers.cpp:build_blocks_mapping_impl
