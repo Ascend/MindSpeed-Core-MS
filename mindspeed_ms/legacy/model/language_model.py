@@ -105,41 +105,37 @@ class Embedding(Module):
             Please see the `msrun start up
             <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
             for more details.
-
+        >>> import numpy as np
         >>> import mindspore as ms
         >>> from mindspore.communication import init
         >>> from mindspeed_ms.core.config import TransformerConfig, ModelParallelConfig
-        >>> from mindspeed_ms.legacy.model.language_model import (
-        ...     Embedding as Pynative_Embedding
-        ... )
+        >>> from mindspeed_ms.legacy.model.language_model import Embedding
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
-        >>> from mindspeed_ms.core.parallel_core import Embedding
-        >>> from mindspore.common.initializer import initializer
-        >>> from mindspore.numpy import array_equal
-        >>> from mindspeed_ms.legacy.model.rotary_pos_embedding import (
-        ...     apply_rotary_pos_emb as pynative_apply_rotary_pos_emb
-        ... )
-        >>> from mindspeed_ms.core.parallel_core import apply_rotary_pos_emb
-        >>> ms.set_context(mode=ms.PYNATIVE_MODE)
+        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
         >>> init()
         >>> initialize_model_parallel()
-        >>> def get_config():
-        ...     parallel_config = ModelParallelConfig(tensor_model_parallel_size=1)
-        ...     config = TransformerConfig(vocab_size=1,
-        ...                                num_layers=1,
-        ...                                num_attention_heads=1,
-        ...                                hidden_size=1,
-        ...                                ffn_hidden_size=1,
-        ...                                parallel_config=parallel_config)
-        ...     return config
-        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic="ON")
-        >>> x = initializer('normal', (1, 8, 4096, 64), ms.dtype.bfloat16)
-        >>> freqs = initializer('normal', (1, 1, 4096, 64), ms.dtype.bfloat16)
-        >>> config = get_config()
-        >>> assert array_equal(apply_rotary_pos_emb(x, freqs, None), pynative_apply_rotary_pos_emb(x, freqs, None))
-        >>> assert isinstance(Embedding(hidden_size=16, vocab_size=1600, config=config,
-        ...                             max_sequence_length=64, embedding_dropout_prob=0.),
-        ...                   Pynative_Embedding)
+        >>> parallel_config = ModelParallelConfig()
+        >>> config = TransformerConfig(vocab_size=128,
+        ...                            num_layers=1,
+        ...                            num_attention_heads=8,
+        ...                            num_query_groups=4,
+        ...                            hidden_size=256,
+        ...                            ffn_hidden_size=128,
+        ...                            parallel_config=parallel_config,
+        ...                            training_config=None)
+        >>> embedding = Embedding(hidden_size=config.hidden_size,
+        ...                       vocab_size=128,
+        ...                       max_sequence_length=64,
+        ...                       embedding_dropout_prob=0.0,
+        ...                       config=config)
+        >>> shape = (2, 64)
+        >>> input_ids = ms.Tensor(np.random.randint(0, 100, size=shape), dtype=ms.int32)
+        >>> position_array = np.expand_dims(np.arange(64), axis=0)
+        >>> position_array = position_array.repeat(repeats=2, axis=0)
+        >>> position_ids = ms.Tensor(position_array, dtype=ms.int32)
+        >>> out = embedding(input_ids, position_ids)
+        >>> print(out.shape)
+        (2, 64, 256)
     """
 
     def __init__(self,
@@ -356,12 +352,14 @@ class TransformerLanguageModel(Module):
         >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic="ON")
         >>> init()
         >>> initialize_model_parallel()
+        >>> batch_size = dataset_config.batch_size
+        >>> sq = model_config.seq_length
         >>> language_model = TransformerLanguageModel(model_config, encoder_attn_mask_type=None)
-        >>> input_data = Tensor(np.random.random((model_config.seq_length, model_config.seq_length)).astype(np.float32))
-        >>> label_data = Tensor(np.zeros((model_config.seq_length, model_config.seq_length)).astype(np.int32))
-        >>> hidden_states = language_model(input_data, None, label_data)
+        >>> input_data = Tensor(np.random.random((batch_size, sq)).astype(np.int32))
+        >>> attention_mask = Tensor(np.zeros((batch_size, 1, sq, sq)).astype(np.int32))
+        >>> hidden_states = language_model(input_data, None, attention_mask)
         >>> print(hidden_states.shape)
-        (32, 32, 64)
+        (8, 32, 64)
     """
     # pylint: disable=W0613, C0111
     def __init__(self,

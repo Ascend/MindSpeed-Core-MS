@@ -120,28 +120,27 @@ def _merge_heads(x):
 
 
 class CoreAttention(nn.Cell):
-    r"""
+    """
     This class can get the weighted score along the seq_length. It is used within a larger framework to compute the
     context layer based on query, key, and value layers and an attention mask.
 
     Args:
-        layer_number (int): Number which indicates the index of this transformer layer in the
-            whole transformer block.
+        layer_number (int): Number which indicates the index of this transformer layer in the whole transformer block.
         config (dict): A configuration dictionary that provides various settings for the attention mechanism.
         attn_mask_type (int): Attention mask type. Support [AttnMaskType::padding = 1, AttnMaskType::causal = 2].
             Default: ``1``.
 
     Inputs:
-        - **query_layer** (Tensor) - The shape of query Tensor is :math:`(B, N, S, D)`.
-        - **key_layer** (Tensor) - The shape of key Tensor is :math:`(B, N, S, D)`.
-        - **value_layer** (Tensor) - The shape of value Tensor is :math:`(B, N, S, D)`.
-        - **attention_mask** (Tensor) - The shape of attention mask Tensor is :math:`(B, N, S_q, S_k)'.
+        - **query_layer** (Tensor) - The shape of query Tensor is :math:`(S, B, N, D)`.
+        - **key_layer** (Tensor) - The shape of key Tensor is :math:`(S, B, N, D)`.
+        - **value_layer** (Tensor) - The shape of value Tensor is :math:`(S, B, N, D)`.
+        - **attention_mask** (Tensor) - The shape of attention mask Tensor is :math:`(B, S_q, S_k)`.
 
     Outputs:
-        - **context_layer** (Tensor) - The shape of context_layer Tensor is :math:`(B, S, H)`.
+        - **context_layer** (Tensor) - The shape of context_layer Tensor is :math:`(S, B, H)`.
 
     Raises:
-        NotImplementedError: If 'masked_softmax_fusion' in config is true.
+        NotImplementedError: If `masked_softmax_fusion` in config is True.
 
     Supported Platforms:
         ``Ascend``
@@ -160,7 +159,7 @@ class CoreAttention(nn.Cell):
         >>> import mindspore.nn as nn
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindspeed_ms.legacy.model import CoreAttention
+        >>> from mindspeed_ms.legacy.model.transformer import CoreAttention
         >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> class MyNet(nn.Cell):
@@ -170,23 +169,25 @@ class CoreAttention(nn.Cell):
         ...     def construct(self, x, mask):
         ...         out = self.core_attn(x, x, x, mask)
         ...         return out
-        ...
         >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
         >>> init()
         >>> initialize_model_parallel(tensor_model_parallel_size=2)
         >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=2)
         >>> config = TransformerConfig(vocab_size=1,
-        >>>                            num_layers=1,
-        >>>                            num_attention_heads=8,
-        >>>                            num_query_groups=4,
-        >>>                            hidden_size=256,
-        >>>                            ffn_hidden_size=256,
-        >>>                            parallel_config=parallel_config)
-        >>> input_shape = (1024, 32, 4, 256)
+        ...                            num_layers=1,
+        ...                            num_attention_heads=8,
+        ...                            num_query_groups=4,
+        ...                            hidden_size=256,
+        ...                            ffn_hidden_size=256,
+        ...                            parallel_config=parallel_config,
+        ...                            training_config=None)
+        >>> input_shape = (1024, 1, 4, 32)
         >>> input = Tensor(np.random.standard_normal(input_shape).astype(np.float32))
-        >>> mask = np.ones((32, 1024, 1024), dtype=np.uint8)
+        >>> mask = np.ones((1, 1024, 1024), dtype=np.uint8)
         >>> mask = Tensor(np.expand_dims(mask, axis=1))
         >>> out = MyNet(config=config)(input, mask)
+        >>> print(out.shape)
+        (1024, 1, 128)
     """
 
     def __init__(self, layer_number, config, attn_mask_type=AttnMaskType.padding):
@@ -319,9 +320,13 @@ class ParallelAttention(Module):
         - **bias** (Tensor) - The trainable bias parameter.
 
     Raises:
+        NotImplementedError: If use flash attention but attention_type is not 'AttnType.self_attn'.
+        ValueError: If group_query_attention is `True` but the num_query_groups is not divisible by tp_group_size.
         ValueError: If 'attention_type' is neither 'AttnType::self_attn' nor 'AttnType::cross_attn'.
         NotImplementedError: If 'attention_type' is 2 and 'group_query_attention' in config is true.
         ValueError: If 'hidden_size' is not equal to 'kv_hidden_size' and 'attention_type' is 2.
+        NotImplementedError: If 'get_context_parallel_world_size()' > 1 and args.context_parallel_algo ==
+            'ulysses_cp_algo' and not use flash attention.
         NotImplementedError: If 'inference_params' is not none.
 
     Supported Platforms:
@@ -342,7 +347,7 @@ class ParallelAttention(Module):
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
         >>> from mindspeed_ms.legacy.model import ParallelAttention
-        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TrainingConfig, TransformerConfig
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> class MyNet(nn.Cell):
         ...     def __init__(self, config):
@@ -351,18 +356,19 @@ class ParallelAttention(Module):
         ...     def construct(self, x, attention_mask):
         ...         output, _ = self.attention(x, attention_mask)
         ...         return output
-        ...
         >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
         >>> init()
         >>> initialize_model_parallel(tensor_model_parallel_size=2)
         >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=2)
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
         >>> config = TransformerConfig(vocab_size=1,
         >>>                            num_layers=1,
         >>>                            num_attention_heads=8,
         >>>                            num_query_groups=4,
         >>>                            hidden_size=256,
         >>>                            ffn_hidden_size=256,
-        >>>                            parallel_config=parallel_config)
+        >>>                            parallel_config=parallel_config,
+        >>>                            training_config=training_config)
         >>> input_shape = (32, 1024, 256)
         >>> input = Tensor(np.random.standard_normal(input_shape).astype(np.float32))
         >>> mask = np.ones((32, 1024, 1024), dtype=np.uint8)
@@ -818,7 +824,7 @@ class ParallelTransformerLayer(Module):
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
         >>> from mindspeed_ms.legacy.model import ParallelTransformerLayer
-        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TrainingConfig, TransformerConfig
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> class MyNet(nn.Cell):
         ...     def __init__(self, config):
@@ -832,13 +838,15 @@ class ParallelTransformerLayer(Module):
         >>> init()
         >>> initialize_model_parallel(tensor_model_parallel_size=2)
         >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=2)
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
         >>> config = TransformerConfig(vocab_size=1,
         >>>                            num_layers=1,
         >>>                            num_attention_heads=8,
         >>>                            num_query_groups=4,
         >>>                            hidden_size=256,
         >>>                            ffn_hidden_size=256,
-        >>>                            parallel_config=parallel_config)
+        >>>                            parallel_config=parallel_config,
+        >>>                            training_config=training_config)
         >>> input_shape = (32, 1024, 256)
         >>> input = Tensor(np.random.standard_normal(input_shape).astype(np.float32))
         >>> mask = Tensor(np.triu(np.ones((1024, 1024)), 1), mstype.uint8)
@@ -1199,7 +1207,7 @@ class ParallelTransformer(Module):
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
         >>> from mindspeed_ms.legacy.model import ParallelTransformer
-        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TrainingConfig, TransformerConfig
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> class MyNet(nn.Cell):
         ...     def __init__(self, config):
@@ -1208,11 +1216,11 @@ class ParallelTransformer(Module):
         ...     def construct(self, x, attention_mask):
         ...         output = self.transformer(x, attention_mask)
         ...         return output
-        ...
         >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
         >>> init()
         >>> initialize_model_parallel(tensor_model_parallel_size=2)
         >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=2)
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
         >>> config = TransformerConfig(seq_length=16,
         >>>                            vocab_size=1,
         >>>                            num_layers=1,
@@ -1220,7 +1228,8 @@ class ParallelTransformer(Module):
         >>>                            num_query_groups=4,
         >>>                            hidden_size=256,
         >>>                            ffn_hidden_size=256,
-        >>>                            parallel_config=parallel_config)
+        >>>                            parallel_config=parallel_config,
+        >>>                            training_config=training_config)
         >>> input_shape = (32, 1024, 256)
         >>> input = Tensor(np.random.standard_normal(input_shape).astype(np.float32))
         >>> mask = Tensor(np.triu(np.ones((1024, 1024)), 1), mstype.uint8)
@@ -1492,7 +1501,7 @@ class ParallelTransformer(Module):
     def set_input_tensor(self, input_tensor):
         """
         In pipeline parallel, the receiving data from previous stage will be set into class.
-        Construct function's input will be replace by self.set_hidden_states.
+        Construct function's input will be replaced by self.set_hidden_states.
         """
         self.set_hidden_states.set_data(input_tensor, slice_shape=True)
 
@@ -1577,24 +1586,33 @@ class ParallelLMLogits(nn.Cell):
             <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
             for more details.
 
-        >>> import os
         >>> import numpy as np
         >>> import mindspore as ms
-        >>> import mindspore.common.dtype as mstype
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TrainingConfig, TransformerConfig
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> from mindspeed_ms.legacy.model import ParallelLMLogits
+        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
         >>> init()
-        >>> initialize_model_parallel()
-        >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=tensor_parallel)
-        >>> config = TransformerConfig      #The config of Transformer model. For details, please refer to TransformerConfig
+        >>> initialize_model_parallel(tensor_model_parallel_size=2)
+        >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=2)
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
+        >>> config = TransformerConfig(seq_length=16,
+        ...                            vocab_size=1,
+        ...                            num_layers=1,
+        ...                            num_attention_heads=8,
+        ...                            num_query_groups=4,
+        ...                            hidden_size=256,
+        ...                            ffn_hidden_size=256,
+        ...                            parallel_config=parallel_config,
+        ...                            training_config=training_config)
         >>> model = ParallelLMLogits(config=config, bias=False, compute_dtype=ms.float32)
-        >>> input = Tensor(np.random.random((2, 3, 3)).astype(np.float32))
-        >>> weight = Tensor(np.random.random((3, 3)).astype(np.float32))
-        >>> logits = model(input, weight, parallel_output=True)
-        >>> print(logits)
+        >>> input = Tensor(np.random.random((2, 3, 6)).astype(np.float32))
+        >>> word_emb = Tensor(np.random.random((6, 6)).astype(np.float32))
+        >>> logits = model(input, word_emb, parallel_output=True)
+        >>> print(logits.shape)
+        (2, 3, 6)
     """
 
     def __init__(self, config, bias=False, compute_dtype=None):

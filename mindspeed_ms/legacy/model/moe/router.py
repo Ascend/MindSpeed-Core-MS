@@ -45,6 +45,47 @@ class TopKRouter(nn.Cell):
     Raises:
         NotImplementedError: If `self.routing_type` is equal to "sinkhorn".
         ValueError: If `self.routing_type` is not equal to "none".
+
+    Examples:
+        .. note::
+            Before running the following examples, you need to configure the communication environment variables.
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
+        >>> import numpy as np
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, MoEConfig, TrainingConfig, TransformerConfig
+        >>> from mindspeed_ms.legacy.model.moe.router import TopKRouter
+        >>> from mindspore.communication.management import init
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> import mindspore as ms
+        >>> import mindspore.common.dtype as mstype
+        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
+        >>> init()
+        >>> initialize_model_parallel(tensor_model_parallel_size=1,expert_model_parallel_size=1)
+        >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=1)
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
+        >>> moe_cfg = MoEConfig(num_experts=4, moe_router_topk=2)
+        >>> model_cfg = TransformerConfig(
+        ...     vocab_size=1,
+        ...     num_layers=1,
+        ...     num_attention_heads=1,
+        ...     seq_length=8,
+        ...     hidden_size=16,
+        ...     ffn_hidden_size=64,
+        ...     gated_linear_unit=True,
+        ...     param_init_type=mstype.float32,
+        ...     parallel_config=parallel_config,
+        ...     moe_config=moe_cfg,
+        ...     training_config=training_config,
+        ... )
+        >>> router = TopKRouter(model_cfg)
+        >>> data = ms.Tensor(np.random.random((4, 8, 16)).astype(np.float32))
+        >>> scores, indices = router(data)
+        >>> print(scores.shape)
+        (32 ,2)
     """
     def __init__(self, config: TransformerConfig):
         super(TopKRouter, self).__init__()
