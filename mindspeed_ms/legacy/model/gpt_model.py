@@ -32,8 +32,53 @@ def post_language_model_processing(parallel_lm_logits, loss_fn, lm_output, label
     return loss
 
 class GPTModel(Module):
-    """
-    GPT model
+    r"""
+    The Generative Pre-trained Transformer (GPT) is a decoder-only Transformer model.
+
+    Args:
+        config (TransformerConfig): The config of the transformer model. For details, please refer to TransformerConfig.
+        num_tokentypes (int, optional): size of the token-type embeddings.
+          If > 0, using tokentypes embedding. Default: ``0``.
+        parallel_output (bool): Specifies whether return paralleled output on
+          each tensor parallel rank. Default: ``True``.
+        pre_process (bool): When using pipeline parallel, indicate whether it's the first stage. Default: ``True``.
+        post_process (bool): When using pipeline parallel, indicate whether it's the last stage. Default: ``True``.
+
+    Inputs:
+        - **tokens** (Tensor) - Input indices. Shape :math:`(B, S)`.
+        - **position_ids** (Tensor) - Position offset. Shape :math:`(B, S)`.
+        - **attention_mask** (Tensor) - Attention mask. Shape :math:`(B, S)`.
+        - **loss_mask** (Tensor) - Loss mask. Shape :math:`(B, S)`.
+        - **retriever_input_ids** (Tensor) - Retriever input token indices. Shape: Depends on the input shape
+          of the retrieval task. Default: ``None``.
+        - **retriever_position_ids** (Tensor) - Retriever input position indices. Shape: Depends on the input
+          shape of the retrieval task. Default: ``None``.
+        - **labels** (Tensor) - Tensor of shape (N, ). The ground truth label of the sample. Default: ``None``.
+        - **tokentype_ids** (Tensor) - List of token type ids to be fed to a model.
+          Shape :math:`(B, S)`. Default: ``None``.
+        - **inference_params** (Tensor) - Inference parameters. Used to specify specific settings during
+          inference, such as maximum generation length, max batch size, etc. Default: ``None``.
+
+    Outputs:
+        Returns gpt loss or hidden states.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        .. note::
+            Before running the following examples, you need to configure the communication environment variables.
+
+            For Ascend devices, it is recommended to use the msrun startup method without any third-party
+            or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
+        >>> from mindspeed_ms.core.config import TransformerConfig
+        >>> from mindspeed_ms.legacy.model.gpt_model import GPTModel
+        >>> config = TransformerConfig()
+        >>> model = GPTModel(config)
     """
     def __init__(self,
                  config,
