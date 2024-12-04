@@ -771,15 +771,12 @@ def train(
         >>>       training_config=training_config)
     """
     args = get_args()
-    if args.resume_training and resume_dict is not None and not args.new_dataset:
+    if args.resume_training and resume_dict is not None:
         initial_epoch = resume_dict.get("epoch_num")
         initial_step = resume_dict.get("step_num")
     else:
         initial_epoch = 0
         initial_step = 0
-    if args.resume_training and args.new_dataset:
-        logger.warning("When 'resume_training = True' and 'new_dataset = True', will load dataset from start, and "
-                       "training step will start from '1'")
 
     dataset_size = None
     # broadcast only support [Int32], datasize limit [-2147483648, 2147483647]
@@ -858,8 +855,12 @@ def train(
     # both `get_batch_func` and `train_dataloader` need create train_dataloader
     if train_dataloader is not None:
         if args.resume_training:
-            # when epoch_step > 1, means resume traing mode, will skip some data.
-            train_data_dict_iterator = train_dataloader.skip(epoch_step - 1).create_dict_iterator()
+            if not args.new_dataset:
+                # when epoch_step > 1, means resume traing mode, will skip some data.
+                train_data_dict_iterator = train_dataloader.skip(epoch_step - 1).create_dict_iterator()
+            else:
+                logger.warning(f"When `resume_training = True` and `new_dataset = True`, will use a new dataset.")
+                train_data_dict_iterator = train_dataloader.create_dict_iterator()
         else:
             train_data_dict_iterator = train_dataloader.create_dict_iterator()
     else:
