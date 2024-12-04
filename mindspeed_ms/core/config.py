@@ -124,7 +124,7 @@ mapping_dict = {
     'profile_step_end': 'training_config.profile_step_end',
     'profile_level': 'training_config.profile_level',
     'profile_with_stack': 'training_config.profile_with_stack',
-    'profile_memory': 'training_config.profile_memory',
+    'profile_with_memory': 'training_config.profile_memory',
     'profile_framework': 'training_config.profile_framework',
     'profile_communication': 'training_config.profile_communication',
     'profile_parallel_strategy': 'training_config.profile_parallel_strategy',
