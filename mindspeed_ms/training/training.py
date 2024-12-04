@@ -769,15 +769,12 @@ def train(
         >>> train(train_one_step_cell=train_one_step_cell, train_dataloader=train_dataloader,
         >>>       training_config=training_config)
     """
-    if training_config.resume_training and resume_dict is not None and not training_config.new_dataset:
+    if training_config.resume_training and resume_dict is not None:
         initial_epoch = resume_dict.get("epoch_num")
         initial_step = resume_dict.get("step_num")
     else:
         initial_epoch = 0
         initial_step = 0
-    if training_config.resume_training and training_config.new_dataset:
-        logger.warning("When 'resume_training = True' and 'new_dataset = True', will load dataset from start, and "
-                       "training step will start from '1'")
 
     dataset_size = None
     # broadcast only support [Int32], datasize limit [-2147483648, 2147483647]
@@ -856,8 +853,12 @@ def train(
     # both `get_batch_func` and `train_dataloader` need create train_dataloader
     if train_dataloader is not None:
         if training_config.resume_training:
-            # when epoch_step > 1, means resume traing mode, will skip some data.
-            train_data_dict_iterator = train_dataloader.skip(epoch_step - 1).create_dict_iterator()
+            if not training_config.new_dataset:
+                # when epoch_step > 1, means resume traing mode, will skip some data.
+                train_data_dict_iterator = train_dataloader.skip(epoch_step - 1).create_dict_iterator()
+            else:
+                logger.warning(f"When `resume_training = True` and `new_dataset = True`, will use a new dataset.")
+                train_data_dict_iterator = train_dataloader.create_dict_iterator()
         else:
             train_data_dict_iterator = train_dataloader.create_dict_iterator()
     else:
@@ -1064,7 +1065,8 @@ def pretrain(train_valid_test_datasets_provider,
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer, optimizer_config, dataset_config, training_config)
 
     resume_dict = None
-    if training_config.load_checkpoint is not None and \
+    if training_config.resume_training is True and \
+       training_config.load_checkpoint is not None and \
        os.path.exists(training_config.load_checkpoint):
 
         rank_path = os.path.join(training_config.load_checkpoint, f"rank_{get_rank()}")
@@ -1109,10 +1111,6 @@ def pretrain(train_valid_test_datasets_provider,
             )
         logger.info(f"Checkpoint has trained {resume_dict.get('epoch_num', 0)} epochs, " + \
                     f"{resume_dict.get('step_num', 0)} steps.")
-        if resume_dict is not None and training_config.resume_training is False:
-            resume_dict = None
-            logger.warning("resume_dict extract from checkpoint is not 'None', but resume_training is 'False', "
-                           "so resume_dict will be set to 'None'")
     train_one_step_cell = TrainOneStepCell(network_with_loss, optimizer, opt_param_scheduler, training_config,
                                            model_config)
 

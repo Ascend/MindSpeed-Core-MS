@@ -238,7 +238,7 @@ def get_default_config():
     default_param_dict = {}
     default_param_dict['dataset_config.drop_remainder'] = True
     default_param_dict['dataset_config.data_layout'] = "SBH"
-    default_param_dict['optimizer_config.optimizer_type'] = "mint.AdamW"
+    default_param_dict['optimizer_config.optimizer_type'] = "SpeedAdamW"
     default_param_dict['training_config.grad_clip_kwargs.clip_value'] = 1.0
     default_param_dict['training_config.grad_clip_kwargs.grad_clip_type'] = "ClipGlobalNorm"
     default_param_dict['training_config.eval_metric'] = "perplexity"
