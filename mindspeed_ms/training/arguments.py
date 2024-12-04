@@ -356,11 +356,12 @@ def validate_args(args, default_args, defaults={}):
             "num_layers_per_virtual_pipeline_stage must be None when virtual_pipeline_model_parallel_size is specified"
         # check noop_layers
         if args.noop_layers is not None:
-            assert args.num_layers % \
-                (args.virtual_pipeline_model_parallel_size * args.transformer_pipeline_model_parallel_size) == 0, \
+            pp_split_num = args.model_parallel.virtual_pipeline_model_parallel_size * \
+                args.model_parallel.transformer_pipeline_model_parallel_size
+            assert args.num_layers % pp_split_num == 0, \
                 f'The number of model layers is {args.num_layers}, but using pipeline parallel required at least ' \
                 f'pp({args.transformer_pipeline_model_parallel_size}) * vpp' \
-                f'({args.virtual_pipeline_model_parallel_size}) = {args.num_layers} layers for splitting'
+                f'({args.virtual_pipeline_model_parallel_size}) = {pp_split_num} layers for splitting'
 
         _check_list_is_validate("num_layer_list", args.num_layer_list,
                                 args.virtual_pipeline_model_parallel_size,
@@ -545,6 +546,7 @@ def validate_args(args, default_args, defaults={}):
 
     # Now not support the transformer_engine
     if args.transformer_impl == 'transformer_engine':
+        logger.warning('transformer_impl would be set to "local"')
         args.transformer_impl = 'local'
 
     # clone_scatter_output_in_embedding not supported yet

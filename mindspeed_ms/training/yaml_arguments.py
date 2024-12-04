@@ -201,14 +201,14 @@ def validate_yaml(args, args_default, defaults={}):
             "num_layers_per_virtual_pipeline_stage must be None when virtual_pipeline_model_parallel_size is specified"
         # check noop_layers
         if args.model_parallel.noop_layers is not None:
-            assert args.language_model.num_layers % \
-                (args.model_parallel.virtual_pipeline_model_parallel_size * \
-                    args.model_parallel.transformer_pipeline_model_parallel_size) == 0, \
+            pp_split_num = args.model_parallel.virtual_pipeline_model_parallel_size * \
+                args.model_parallel.transformer_pipeline_model_parallel_size
+            assert args.language_model.num_layers % pp_split_num == 0, \
                 f'The number of model layers is {args.language_model.num_layers}, ' \
                 f'but using pipeline parallel required at least ' \
                 f'pp({args.model_parallel.transformer_pipeline_model_parallel_size}) * ' \
                 f'vpp({args.model_parallel.virtual_pipeline_model_parallel_size}) = ' \
-                f'{args.language_model.num_layers} layers for splitting'
+                f'{pp_split_num} layers for splitting'
 
         _check_list_is_validate("num_layer_list", args.model_parallel.num_layer_list,
                                 args.model_parallel.virtual_pipeline_model_parallel_size,
@@ -364,6 +364,11 @@ def validate_yaml(args, args_default, defaults={}):
     else:
         assert args.start_weight_decay is not None
         assert args.end_weight_decay is not None
+
+    # Now not support the transformer_engine
+    if args.transformer_impl == 'transformer_engine':
+        logger.warning('transformer_impl would be set to "local"')
+        args.transformer_impl = 'local'
 
     # clone_scatter_output_in_embedding not supported yet
     if args.language_model.clone_scatter_output_in_embedding:
