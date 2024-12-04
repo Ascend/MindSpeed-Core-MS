@@ -27,7 +27,7 @@ __all__ = ['VocabParallelCrossEntropy']
 
 
 class VocabParallelCrossEntropy(nn.Cell):
-    r"""
+    """
     Calculate the paralleled cross entropy loss.
 
     Inputs:
@@ -51,25 +51,19 @@ class VocabParallelCrossEntropy(nn.Cell):
 
         >>> from mindspore import dtype as mstype
         >>> from mindspore import Tensor
-        >>> from mindspeed_ms.core.tensor_parallel.cross_entropy import (
-        ...     VocabParallelCrossEntropy
-        ... )
+        >>> from mindspeed_ms.core.tensor_parallel.cross_entropy import VocabParallelCrossEntropy
         >>> from mindspore.communication.management import init
-        >>> from mindspeed_ms.core.parallel_state import (
-        ...     initialize_model_parallel,
-        ...     get_tensor_model_parallel_world_size,
-        ...     get_data_parallel_world_size
-        ... )
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> init()
         >>> initialize_model_parallel()
         >>> loss = VocabParallelCrossEntropy()
-        >>> logits = Tensor([[2., 1., 0.1]], mstype.float32)
-        >>> labels = Tensor([1], mstype.int32)
+        >>> logits = Tensor([[2., 1., 0.2],[2., 1., 0.2]], mstype.float32)
+        >>> labels = Tensor([1,1], mstype.int32)
         >>> output = loss(logits, labels)
         >>> print(output.shape)
-        (1,)
+        (2,)
         >>> print(output)
-        [1.41703]
+        [1.4273429 1.4273429]
     """
 
     # pylint: disable=W0613

@@ -413,8 +413,9 @@ class ColumnParallelLinear(nn.Cell):
           :math:`out\_channels` in `Outputs`.
 
     Outputs:
-        Tensor of shape :math:`(*, out\_channels)`. The `output_size` in `Args` should be equal to :math:`out\_channels`
-        in `Outputs`.
+        - **output** (Tensor) - Tensor of shape :math:`(*, out\_channels)`. The `output_size` in `Args` should be equal
+          to :math:`out\_channels` in `Outputs`.
+        - **output_bias** (Tensor) - Tensor of shape :math:`(out\_channels,)`.
 
     Raises:
         ValueError: `skip_weight_param_allocation=True` but weight_tensor is not passed to construct function.
@@ -448,6 +449,7 @@ class ColumnParallelLinear(nn.Cell):
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> from mindspeed_ms.core.config import (
         ...     ModelParallelConfig,
+        ...     TrainingConfig,
         ...     TransformerConfig
         ... )
         >>> from mindspeed_ms.core.tensor_parallel import ColumnParallelLinear
@@ -476,22 +478,27 @@ class ColumnParallelLinear(nn.Cell):
         >>> initialize_model_parallel(tensor_model_parallel_size=tensor_parallel)
         >>> input_data = Tensor(np.random.random((dataset_size, seq_length, hidden_size)).astype(np.float32))
         >>> parallel_config = ModelParallelConfig()
+        >>> train_config = TrainingConfig(parallel_config=parallel_config)
         >>> model_config = TransformerConfig(vocab_size=40000,
         ...                                  num_layers=1,
         ...                                  num_attention_heads=1,
-        ...                                  mlp_has_bias=True,
-        ...                                  gated_linear_unit=False,
         ...                                  hidden_size=hidden_size,
         ...                                  ffn_hidden_size=4*hidden_size,
-        ...                                  hidden_act='gelu',
         ...                                  parallel_config=parallel_config,
+        ...                                  training_config=train_config,
+        ...                                  mlp_has_bias=True,
+        ...                                  gated_linear_unit=False,
+        ...                                  hidden_act='gelu',
         ...                                  params_dtype='float32',
         ...                                  compute_dtype='float32')
         >>> network = TestNet(config=model_config)
         >>> output = network(input_data)
         >>> print(output)
-        [[[ 0.01780816  0.00895902 -0.00554341 -0.00185049]
-          [ 0.02319741 -0.00320548 -0.0062025  -0.0050142 ]]]
+        >>> print(output.shape)
+        [[[ 0.01780816  0.00895902 -0.00554341 -0.00185049]]
+
+         [[ 0.02319741 -0.00320548 -0.0062025  -0.0050142 ]]]
+        (2, 1, 4)
     """
     def __init__(
             self,
@@ -759,8 +766,9 @@ class RowParallelLinear(nn.Cell):
           to :math:`in\_channels` in `Inputs`.
 
     Outputs:
-        Tensor of shape :math:`(*, out\_channels)`. The `output_size` in `Args` should be equal to :math:`out\_channels`
-        in `Outputs`.
+        - **output** (Tensor) - Tensor of shape :math:`(*, out\_channels)`. The `output_size` in `Args` should be equal
+          to :math:`out\_channels` in `Outputs`.
+        - **output_bias** (Tensor) - Tensor of shape :math:`(out\_channels,)`.
 
     Raises:
         ValueError: `sequence_parallel` should be False when `input_is_parallel` is False , but got True.
@@ -791,6 +799,7 @@ class RowParallelLinear(nn.Cell):
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> from mindspeed_ms.core.config import (
         ...     ModelParallelConfig,
+        ...     TrainingConfig,
         ...     TransformerConfig
         ... )
         >>> from mindspeed_ms.core.tensor_parallel import RowParallelLinear
@@ -809,32 +818,37 @@ class RowParallelLinear(nn.Cell):
         ...     def construct(self, input_):
         ...         output, _ = self.rowlinear(input_)
         ...         return output
-        >>> dataset_size = 1
         >>> seq_length = 2
+        >>> dataset_size = 1
         >>> hidden_size = 4
         >>> tensor_parallel = 1
         >>> ms.set_context(device_target='Ascend', mode=ms.PYNATIVE_MODE)
         >>> ms.set_seed(2024)
         >>> init()
         >>> initialize_model_parallel(tensor_model_parallel_size=tensor_parallel)
-        >>> input_data = Tensor(np.random.random((dataset_size, seq_length, hidden_size)).astype(np.float32))
+        >>> input_data = Tensor(np.random.random((seq_length, dataset_size, hidden_size)).astype(np.float32))
         >>> parallel_config = ModelParallelConfig()
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
         >>> model_config = TransformerConfig(vocab_size=40000,
         ...                                  num_layers=1,
         ...                                  num_attention_heads=1,
-        ...                                  mlp_has_bias=True,
-        ...                                  gated_linear_unit=False,
         ...                                  hidden_size=hidden_size,
         ...                                  ffn_hidden_size=4*hidden_size,
-        ...                                  hidden_act='gelu',
         ...                                  parallel_config=parallel_config,
+        ...                                  training_config=training_config,
+        ...                                  mlp_has_bias=True,
+        ...                                  gated_linear_unit=False,
+        ...                                  hidden_act='gelu',
         ...                                  params_dtype='float32',
         ...                                  compute_dtype='float32')
         >>> network = TestNet(config=model_config)
         >>> output = network(input_data)
         >>> print(output)
-        [[[ 0.01780816  0.00895902 -0.00554341 -0.00185049]
-          [ 0.02319741 -0.00320548 -0.0062025  -0.0050142 ]]]
+        >>> print(output.shape)
+        [[[ 0.01780816  0.00895902 -0.00554341 -0.00185049]]
+
+         [[ 0.02319741 -0.00320548 -0.0062025  -0.0050142 ]]]
+        (2, 1, 4)
     """
     def __init__(
             self,
@@ -1042,10 +1056,11 @@ class VocabParallelEmbedding(nn.Cell):
         param_init_dtype (dtype.Number): The parameter initialization type. Default: ``None``.
 
     Inputs:
-        - **input\_** (Tensor) - Tensor of shape (B, S) or (S, B).
+        - **input\_** (Tensor) - Tensor of shape :math:`(B, S)` or :math:`(S, B)`.
 
     Outputs:
-        - **output** (Tensor) - Tensor of shape (B, S, H) or (S, B, H), which is consistent with the input.
+        - **output** (Tensor) - Tensor of shape :math:`(B, S, H)` or :math:`(S, B, H)`, which is consistent
+          with the input.
 
     Raises:
         ValueError: The vocabulary size is not divisible by size of tensor parallel.
@@ -1075,6 +1090,7 @@ class VocabParallelEmbedding(nn.Cell):
         >>> from mindspeed_ms.core.tensor_parallel.layers import VocabParallelEmbedding
         >>> from mindspeed_ms.core.config import (
         ...     ModelParallelConfig,
+        ...     TrainingConfig,
         ...     DatasetConfig,
         ...     TransformerConfig
         ... )
@@ -1101,6 +1117,7 @@ class VocabParallelEmbedding(nn.Cell):
         ...                                       context_parallel_size=1,
         ...                                       expert_model_parallel_size=1,
         ...                                       sequence_parallel=True)
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
         >>> dataset_config = DatasetConfig(batch_size=1,
         ...                                dataset_size=2,
         ...                                seq_length=1024)
@@ -1109,7 +1126,8 @@ class VocabParallelEmbedding(nn.Cell):
         ...                                  num_attention_heads=32,
         ...                                  hidden_size=2560,
         ...                                  ffn_hidden_size=7680,
-        ...                                  parallel_config=parallel_config)
+        ...                                  parallel_config=parallel_config,
+        ...                                  training_config=training_config)
         >>> model_config.dataset_config = dataset_config
         >>> batch_size = dataset_config.batch_size
         >>> dataset_size = dataset_config.dataset_size
@@ -1120,16 +1138,16 @@ class VocabParallelEmbedding(nn.Cell):
         >>> initialize_model_parallel(tensor_model_parallel_size=tensor_parallel)
         >>> network = ParallelTransformerLayerNet(config=model_config)
         >>> input_shape = (batch_size, seq_length)
-        >>> input_ids = Tensor(np.ones(input_shape).astype(np.float32))
+        >>> input_ids = Tensor(np.ones(input_shape).astype(np.int32))
         >>> output = network(input_ids)
         >>> print(output)
-        [[-0.00546161]
-         [ 0.00440422]
-         [ 0.00252223]
-         ...
-         [ 0.00539334]
-         [-0.00625365]
-         [-0.01025379]]
+        [[[-0.00546161  0.00440422  0.00252223 ...  0.00539334 -0.00625365 -0.01025379]
+          [-0.00546161  0.00440422  0.00252223 ...  0.00539334 -0.00625365 -0.01025379]
+          [-0.00546161  0.00440422  0.00252223 ...  0.00539334 -0.00625365 -0.01025379]
+          ...
+          [-0.00546161  0.00440422  0.00252223 ...  0.00539334 -0.00625365 -0.01025379]
+          [-0.00546161  0.00440422  0.00252223 ...  0.00539334 -0.00625365 -0.01025379]
+          [-0.00546161  0.00440422  0.00252223 ...  0.00539334 -0.00625365 -0.01025379]]]
     """
 
     def __init__(
