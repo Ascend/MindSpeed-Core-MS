@@ -319,7 +319,7 @@ def save_args(weight_pt_path, save_args_path, pt):
     tp = int(dir_name_in_parts[2])
     pp = int(dir_name_in_parts[3]) if len(dir_name_in_parts) == 4 else 0
 
-    args_pt_path = os.path.join(save_args_path, f"args_tp{tp:02}_pp{pp:03}.pt")
+    args_pt_path = save_args_path / f"args_tp{tp:02}_pp{pp:03}.pt"
     torch.save(needed_args, args_pt_path)
 
 
@@ -348,8 +348,8 @@ def convert_pt2ms_param_and_optim(param_keymap: dict, param_dict: dict, pt_path,
             if bucket_id > cur_bucket:
                 cur_bucket = bucket_id
                 buffer2bucket_offset = prev_end_buffer_index
-            start_bucket_index = start_buffer_index-buffer2bucket_offset
-            end_bucket_index = end_buffer_index-buffer2bucket_offset
+            start_bucket_index = start_buffer_index - buffer2bucket_offset
+            end_bucket_index = end_buffer_index - buffer2bucket_offset
             for k in data_keys:
                 log_info(f"Pt content type:{k}, bucket_id: {bucket_id}, "
                          f"start_bucket_index:{start_bucket_index}, end_bucket_index: {end_bucket_index}")
@@ -426,7 +426,9 @@ def run(args, dist_path, model_path):
     pt_content = args.dist_opt_content
     convert_param_only = args.convert_param_only
 
-    args2save = get_pt2ms_args(model_path, para_map_path)
+    save_args_path = Path(all_args.ms_path) / "pt_meta"
+    # save pt args
+    args2save = get_pt2ms_args(model_path, save_args_path)
     vpp_layer_mapping = get_vpp_layers_map(total_layers, vpp_size, pp_size)
     log_info(f"vpp_layer_mapping: {vpp_layer_mapping}")
     log_info(f"Parameter conversion begins.")
@@ -494,7 +496,24 @@ def throw_error(e):
 if __name__ == '__main__':
     all_args = parse_args()
     log_info(f'Got args: {all_args}', override=True)
+    if not all_args.convert_param_only and all_args.param_map_path is None:
+        raise ValueError(f"When '--convert-param-only' is NOT enable, means converting both model and optimizer, "
+                         "please specify '--param-map-path'.")
     DEBUG = all_args.debug
+
+    pt_meta_path = Path(all_args.ms_path) / "pt_meta"
+    # make sure 'pt_meta_path' exists
+    pt_meta_path.mkdir(parents=True, exist_ok=True)
+    # copy param_map to ms_path
+    param_map_list = Path(all_args.param_map_path).glob("*.json")
+    if not param_map_list:
+        log_info(f"no param_map*.json was found under directory {all_args.param_map_path}, "
+                 f"so no param_map*.json will be copy to {pt_meta_path}")
+    for param_map_file in param_map_list:
+        dest_path = pt_meta_path / param_map_file.name
+        log_info(f"copy {param_map_file} to {dest_path}")
+        shutil.copy(param_map_file, dest_path)
+
     pt_file_list = get_pts_path(all_args)
 
     if all_args.multiprocess_off:
@@ -507,3 +526,4 @@ if __name__ == '__main__':
                 result = pool.apply_async(run, (all_args, dist_file_path, model_file_path), error_callback=throw_error)
                 results.append(result)
             output = [result.wait(all_args.process_timeout) for result in results]
+        log_info("-------------end convert pt to ckpt-------------")
