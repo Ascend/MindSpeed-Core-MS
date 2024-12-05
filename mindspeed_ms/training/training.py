@@ -891,14 +891,11 @@ def train(
             if not correct_metric_flag:
                 logger.warning("Metrics is only calculated on the last stage.")
             if isinstance(learning_rate, (tuple, list)):
-                report_learning_rate = '('
-                for lr in learning_rate:
-                    report_learning_rate += "{:e},".format(lr)
-                report_learning_rate += ')'
+                report_learning_rate = "{:.16f}".format(learning_rate[0])
             else:
-                report_learning_rate = "{:e}".format(learning_rate)
+                report_learning_rate = "{:.16f}".format(learning_rate)
             logger.info(
-                f"Epoch: {current_epoch}, Step: {epoch_step}, Loss: {loss}, "
+                f"Epoch: {current_epoch}, Step: {epoch_step}, Loss: {loss.item():.16f}, "
                 + f"Finite_grads: {is_finite}, "
                 + f"Loss_scale: {loss_scale.value() if loss_scale is not None else None}, "
                 + f"Learning_rate: {report_learning_rate}, Grad_norm: {global_norm}, "
