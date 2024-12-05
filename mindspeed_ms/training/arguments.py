@@ -357,12 +357,14 @@ def validate_args(args, default_args, defaults={}):
         # check noop_layers
         if args.noop_layers is not None:
             assert args.num_layers % \
-                (args.virtual_pipeline_model_parallel_size * args.pipeline_model_parallel_size) == 0, \
-                'number of layers should be divisible by the pipeline parallel size * virtual pipeline parallel size'
+                (args.virtual_pipeline_model_parallel_size * args.transformer_pipeline_model_parallel_size) == 0, \
+                f'The number of model layers is {args.num_layers}, but using pipeline parallel required at least ' \
+                f'pp({args.transformer_pipeline_model_parallel_size}) * vpp' \
+                f'({args.virtual_pipeline_model_parallel_size}) = {args.num_layers} layers for splitting'
 
         _check_list_is_validate("num_layer_list", args.num_layer_list,
                                 args.virtual_pipeline_model_parallel_size,
-                                args.pipeline_model_parallel_size)
+                                args.transformer_pipeline_model_parallel_size)
 
     if args.overlap_param_gather:
         assert args.use_distributed_optimizer, \
@@ -414,13 +416,6 @@ def validate_args(args, default_args, defaults={}):
     # Consumed tokens.
     args.consumed_train_samples = 0
     args.consumed_valid_samples = 0
-
-    # Support for variable sequence lengths across batches/microbatches.
-    # set it if the dataloader supports generation of variable sequence lengths
-    # across batches/microbatches. Due to additional communication overhead
-    # during pipeline parallelism, it should not be set if sequence length
-    # is constant during training.
-    args.variable_seq_lengths = False
 
     # Iteration-based training.
     if args.train_iters:

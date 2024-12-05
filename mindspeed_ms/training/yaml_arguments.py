@@ -176,7 +176,8 @@ def validate_yaml(args, args_default, defaults={}):
                 required_args = ['recompute', 'select_recompute', 'select_comm_recompute']
                 for arg in required_args:
                     if hasattr(args.language_model.recompute_config, arg):
-                        _check_arg_is_none(args.language_model.recompute_config, arg)
+                        _check_arg_is_none(args.language_model.recompute_config, arg, \
+                            f"num_layers_per_virtual_pipeline_stage is specified, recompute_config.{arg} is not None")
 
             assert args.model_parallel.pipeline_model_parallel_size > 2, \
                 'pipeline-model-parallel size should be greater than 2 with ' \
@@ -202,19 +203,23 @@ def validate_yaml(args, args_default, defaults={}):
         if args.model_parallel.noop_layers is not None:
             assert args.language_model.num_layers % \
                 (args.model_parallel.virtual_pipeline_model_parallel_size * \
-                    args.model_parallel.pipeline_model_parallel_size) == 0, \
-                'number of layers should be divisible by the pipeline parallel size times virtual pipeline parallel size'
+                    args.model_parallel.transformer_pipeline_model_parallel_size) == 0, \
+                f'The number of model layers is {args.language_model.num_layers}, ' \
+                f'but using pipeline parallel required at least ' \
+                f'pp({args.model_parallel.transformer_pipeline_model_parallel_size}) * ' \
+                f'vpp({args.model_parallel.virtual_pipeline_model_parallel_size}) = ' \
+                f'{args.language_model.num_layers} layers for splitting'
 
         _check_list_is_validate("num_layer_list", args.model_parallel.num_layer_list,
                                 args.model_parallel.virtual_pipeline_model_parallel_size,
-                                args.model_parallel.pipeline_model_parallel_size)
+                                args.model_parallel.transformer_pipeline_model_parallel_size)
         if args.language_model.recompute_config is not None:
             required_args = ['recompute', 'select_recompute', 'select_comm_recompute']
             for arg in required_args:
                 if hasattr(args.language_model.recompute_config, arg):
                     _check_list_is_validate(arg, getattr(args.language_model.recompute_config, arg),
                                             args.model_parallel.virtual_pipeline_model_parallel_size,
-                                            args.model_parallel.pipeline_model_parallel_size)
+                                            args.model_parallel.transformer_pipeline_model_parallel_size)
 
 
     if args.overlap_param_gather:
@@ -250,12 +255,6 @@ def validate_yaml(args, args_default, defaults={}):
     # Consumed tokens.
     args.consumed_train_samples = 0
     args.consumed_valid_samples = 0
-
-    # Support for variable sequence lengths across batches/microbatches.
-    # set it if the dataloader supports generation of variable sequence lengths
-    # across batches/microbatches. Due to additional communication overhead
-    # during pipeline parallelism, it should not be set if sequence length
-    # is constant during training.
 
     # Iteration-based training.
     if args.train_iters:
@@ -546,8 +545,8 @@ def _check_arg_is_not_none(args, arg):
     assert getattr(args, arg) is not None, '{} argument is None'.format(arg)
 
 
-def _check_arg_is_none(args, arg):
-    assert getattr(args, arg) is None, '{} argument is not None'.format(arg)
+def _check_arg_is_none(args, arg, error_msg=None):
+    assert getattr(args, arg) is None, error_msg if error_msg else '{} argument is not None'.format(arg)
 
 
 def _check_list_is_validate(arg_name, arg, vpp, pp):
