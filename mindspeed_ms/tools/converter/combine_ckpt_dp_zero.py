@@ -55,6 +55,21 @@ def combine_bucket_data(param_total_dict, prefix, buffer_id, bucket_id):
     return bucket_data
 
 
+def combine_zero3_data(param_total_dict, param_name):
+    '''combine bucket data'''
+    # collect this bucket data from all dp rank
+    param_data_list = []
+    for rank, state_dict in param_total_dict.items():
+        if not param_name in state_dict:
+            raise KeyError("There is no data found for param {} in rank_{}'s state_dict."
+                           .format(param_name, rank))
+        param_data_list.append(state_dict[param_name].asnumpy())
+        state_dict.pop(param_name)
+    # concatenate sharded data
+    param_data = np.concatenate(param_data_list)
+    return param_data
+
+
 def get_parameter_state_dp_zero(strategy, param_total_dict):
     '''get parameter state on dp_zero'''
     # extract buffer info
@@ -97,6 +112,19 @@ def get_parameter_state_dp_zero(strategy, param_total_dict):
                 requires_grad=True,
             )
             new_state_dict[param.name] = param
+
+    # assemble zero3 params
+    if 'zero3_params' in strategy:
+        zero3_params = strategy['zero3_params']
+        for param_name in zero3_params:
+            param_data = combine_zero3_data(param_total_dict, param_name)
+            param = ms.Parameter(
+                param_data,
+                name=param_name,
+                requires_grad=True,
+            )
+            new_state_dict[param.name] = param
+
     # add remain non-parameter-related parameters such as rng, epoch_num, step_num.
     for _, state_dict in param_total_dict.items():
         for key, value in state_dict.items():
