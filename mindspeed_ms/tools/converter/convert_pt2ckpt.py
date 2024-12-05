@@ -48,14 +48,14 @@ WD_INCR_STYLE = ['constant', 'linear', 'cosine']
 LR_DECAY_STYLE = ['constant', 'WSD', 'linear', 'cosine', 'inverse-square-root']
 OPT_SCHEDULER_MAP = {
     'state_step': 'fp32',
-    'max_lr': 'fp32',
+    'max_lr': 'fp64',
     'lr_warmup_steps': 'int64',
     'num_steps': 'int64',
     'lr_decay_style': 'int64',
     'lr_decay_steps': 'int64',
-    'min_lr': 'fp32',
-    'start_wd': 'fp32',
-    'end_wd': 'fp32',
+    'min_lr': 'fp64',
+    'start_wd': 'fp64',
+    'end_wd': 'fp64',
     'wd_incr_style': 'int64',
     'wd_incr_steps': 'int64',
 }
@@ -179,6 +179,8 @@ def get_pt2ms_args(weight_pt_path, save_args_path):
     for k, v in flatten_param_groups.items():
         if isinstance(v, list):
             return_dict[k] = Parameter([float(ele) for ele in v])
+        elif k in OPT_SCHEDULER_MAP and OPT_SCHEDULER_MAP[k] == 'fp64':
+            return_dict[k] = Parameter(ms.Tensor(v, dtype=ms.float64))
         elif k in OPT_SCHEDULER_MAP and OPT_SCHEDULER_MAP[k] == 'fp32':
             return_dict[k] = Parameter(float(v))
         elif k in OPT_SCHEDULER_MAP and OPT_SCHEDULER_MAP[k] == 'int64':
