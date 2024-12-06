@@ -185,9 +185,9 @@ class LinearWithGradAccumulationAndAsyncCommunication(nn.Cell):
         self.data_layout = data_layout
         self.recompute_comm = recompute_comm and self.sequence_parallel
         if self.recompute_comm:
-            self.used_bprop_inputs = [0, 1, 2, 3]
+            self.used_bprop_inputs = [0, 1]
         else:
-            self.used_bprop_inputs = [1, 2, 3]
+            self.used_bprop_inputs = [1]
 
     # pylint: disable=C0111, W0622
     def construct(self, input, weight, bias, weight_param=None):
@@ -345,6 +345,10 @@ class LinearWithFrozenWeight(nn.Cell):
         self.matmul = P.BatchMatMul(transpose_b=self.transpose_b)
         self.matmul_g_in = P.BatchMatMul(transpose_a=False, transpose_b=not self.transpose_b)
         self.tp_group = get_tensor_model_parallel_group()
+        if self.bias:
+            self.used_bprop_inputs = [0, 1, 2]
+        else:
+            self.used_bprop_inputs = [0, 1]
 
     def construct(self, input_, weight, bias):
         output = self.matmul(input_, weight)
@@ -353,9 +357,10 @@ class LinearWithFrozenWeight(nn.Cell):
         return output
 
     # pylint: disable=W0613
-    def bprop(self, x, weight, bias, out, dout):
+    def bprop(self, *args):
+        x, weight, dout = args[0], args[1], args[-1]
         grad_input = self.matmul_g_in(dout, weight).reshape(x.shape)
-        grad_bias = F.full(bias.shape, 0, dtype=bias.dtype) if self.bias else None
+        grad_bias = F.full(args[2].shape, 0, dtype=args[2].dtype) if self.bias else None
         if self.allreduce_dgrad:
             grad_input = comm_func.all_reduce(grad_input, group=self.tp_group)[0]
         return grad_input, None, grad_bias
