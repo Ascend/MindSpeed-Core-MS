@@ -18,7 +18,6 @@ from mindspore import nn, ops
 
 from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.legacy.model.module import Module
-from mindspeed_ms.legacy.model.mlp import ParallelMLP
 
 
 class GroupedMLP(Module):
@@ -59,6 +58,7 @@ class SequentialMLP(Module):
     """
     def __init__(self, num_local_experts: int, config: TransformerConfig, submodules=None):
         super(SequentialMLP, self).__init__()
+        from mindspeed_ms.legacy.model.transformer import ParallelMLP
         if submodules is not None:
             raise NotImplementedError("`submodules` is not supported for now.")
         self.num_local_experts = num_local_experts

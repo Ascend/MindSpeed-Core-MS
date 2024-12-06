@@ -79,8 +79,9 @@ from mindspeed_ms.core.recompute import (
 from mindspeed_ms.core.utils import divide
 from mindspeed_ms.tools import logger
 
+from .activation import get_act_func
 from .module import Module
-from .mlp import ParallelMLP
+from .utils import openai_gelu, erf_gelu
 
 
 def get_attention_mask(input_mask, data_layout='BSH'):
@@ -716,6 +717,142 @@ class ParallelAttention(Module):
         output = ops.cast(output, ori_dtype)
 
         return output, bias
+
+
+class ParallelMLP(Module):
+    r"""
+    Implementation of parallel feedforward block.
+
+    Args:
+        config (TransformerConfig): Configuration object for the transformer model.
+        is_expert (bool): This block is an expert block. Default: False.
+
+    Inputs:
+        - **hidden_states** (Tensor) - Tensor of shape :math:`(B, S, H)`.
+
+    Outputs:
+        - **output** (Tensor) - Output tensor of shape :math:`(B, S, H)`.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        .. note::
+            Before running the following examples, you need to configure the communication environment variables.
+
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
+        >>> import os
+        >>> import numpy as np
+        >>> import mindspore as ms
+        >>> import mindspore.common.dtype as mstype
+        >>> from mindspore import Tensor
+        >>> from mindspore.communication.management import init
+        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model.transformer import ParallelMLP
+        >>> init()
+        >>> initialize_model_parallel()
+        >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=tensor_parallel)
+        >>> config = TransformerConfig      #The config of Transformer model. For details, please refer to TransformerConfig
+        >>> mlp = ParallelMLP(config=config)
+        >>> input = Tensor(np.random.random((3, 8, 16)).astype(np.float32))
+        >>> output, _ = mlp(input)
+        >>> print(output)
+    """
+
+    def __init__(self, config, is_expert=False):
+        super(ParallelMLP, self).__init__(config)
+        args = get_args()
+        self.add_bias = config.add_bias_linear
+        self.act_type = args.activation_func
+        self.hidden_size = config.hidden_size
+        mapping_output_size = config.ffn_hidden_size
+        if config.gated_linear_unit:
+            mapping_output_size *= 2
+
+        self.mapping = ColumnParallelLinear(
+            self.hidden_size,
+            mapping_output_size,
+            config=config,
+            init_method=config.init_method,
+            bias=self.add_bias,
+            gather_output=False,
+            is_expert=is_expert,
+            bias_init=config.bias_init,
+        )
+
+        self.bias_gelu_fusion = False
+
+        if args.openai_gelu:
+            self.act_func = openai_gelu
+        elif args.onnx_safe:
+            self.act_func = erf_gelu
+        else:
+            if self.act_type == "swiglu" and args.use_fused_swiglu:
+                self.act_type = "fused_swiglu"
+            self.act_func = get_act_func(self.act_type)
+
+        # Project back to h.
+        self.projection = RowParallelLinear(
+            config.ffn_hidden_size,
+            self.hidden_size,
+            config=config,
+            init_method=config.init_method,
+            bias=self.add_bias,
+            skip_bias_add=True,
+            input_is_parallel=True,
+            is_expert=is_expert,
+            bias_init=config.bias_init,
+        )
+        use_lora = config.use_lora
+        if use_lora:
+            mapping_lora = self._get_cell_lora_config(config, 'mapping')
+            if mapping_lora is not None:
+                self.mapping = ColumnParallelLoRA(
+                    self.hidden_size,
+                    mapping_output_size,
+                    config=config,
+                    init_method=config.init_method,
+                    bias=self.add_bias,
+                    gather_output=False,
+                    is_expert=is_expert,
+                    bias_init=config.bias_init,
+                    lora_rank=mapping_lora['rank'],
+                    lora_alpha=mapping_lora['alpha'],
+                    lora_dropout=mapping_lora['dropout'],
+                )
+            projection_lora = self._get_cell_lora_config(config, 'projection')
+            if projection_lora is not None:
+                self.projection = RowParallelLoRA(
+                    config.ffn_hidden_size,
+                    self.hidden_size,
+                    config=config,
+                    init_method=config.init_method,
+                    bias=self.add_bias,
+                    input_is_parallel=True,
+                    skip_bias_add=False,
+                    is_expert=is_expert,
+                    bias_init=config.bias_init,
+                    lora_rank=projection_lora['rank'],
+                    lora_alpha=projection_lora['alpha'],
+                )
+
+    def construct(self, hidden_states):
+        """Construct function of mlp block."""
+        # [B, S, H] -> [B, S, ffn_H] / [S, B, H] -> [S, B, ffn_H]
+        intermediate_parallel, bias_parallel = self.mapping(hidden_states)
+        if bias_parallel is not None:
+            intermediate_parallel = intermediate_parallel + bias_parallel
+        intermediate_parallel = self.act_func(intermediate_parallel)
+
+        # [B, S, ffn_H] -> [B, S, H] / [S, B, ffn_H] -> [S, B, H]
+        output, output_bias = self.projection(intermediate_parallel)
+        return output, output_bias
 
 
 class NoopTransformerLayer(Module):
