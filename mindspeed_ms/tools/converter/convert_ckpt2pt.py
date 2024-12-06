@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-'''convert mindspore ckpt to torch pt'''
+'''convert MindSpore ckpt to torch pt'''
 import os
 import sys
 import json
@@ -96,17 +96,21 @@ def parse_args():
 
     group = parser.add_argument_group(title='File Path/Location')
     group.add_argument('--ms-path', type=str, default=None, required=True,
-                       help='Path to mindspore checkpoint files.')
+                       help='Path to MindSpore checkpoint files.')
     group.add_argument('--param-map-path', type=str, default=None, required=True,
                        help='Path to param_map files.')
     group.add_argument('--megatron-path', type=str, default=None, required=True,
-                       help='Path for saving Mindspore ckpt.')
+                       help='Path to save Megatron checkpoint.')
     group.add_argument('--convert-param-only',
                        action='store_true', default=False,
                        help='Convert only the model parameter without optimizer params;')
-    group.add_argument('--process-limit', type=int, default=4,
+    group.add_argument('--process-limit', type=int, default=8,
                        help='Max num of processes.')
-
+    group.add_argument('--multiprocess-off',
+                       action='store_true', default=False,
+                       help='Turn off multiprocess.')
+    group.add_argument('--process_timeout', type=int, default=3600,
+                       help='Timeout for each process.')
     # Parse.
     return parser.parse_args()
 
@@ -166,7 +170,7 @@ def get_ckpt():
             safetensors_files.sort(key=os.path.getmtime, reverse=True)
             latest_safetensors_file = safetensors_files[0] if safetensors_files else None
             ckpt_path = latest_safetensors_file
-            rst_list.append([dir_name, ckpt_path, tp, pp, save_dir_name])
+            rst_list.append((ckpt_path, tp, pp, save_dir_name, dir_name))
     return rst_list
 
 
@@ -321,11 +325,9 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
     log_with_time(f"> processing {dir_name}, tp = {tp}, pp = {pp}")
     global ms_path, param_map_path, megatron_path, num_layers, dp_size, tp_size, pp_size, vpp_size, noop, \
            src_model_format
-    if src_model_format == "safetensors":
-        ckpt = ms.load_checkpoint(ckpt_path, format="safetensors")
-    else:
-        ckpt = ms.load_checkpoint(ckpt_path)
-
+    ckpt = ms.load_checkpoint(ckpt_path, format="safetensors" if src_model_format == "safetensors" else "ckpt")
+    # for k, v in ckpt.items():
+    #     print(f"{k} {v.dtype} {v.numpy() if v.numel() <= 10 else v.shape}")
     with curr_iter.get_lock():
         if curr_iter.value < 0:
             curr_iter.value = int(
@@ -378,7 +380,7 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
         cur_bucket_numel = [0 for i in range(bucket_num)]
         cur_bucket_numel_unpadded = [0 for i in range(bucket_num)]
 
-        # mindspore pp/vpp → megatron layer_num
+        # MindSpore pp/vpp → megatron layer_num
         vpp_ms_layers, vpp_megatron_layers = cal_corr_vpp_layers(vpp, pp)
 
         for key in param_map:
@@ -447,18 +449,32 @@ def init(val):
     curr_iterations = val
 
 
+def throw_error(e):
+    print(
+        "multiprocess caught ERROR:\n"
+        f"    {e}\n"
+        "please add '--multiprocess-off' to obtain more error imformation.\n"
+    )
+
+
 if __name__ == "__main__":
     log_with_time("-------------start convert ckpt to pt-------------")
     all_args = parse_args()
     set_args(all_args)
 
-    # 2. read mindspore ckpt file, save tp/pp info
+    # 2. read MindSpore ckpt file, save tp/pp info
     rst = get_ckpt()
     curr_iterations = multiprocessing.Value('i', -1)
     lock = multiprocessing.Lock()
-
-    with multiprocessing.Pool(processes=all_args.process_limit, initializer=init, initargs=(curr_iterations,)) as pool:
-        results = pool.map(process_ckpt_to_pt_wrapper, [(
-            ckpt_path, tp, pp, save_dir_name, dir_name) for dir_name, ckpt_path, tp, pp, save_dir_name in rst])
-
+    if all_args.multiprocess_off:
+        for args_tuple in rst:
+            process_ckpt_to_pt_wrapper(args_tuple)
+    else:
+        with multiprocessing.Pool(processes=all_args.process_limit, initializer=init,
+                                  initargs=(curr_iterations,)) as pool:
+            results = []
+            for args_tuple in rst:
+                result = pool.apply_async(process_ckpt_to_pt_wrapper, (args_tuple,), error_callback=throw_error)
+                results.append(result)
+            output = [result.wait(all_args.process_timeout) for result in results]
     log_with_time("-------------end convert ckpt to pt-------------")
