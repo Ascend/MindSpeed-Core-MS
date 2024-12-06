@@ -94,7 +94,7 @@ def get_sp_params(config: TransformerConfig):
         ]
     else:
         sp_params = ["norm", "mlp.projection.bias", "attention.out_proj.bias",
-                     "attention.linear_proj.bias", "linear_fc2.bias"]
+                     "attention.linear_proj.bias", "mlp.linear_fc2.bias"]
     return sp_params
 
 

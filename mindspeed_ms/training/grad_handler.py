@@ -155,6 +155,8 @@ class ClipGlobalNorm(nn.Cell):
                 ("norm" in param.name)
                 or ("mlp.projection.bias" in param.name)
                 or ("attention.out_proj.bias" in param.name)
+                or ("mlp.linear_fc2.bias" in param.name)
+                or ("attention.linear_proj.bias" in param.name)
             )
             if tp_duplicate_params:
                 if rank_id == 0:
