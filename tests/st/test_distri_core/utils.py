@@ -15,8 +15,7 @@
 """some utility functions"""
 from typing import Dict
 import collections
-import os
-import time
+import re
 import numpy as np
 
 import mindspore as ms
@@ -25,7 +24,6 @@ import mindspore.common.dtype as mstype
 import mindspore.ops as ops
 from mindspore import Parameter, Tensor
 from mindspore.nn import DistributedGradReducer
-from mindspore.communication import get_rank
 
 from mindspeed_ms.core.distributed import DistributedDataParallel
 from mindspeed_ms.core.parallel_state import (
@@ -35,7 +33,6 @@ from mindspeed_ms.core.parallel_state import (
     get_tensor_model_parallel_world_size,
     get_expert_model_parallel_rank,
 )
-from mindspeed_ms.core.dist_checkpointing import save_checkpoint
 from mindspeed_ms.core.optimizer import MixedPrecisionOptimizer
 from mindspeed_ms.core.config import TransformerConfig
 from mindspeed_ms.legacy.model import ParallelLMLogits, TransformerLanguageModel
@@ -643,3 +640,15 @@ class MixtralModel(Module):
         loss = self.loss(logits, labels, loss_mask)
 
         return loss
+
+
+def read_loss_from_log(file_path):
+    """ reading loss from log """
+    losses = []
+    with open(file_path, 'r') as file:
+        for line in file:
+            match_str = re.search(r'Loss: (\d+\.\d+)', line)
+            if match_str:
+                loss_value = float(match_str.group(1))
+                losses.append(loss_value)
+    return losses

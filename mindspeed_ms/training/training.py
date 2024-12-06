@@ -241,6 +241,7 @@ class ParallelTrainingReducer:
             ))[0]
         if self.enable_grad_flag_reduce["tp"]:
             overflow = comm_func.all_reduce(overflow, "max", get_tensor_model_parallel_group())[0]
+        return overflow.astype(mstype.bool_)
 
     def reduce_is_finite(self, is_finite):
         """Reduce the is_finite status in all parallel modes."""
