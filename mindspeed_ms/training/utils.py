@@ -26,11 +26,7 @@ from mindspeed_ms.core.parallel_state import get_data_parallel_world_size, initi
     get_context_parallel_for_hybrid_ulysses_world_size
 
 
-def decay_filter(x):
-    return "norm" not in x.name.lower() and "bias" not in x.name.lower()
-
-
-def set_weight_decay(params, weight_decay=1e-1):
+def set_weight_decay(params, optimizer_config):
     """
     Set weight decay coefficient, zero for bias and layernorm, 1e-1 for rest
 
@@ -40,14 +36,52 @@ def set_weight_decay(params, weight_decay=1e-1):
     Returns:
         list: A list of dictionaries specifying the parameter groups and their respective weight decay coefficients.
     """
-    decay_params = list(filter(decay_filter, params))
-    other_params = list(filter(lambda x: not decay_filter(x), params))
-    group_params = []
-    if decay_params:
-        group_params.append({"params": decay_params, "weight_decay": weight_decay, "wd_mult": 1.0})
-    if other_params:
-        group_params.append({"params": other_params, "weight_decay": 0.0, "wd_mult": 0.0})
-    return group_params
+    params_map = {}
+    for param in params:
+        if not param.requires_grad:
+            continue
+
+        no_wd = no_weight_decay_cond_func(optimizer_config.no_weight_decay_params, param.name, param)
+
+        scale_lr = False
+
+        if not no_wd and not scale_lr:
+            wd_mult, lr_mult = 1.0, 1.0
+        elif not no_wd and scale_lr:
+            wd_mult, lr_mult = 1.0, lr_mult
+        elif no_wd and not scale_lr:
+            wd_mult, lr_mult = 0.0, 1.0
+        else:
+            wd_mult, lr_mult = 0.0, lr_mult
+
+        key = (wd_mult, lr_mult)
+        if key not in params_map:
+            params_map[key] = []
+        params_map[key].append(param)
+
+    param_groups = []
+    for (wd_mult, lr_mult), param_list in params_map.items():
+        if not param_list:
+            raise ValueError("After setting weight decay, param groups should not be empty.")
+        param_groups.append(
+            {
+                "params": param_list,
+                "weight_decay": optimizer_config.weight_decay,
+                "wd_mult": wd_mult,
+                "lr_mult": lr_mult,
+            }
+        )
+    return param_groups
+
+
+def no_weight_decay_cond_func(no_weight_decay_params, name, param):
+    if 'Default_Setup' in no_weight_decay_params:
+        return name.endswith(".bias") or len(param.shape) == 1
+    # Check if the parameter name ends with any of the specified suffixes
+    for suffix in no_weight_decay_params:
+        if name.endswith(suffix):
+            return True
+    return False
 
 
 def set_parallel_context(parallel_config):
