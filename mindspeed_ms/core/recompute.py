@@ -35,6 +35,9 @@ class _RecomputeCellWithRng(_RecomputeCell):
      - RecomputeCell now only support pynative mode.
      - When use recompute function, block object should not decorated by @jit.
     """
+    def __init__(self, block):
+        super(_RecomputeCellWithRng, self).__init__(block)
+        self.used_bprop_inputs = []
 
     def construct(self, *args, **kwargs):
         """Construct function of recompute with rng."""
