@@ -163,6 +163,7 @@ mapping_dict = {
     'start_weight_decay': 'optimizer_config.start_weight_decay',
     'end_weight_decay': 'optimizer_config.end_weight_decay',
     'weight_decay_incr_style': 'optimizer_config.weight_decay_incr_style',
+    'no_weight_decay_params': 'optimizer_config.no_weight_decay_params',
     # parallel config
     'tensor_model_parallel_size': 'parallel_config.tensor_model_parallel_size',
     'context_parallel_size': 'parallel_config.context_parallel_size',
@@ -2873,6 +2874,7 @@ class OptimizerConfig(BaseConfig):
             use_checkpoint_opt_param_scheduler: bool = True,
             override_opt_param_scheduler: bool = False,
             overlap_param_gather: bool = False,
+            no_weight_decay_params: Optional[List[str]] = None,
             **kwargs,
     ):
         super().__init__()
@@ -2902,6 +2904,7 @@ class OptimizerConfig(BaseConfig):
         self.use_checkpoint_opt_param_scheduler = use_checkpoint_opt_param_scheduler
         self.override_opt_param_scheduler = override_opt_param_scheduler
         self.overlap_param_gather = overlap_param_gather
+        self.no_weight_decay_params = no_weight_decay_params
         self.update_attrs(**kwargs)
 
 
@@ -3063,3 +3066,11 @@ def validate_override_opt_param_scheduler(config_instance, override_opt_param_sc
     """Validate override_opt_param_scheduler."""
     Validator.check_bool(override_opt_param_scheduler, "override_opt_param_scheduler")
     return override_opt_param_scheduler
+
+
+@OptimizerConfig.validator("no_weight_decay_params")
+def validate_no_weight_decay_params(config_instance, no_weight_decay_params):
+    """Validate override_opt_param_scheduler."""
+    if no_weight_decay_params is None:
+        no_weight_decay_params = ['Default_Setup']
+    return no_weight_decay_params

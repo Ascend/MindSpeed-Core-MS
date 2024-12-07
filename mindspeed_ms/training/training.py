@@ -1052,7 +1052,7 @@ def pretrain(train_valid_test_datasets_provider,
 
     network_with_loss = get_model(model_provider_func, training_config)
 
-    group_params = set_weight_decay(network_with_loss.trainable_params(), optimizer_config.weight_decay)
+    group_params = set_weight_decay(network_with_loss.trainable_params(), optimizer_config)
     optimizer = get_optimizer(
         optimizer_config,
         training_config,
