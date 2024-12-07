@@ -50,24 +50,23 @@ def single_all_to_all(input_, scatter_idx, gather_idx, group):
         input_t = input_.reshape(
             [seq_world_size, inp_shape[scatter_idx]] + \
             inp_shape[scatter_idx + 1:]
-        ).contiguous()
+        )
     else:
         # transpose groups of heads with the seq-len parallel dimension, so that we can scatter them!
-        input_t = input_.reshape(
-            [-1, seq_world_size, inp_shape[scatter_idx]] + \
-            inp_shape[scatter_idx + 1:]
-        ).swapaxes(0, 1).contiguous()
-    output = mint.zeros_like(input_t)
-    output = all_to_all_single_with_output_shape(output.shape, input_t, group=group)
+        input_t = mint.swapaxes(
+            input_.reshape([-1, seq_world_size, inp_shape[scatter_idx]] +
+                           inp_shape[scatter_idx + 1:]), 0, 1
+        )
+    output = all_to_all_single_with_output_shape(input_t.shape, input_t, group=group)
     output = output[0]
     # if scattering the seq-dim, transpose the heads back to the original dimension
     # e.g., [cp, s/cp, b, n/cp, d] -> [s/cp, b, cp, n/cp, d]
     if scatter_idx < 2:
-        output = output.swapaxes(0, 1).swapaxes(1, 2).contiguous()
+        output = mint.swapaxes(mint.swapaxes(output, 0, 1), 1, 2)
 
     return output.reshape(
         inp_shape[:gather_idx] + [inp_shape[gather_idx] * seq_world_size] + inp_shape[gather_idx + 1:]
-    ).contiguous()
+    )
 
 
 class _SeqAllToAll(mindspore.nn.Cell):
