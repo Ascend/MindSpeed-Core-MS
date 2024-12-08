@@ -14,7 +14,6 @@
 # ============================================================================
 """Test Hybrid Context Parallel"""
 import os
-import time
 import pytest
 
 @pytest.mark.level0
@@ -41,10 +40,10 @@ class TestHybridAttnCP:
         cmd = f"msrun --worker_num={device_num} " + \
               f"--local_worker_num={device_num} " + \
               f"--master_port=8118 " + \
+              f"--join=True " + \
               f"--log_dir={log_dir} " + \
               f"{scripts_cmd}"
         ret = os.system(cmd)
-        time.sleep(90)
         # Check the success message in the logs
-        os.system(f"grep -E 'ERROR|error|Error' {sh_path}/msrun_log/worker_0.log -C 3")
+        os.system(f"grep -Ei 'ERROR' {sh_path}/msrun_log/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check {log_dir}/worker_*.log"
