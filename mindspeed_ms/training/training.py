@@ -23,7 +23,6 @@ import numpy as np
 import mindspore as ms
 import mindspore.common.dtype as mstype
 import mindspore.communication.comm_func as comm_func
-from mindspore.common.api import _pynative_executor
 
 from mindspore import nn, Tensor, Parameter, mint, value_and_grad
 from mindspore.train import Perplexity
@@ -33,6 +32,7 @@ from mindspore.experimental.optim.optimizer import Optimizer as mintOptimizer
 
 from mindspeed_ms.tools import logger
 from mindspeed_ms.tools.resume_ckpt import get_resume_checkpoint
+from mindspeed_ms.training.initialize import initialize_megatron
 from mindspeed_ms.training import (
     get_args,
     core_transformer_config_from_args
@@ -74,9 +74,29 @@ from mindspeed_ms.core.dist_checkpointing import (
 from mindspeed_ms.legacy.model.moe.utils import MoEAuxLossAutoScaler
 from mindspeed_ms.core.optimizer import get_optimizer, get_optimizer_param_scheduler
 from mindspeed_ms.core.profiler import PynativeProfiler
+from mindspeed_ms.legacy.data.data_samplers import build_pretraining_data_loader
 
 from .utils import set_weight_decay
 from .grad_handler import inplace_apply_to_tensor_list, get_grad_process_func, GradAccumulator
+def get_train_valid_test_num_samples():
+    """Train/valid/test num samples."""
+
+    args = get_args()
+
+    # Number of train/valid/test samples.
+    if args.train_samples:
+        train_samples = args.train_samples
+    else:
+        train_samples = args.train_iters * args.global_batch_size
+    eval_iters = (args.train_iters // args.eval_interval + 1) * \
+                 args.eval_iters
+    test_iters = args.eval_iters
+
+    return (
+        train_samples,
+        eval_iters * args.global_batch_size,
+        test_iters * args.global_batch_size,
+    )
 
 
 def get_sp_params(config: TransformerConfig):
@@ -96,8 +116,6 @@ def get_sp_params(config: TransformerConfig):
         sp_params = ["norm", "mlp.projection.bias", "attention.out_proj.bias",
                      "attention.linear_proj.bias", "linear_fc2.bias"]
     return sp_params
-
-
 def rename_set_hidden_states_parameter(model, model_chunk_id=None):
     """ rename set_hidden_states parameter """
     weight_untrainable = model.untrainable_params()
@@ -796,8 +814,6 @@ def train(
         tp_world_size = get_tensor_model_parallel_world_size()
         src_rank = (get_rank() // tp_world_size) * tp_world_size
         dataset_size_tensor = comm_func.broadcast(dataset_size_tensor, src_rank, get_tensor_model_parallel_group())
-        comm_func.barrier(group=get_tensor_model_parallel_group())
-        _pynative_executor.sync()
     dataset_size = dataset_size_tensor.asnumpy().tolist()
     if isinstance(dataset_size, list):
         dataset_size = dataset_size[0]
@@ -816,13 +832,10 @@ def train(
         global_step = initial_step + initial_epoch * dataset_size + 1
         epoch_step = global_step % dataset_size
         current_epoch = global_step // dataset_size
-        if epoch_step == 0 and current_epoch > 0:
-            epoch_step = dataset_size
-            current_epoch -= 1
         logger.info(f"Resume training starts from global step {global_step}, epoch {current_epoch}, step {epoch_step}.")
 
     if epoch_step > 1:
-        logger.info(f"Resume training will skip {epoch_step - 1} step data")
+        logger.info(f"Resume training will skip {epoch_step} step data")
 
     evaluation_flag = (
         val_dataloader is not None
@@ -832,9 +845,7 @@ def train(
         and args.best_metric_comparison is not None
         and args.eval_metric is not None
     )
-    save_ckpt_flag = (args.save_interval is not None and
-                      args.train_iters != 0 and
-                      args.save_interval <= args.train_iters)
+    save_ckpt_flag = args.save_interval is not None and args.train_iters != 0
     correct_metric_flag = is_pipeline_last_stage() # not use pp or pp last_stage
 
     if evaluation_flag:
@@ -876,14 +887,12 @@ def train(
         # when resume training, epoch_step > 1, so train_data_dict_iterator will not be refreshed
         if epoch_step == 1 and train_dataloader is not None:
             train_data_dict_iterator = train_dataloader.create_dict_iterator(num_epochs=1)
-
+        start_time = time.time()
         # get step data
         if get_batch_func is None:
             data = next(train_data_dict_iterator)
         else:
             data = get_batch_func(train_data_dict_iterator)
-        logger.debug(f"step {global_step} input data are:\n{data}")
-        start_time = time.time()
         profiler.step_begin(global_step)
         loss, is_finite, loss_scale, learning_rate, global_norm = train_one_step_cell(**data)
         cp_world_size = get_context_parallel_world_size()
@@ -993,9 +1002,11 @@ def pretrain(train_valid_test_datasets_provider,
              model_type,
              forward_step_func=None,
              process_non_loss_data_func=None,
+             extra_args_provider=None,
              **kwargs):
     """pretrain function"""
-
+    # ms.context.set_context(pynative_synchronize=True)
+    initialize_megatron(extra_args_provider=extra_args_provider)
     args = get_args()
     if args.yaml_cfg is None:
         config = core_transformer_config_from_args(args)
@@ -1003,7 +1014,8 @@ def pretrain(train_valid_test_datasets_provider,
         config = core_transformer_config_from_yaml(args)
     optimizer_config = optimizer_config_from_args(args)
 
-    train_data_loader = kwargs.get("train_data_loader", None)
+    train_ds, _, _ = train_valid_test_datasets_provider(get_train_valid_test_num_samples())
+    train_data_loader = build_pretraining_data_loader(train_ds, 0)
     get_batch_func = kwargs.get("get_batch_func", None)
 
     network_with_loss = get_model(model_provider_func, config)
@@ -1094,5 +1106,5 @@ def pretrain(train_valid_test_datasets_provider,
         metrics=metrics,
         resume_dict=resume_dict,
         get_batch_func=get_batch_func,
-        loss_func_type=optimizer_config.loss_func_kwargs["loss_func_type"],
+        #loss_func_type=optimizer_config.loss_func_kwargs.loss_func_type,
     )

@@ -391,6 +391,9 @@ class ParallelAttention(Module):
         self.kv_channels = self.config.kv_channels
         self.kv_hidden_size = self.kv_channels * self.num_query_groups
 
+        self.pre_tockens = args.pre_tockens
+        self.next_tockens = args.next_tockens
+        self.input_layout = args.shape_order
         self.sequence_parallel = self.config.sequence_parallel
         self.use_flash_attention = args.use_flash_attn and attention_type == AttnType.self_attn \
             and self.attn_mask_type == AttnMaskType.causal
@@ -399,10 +402,12 @@ class ParallelAttention(Module):
                 raise NotImplementedError(
                     'FlashAttention code path only supports self-attention for now.'
                 )
+
             if self.attn_mask_type != AttnMaskType.causal:
                 raise NotImplementedError(
                     'FlashAttention code path only supports causal mask for now.'
                 )
+
         self.use_flash_sp = args.use_flash_sp
         self.norm_factor = math.sqrt(self.kv_channels)
 
@@ -637,17 +642,20 @@ class ParallelAttention(Module):
                 value = mint.repeat_interleave(value, repeat_num, dim=2)
             context_layer = self.core_attention(query, key, value, attention_mask)
         elif get_context_parallel_world_size() <= 1:
+            if attention_mask is None:
+                attention_mask = ops.triu(mint.ones((seq_len, seq_len)), 1)
             if attention_mask.ndim == 3:
                 attention_mask = attention_mask.expand_dims(axis=1)
             if query.dtype == mstype.float32:
-                query = query.astype(mstype.float16)
+                query = query.astype(mstype.bfloat16)
             if key.dtype == mstype.float32:
-                key = key.astype(mstype.float16)
+                key = key.astype(mstype.bfloat16)
             if value.dtype == mstype.float32:
-                value = value.astype(mstype.float16)
-            attention_mask = attention_mask.astype(mstype.uint8)
+                value = value.astype(mstype.bfloat16)
+            attention_mask = attention_mask.bool()
 
             if args.shape_order == 'SBH':
+
                 # SBND -> SBH
                 fa_use_sbh = True
                 query, key, value = [
@@ -669,6 +677,7 @@ class ParallelAttention(Module):
                 pre_tokens=args.pre_tockens,
                 next_tokens=args.next_tockens,
                 sparse_mode=args.sparse_mode
+
             )
 
             if not fa_use_sbh:

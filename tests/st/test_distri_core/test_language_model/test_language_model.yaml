@@ -36,6 +36,7 @@ language_model:
 # data
 seq_length: 32
 vocab_size: 128
+padded_vocab_size: 128
 eod_id: -100
 
 # training

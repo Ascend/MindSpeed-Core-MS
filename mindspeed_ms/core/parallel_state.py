@@ -581,7 +581,7 @@ def get_tensor_model_parallel_rank():
 
 def get_zero_parallel_rank():
     """Return my rank for the tensor model parallel group."""
-    return _get_rank_helper('dp-zero')
+    return _get_rank_helper('dp-zero-tp')
 
 
 def get_context_parallel_rank():

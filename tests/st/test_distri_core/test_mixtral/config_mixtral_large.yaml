@@ -65,6 +65,7 @@ max_position_embeddings: 4096
 
 # data
 vocab_size: 32000
+padded_vocab_size: 32000
 seq_length: 4096
 shuffle: False
 pad_token: 0

@@ -1,0 +1,107 @@
+# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+
+"""Dataloaders."""
+
+import mindspore.dataset as ds
+from mindspeed_ms.training import get_args
+from mindspeed_ms.core.parallel_state import get_data_parallel_rank, get_data_parallel_world_size
+
+
+def build_pretraining_data_loader(dataset, consumed_samples):
+    """Build dataloader given an input dataset."""
+
+    if dataset is None:
+        return None
+    args = get_args()
+
+    # Megatron sampler
+    if args.dataloader_type == 'single':
+        batch_sampler = MegatronPretrainingSampler(
+            total_samples=len(dataset),
+            consumed_samples=consumed_samples,
+            micro_batch_size=args.micro_batch_size,
+            global_batch_size=args.global_batch_size,
+            data_parallel_rank=get_data_parallel_rank(),
+            data_parallel_size=get_data_parallel_world_size())
+    elif args.dataloader_type == 'cyclic':
+        batch_sampler = MegatronPretrainingRandomSampler(
+            dataset,
+            total_samples=len(dataset),
+            consumed_samples=consumed_samples,
+            micro_batch_size=args.micro_batch_size,
+            data_parallel_rank=get_data_parallel_rank(),
+            data_parallel_size=get_data_parallel_world_size(),
+            data_sharding=args.data_sharding)
+    elif args.dataloader_type == "external":
+        # External dataloaders are passed through. User is expected to provide a
+        # torch-compatible dataloader and define samplers, if needed.
+        return dataset
+    else:
+        raise Exception('{} dataloader type is not supported.'.format(
+            args.dataloader_type))
+
+    # Torch dataloader.
+    return ds.GeneratorDataset(dataset, batch_sampler=batch_sampler, column_names=["dataset"])
+
+
+class MegatronPretrainingSampler(ds.Sampler):
+    """Megatron Pretraining Sampler."""
+
+    def __init__(self, total_samples, consumed_samples, micro_batch_size, global_batch_size,
+                 data_parallel_rank, data_parallel_size, drop_last=True):
+        super().__init__()
+        # Keep a copy of input params for later use.
+        self.total_samples = total_samples
+        self.consumed_samples = consumed_samples
+        self.micro_batch_size = micro_batch_size
+        self.data_parallel_rank = data_parallel_rank
+        self.micro_batch_times_data_parallel_size = \
+            self.micro_batch_size * data_parallel_size
+        self.drop_last = drop_last
+        batch_per_dp = global_batch_size // data_parallel_size
+        self.micro_batch_num = batch_per_dp // self.micro_batch_size
+        self.micro_batch_times_data_parallel_size = \
+            self.micro_batch_size * data_parallel_size
+        self.full_batch_data_parallel_size = \
+            self.micro_batch_size * self.micro_batch_num * data_parallel_size
+
+        # Sanity checks.
+        assert self.total_samples > 0, \
+            'no sample to consume: {}'.format(self.total_samples)
+        assert self.consumed_samples < self.total_samples, \
+            'no samples left to consume: {}, {}'.format(self.consumed_samples,
+                                                        self.total_samples)
+        assert self.micro_batch_size > 0
+        assert data_parallel_size > 0
+        assert self.data_parallel_rank < data_parallel_size, \
+            'data_parallel_rank should be smaller than data size: {}, ' \
+            '{}'.format(self.data_parallel_rank, data_parallel_size)
+
+    def __len__(self):
+        return self.total_samples // self.full_batch_data_parallel_size
+
+    def get_start_end_idx(self, micro_batch_idx):
+        start_idx = (self.data_parallel_rank * self.micro_batch_size +
+                     micro_batch_idx * self.micro_batch_times_data_parallel_size)
+        end_idx = start_idx + self.micro_batch_size
+        return start_idx, end_idx
+
+    # pylint: disable=C1801, E1120
+    def __iter__(self):
+        batch = []
+        # Last batch will be dropped if drop_last is not set False
+        for idx in range(self.consumed_samples, self.total_samples):
+            batch.append(idx)
+            if len(batch) == self.full_batch_data_parallel_size:
+                batch_per_dp = []
+                for micro_batch_idx in range(self.micro_batch_num):
+                    start_idx, end_idx = self.get_start_end_idx(micro_batch_idx)
+                    batch_per_dp += batch[start_idx:end_idx]
+                yield batch_per_dp
+                batch = []
+                batch_per_dp = []
+
+        # Check the last partial batch and see drop_last is set
+        if len(batch) > 0 and not self.drop_last:
+            start_idx, end_idx = self.get_start_end_idx()
+            yield batch[start_idx:end_idx]

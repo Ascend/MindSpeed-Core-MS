@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import types
-from transformers import AutoTokenizer
 from mindspeed_ms.core.datasets.megatron_tokenizer import MegatronTokenizer
 
 from .bert_tokenization import FullTokenizer as FullBertTokenizer
@@ -23,7 +22,7 @@ def build_tokenizer(args):
               flush=True)
     # Select and instantiate the tokenizer.
     if args.tokenizer_type == "PretrainedFromHF":
-        build_pretrainedfromhf_tokenizer(args)
+        tokenizer = build_pretrainedfromhf_tokenizer(args)
     elif args.tokenizer_type == 'BertWordPieceLowerCase':
         assert args.vocab_file is not None
         tokenizer = _BertWordPieceTokenizer(vocab_file=args.vocab_file,
@@ -86,28 +85,28 @@ def build_tokenizer(args):
 
 def build_pretrainedfromhf_tokenizer(args):
     if args.rank == 0:
-            print(' > building PretrainFromHF tokenizer. Vocab file is un-used, '
-                  'loading tokenizer from pre-trained model', flush=True)
+        print(' > building PretrainFromHF tokenizer. Vocab file is un-used, '
+              'loading tokenizer from pre-trained model', flush=True)
 
-        if args.tokenizer_name_or_path is None:
-            raise ValueError("Missing tokenizer_name_or_path while building PretrainFromHF tokenizer.")
+    if args.tokenizer_name_or_path is None:
+        raise ValueError("Missing tokenizer_name_or_path while building PretrainFromHF tokenizer.")
 
-        hf_tokenizer_kwargs = dict()
-        if hasattr(args, "tokenizer_kwargs") and args.tokenizer_kwargs:
-            if len(args.tokenizer_kwargs) % 2 != 0:
-                raise ValueError("The token name and token value must be entered in pairs.")
+    hf_tokenizer_kwargs = dict()
+    if hasattr(args, "tokenizer_kwargs") and args.tokenizer_kwargs:
+        if len(args.tokenizer_kwargs) % 2 != 0:
+            raise ValueError("The token name and token value must be entered in pairs.")
 
-            for i in range(0, len(args.tokenizer_kwargs), 2):
-                hf_tokenizer_kwargs[args.tokenizer_kwargs[i]] = \
-                    args.tokenizer_kwargs[i + 1]
+        for i in range(0, len(args.tokenizer_kwargs), 2):
+            hf_tokenizer_kwargs[args.tokenizer_kwargs[i]] = \
+                args.tokenizer_kwargs[i + 1]
 
-        tokenizer = _AutoTokenizer(
-            args.tokenizer_name_or_path,
-            vocab_extra_ids=args.vocab_extra_ids,
-            model_max_length=args.seq_length,
-            use_fast=args.tokenizer_not_use_fast,
-            **hf_tokenizer_kwargs
-        )
+    tokenizer = _AutoTokenizer(
+        args.tokenizer_name_or_path,
+        vocab_extra_ids=args.vocab_extra_ids,
+        model_max_length=args.seq_length,
+        use_fast=args.tokenizer_not_use_fast,
+        **hf_tokenizer_kwargs
+    )
     return tokenizer
 
 
@@ -901,7 +900,12 @@ class _AutoTokenizer(MegatronTokenizer):
         hf_tokenizer_kwargs["use_fast"] = use_fast
         hf_tokenizer_kwargs["trust_remote_code"] = True
         hf_tokenizer_kwargs["local_files_only"] = True
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, **hf_tokenizer_kwargs)
+
+        try:
+            import transformers
+        except ImportError:
+            raise EnvironmentError(f"The transformers library must be installed to use pretrainedfromhf tokenizer")
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_name_or_path, **hf_tokenizer_kwargs)
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         self.encoder = self.tokenizer.get_vocab()

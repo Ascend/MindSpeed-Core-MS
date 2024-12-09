@@ -29,7 +29,6 @@ MODEL_ARGS="
     --no-gradient-accumulation-fusion \
     --bf16\
     --rotary-interleaved \
-    --no-rope-fusion \
     --use-mcore-models \
 "
 

@@ -15,6 +15,7 @@
 
 """pynative init"""
 
+from mindspeed_ms.core import parallel_state
 from . import distributed
 from . import pipeline_parallel
 from . import tensor_parallel
@@ -23,6 +24,8 @@ from . import optimizer
 from . import transformer
 from . import dist_checkpointing
 from . import profiler
+
+mpu = parallel_state
 
 __all__ = []
 __all__.extend(distributed.__all__)

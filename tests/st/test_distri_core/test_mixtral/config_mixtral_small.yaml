@@ -69,6 +69,7 @@ next_tockens: 2147483647
 
 # data
 vocab_size: 64
+padded_vocab_size: 64
 seq_length: 4
 shuffle: False
 pad_token: 0
