@@ -144,11 +144,11 @@ def print_keys(ckpt, s=1):
             print_keys(v, s+1)
 
 
-def get_pt2ms_args(weight_pt_path, save_args_path):
+def get_pt2ms_args(weight_pt_path, save_args_path, param_name_list=None):
     """convert pt args to ms args"""
     log_info(f"weight_pt_path: {weight_pt_path}")
     pt = torch.load(weight_pt_path, map_location="cpu")
-    save_args(weight_pt_path, save_args_path, pt)
+    save_args(weight_pt_path, save_args_path, pt, param_name_list)
     flatten_param_groups = {}
 
     if 'optimizer' in pt:
@@ -302,7 +302,7 @@ def _convert_param_name(pt_param_name, data_key, pt_path, stage_list, vpp_layer_
     return ms_para_name
 
 
-def save_args(weight_pt_path, save_args_path, pt):
+def save_args(weight_pt_path, save_args_path, pt, param_name_list):
     """save args"""
     needed_args = {}
     needed_args['args'] = pt.get('args', None)
@@ -312,6 +312,9 @@ def save_args(weight_pt_path, save_args_path, pt):
     needed_args['opt_param_scheduler'] = pt.get('opt_param_scheduler', None)
     needed_args['rng_state'] = pt.get('rng_state', None)
     needed_args['num_floating_point_operations_so_far'] = pt.get('num_floating_point_operations_so_far', None)
+
+    if param_name_list is not None:
+        needed_args['param_name_list'] = param_name_list
 
     dir_path = os.path.dirname(weight_pt_path)
     dir_name = os.path.basename(dir_path)
@@ -375,12 +378,16 @@ def flatten_param_dict(prefix, param_dict, flattened_param_dict):
 
 def convert_pt2ms_param_only(param_dict: dict, pt_path, stage_list, ms_dtype=ms.float32, vpp_layer_mapping=None):
     """convert param only"""
-    flattened_dict = collections.OrderedDict()
     retrived_data = collections.OrderedDict()
     vpp_size = len(vpp_layer_mapping[0]) if vpp_layer_mapping else 1
+    param_name_list = []
     for vpp_stage in range(vpp_size):
+        flattened_dict = collections.OrderedDict()
         model_key = f'model{vpp_stage}' if vpp_size > 1 else 'model'
         flatten_param_dict([], param_dict[model_key], flattened_dict)
+        param_names = [f"{model_key}.{key}" for key in flattened_dict.keys()]
+        param_names.reverse()
+        param_name_list.append(param_names)
 
         for k, v in flattened_dict.items():
             new_key = _convert_param_name(k, "param", pt_path, stage_list, vpp_layer_mapping, vpp_stage)
@@ -388,7 +395,8 @@ def convert_pt2ms_param_only(param_dict: dict, pt_path, stage_list, ms_dtype=ms.
             new_param = Parameter(Tensor(v, dtype=ms_dtype))
             retrived_data[new_key] = new_param
 
-    return retrived_data
+    print(f"param_name_list {str(param_name_list)}")
+    return retrived_data, param_name_list
 
 
 def get_ms_dir_format(tp_rank, tp_size, cp_rank, cp_size, dp_rank, dp_size, pp_rank, order='tp-cp-ep-dp-pp'):
@@ -428,7 +436,6 @@ def run(args, dist_path, model_path):
 
     save_args_path = Path(all_args.ms_path) / "pt_meta"
     # save pt args
-    args2save = get_pt2ms_args(model_path, save_args_path)
     vpp_layer_mapping = get_vpp_layers_map(total_layers, vpp_size, pp_size)
     log_info(f"vpp_layer_mapping: {vpp_layer_mapping}")
     log_info(f"Parameter conversion begins.")
@@ -445,15 +452,19 @@ def run(args, dist_path, model_path):
             ms_dtype=ms.float32,
             vpp_layer_mapping=vpp_layer_mapping
         )
+        args2save = get_pt2ms_args(model_path, save_args_path)
+
     else:
         param_dict = torch.load(model_path, map_location="cpu")
-        retrived_data = convert_pt2ms_param_only(
+        retrived_data, param_name_list = convert_pt2ms_param_only(
             param_dict=param_dict,
             pt_path=model_path,
             stage_list=stage_list,
             ms_dtype=ms.float32,
             vpp_layer_mapping=vpp_layer_mapping
         )
+        args2save = get_pt2ms_args(model_path, save_args_path, param_name_list)
+
     print(f"converted param is:")
     for k, v in retrived_data.items():
         print(f"{k} {v.shape} {v.dtype}")
@@ -505,14 +516,15 @@ if __name__ == '__main__':
     # make sure 'pt_meta_path' exists
     pt_meta_path.mkdir(parents=True, exist_ok=True)
     # copy param_map to ms_path
-    param_map_list = Path(all_args.param_map_path).glob("*.json")
-    if not param_map_list:
-        log_info(f"no param_map*.json was found under directory {all_args.param_map_path}, "
-                 f"so no param_map*.json will be copy to {pt_meta_path}")
-    for param_map_file in param_map_list:
-        dest_path = pt_meta_path / param_map_file.name
-        log_info(f"copy {param_map_file} to {dest_path}")
-        shutil.copy(param_map_file, dest_path)
+    if not all_args.convert_param_only:
+        param_map_list = Path(all_args.param_map_path).glob("*.json")
+        if not param_map_list:
+            log_info(f"no param_map*.json was found under directory {all_args.param_map_path}, "
+                     f"so no param_map*.json will be copy to {pt_meta_path}")
+        for param_map_file in param_map_list:
+            dest_path = pt_meta_path / param_map_file.name
+            log_info(f"copy {param_map_file} to {dest_path}")
+            shutil.copy(param_map_file, dest_path)
 
     pt_file_list = get_pts_path(all_args)
 

@@ -75,7 +75,7 @@ MindSpore Checkpoint 转为 Megatron Checkpoint 支持两种模式，对应转�
 
 ### 1.2.1. 仅转换模型权重
 
-转换时添加 `--convert-param-only` 参数，这种模式仅生成包含 `bfloat16` 类型的模型权重文件 `model_optim_rng.pt`。
+转换时添加 `--convert-param-only` 参数，这种模式无需param-map-path中的json文件，仅生成包含 `bfloat16` 类型的模型权重文件 `model_optim_rng.pt`。
 
 ```bash
 export PYTHONPATH=/path/to/Megatron-LM:$PYTHONPATH
