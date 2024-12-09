@@ -38,7 +38,7 @@ def get_last_checkpoint(ckpt_path, format_="ckpt"):
     return os.path.join(ckpt_path, ckpt_list[-1])
 
 
-def combine_bucket_data(param_total_dict, prefix, buffer_id, bucket_id):
+def combine_bucket_data(param_total_dict, prefix, buffer_id, bucket_id, no_save_optim):
     '''combine bucket data'''
     shard_name = "buffer_{}_bucket_{}".format(buffer_id, bucket_id)
     param_name = prefix + '.' + shard_name if prefix else shard_name
@@ -50,12 +50,16 @@ def combine_bucket_data(param_total_dict, prefix, buffer_id, bucket_id):
                            .format(buffer_id, bucket_id, rank))
         bucket_data_list.append(state_dict[param_name].asnumpy())
         state_dict.pop(param_name)
+        if no_save_optim:
+            # filter optimizer parameters
+            state_dict.pop('exp_avg.' + shard_name, None)
+            state_dict.pop('exp_avg_sq.' + shard_name, None)
     # concatenate sharded bucket data
     bucket_data = np.concatenate(bucket_data_list)
     return bucket_data
 
 
-def combine_zero3_data(param_total_dict, param_name):
+def combine_zero3_data(param_total_dict, param_name, no_save_optim):
     '''combine bucket data'''
     # collect this bucket data from all dp rank
     param_data_list = []
@@ -65,17 +69,29 @@ def combine_zero3_data(param_total_dict, param_name):
                            .format(param_name, rank))
         param_data_list.append(state_dict[param_name].asnumpy())
         state_dict.pop(param_name)
+        if no_save_optim:
+            state_dict.pop('exp_avg.' + param_name, None)
+            state_dict.pop('exp_avg_sq.' + param_name, None)
     # concatenate sharded data
     param_data = np.concatenate(param_data_list)
     return param_data
 
+def check_key(key):
+    key_list = ['learning_rate', 'weight_decay', 'epoch', 'state', 'default_generator']
+    if any(x in key for x in key_list):
+        return True
+    return False
 
-def get_parameter_state_dp_zero(strategy, param_total_dict):
+def get_parameter_state_dp_zero(strategy, param_total_dict, no_save_optim):
     '''get parameter state on dp_zero'''
     # extract buffer info
     buffer_info = strategy['buffer_info']
     buffer_num = len(buffer_info)
-    param_buffer_data = {"": {}, "exp_avg": {}, "exp_avg_sq": {}}
+    if no_save_optim:
+        # only save model parameters
+        param_buffer_data = {"": {}}
+    else:
+        param_buffer_data = {"": {}, "exp_avg": {}, "exp_avg_sq": {}}
     # assemble parameter and states data from all dp rank
     for buffer_id in range(buffer_num):
         buffer_id = str(buffer_id)
@@ -92,7 +108,8 @@ def get_parameter_state_dp_zero(strategy, param_total_dict):
                     param_total_dict,
                     prefix=key,
                     buffer_id=buffer_id,
-                    bucket_id=bucket_id
+                    bucket_id=bucket_id,
+                    no_save_optim=no_save_optim
                 )
                 bucket_size = bucket_data.shape[0]
                 # copy bucket data into buffer
@@ -117,7 +134,9 @@ def get_parameter_state_dp_zero(strategy, param_total_dict):
     if 'zero3_params' in strategy:
         zero3_params = strategy['zero3_params']
         for param_name in zero3_params:
-            param_data = combine_zero3_data(param_total_dict, param_name)
+            if no_save_optim and (param_name.startswith('exp_avg.') or param_name.startswith('exp_avg_sq.')):
+                continue
+            param_data = combine_zero3_data(param_total_dict, param_name, no_save_optim)
             param = ms.Parameter(
                 param_data,
                 name=param_name,
@@ -129,6 +148,8 @@ def get_parameter_state_dp_zero(strategy, param_total_dict):
     for _, state_dict in param_total_dict.items():
         for key, value in state_dict.items():
             if key in new_state_dict.keys():
+                continue
+            if no_save_optim and check_key(key):
                 continue
             new_state_dict[key] = value
     return new_state_dict
@@ -142,6 +163,7 @@ def transform_ckpt_dp_zero_by_rank(
         src_format="ckpt",
         dst_format="ckpt",
         copy_to_all_dp_ranks=True,
+        no_save_optim=False,
     ):
     '''transform dp0 ckpt'''
     with open(shard_info_file, 'r') as f:
@@ -164,7 +186,7 @@ def transform_ckpt_dp_zero_by_rank(
         datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), rank_id))
 
     # combine data from all dp rank
-    param_state_dict = get_parameter_state_dp_zero(strategy, param_total_dict)
+    param_state_dict = get_parameter_state_dp_zero(strategy, param_total_dict, no_save_optim)
 
     # save combined checkpoint
     this_rank_ckpt_file = get_last_checkpoint(
@@ -207,7 +229,8 @@ def transform_ckpt_dp_zero(
         dst_format='ckpt',
         copy_to_all_dp_ranks=True,
         max_proccess_limit=8,
-        rank_section=None
+        rank_section=None,
+        no_save_optim=False,
     ):
     '''transform dp0 ckpt'''
     if rank_section is None:
@@ -264,6 +287,7 @@ def transform_ckpt_dp_zero(
                 src_format,
                 dst_format,
                 copy_to_all_dp_ranks,
+                no_save_optim,
             )
         )
         p.start()
@@ -327,6 +351,11 @@ if __name__ == '__main__':
         default=[None, None],
         help='Specify the rank section will be processed.'
     )
+    parser.add_argument(
+        '--no-save-optim',
+        action='store_true',
+        help='Filter optimizer parameters'
+    )
 
     args = parser.parse_args()
     transform_ckpt_dp_zero(
@@ -338,4 +367,5 @@ if __name__ == '__main__':
         args.copy_to_all_dp_ranks,
         args.max_proccess_limit,
         args.rank_section,
+        args.no_save_optim,
     )
