@@ -2,6 +2,7 @@
 """GPT model."""
 
 import mindspore.common.dtype as mstype
+from mindspore import ops
 from mindspeed_ms.legacy.model.module import Module
 from mindspeed_ms.legacy.model.enums import AttnMaskType
 from mindspeed_ms.legacy.model.language_model import get_language_model
@@ -9,6 +10,7 @@ from mindspeed_ms.legacy.model.transformer import ParallelLMLogits
 from mindspeed_ms.core.tensor_parallel.cross_entropy import VocabParallelCrossEntropy
 from mindspeed_ms.training.loss_func import LossWithMask
 from mindspeed_ms.legacy.model.eos_mask import EosMask
+from mindspeed_ms.core.parallel_state import get_context_parallel_rank, get_context_parallel_world_size
 
 def post_language_model_processing(parallel_lm_logits, loss_fn, lm_output, labels, logit_weights,
                                    parallel_output, fp16_lm_cross_entropy, loss_mask):
@@ -100,10 +102,11 @@ class GPTModel(Module):
 
         self.eod = kwargs['eod'] if 'eod' in kwargs else None
         self.reset_position_ids = kwargs['reset_position_ids'] if 'reset_position_ids' in kwargs else False
+        self.cp_size = get_context_parallel_world_size()
+        self.cp_rank = get_context_parallel_rank()
         if self.eod:
             self.eod_mask = EosMask(self.batch_size, config.seq_length, self.eod, self.reset_position_ids)
 
-        self.set_model_key()
 
         self.language_model, _ = get_language_model(config=config,
                                                     encoder_attn_mask_type=AttnMaskType.causal,
@@ -125,10 +128,6 @@ class GPTModel(Module):
         """ set input_tensor to model """
         self.language_model.set_input_tensor(input_tensor)
 
-    def set_model_key(self):
-        """ set model key for differentiate PipelineCell process """
-        self.model_key = "gpt_model"
-
     def construct(self, tokens, position_ids, attention_mask, loss_mask,
                   retriever_input_ids=None,
                   retriever_position_ids=None,
@@ -138,6 +137,14 @@ class GPTModel(Module):
 
         if (position_ids is None or attention_mask is None) and self.eod:
             position_ids, attention_mask = self.eod_mask(tokens)
+
+        if self.cp_size > 1:
+            seq_dim = 1
+            tokens = ops.chunk(tokens, self.cp_size, seq_dim)[self.cp_rank]
+            position_ids = ops.chunk(position_ids, self.cp_size, seq_dim)[self.cp_rank]
+            loss_mask = ops.chunk(loss_mask, self.cp_size, seq_dim)[self.cp_rank]
+            if labels is not None:
+                labels = ops.chunk(labels, self.cp_size, seq_dim)[self.cp_rank]
 
         lm_output = self.language_model(tokens,
                                         position_ids,

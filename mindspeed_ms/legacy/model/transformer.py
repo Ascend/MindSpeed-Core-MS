@@ -721,6 +721,8 @@ class ParallelAttention(Module):
                 context_layer = output.contiguous()
 
         else:
+            if attention_mask.ndim == 3:
+                attention_mask = attention_mask.expand_dims(axis=1)
             if query.dtype == mstype.float32:
                 query = query.astype(mstype.float16)
             if key.dtype == mstype.float32:
