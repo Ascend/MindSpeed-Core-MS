@@ -74,6 +74,7 @@ class VocabParallelCrossEntropy(nn.Cell):
         self.saved_tensors = [[], [], []]
         self.tp_world_size = get_tensor_model_parallel_world_size()
         self.tp_group = get_tensor_model_parallel_group()
+        self.used_bprop_inputs = []
 
     def _calculate_logits_max(self, vocab_parallel_logits):
         logits_max = mint.max(vocab_parallel_logits, dim=-1)[0]
