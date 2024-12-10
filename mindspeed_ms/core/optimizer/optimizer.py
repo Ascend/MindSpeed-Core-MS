@@ -177,6 +177,8 @@ class MixedPrecisionOptimizer(nn.Cell):
                 ("norm" in param.name)
                 or ("mlp.projection.bias" in param.name)
                 or ("attention.out_proj.bias" in param.name)
+                or ("mlp.linear_fc2.bias" in param.name)
+                or ("attention.linear_proj.bias" in param.name)
             ) or (get_tensor_model_parallel_rank() == 0)
             if grad_not_none and is_not_shared and is_not_tp_duplicate:
                 grads_for_norm.append(grad)
