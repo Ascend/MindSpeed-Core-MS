@@ -34,6 +34,7 @@ class SelfDefinedGather(nn.Cell):
         """init"""
         super(SelfDefinedGather, self).__init__()
         self.indices = indices
+        self.used_bprop_inputs = []
 
     def construct(self, input_):
         """forward process"""
@@ -44,8 +45,9 @@ class SelfDefinedGather(nn.Cell):
         return output
 
     # pylint: disable=W0613
-    def bprop(self, input_, output, dout):
+    def bprop(self, *args):
         """bprop process"""
+        dout = args[-1]
         indices = self.indices
         if indices.max() >= dout.shape[0]:
             raise ValueError(f"expect indices.max() < dout.shape[0], but got {indices} and {dout.shape}")
@@ -133,15 +135,18 @@ class MoEAuxLossAutoScaler(nn.Cell):
 
     """
     main_loss_backward_scale = ms.Tensor(1.0)
+    def __init__(self):
+        super(MoEAuxLossAutoScaler, self).__init__()
+        self.used_bprop_inputs = [1]
 
     # pylint: disable=W0613
     def construct(self, output, aux_loss):
         return output
 
     # pylint: disable=W0613
-    def bprop(self, output, aux_loss, out, dout):
-        scale_aux_loss_grad = mint.ones_like(aux_loss) * MoEAuxLossAutoScaler.main_loss_backward_scale
-        return dout, scale_aux_loss_grad
+    def bprop(self, *args):
+        scale_aux_loss_grad = mint.ones_like(args[1]) * MoEAuxLossAutoScaler.main_loss_backward_scale
+        return args[-1], scale_aux_loss_grad
 
     @staticmethod
     def set_loss_scale(scale):

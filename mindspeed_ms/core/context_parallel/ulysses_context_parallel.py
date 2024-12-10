@@ -94,6 +94,7 @@ class _SeqAllToAll(mindspore.nn.Cell):
         self.group = group
         self.scatter_idx = scatter_idx
         self.gather_idx = gather_idx
+        self.used_bprop_inputs = []
 
     def construct(self, input_: Tensor) -> Tensor:
         return single_all_to_all(input_, self.scatter_idx, self.gather_idx, self.group)
