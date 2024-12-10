@@ -193,15 +193,20 @@ def cal_bucket_num(param_map):
 
 def update_ms_key(ms_key, vpp_ms_layers, vpp_megatron_layers):
     '''update ms key'''
+    is_success = True
     ms_key_list = ms_key.split(".")
     layers_index = ms_key_list.index("layers")
     layer_num_index = layers_index + 1
     layer_num = int(ms_key_list[layer_num_index])
-    layer_in_megatron_index = vpp_megatron_layers.index(layer_num)
+    try:
+        layer_in_megatron_index = vpp_megatron_layers.index(layer_num)
+    except ValueError as e:
+        print(f"get layer in megatron failed: {e}")
+        return "", False
     layer_in_ms_index = vpp_ms_layers[layer_in_megatron_index]
     ms_key_list[layer_num_index] = str(layer_in_ms_index)
     new_ms_key = ".".join(ms_key_list)
-    return new_ms_key
+    return new_ms_key, is_success
 
 
 def cal_corr_vpp_layers(vpp, pp):
@@ -250,7 +255,7 @@ def add_args(model_optim, tp, pp, curr_iter):
     else:
         for i in range(len(model_optim)):
             model_optim_with_args[f'model{i}'] = model_optim[f'model{i}']
-    if not convert_param_only:
+    if 'optimizer' in pt_args:
         model_optim_with_args['optimizer'] = pt_args['optimizer']
         for i in range(len(pt_args['optimizer']['optimizer']['param_groups'])):
             model_optim_with_args['optimizer']['optimizer']['param_groups'][i]['step'] = curr_iter.value
@@ -320,6 +325,19 @@ def reconstruct_model_optim(model_optim_rng, tp, pp, curr_iter):
     return model_optim_with_args
 
 
+def get_param_keys_from_pt_meta(tp, vpp, pp):
+    '''get param keys from metafiles'''
+    global param_map_path
+    args_path = os.path.join(param_map_path, f"args_tp{tp:02}_pp{pp:03}.pt")
+    pt_args = torch.load(args_path, map_location="cpu")
+    if 'param_name_list' in pt_args:
+        param_keys = pt_args['param_name_list'][vpp]
+        print(f"param_keys: {param_keys}")
+    else:
+        raise ValueError("model in args pt not found, please check the version of the tool used")
+    return param_keys
+
+
 def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
     '''ckpt to pt main process'''
     log_with_time(f"> processing {dir_name}, tp = {tp}, pp = {pp}")
@@ -345,9 +363,8 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
 
     per_bucket_numel = []
     per_bucket_numel_unpadded = []
-    if not convert_param_only:
-        distrib_optim_model["per_bucket_numel"] = per_bucket_numel
-        distrib_optim_model["per_bucket_numel_unpadded"] = per_bucket_numel_unpadded
+    distrib_optim_model["per_bucket_numel"] = per_bucket_numel
+    distrib_optim_model["per_bucket_numel_unpadded"] = per_bucket_numel_unpadded
 
     model_curr = []
     for vpp in range(vpp_size):
@@ -355,13 +372,12 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
 
         model_curr_vpp = []
         # 3. fetch param_map according to to/pp, multiple param_map need to be read when vpp_size > 1
-        param_map = get_param_map(tp, pp, vpp)
-
-        bucket_num = cal_bucket_num(param_map)
-        param = [torch.tensor([], dtype=torch.float32)
-                 for i in range(bucket_num)]
 
         if not convert_param_only:
+            param_map = get_param_map(tp, pp, vpp)
+            bucket_num = cal_bucket_num(param_map)
+            param = [torch.tensor([], dtype=torch.float32)
+                     for i in range(bucket_num)]
             exp_avg = [torch.tensor([], dtype=torch.float32)
                        for i in range(bucket_num)]
             exp_avg_sq = [torch.tensor([], dtype=torch.float32)
@@ -377,53 +393,63 @@ def process_ckpt_to_pt(ckpt_path, tp, pp, save_dir_name, dir_name, curr_iter):
             distrib_optim_model[vpp][(
                 torch.bfloat16, torch.float32)]["exp_avg_sq"] = exp_avg_sq
 
-        cur_bucket_numel = [0 for i in range(bucket_num)]
-        cur_bucket_numel_unpadded = [0 for i in range(bucket_num)]
+            cur_bucket_numel = [0 for i in range(bucket_num)]
+            cur_bucket_numel_unpadded = [0 for i in range(bucket_num)]
+
+            param_keys = param_map.keys()
+        else:
+            param_keys = get_param_keys_from_pt_meta(tp, vpp, pp)
 
         # MindSpore pp/vpp → megatron layer_num
         vpp_ms_layers, vpp_megatron_layers = cal_corr_vpp_layers(vpp, pp)
 
-        for key in param_map:
+        for key in param_keys:
+            is_success = True
             ms_key = ".".join(key.split(".")[1:])
             if "layers" in ms_key:
-                ms_key = update_ms_key(
+                ms_key, is_success = update_ms_key(
                     ms_key, vpp_ms_layers, vpp_megatron_layers)
+                if not is_success:
+                    continue
             for k, v in param_key_mapping.items():
                 if k in ms_key:
                     ms_key = ms_key.replace(k, v)
-            shape = param_map[key][1]
-            bucket_id = int(param_map[key][-1])
-            newshape = [1]
-            for i in shape:
-                newshape[0] *= i
-            weight_value = torch.tensor(ckpt[ms_key].asnumpy().astype(
-                np.float32).reshape(newshape), dtype=torch.float32)
-            weight_value_for_megatron = torch.tensor(ckpt[ms_key].asnumpy().astype(
-                np.float32), dtype=torch.bfloat16)
-            model_curr_vpp.append({key: weight_value_for_megatron})
+
             if not convert_param_only:
+                shape = param_map[key][1]
+                bucket_id = int(param_map[key][-1])
+                newshape = [1]
+                for i in shape:
+                    newshape[0] *= i
+                weight_value = torch.tensor(ckpt[ms_key].asnumpy().astype(
+                    np.float32).reshape(newshape), dtype=torch.float32)
+
                 exp_avg_value = torch.tensor(ckpt["exp_avg." + ms_key].asnumpy().astype(
                     np.float32).reshape(newshape), dtype=torch.float32)
                 exp_avg_sq_value = torch.tensor(
                     ckpt["exp_avg_sq." + ms_key].asnumpy().astype(np.float32).reshape(newshape), dtype=torch.float32
                 )
-            # 5. build buffer
-            param[bucket_id] = torch.cat((param[bucket_id], weight_value), 0)
-            if not convert_param_only:
+                # 5. build buffer
+                param[bucket_id] = torch.cat((param[bucket_id], weight_value), 0)
                 exp_avg[bucket_id] = torch.cat(
                     (exp_avg[bucket_id], exp_avg_value), 0)
                 exp_avg_sq[bucket_id] = torch.cat(
                     (exp_avg_sq[bucket_id], exp_avg_sq_value), 0)
 
-            # bucket_id ＆ shape
-            cur_bucket_numel[bucket_id] += newshape[0]
-            cur_bucket_numel_unpadded[bucket_id] += newshape[0]
+                # bucket_id ＆ shape
+                cur_bucket_numel[bucket_id] += newshape[0]
+                cur_bucket_numel_unpadded[bucket_id] += newshape[0]
 
-        # 6. merge different vpp，add head information: (per_bucket_numel、per_bucket_numel_unpadded)
-        per_bucket_numel.append(
-            {(torch.bfloat16, torch.float32): cur_bucket_numel})
-        per_bucket_numel_unpadded.append(
-            {(torch.bfloat16, torch.float32): cur_bucket_numel_unpadded})
+            weight_value_for_megatron = torch.tensor(ckpt[ms_key].asnumpy().astype(
+                np.float32), dtype=torch.bfloat16)
+            model_curr_vpp.append({key: weight_value_for_megatron})
+
+        if not convert_param_only:
+            # 6. merge different vpp，add head information: (per_bucket_numel、per_bucket_numel_unpadded)
+            per_bucket_numel.append(
+                {(torch.bfloat16, torch.float32): cur_bucket_numel})
+            per_bucket_numel_unpadded.append(
+                {(torch.bfloat16, torch.float32): cur_bucket_numel_unpadded})
 
         model_curr_vpp.reverse()
         model_curr.append(model_curr_vpp)

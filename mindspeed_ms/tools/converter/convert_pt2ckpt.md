@@ -91,13 +91,12 @@ Megatron Checkpoint 转为 MindSpore Checkpoint 支持两种模式，对应转�
 
 ### 1.2.1. 仅转换模型权重
 
-添加 `--convert-param-only` 参数，这种模式会读取 Megatron Checkpoint 目录底下的 `model_optim_rng.pt` 文件，该文件中仅包含以 `bfloat16` 类型保存的模型权重，不含优化器状态。因此，转换后的文件仅含模型权重，不含优化器状态。该转换模式下无需 `param_map` 信息。Megatron 的部分训练配置 args 将会被保存到 `--ms-path` 指定的目录下 `pt_meta` 文件夹中，该 args 在 MindSpore Checkpoint 转回 Megatron Checkpoint 时，需要回写入 Megatron Checkpoint 中。
+添加 `--convert-param-only` 参数，同时不指定`--param-map-path`。这种模式会读取 Megatron Checkpoint 目录底下的 `model_optim_rng.pt` 文件，该文件中仅包含以 `bfloat16` 类型保存的模型权重，不含优化器状态。因此，转换后的文件仅含模型权重，不含优化器状态。该转换模式下无需 `param_map` 信息。Megatron 的部分训练配置 args 将会被保存到 `--ms-path` 指定的目录下 `pt_meta` 文件夹中，该 args 在 MindSpore Checkpoint 转回 Megatron Checkpoint 时，需要回写入 Megatron Checkpoint 中。
 
 ```bash
 export PYTHONPATH=/path/to/Megatron-LM:$PYTHONPATH
 python mindspeed_ms/tools/converter/convert_pt2ckpt.py \
        --megatron-path /path/to/torch_baseline_ckpts/iter_0001000/ \
-       --param-map-path /path/to/torch_baseline_ckpts/param_map \
        --ms-path /path/to/ms_baseline_ckpts/ \
        --num-layers 64 \
        --pp-size 4 \
