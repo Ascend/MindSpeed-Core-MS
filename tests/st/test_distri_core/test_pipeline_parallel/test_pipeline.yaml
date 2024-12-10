@@ -42,6 +42,11 @@ shape_order: "BSH"
 pre_tockens: 2147483647
 next_tockens: 2147483647
 
+# evaluate
+eval_iters: 2
+save: "./saved_ckpt"
+save_interval: 3 # not save
+
 # loss arguments
 initial_loss_scale: 1  # loss_scale_value
 hysteresis: 2   # loss_scale_factor

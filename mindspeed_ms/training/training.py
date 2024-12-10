@@ -14,6 +14,7 @@
 # ============================================================================
 """For Training"""
 
+import math
 import time
 import os
 import gc
@@ -73,6 +74,11 @@ from mindspeed_ms.training.initialize import initialize_mindspeed_ms
 from mindspeed_ms.core.utils import get_model_config
 
 from .grad_handler import inplace_apply_to_tensor_list, get_grad_process_func
+from .utils import print_rank_last, print_rank_0, is_last_rank
+from .global_vars import get_timers, get_tensorboard_writer, get_wandb_writer
+
+# The earliest we can measure the start time.
+_TRAIN_START_TIME = time.time()
 
 
 def get_train_valid_test_num_samples():
@@ -908,10 +914,20 @@ def pretrain(train_valid_test_dataset_provider,
     initialize_mindspeed_ms(extra_args_provider=extra_args_provider,
                             args_defaults=args_defaults)
 
+    # updata _TRAIN_START_TIME to the min
+    global _TRAIN_START_TIME
+    start_time_tensor = Tensor([_TRAIN_START_TIME], mstype.float32)
+    start_time_tensor = comm_func.all_reduce(start_time_tensor, op='min')[0]
+    _TRAIN_START_TIME = start_time_tensor.item()
+
     args = get_args()
+    timers = get_timers()
 
+    timers('model-and-optimizer-setup', log_level=0).start(barrier=True)
     model, optimizer, opt_param_scheduler, resume_dict = setup_model_and_optimizer(model_provider, model_type)
+    timers('model-and-optimizer-setup').stop()
 
+    timers('train/valid/test-data-iterators-setup', log_level=0).start(barrier=True)
     if args.virtual_pipeline_model_parallel_size is not None:
         train_data_iterator = []
         valid_data_iterator = []
@@ -927,6 +943,9 @@ def pretrain(train_valid_test_dataset_provider,
         train_data_iterator, valid_data_iterator, test_data_iterator \
             = build_train_valid_test_data_iterators(
                 train_valid_test_dataset_provider)
+    timers('train/valid/test-data-iterators-setup').stop()
+
+    timers.log(['model-and-optimizer-setup', 'train/valid/test-data-iterators-setup'], barrier=True)
 
     config = get_model_config(model[0])
 
@@ -935,6 +954,7 @@ def pretrain(train_valid_test_dataset_provider,
 
     if not args.skip_train:
         logger.warning("training...")
+        iteration = 0
         if args.do_train and args.train_iters > 0:
             train(
                 train_one_step_cell=train_one_step_cell,
@@ -944,12 +964,19 @@ def pretrain(train_valid_test_dataset_provider,
                 metrics=None,
                 resume_dict=resume_dict,
             )
+            iteration = args.train_iters
             logger.warning("training is done...")
     else:
+        # TODO: Make iteration sense
+        iteration = 0
         logger.warning("skip training...")
 
     if args.do_valid:
-        logger.warning("validation is not supported for now.")
+        prefix = f'on validation set'
+        evaluate_and_print_results(prefix, forward_step_func,
+                                   valid_data_iterator, model,
+                                   iteration, process_non_loss_data_func, config,
+                                   verbose=True, write_to_tensorboard=False)
 
     if args.do_test:
         logger.warning("testing is not supported for now.")
@@ -1048,7 +1075,7 @@ def build_train_valid_test_data_loaders(build_train_valid_test_datasets_provider
     """ build the loader for train, validation and test set """
     args = get_args()
     (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
-    train_dataloader = build_train_valid_test_datasets_provider(get_train_valid_test_num_samples())
+    train_dataloader, valid_dataloader = build_train_valid_test_datasets_provider(get_train_valid_test_num_samples())
 
     do_train = train_dataloader is not None and args.train_iters > 0
     do_valid = valid_dataloader is not None and args.eval_iters > 0
@@ -1070,3 +1097,139 @@ def build_train_valid_test_data_iterators(build_train_valid_test_datasets_provid
     test_data_iterator = test_dataloader
 
     return train_data_iterator, valid_data_iterator, test_data_iterator
+
+
+def evaluate(forward_step_func,
+             data_iterator,
+             model,
+             process_non_loss_data_func,
+             config,
+             verbose=False):
+    """ Evaluation func """
+    if process_non_loss_data_func:
+        raise NotImplementedError("process_non_loss_data_func is not supported for now.")
+    args = get_args()
+    timers = get_timers()
+    timers('evaluation', log_level=0).start(barrier=True)
+    eval_batch_size = args.global_batch_size
+    eval_num_microbatch = eval_batch_size // (args.micro_batch_size * args.data_parallel_size)
+
+    for submodel in model:
+        submodel.set_train(False)
+    if verbose:
+        print_rank_0(f"Evaluation on {args.eval_iters * eval_batch_size} samples")
+    if isinstance(data_iterator, list):
+        valid_data_dict_iterator = []
+        for cur_valid_dataloader in data_iterator:
+            valid_data_dict_iterator.append(cur_valid_dataloader.create_dict_iterator())
+    else:
+        valid_data_dict_iterator = data_iterator.create_dict_iterator()
+    iteration = 0
+    total_loss_reduced = {}
+    while iteration < args.eval_iters:
+        iteration += 1
+        if verbose:
+            print_rank_0(f"Evaluating iter {iteration}/{args.eval_iters}")
+        forward_backward_func = get_forward_backward_func()
+        config.timers = None
+        losses_reduced, _ = forward_backward_func(
+            forward_step_func=forward_step_func,
+            data_iterator=valid_data_dict_iterator,
+            model=model,
+            num_microbatches=eval_num_microbatch,
+            seq_length=args.seq_length,
+            micro_batch_size=args.micro_batch_size,
+            decoder_seq_length=args.decoder_seq_length,
+            forward_only=True
+        )
+        config.timers = get_timers()
+
+        if is_pipeline_last_stage(ignore_virtual=True):
+            for key in losses_reduced[0].keys():
+                for x in losses_reduced:
+                    if key not in total_loss_reduced:
+                        total_loss_reduced[key] = Tensor([0.0, 0.0], mstype.float32)
+                    val = x[key]
+                    if isinstance(val, (list, tuple)):
+                        total_loss_reduced[key][0] += val[0]
+                        total_loss_reduced[key][1] += val[1]
+                    else:
+                        total_loss_reduced[key][0] += val
+                        total_loss_reduced[key][1] += 1
+        else:
+            total_loss_reduced = {"lm loss": [Tensor(0, mstype.float32), 1]}
+        args.consumed_valid_samples += eval_batch_size
+
+        if args.exit_duration_in_mins:
+            train_time = (time.time() - _TRAIN_START_TIME) / 60.0
+            done_each_device = Tensor(
+                [train_time > args.exit_duration_in_mins],
+                mstype.int8
+            )
+            done_each_device = comm_func.all_reduce(done_each_device, "max")[0]
+            done = done_each_device.item()
+            if done:
+                logger.warning('Exiting during evaluation, timelimit reached')
+                return None, None, True
+
+    collected_non_loss_data = None
+
+    for submodel in model:
+        submodel.set_train(True)
+    for key in total_loss_reduced:
+        numerator, denominator = total_loss_reduced[key]
+        total_loss_reduced[key] = numerator / denominator
+    timers('evaluation').stop()
+    timers.log(['evaluation'])
+
+    return total_loss_reduced, collected_non_loss_data, False
+
+
+def evaluate_and_print_results(prefix, forward_step_func,
+                               data_iterator, model,
+                               iteration, process_non_loss_data_func, config,
+                               verbose=False, write_to_tensorboard=True):
+    """Helper function to evaluate."""
+    args = get_args()
+    if write_to_tensorboard:
+        writer = get_tensorboard_writer()
+    else:
+        writer = None
+
+    wandb_writer = get_wandb_writer()
+
+    total_loss_dict, _, timelimit = evaluate(
+        forward_step_func, data_iterator, model,
+        process_non_loss_data_func, config, verbose
+    )
+    if timelimit:
+        return
+    string = " validation loss at {} | ".format(prefix)
+    for key in total_loss_dict:
+        string += "{} value: {:.6E} | ".format(key, total_loss_dict[key].item())
+        ppl = math.exp(min(20, total_loss_dict[key].item()))
+        string += "{} PPL: {:.6E} | ".format(key, ppl)
+        if writer:
+            writer.add_scalar('{} validation'.format(key),
+                              total_loss_dict[key].item(),
+                              iteration)
+            writer.add_scalar('{} validation vs samples'.format(key),
+                              total_loss_dict[key].item(),
+                              args.consumed_train_samples)
+            if args.log_validation_ppl_to_tensorboard:
+                writer.add_scalar('{} validation ppl'.format(key), ppl,
+                                  iteration)
+                writer.add_scalar('{} validation ppl vs samples'.format(key),
+                                  ppl, args.consumed_train_samples)
+            if wandb_writer and is_last_rank():
+                wandb_writer.log({
+                    '{} validation'.format(key): total_loss_dict[key].item()},
+                    iteration)
+
+    if process_non_loss_data_func:
+        raise NotImplementedError("process_non_loss_data_func is not supported for now.")
+
+    length = len(string) + 1
+    print_rank_last("-" * length)
+    print_rank_last(string)
+    print_rank_last("-" * length)

@@ -15,6 +15,7 @@
 """Mindspeed global variables."""
 import os
 from mindspeed_ms.training.tokenizer import build_tokenizer
+from mindspeed_ms.core.timers import Timers
 
 _GLOBAL_ARGS = None
 _GLOBAL_TOKENIZER = None
@@ -139,6 +140,13 @@ def _set_one_logger(args):
                   ' for details to install it')
 
 
+def _set_timers(args):
+    """Initialize timers."""
+    global _GLOBAL_TIMERS
+    _ensure_var_is_not_initialized(_GLOBAL_TIMERS, 'timers')
+    _GLOBAL_TIMERS = Timers(args.timing_log_level, args.timing_log_option)
+
+
 def get_tokenizer():
     """Return tokenizer."""
     _ensure_var_is_initialized(_GLOBAL_TOKENIZER, 'tokenizer')
@@ -165,6 +173,7 @@ def set_global_variables(args, build_tokenizer=True):
 
     _ensure_var_is_not_initialized(_GLOBAL_ARGS, 'args')
     set_args(args)
+    _set_timers(args)
 
     if build_tokenizer:
         _ = _build_tokenizer(args)

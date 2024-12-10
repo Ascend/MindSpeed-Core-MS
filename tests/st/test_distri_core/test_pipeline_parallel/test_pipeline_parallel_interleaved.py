@@ -19,7 +19,7 @@ import pytest
 from tests.st.test_distri_core.utils import read_loss_from_log
 
 
-@pytest.mark.level1
+@pytest.mark.level0
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_single
 class TestPipelineParallel:
@@ -103,3 +103,23 @@ class TestPipelineParallel:
         assert np.allclose(pp_loss, golden_loss, atol=1e-7), "Interleaved pipeline net " \
                                                                 "loss accuracy test fail !"
         print("============== Interleaved staged pipeline net loss accuracy test pass !!! ==============")
+
+    @pytest.mark.platform_arm_ascend910b_training
+    @pytest.mark.run(order=4)
+    def test_evaluation_loss(self):
+        """
+        Feature: test_evaluation_loss
+        Description: compare relative error between pipeline loss and golden loss on evaluation
+        Expectation: relative error smaller than 1e-6
+        """
+        pp_log_path = './pp_interleaved/worker_3.log'
+        pp_loss = read_loss_from_log(pp_log_path, pattern=r'lm loss value: (\d+\.\d+)')
+
+        pp_loss = np.array(pp_loss, np.float32)
+        golden_loss = np.array([6.133650, 6.068154], np.float32)
+
+        print(f"interleaved staged pp loss on evaluation: {pp_loss}", flush=True)
+        print(f"golden loss on evaluation: {golden_loss}", flush=True)
+        assert np.allclose(pp_loss, golden_loss, atol=1e-6), "Interleaved pipeline net " \
+                                                                "loss accuracy on evaluation test fail !"
+        print("============== Interleaved staged pipeline net loss accuracy on evaluation test pass !!! ==============")

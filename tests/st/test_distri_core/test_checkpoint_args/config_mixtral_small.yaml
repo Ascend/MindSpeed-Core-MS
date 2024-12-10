@@ -57,6 +57,7 @@ shape_order: "BSH"
 pre_tockens: 2147483647
 next_tockens: 2147483647
 tokenizer_type: 'NullTokenizer'
+eval_iters: 10
 
 # data
 vocab_size: 64

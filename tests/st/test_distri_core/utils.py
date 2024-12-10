@@ -682,12 +682,12 @@ class MixtralModel(Module):
         return loss
 
 
-def read_loss_from_log(file_path):
+def read_loss_from_log(file_path, pattern=r'lm loss: (\d+\.\d+)'):
     """ reading loss from log """
     losses = []
     with open(file_path, 'r') as file:
         for line in file:
-            loss_str = re.search(r'lm loss: (\d+\.\d+)', line)
+            loss_str = re.search(pattern, line)
             if loss_str:
                 loss_value = float(loss_str.group(1))
                 losses.append(loss_value)

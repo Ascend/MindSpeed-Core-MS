@@ -119,7 +119,7 @@ class TestData:
 # pylint: disable=W0613
 def train_valid_test_dataset_provider(unuse_args):
     """ get dataset """
-    return dataset
+    return dataset, dataset
 
 
 # pylint: disable=W0621

@@ -454,8 +454,6 @@ def forward_backward_pipelining_with_interleaving(
         raise NotImplementedError("collect_non_loss_data is not supported for now.")
     if first_val_step is not None:
         raise NotImplementedError("first_val_step is not supported for now.")
-    if forward_only:
-        raise NotImplementedError("'forward_only' input of pipeline interleaved is not supported for now.")
 
     args = get_args()
     config = get_model_config(model[0])
@@ -513,7 +511,10 @@ def forward_backward_pipelining_with_interleaving(
     if num_microbatches % pp_world_size != 0:
         raise RuntimeError("When using pipeline with interleaved, "
                            "the 'num_microbatches' must be divisible by pipeline world size.")
-    if total_num_microbatches == pp_world_size:
+    if forward_only:
+        warm_up_steps = total_num_microbatches
+        all_warmup_steps = False
+    elif total_num_microbatches == pp_world_size:
         warm_up_steps = total_num_microbatches
         all_warmup_steps = True
     else:
@@ -816,72 +817,73 @@ def forward_backward_pipelining_with_interleaving(
             input_tensors[next_forward_model_chunk_id].append(input_tensor)
         output_tensor_grads[next_backward_model_chunk_id].append(recv_grads)
 
-    # wait backward comm stream
-    if overlap_p2p_comm and backward_reqs is not None:
-        # pylint: disable=E1133
-        for req in backward_reqs:
-            req.wait()
-
-    # recv grad for running cooldown
-    if all_warmup_steps:
-        recv_grads = p2p_primitive.recv_backward(tensor_shape)
-        output_tensor_grads[-1].append(recv_grads)
-
-    # cooldown process
-    for i in range(steady_steps, total_num_microbatches):
-        dout = backward_step_helper(i)
-        next_backward_model_chunk_id = get_model_chunk_id(i + 1,
-                                                          pp_world_size,
-                                                          num_model_chunks,
-                                                          forward=False)
-        # decide communication operation
-        recv_next = True
-        if parallel_state.is_pipeline_last_stage(ignore_virtual=True) and \
-            next_backward_model_chunk_id == num_model_chunks - 1:
-            recv_next = False
-        if i == total_num_microbatches - 1:
-            recv_next = False
-        recv_grads = p2p_primitive.send_backward_recv_backward(dout,
-                                                               recv_next=recv_next,
-                                                               tensor_shape=tensor_shape)
-        output_tensor_grads[next_backward_model_chunk_id].append(recv_grads)
-
-    # get all model chunk parameters
-    merge_weights = []
-    for model_chunk_params in weights:
-        # remove 'set_hidden_states' parameter
-        merge_weights.extend(model_chunk_params[1:])
-    del weights
-
-    # merge grads
     all_model_chunk_grads = None
-    for model_chunk_grad in accumulate_grads_list:
-        if all_model_chunk_grads is None:
-            all_model_chunk_grads = model_chunk_grad
-        else:
-            all_model_chunk_grads += model_chunk_grad
-    del accumulate_grads_list
+    if not forward_only:
+        # wait backward comm stream
+        if overlap_p2p_comm and backward_reqs is not None:
+            # pylint: disable=E1133
+            for req in backward_reqs:
+                req.wait()
 
-    if wrap_with_ddp:
-        # grad sync for remaining model chunks
-        enable_grad_sync()
-        if overlap_grad_reduce and delay_grad_reduce:
+        # recv grad for running cooldown
+        if all_warmup_steps:
+            recv_grads = p2p_primitive.recv_backward(tensor_shape)
+            output_tensor_grads[-1].append(recv_grads)
+
+        # cooldown process
+        for i in range(steady_steps, total_num_microbatches):
+            dout = backward_step_helper(i)
+            next_backward_model_chunk_id = get_model_chunk_id(i + 1,
+                                                              pp_world_size,
+                                                              num_model_chunks,
+                                                              forward=False)
+            # decide communication operation
+            recv_next = True
+            if parallel_state.is_pipeline_last_stage(ignore_virtual=True) and \
+                next_backward_model_chunk_id == num_model_chunks - 1:
+                recv_next = False
+            if i == total_num_microbatches - 1:
+                recv_next = False
+            recv_grads = p2p_primitive.send_backward_recv_backward(dout,
+                                                                   recv_next=recv_next,
+                                                                   tensor_shape=tensor_shape)
+            output_tensor_grads[next_backward_model_chunk_id].append(recv_grads)
+
+        # get all model chunk parameters
+        merge_weights = []
+        for model_chunk_params in weights:
+            # remove 'set_hidden_states' parameter
+            merge_weights.extend(model_chunk_params[1:])
+        del weights
+
+        # merge grads
+        for model_chunk_grad in accumulate_grads_list:
+            if all_model_chunk_grads is None:
+                all_model_chunk_grads = model_chunk_grad
+            else:
+                all_model_chunk_grads += model_chunk_grad
+        del accumulate_grads_list
+
+        if wrap_with_ddp:
+            # grad sync for remaining model chunks
+            enable_grad_sync()
+            if overlap_grad_reduce and delay_grad_reduce:
+                for model_chunk_id in range(num_model_chunks):
+                    if model_chunk_id not in synchronized_model_chunks:
+                        model[model_chunk_id].issue_grad_reduce()
+                        synchronized_model_chunks.add(model_chunk_id)
+
+            # finish grad sync
             for model_chunk_id in range(num_model_chunks):
-                if model_chunk_id not in synchronized_model_chunks:
-                    model[model_chunk_id].issue_grad_reduce()
-                    synchronized_model_chunks.add(model_chunk_id)
+                model[model_chunk_id].final_grad_reduce()
 
-        # finish grad sync
-        for model_chunk_id in range(num_model_chunks):
-            model[model_chunk_id].final_grad_reduce()
-
-    # Reduce and scale grads
-    all_model_chunk_grads = reduce_and_scale_grads(list(all_model_chunk_grads),
-                                                   merge_weights,
-                                                   model,
-                                                   num_tokens_list,
-                                                   wrap_with_ddp,
-                                                   calculate_per_token_loss)
+        # Reduce and scale grads
+        all_model_chunk_grads = reduce_and_scale_grads(list(all_model_chunk_grads),
+                                                       merge_weights,
+                                                       model,
+                                                       num_tokens_list,
+                                                       wrap_with_ddp,
+                                                       calculate_per_token_loss)
 
     # return forward data
     forward_data_store = print_loss

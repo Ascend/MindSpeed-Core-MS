@@ -25,7 +25,7 @@ from mindspore.mint.optim import AdamW
 from mindspore.communication import init
 
 from mindspeed_ms.core.tensor_parallel.mappings import ReduceFromContextParallelRegion
-from mindspeed_ms.training import TrainOneStepCell, train, get_model, get_args
+from mindspeed_ms.training import TrainOneStepCell, train, get_model, get_args, evaluate_and_print_results
 from mindspeed_ms.training.utils import average_losses_across_data_parallel_group
 from mindspeed_ms.core.optimizer import DistributedOptimizer
 from mindspeed_ms.training.arguments import parse_args
@@ -209,7 +209,15 @@ def run_pipeline(model_config, train_args, dynamic_dataset=False):
 
     print(f"network trainable params: {network.trainable_params()}", flush=True)
 
+    prefix = f'pipeline before train'
+    evaluate_and_print_results(prefix, forward_step, dataset_parallel, network, 0,
+                               None, model_config, verbose=True, write_to_tensorboard=False)
+
     train(train_one_step_cell, dataset_parallel, forward_step)
+
+    prefix = f'pipeline after train'
+    evaluate_and_print_results(prefix, forward_step, dataset_parallel, network, args.train_iters,
+                               None, model_config, verbose=True, write_to_tensorboard=False)
 
 
 def run_standalone(model_config, train_args):
@@ -261,7 +269,15 @@ def run_standalone(model_config, train_args):
 
     print(f"network trainable params: {network.trainable_params()}", flush=True)
 
+    prefix = f'standalone before train'
+    evaluate_and_print_results(prefix, forward_step, dataset_parallel, network, 0,
+                               None, model_config, verbose=True, write_to_tensorboard=False)
+
     train(train_one_step_cell, dataset_parallel, forward_step)
+
+    prefix = f'standalone after train'
+    evaluate_and_print_results(prefix, forward_step, dataset_parallel, network, args.train_iters,
+                               None, model_config, verbose=True, write_to_tensorboard=False)
 
 
 def extra_args_provider(inner_parser):
