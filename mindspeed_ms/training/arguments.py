@@ -217,6 +217,12 @@ def _validate_create_attention_mask_in_dataloader(args):
 def validate_args(args, default_args, defaults={}):
     """Validate args from command line"""
     # Load saved args from Retro (if applicable).
+    if args.use_mc2:
+        logger.warning(f"MC2 is not supported for current version")
+    if args.jit_compile:
+        logger.warning(f"JIT Compile is not supported for current version")
+        args.jit_compile = False
+
     load_retro_args(args)
 
     _validate_create_attention_mask_in_dataloader(args)
@@ -1387,6 +1393,8 @@ def _add_training_args(parser):
     group.add_argument('--shape-order', type=str, default='SBH',
                        choices=['SBH', 'BSH', 'BSND', 'BNSD'],
                        help='input shape order used by Flash attention')
+    group.add_argument('--jit-compile', action='store_true', default=False,
+                       help='Setting jit compile mode to True')
 
     return parser
 
@@ -2123,6 +2131,8 @@ def _add_fusion_op_args(parser):
                        help="Use fused swiglu.")
     group.add_argument("--use-fused-rotary-pos-emb", action='store_true',
                        help="Use fused rotary-pos-emb.")
+    group.add_argument("--use-mc2", action='store_true',
+                       help="Use mc2 for compute-comm overlap in tp.")
     return parser
 
 
