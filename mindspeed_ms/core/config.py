@@ -137,6 +137,7 @@ mapping_dict = {
     'profile_op_time': 'training_config.profile_op_time',
     'profile_offline_analyse': 'training_config.profile_offline_analyse',
     'profile_dynamic_profiler_config_path': 'training_config.profile_dynamic_profiler_config_path',
+    'enable_high_availability': 'training_config.enable_high_availability',
     # dataset config
     'reset_attention_mask': 'dataset_config.reset_attention_mask',
     'reset_position_ids': 'dataset_config.reset_position_ids',
@@ -1533,6 +1534,7 @@ class TrainingConfig(BaseConfig):
         profile_op_time (bool, optional): profiling with op time info. Default: True.
         profile_offline_analyse (bool, optional): profiling with offline analyse. Default: False.
         profile_dynamic_profiler_config_path (str, optional): profiling with dynamic. Default: "".
+        enable_high_availability (str, optional): enable high availability. Default: False.
         kwargs (dict, optional): Other dataset config arguments.
     """
 
@@ -1600,6 +1602,7 @@ class TrainingConfig(BaseConfig):
             profile_op_time: bool = True,
             profile_offline_analyse: bool = False,
             profile_dynamic_profiler_config_path: str = "",
+            enable_high_availability: bool = False,
             **kwargs,
     ):
         super().__init__()
@@ -1673,6 +1676,7 @@ class TrainingConfig(BaseConfig):
         self.profile_op_time = profile_op_time
         self.profile_offline_analyse = profile_offline_analyse
         self.profile_dynamic_profiler_config_path = profile_dynamic_profiler_config_path
+        self.enable_high_availability = enable_high_availability
         self.update_attrs(**kwargs)
 
 

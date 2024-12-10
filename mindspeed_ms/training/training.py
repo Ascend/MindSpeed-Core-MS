@@ -68,6 +68,7 @@ from mindspeed_ms.core.profiler import PynativeProfiler
 
 from .utils import set_weight_decay
 from .grad_handler import inplace_apply_to_tensor_list, get_grad_process_func, GradAccumulator
+from .ha_train import ha_controller, TrainPhase
 
 
 def get_sp_params(training_config):
@@ -679,8 +680,12 @@ class TrainOneStepCell(nn.Cell):
             if not self.use_mixed_precision_optimizer:
                 global_norm = self.unscale_and_clip_grads(grads, current_step_loss_scale)
                 grads_tuple = tuple(grads)
+                # we will check whether ha feature is enabled inside update_status function
+                ha_controller.update_status(TrainPhase.OPT_UPDATE_START)
                 self.optimizer(grads_tuple)
             else:
+                # we will check whether ha feature is enabled inside update_status function
+                ha_controller.update_status(TrainPhase.OPT_UPDATE_START)
                 _, global_norm, _ = self.optimizer()
 
         # Update learning rate.
@@ -885,6 +890,9 @@ def train(
         start_time = time.time()
         profiler.step_begin(global_step)
         loss, is_finite, loss_scale, learning_rate, global_norm = train_one_step_cell(**data)
+        # we will check whether ha feature is enabled inside update_status function
+        ha_controller.update_status(TrainPhase.OPT_UPDATE_END, cur_epoch_num=current_epoch, cur_step_num=epoch_step,
+                                    global_step=global_step)
         cp_world_size = get_context_parallel_world_size()
         loss = loss / cp_world_size
         end_time = time.time()
@@ -1068,7 +1076,9 @@ def pretrain(train_valid_test_datasets_provider,
        os.path.exists(training_config.load_checkpoint):
 
         rank_path = os.path.join(training_config.load_checkpoint, f"rank_{get_rank()}")
-        if os.path.exists(rank_path):
+        if training_config.enable_high_availability:
+            ckpt_path = ha_controller.get_ha_ckpt(training_config.load_checkpoint, training_config.ckpt_format)
+        elif os.path.exists(rank_path):
             meta_path = os.path.join(rank_path, "meta.json")
             resume_by_meta = True
             if not os.path.exists(meta_path):
@@ -1115,7 +1125,13 @@ def pretrain(train_valid_test_datasets_provider,
     metrics = {
         "perplexity": Perplexity(),
     }
-    train(
+    train_wrapper = train
+    if training_config.enable_high_availability:
+        ha_controller.init()
+        train_wrapper = ha_controller.handle_exception(train)
+        ha_controller.update_status(TrainPhase.TRAIN_START, train_one_step_cell=train_one_step_cell,
+                                    model_config=train_one_step_cell.model_config, training_config=training_config)
+    train_wrapper(
         train_one_step_cell=train_one_step_cell,
         train_dataloader=train_data_loader,
         training_config=training_config,

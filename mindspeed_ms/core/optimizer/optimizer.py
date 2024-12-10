@@ -387,7 +387,7 @@ class Float16OptimizerWithFloat16Params(MixedPrecisionOptimizer):
             if isinstance(param, Parameter):
                 param_dict[param.name] = param
             elif isinstance(param, Tensor):
-                param_dict[param.name] = Parameter(param, name=param.name)
+                param_dict[param.name] = Parameter(param.move_to("CPU", False), name=param.name)
             else:
                 raise TypeError("Instance in optimizer.parameters should be mindspore.Parameter or "
                                 "mindspore.Tensor, but got {}".format(type(param)))

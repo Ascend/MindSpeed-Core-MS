@@ -130,6 +130,17 @@ def _update_zero(params_dict, shard_info, param, group):
     shard_info[param.name]['opt_weight_shard_size'] = 0
     shard_info[param.name]['opt_weight_shard_step'] = 0
 
+def _copy_params_dict_to_cpu(params_dict):
+    """ copy ckpt params dict to cpu if we saved them in aync thread. """
+    s1 = ms.hal.Stream()
+    with ms.hal.StreamCtx(s1):
+        for (k, v) in params_dict.items():
+            if isinstance(k, str) and isinstance(v, (ms.Parameter, str)):
+                params_dict[k] = ms.Parameter(v.move_to("CPU", False), v.name)
+            else:
+                raise TypeError(f"params dict key:{k} value: {type(v)} is invalid!")
+    s1.synchronize()
+    return params_dict
 
 def _get_params_dict(model, optimizer):
     """ get params dict for saving checkpoint. """
@@ -270,11 +281,20 @@ def save_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
 
     # generate sharded info
     shard_info = generate_state_dict(model, optimizer)
-    shard_info, params_dict = save_pre_process(shard_info, model, optimizer, config)
+    enable_ha = kwargs.get("enable_high_availability", False)
+    if enable_ha:
+        s1 = ms.hal.Stream()
+        with ms.hal.StreamCtx(s1):
+            shard_info, params_dict = save_pre_process(shard_info, model, optimizer, config)
+        s1.synchronize()
+    else:
+        shard_info, params_dict = save_pre_process(shard_info, model, optimizer, config)
 
     # saving
     save_strategy_file(shard_info, strategy_file)
     if not only_save_strategy:
+        if enable_ha:
+            params_dict = _copy_params_dict_to_cpu(params_dict)
         rng_state_dict = save_rng_state()
         append_dict = rng_state_dict.copy()
         if opt_param_scheduler is not None:
