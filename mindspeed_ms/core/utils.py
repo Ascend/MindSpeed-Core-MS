@@ -59,6 +59,31 @@ def ensure_divisibility(numerator, denominator):
         raise ValueError("{} is not divisible by {}".format(numerator, denominator))
 
 
+def local_multi_tensor_applier(op, noop_flag_buffer, tensor_lists, *args):
+    return op(2048 * 32, noop_flag_buffer, tensor_lists, *args)
+
+# pylint: disable=W0613
+## computes l2 norm for a list of contiguous tensors
+## works as a drop-in replacement for amp_C.multi_tensor_l2norm
+def local_multi_tensor_l2_norm(chunk_size, noop_flag, tensor_lists, per_tensor, *args):
+    l2 = [[P.norm(tensor).item() for tensor in tensor_list] for tensor_list in tensor_lists]
+    l2_reduced = P.norm(mindspore.tensor(l2))
+    l2_cuda = mindspore.tensor([float(l2_reduced)], dtype=mindspore.float32)
+    return l2_cuda, None
+
+# pylint: disable=W0613
+## works as a drop-in replacement for amp_C.multi_tensor_scale
+def local_multi_tensor_scale(chunk_size, noop_flag, tensor_lists, scale):
+    inputs, targets = tensor_lists[0], tensor_lists[1]
+    if inputs == targets:
+        for i in range(len(targets)):
+            ## for parity with apex implementation
+            targets[i] *= scale
+    else:
+        for i in range(len(targets)):
+            targets[i] = inputs[i] * scale
+
+
 def divide(numerator, denominator):
     """Ensure that numerator is divisible by the denominator and return the division value."""
     ensure_divisibility(numerator, denominator)

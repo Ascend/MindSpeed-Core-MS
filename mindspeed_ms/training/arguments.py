@@ -1388,6 +1388,10 @@ def _add_training_args(parser):
                        choices=['SBH', 'BSH', 'BSND', 'BNSD'],
                        help='input shape order used by Flash attention')
 
+    # reuse-fp32-param deterministic
+    group.add_argument('--npu-deterministic', action='store_true', default=False,
+                       help='enable deterministic computing for npu')
+
     return parser
 
 
@@ -2137,6 +2141,9 @@ def _add_algorithm_args(parser):
                        help='rope high freq factor for rope scaling type.')
     group.add_argument('--original-max-position-embeddings', type=float,
                        help='original max position embeddings for rope scaling type')
+    group.add_argument('--reuse-fp32-param', action='store_true',
+                       help='The distributed training optimizer frees up '
+                            'param copies of FP32 to save memory.')
     return parser
 
 

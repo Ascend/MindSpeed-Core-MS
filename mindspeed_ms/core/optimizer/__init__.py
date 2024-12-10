@@ -89,7 +89,6 @@ def get_ditributed_optimizer(optimizer, optimizer_config, model_chunks):
 
 def get_non_distributed_mixed_precision_optimizer(optimizer, optimizer_config):
     " warp non-parallel optimizer with Float16OptimizerWithFloat16Params optimizer. "
-    args = get_args()
     grad_scaler = None if not optimizer_config.loss_scale \
         else ops.Tensor(optimizer_config.loss_scale, mstype.float32)
     optimizer = Float16OptimizerWithFloat16Params(
@@ -97,7 +96,6 @@ def get_non_distributed_mixed_precision_optimizer(optimizer, optimizer_config):
         optimizer_config,
         grad_scaler=grad_scaler,
         init_state_fn=None,
-        wrap_with_ddp=args.wrap_with_ddp,
     )
     return optimizer
 
