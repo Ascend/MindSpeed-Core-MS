@@ -189,6 +189,8 @@ class CompileUtil():
         n_sample = 100
         x_data = np.unique(np.sort(data_2d_global_arg[:, 0]))
         y_data = np.unique(np.sort(data_2d_global_arg[:, 1]))
+        if x_data.shape[0] <= 1:
+            return 0
 
         diffs_x = np.zeros(shape=[n_sample])
         diffs_y = np.zeros(shape=[n_sample])
