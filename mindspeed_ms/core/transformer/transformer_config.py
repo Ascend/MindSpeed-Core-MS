@@ -341,6 +341,18 @@ class TransformerConfig(ModelParallelConfig):
     """When set to true, TransformerLayer blocks are wrapped with CUDA graph."""
 
     ####################
+    # Pipe Expert
+    ####################
+    use_pipe_expert_layer: bool = False
+    """When set to true, ep-communication is overlapped by computing via pipe experts."""
+
+    use_pipe_expert_recompute: bool = False
+    """When set to true, activations of 'silu' and 'mul' are recomputed."""
+
+    use_pipe_expert_swap: bool = False
+    """When set to true, weights and activations selected are copied to host."""
+
+    ####################
     # LoRA
     ####################
 

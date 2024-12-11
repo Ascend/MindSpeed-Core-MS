@@ -26,6 +26,8 @@ from mindspeed_ms.legacy.model.module import Module
 from .experts import GroupedMLP, SequentialMLP
 from .router import TopKRouter
 from .token_dispatcher import MoEAlltoAllTokenDispatcher
+from .pipe_expert_module import PipeExpertLayer
+from .utils import token_sort, token_unsort
 
 
 class MoELayer(Module):
@@ -80,6 +82,8 @@ class MoELayer(Module):
                 raise ValueError(f"expect all local expert indices < expert num, but got {local_expert_indices}")
 
         self.router = TopKRouter(config=config)
+        self.router_topk = config.moe_router_topk
+        self.use_pipe_expert_layer = config.use_pipe_expert_layer
 
         if config.moe_grouped_gemm:
             self.experts = GroupedMLP(num_local_experts, config)
@@ -87,11 +91,18 @@ class MoELayer(Module):
             self.experts = SequentialMLP(num_local_experts, config)
 
         if config.moe_token_dispatcher_type == "alltoall":
-            self.token_dispatcher = MoEAlltoAllTokenDispatcher(
-                num_local_experts=num_local_experts,
-                local_expert_indices=local_expert_indices,
-                config=config
+            if self.use_pipe_expert_layer:
+                self.pipe_expert_layer = PipeExpertLayer(
+                    num_local_experts=num_local_experts,
+                    local_expert_indices=local_expert_indices,
+                    config=config
                 )
+            else:
+                self.token_dispatcher = MoEAlltoAllTokenDispatcher(
+                    num_local_experts=num_local_experts,
+                    local_expert_indices=local_expert_indices,
+                    config=config
+                    )
         else:
             raise ValueError(f"Unsupported token dispatcher type: {config.moe_token_dispatcher_type}")
 
@@ -104,11 +115,41 @@ class MoELayer(Module):
             )
         hidden_shape = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
-        scores, indices = self.router(hidden_states)
 
-        dispatched_input, tokens_per_expert = self.token_dispatcher.token_permutation(hidden_states, scores, indices)
-        expert_output, _ = self.experts(dispatched_input, tokens_per_expert)
+        if self.use_pipe_expert_layer:
+            self.pipe_expert_layer.probs, self.pipe_expert_layer.indices = self.router(hidden_states)
+            if self.pipe_expert_layer.probs.ndim != 2:
+                raise ValueError(f"expect 'probs' is 2d tensor, \
+                                 but got shape {self.pipe_expert_layer.probs.shape}.")
+            if self.pipe_expert_layer.indices.ndim != 2:
+                raise ValueError(f"expect 'indices' is 2d tensor, \
+                                 but got shape {self.pipe_expert_layer.indices.shape}.")
+            hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
+            sorted_local_input_tokens, local_input_sorted_map = token_sort(
+                hidden_states,
+                self.pipe_expert_layer.indices,
+                topk=self.router_topk
+            )
+            total_input = []
+            for expert_id in range(self.pipe_expert_layer.num_local_experts):
+                total_input.append(self.experts.local_experts[expert_id].mapping.weight)
+                total_input.append(self.experts.local_experts[expert_id].projection.weight)
+            total_input.append(sorted_local_input_tokens)
+            output_without_token_sorted = self.pipe_expert_layer(*total_input)
 
-        output, _ = self.token_dispatcher.token_unpermutation(expert_output, bias=None)
+            output = token_unsort(
+                sorted_tokens=output_without_token_sorted,
+                sorted_indices=local_input_sorted_map,
+                probs=self.pipe_expert_layer.probs,
+                topk=self.router_topk
+            )
+        else:
+            scores, indices = self.router(hidden_states)
+
+            dispatched_input, tokens_per_expert = \
+                self.token_dispatcher.token_permutation(hidden_states, scores, indices)
+            expert_output, _ = self.experts(dispatched_input, tokens_per_expert)
+
+            output, _ = self.token_dispatcher.token_unpermutation(expert_output, bias=None)
         output = output.reshape(hidden_shape)
         return output, None

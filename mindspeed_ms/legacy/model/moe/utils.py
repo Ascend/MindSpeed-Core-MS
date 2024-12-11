@@ -216,3 +216,24 @@ def topk_softmax_with_capacity(logits, topk, capacity_factor=None, pad_to_capaci
 def z_loss_func(logits, z_loss_coeff):
     z_loss = mint.mean(mint.square(ops.logsumexp(logits, axis=-1))) * z_loss_coeff
     return z_loss
+
+
+def get_input_tokens(sorted_local_input_tokens, local_input_splits_per_expert, split_index_presum, expert_index):
+    num_expert_local, expert_parallel = len(local_input_splits_per_expert), len(local_input_splits_per_expert[0])
+
+    index_list = []
+    for i in range(expert_parallel):
+        range_start = split_index_presum[expert_index+num_expert_local*i]
+        range_end = split_index_presum[expert_index+num_expert_local*i+1]
+        for j in range(range_start, range_end):
+            index_list.append(j)
+    if index_list == []:
+        return []
+    input_tokens = mint.index_select(sorted_local_input_tokens, 0, ms.Tensor(index_list))
+    return input_tokens
+
+
+def silu_grad(c_output0):
+    up = ops.cast(1+1/ops.exp(c_output0)+c_output0/ops.exp(c_output0), ms.float16)
+    down = ops.cast(ops.float_power(1+1/ops.exp(c_output0), 2), ms.float16)
+    return up/down
