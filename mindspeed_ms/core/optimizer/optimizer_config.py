@@ -169,6 +169,11 @@ class OptimizerConfig:
     zero_without_ddp: bool = False
     """"""
 
+    ################
+    # MindSpeed feature
+    ################
+    reuse_fp32_param: bool = False
+
 
     def get_needed_params_for_class(self, a_class):
         """
