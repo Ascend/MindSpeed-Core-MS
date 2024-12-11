@@ -152,7 +152,7 @@ def generate_state_dict(network: Module, optimizer: Optimizer):
         pp_size = get_pipeline_model_parallel_world_size()
         pp_rank = get_pipeline_model_parallel_rank()
         ep_size = get_expert_model_parallel_world_size()
-        ep_rank = get_expert_model_parallel_rank() if ep_size > 1 else 0
+        ep_rank = get_expert_model_parallel_rank()
     except AssertionError:
         pp_size = 1
         pp_rank = 0
