@@ -149,7 +149,8 @@ def run_distributed_optimizer():
                                      grad_scaler=None,
                                      init_state_fn=None,
                                      per_model_buffers=network_with_ddp.buffers,
-                                     data_parallel_group=get_data_parallel_group(with_context_parallel=True))
+                                     data_parallel_group=get_data_parallel_group(with_context_parallel=True),
+                                     data_parallel_group_mccl=None)
 
     losses = train(epoch_num=1,
                    dataset=dataset,

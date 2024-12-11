@@ -571,7 +571,7 @@ class ColumnParallelLinear(nn.Cell):
         self.use_zero3 = config.zero_level == 'z3'
         if self.use_zero3:
             try:
-                dp_size = get_group_size(get_zero_shard_group(with_context_parallel=False))
+                dp_size = get_group_size(get_zero_shard_group(with_context_parallel=True))
             except AssertionError as e:
                 raise RuntimeError("When using zero3 optimizer parallel. Data parallel communication "
                                    "need be initialized. Please check 'dp' in order when calling "
@@ -713,9 +713,10 @@ class ColumnParallelLinear(nn.Cell):
         tp_size = get_tensor_model_parallel_world_size()
         w_shard = (tp_size, 1) if self.transpose_b else (1, tp_size)
         state_dict = {}
-        opt_weight_shard_step = get_tensor_model_parallel_world_size() if self.use_zero3 else 0
-        opt_weight_shard_size = get_group_size(get_zero_shard_group(with_context_parallel=False)) \
-            if self.use_zero3 else 0
+        is_normal_zero3 = self.use_zero3 and not args.wrap_with_ddp
+        opt_weight_shard_step = get_tensor_model_parallel_world_size() if is_normal_zero3 else 0
+        opt_weight_shard_size = get_group_size(get_zero_shard_group(with_context_parallel=True)) \
+            if is_normal_zero3 else 0
         if not self.skip_weight_param_allocation:
             state_dict[self.weight.name] = {
                 'shape': self.weight.shape,
@@ -727,8 +728,8 @@ class ColumnParallelLinear(nn.Cell):
             state_dict[self.bias.name] = {
                 'shape': self.bias.shape,
                 'shard': (tp_size,),
-                'opt_weight_shard_step': opt_weight_shard_step if not args.wrap_with_ddp else 0,
-                'opt_weight_shard_size': opt_weight_shard_size if not args.wrap_with_ddp else 0
+                'opt_weight_shard_step': opt_weight_shard_step,
+                'opt_weight_shard_size': opt_weight_shard_size
             }
         return state_dict
 
@@ -898,7 +899,7 @@ class RowParallelLinear(nn.Cell):
 
         if self.use_zero3:
             try:
-                dp_size = get_group_size(get_zero_shard_group(with_context_parallel=False))
+                dp_size = get_group_size(get_zero_shard_group(with_context_parallel=True))
             except AssertionError as e:
                 raise RuntimeError("When using zero3 optimizer parallel. Data parallel communication "
                                    "need be initialized. Please check 'dp' in order when calling "
@@ -1020,9 +1021,10 @@ class RowParallelLinear(nn.Cell):
         tp_size = get_tensor_model_parallel_world_size()
         w_shard = (1, tp_size) if self.transpose_b else (tp_size, 1)
         state_dict = {}
-        opt_weight_shard_step = get_tensor_model_parallel_world_size() if self.use_zero3 else 0
-        opt_weight_shard_size = get_group_size(get_zero_shard_group(with_context_parallel=False)) \
-            if self.use_zero3 else 0
+        is_normal_zero3 = self.use_zero3 and not args.wrap_with_ddp
+        opt_weight_shard_step = get_tensor_model_parallel_world_size() if is_normal_zero3 else 0
+        opt_weight_shard_size = get_group_size(get_zero_shard_group(with_context_parallel=True)) \
+            if is_normal_zero3 else 0
         state_dict[self.weight.name] = {
             'shape': self.weight.shape,
             'shard': w_shard,
@@ -1033,8 +1035,8 @@ class RowParallelLinear(nn.Cell):
             state_dict[self.bias.name] = {
                 'shape': self.bias.shape,
                 'shard': (1,),
-                'opt_weight_shard_step': opt_weight_shard_step if not args.wrap_with_ddp else 0,
-                'opt_weight_shard_size': opt_weight_shard_size if not args.wrap_with_ddp else 0
+                'opt_weight_shard_step': opt_weight_shard_step,
+                'opt_weight_shard_size': opt_weight_shard_size
             }
         return state_dict
 

@@ -69,6 +69,7 @@ pad_token: 0
 # checkpointing arguments
 save: "output"
 save_interval: 5
+use_dist_ckpt: True
 dist_ckpt_format: "ckpt"
 
 # optimizer

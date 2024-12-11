@@ -47,6 +47,7 @@ untie_embeddings_and_output_weights: False
 clip_grad: 0.0
 save: "./output"
 save_interval: 1
+use_dist_ckpt: True
 optimizer: "AdamW"
 adam_beta1: 0.9
 adam_beta2: 0.999

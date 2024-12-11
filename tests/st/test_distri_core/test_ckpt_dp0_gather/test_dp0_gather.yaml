@@ -1,10 +1,15 @@
 model_parallel:
-  tensor_model_parallel_size: 2
+  tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 2
   context_parallel_size: 1
   expert_model_parallel_size: 1
-  sequence_parallel: True
+  sequence_parallel: False
   pipeline_dtype: "float32"
+  params_dtype: "float32"
+  compute_dtype: "float32"
+  bf16: True
+  #zero_level: z3
+  finalize_model_grads_func: null
 
 language_model:
   num_layers: 2
@@ -34,6 +39,7 @@ language_model:
 
   masked_softmax_fusion: False
   bias_dropout_fusion: False
+
   # Must add
   clone_scatter_output_in_embedding: False
   attention_softmax_in_fp32: True
@@ -57,8 +63,9 @@ max_position_embeddings: 4
 epochs: 1
 train_iters: 10
 untie_embeddings_and_output_weights: True
-global_batch_size: 1
-micro_batch_size: 1
+global_batch_size: 16
+micro_batch_size: 8
+batch_size: 1
 clip_grad: 0.0
 transformer_impl: "local"
 use_post_norm: False
@@ -86,7 +93,11 @@ lr_wsd_decay_style: "exponential"
 
 # distributed arguments
 delay_grad_reduce: False
-wrap_with_ddp: False
+wrap_with_ddp: True
+overlap_grad_reduce: True
+bucket_size: 1
+average_in_collective: True
+use_distributed_optimizer: True
 
 # loss arguments
 initial_loss_scale: 1  # loss_scale_value
@@ -100,42 +111,21 @@ loss_func_kwargs:
 
 # logging
 log_interval: 1
-save_interval: 5
+save_interval: 3
 
 # custom arguments
 model_customize_staged: False
 dist_ckpt_format: "ckpt"
 
 #resume training
+save: "./saved_ckpt"
 resume_training: False
-use_dist_ckpt: True
+use_dist_ckpt: False
 crc_check: False
 ckpt_format: "ckpt"
 prefix: "network"
 load: ""
-enable_compile_cache: False
-compile_cache_path: "./output/compile_cache"
-keep_checkpoint_max: 3
+keep_checkpoint_max: 10
 no_load_optim: False
-no_load_rng: True
+no_load_rng: False
 new_dataset: False
-profile: False
-profile_save_path: ""
-profile_step_start: 2
-profile_step_end: 4
-profile_level: level0
-profile_with_stack: True
-profile_memory: False
-profile_framework: all
-profile_communication: True
-profile_parallel_strategy: False
-profile_aicore_metrics: 0
-profile_l2_cache: False
-profile_hbm_ddr: False
-profile_pcie: False
-profile_data_process: False
-profile_data_simplification: False
-profile_op_time: False
-profile_offline_analyse: False
-profile_dynamic_profiler_config_path: ""
-

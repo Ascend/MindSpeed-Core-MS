@@ -74,6 +74,7 @@ data_path: "./data/golden_mixtral_input_and_loss_large.npy"
 # checkpointing arguments
 save: "./output"
 save_interval: null
+use_dist_ckpt: True
 dist_ckpt_format: "ckpt"
 checkpoint_dir: "./data/golden_mixtral_large.pt"
 

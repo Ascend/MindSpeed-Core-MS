@@ -51,6 +51,7 @@ initial_loss_scale: 1
 hysteresis: 2
 loss_scale_window: 1000
 save_interval: 1
+use_dist_ckpt: True
 
 model_customize_staged: False
 overlap_grad_reduce: False

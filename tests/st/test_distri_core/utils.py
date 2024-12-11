@@ -14,7 +14,6 @@
 # ============================================================================
 """some utility functions"""
 import os
-import time
 from typing import Dict
 import collections
 import re
@@ -49,6 +48,7 @@ from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.legacy.model import ParallelLMLogits, TransformerLanguageModel
 from mindspeed_ms.legacy.model.module import Module
 from mindspeed_ms.legacy.model.utils import get_num_layer_list
+from mindspeed_ms.tools.utils import barrier_world
 
 
 class TestData:
@@ -714,7 +714,7 @@ def _transform_ckpt_helper(config, model, optimizer, src_ckpt_path, dst_ckpt_pat
                            output_format='safetensors'):
     """ helper function for transform ckpt """
     save_checkpoint(config, model, optimizer, None, dst_ckpt_path, only_save_strategy=True)
-    time.sleep(5)
+    barrier_world()
     if get_rank() == 0:
         src_merged_strategy_file = dst_ckpt_path + "/src_merged_strategy.ckpt"
         dst_merged_strategy_file = dst_ckpt_path + "/dst_merged_strategy.ckpt"
@@ -724,8 +724,7 @@ def _transform_ckpt_helper(config, model, optimizer, src_ckpt_path, dst_ckpt_pat
                                  src_merged_strategy_file,
                                  dst_merged_strategy_file,
                                  output_format=output_format)
-    else:
-        time.sleep(timeout)
+    barrier_world()
 
 
 def count_unequal_element(data_expected, data_our, rtol, atol):
