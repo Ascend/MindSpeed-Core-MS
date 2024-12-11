@@ -29,7 +29,7 @@ def grep_directory(directory_path):
             local_loss = []
             with open(log_file, 'r') as f:
                 lines = f.readlines()
-                re_pattern = r"Loss: *(\d+.?\d+e?\+?\-?\d*)"
+                re_pattern = r"lm loss: *(\d+.?\d+e?\+?\-?\d*)"
                 for line in lines:
                     if "Loss" in line:
                         loss = re.findall(re_pattern, line)
@@ -55,7 +55,7 @@ class TestParallelDDPZeRO3:
         """
         os.environ['HCCL_BUFFSIZE'] = "200"
         scripts_name = "run_parallel_ddp_zero3.py --yaml-cfg test_zero3.yaml --first True"
-        device_num = 8
+        device_num = 4
 
         sh_path = os.path.split(os.path.realpath(__file__))[0]
         scripts_path = os.path.join(sh_path, scripts_name)
@@ -84,7 +84,7 @@ class TestParallelDDPZeRO3:
         """
         os.environ['HCCL_BUFFSIZE'] = "200"
         scripts_name = "run_parallel_ddp_zero3.py --yaml-cfg test_zero3.yaml --golden True"
-        device_num = 8
+        device_num = 4
 
         sh_path = os.path.split(os.path.realpath(__file__))[0]
         scripts_path = os.path.join(sh_path, scripts_name)
@@ -113,7 +113,7 @@ class TestParallelDDPZeRO3:
         """
         os.environ['HCCL_BUFFSIZE'] = "200"
         scripts_name = "run_parallel_ddp_zero3.py --yaml-cfg test_zero3.yaml"
-        device_num = 8
+        device_num = 4
 
         sh_path = os.path.split(os.path.realpath(__file__))[0]
         scripts_path = os.path.join(sh_path, scripts_name)
@@ -141,4 +141,4 @@ class TestParallelDDPZeRO3:
         actual_loss = grep_directory(f"{sh_path}/msrun_log_pynative_ddp_zero3")
         for key, value in actual_loss.items():
             for i in range(len(value)):
-                assert np.allclose(value[i], golden_loss[key][i], atol=1e-3), f"rank {key} {i}th loss not equal"
+                assert np.allclose(value[i], golden_loss[key][i], atol=1e-7), f"rank {key} {i}th loss not equal"

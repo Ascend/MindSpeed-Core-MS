@@ -20,6 +20,9 @@ import mindspore as ms
 import mindspore.dataset as ds
 from mindspore import Tensor
 from mindspore.communication.management import init
+from mindspeed_ms.training.global_vars import set_global_variables
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+
 
 from mindspeed_ms.training import (
     get_model,
@@ -166,7 +169,9 @@ def main(config: TransformerConfig):
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
     args.data_layout = "BSH"
     if args.yaml_cfg is None:
         config = core_transformer_config_from_args(args)

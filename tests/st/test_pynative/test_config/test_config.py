@@ -26,6 +26,8 @@ from mindspeed_ms.training import (
     core_transformer_config_from_args,
     core_transformer_config_from_yaml
 )
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.arguments import validate_args
 
 
 VERIFY_YAML_DICT = {
@@ -92,7 +94,7 @@ VERIFY_YAML_DICT = {
     "transformer_impl": "local",
     "use_flash_attn": False,
     "seed": 1234,
-    "optimizer": "SpeedAdamW",
+    "optimizer": "adam",
     "lr": 2.5e-4,
     "lr_decay_style": "cosine",
     "lr_decay_iters": None,
@@ -168,7 +170,8 @@ class TestConfig:
         """test parse args from yaml"""
         yaml_file = "gpt_config.yaml"
         sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
-        args = parse_args()
+        args, defaults = parse_args()
+        args = validate_yaml(args, defaults, {})
         config = core_transformer_config_from_yaml(args)
 
         for key, val in VERIFY_YAML_DICT.items():
@@ -232,11 +235,8 @@ class TestConfig:
             "b": 2
         }
 
-        args = parse_args(
-            extra_args_provider=extra_args_provider,
-            args_defaults=args_default,
-            ignore_unknown_args=True
-        )
+        args, defaults = parse_args(extra_args_provider=extra_args_provider, ignore_unknown_args=True)
+        args = validate_args(args, defaults, args_default)
         config = core_transformer_config_from_args(args)
 
         assert not hasattr(args, "absent_flag")
@@ -256,7 +256,8 @@ class TestConfig:
         sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
         error = False
         try:
-            _ = parse_args()
+            args, defaults = parse_args()
+            args = validate_yaml(args, defaults, {})
         except TypeError as _:
             error = True
         assert error
@@ -271,14 +272,15 @@ class TestConfig:
 
         yaml_file = "vpp/vpp_standalone.yaml"
         sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
-        _ = parse_args()
+        _, _ = parse_args()
 
         for i in range(1, 4):
             yaml_file = f"vpp/illegal_vpp{i}.yaml"
             sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
             error = False
             try:
-                _ = parse_args()
+                args, defaults = parse_args()
+                args = validate_yaml(args, defaults, {})
             except AssertionError as _:
                 error = True
             assert error
@@ -288,7 +290,8 @@ class TestConfig:
         """test parser complex lora_target_cells"""
         yaml_file = "lora.yaml"
         sys.argv = ['test_config.py', '--yaml-cfg', yaml_file]
-        args = parse_args()
+        args, defaults = parse_args()
+        args = validate_yaml(args, defaults, {})
         config = core_transformer_config_from_yaml(args)
         assert isinstance(config.lora_target_cells, tuple), \
             f"lora_target_cells's type is: {type(config.lora_target_cells)}, not Tuple"

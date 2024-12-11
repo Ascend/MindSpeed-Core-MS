@@ -152,8 +152,9 @@ def _ensure_var_is_initialized(var, name):
 
 # pylint: disable=W0613, W0107
 def _ensure_var_is_not_initialized(var, name):
-    """Make sure the input variable is not None."""
-    pass
+    " check if the input variable is not initialized. "
+    if var is not None:
+        raise ValueError("{} has already been initialized.".format(name))
 
 
 # pylint: disable=W0621

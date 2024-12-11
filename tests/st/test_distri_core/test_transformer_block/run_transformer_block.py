@@ -20,6 +20,7 @@ import sys
 import numpy as np
 
 import mindspore as ms
+import mindspore.dataset as ds
 from mindspore.communication import init
 
 from mindspeed_ms.legacy.model.enums import ModelType
@@ -37,11 +38,64 @@ from mindspeed_ms.core.parallel_state import initialize_model_parallel, \
                                              get_data_parallel_world_size
 from mindspeed_ms.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
 from mindspeed_ms.training import parse_args, get_args, core_transformer_config_from_yaml, get_model
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
 from mindspeed_ms.tools.utils import barrier_world
 
 seed = 2024
 np.random.seed(seed)
+
+class TestData:
+    """
+    generate a test dataset
+    """
+    def __init__(self, input_data):
+        super().__init__()
+        self.input_data = input_data['hidden_states']
+        self.attention_mask = input_data['attention_mask']
+        self.dataset_size = self.input_data.shape[0]
+
+    def __getitem__(self, index):
+        index = int(index)
+        return (ms.Tensor(self.input_data[index]), ms.Tensor(self.attention_mask[index], dtype=ms.bool_))
+
+    def __len__(self):
+        return self.dataset_size
+
+
+def get_batch(data_iterator):
+    """ get micro batch data """
+    if data_iterator is not None:
+        data = next(data_iterator)
+    else:
+        data = None
+    return data.values()
+
+
+def loss_func(output_tensor):
+    """ loss func """
+    return output_tensor, {'lm loss': output_tensor}
+
+
+def forward_step(data_iterator, model):
+    """Forward training step
+
+    Args:
+        data_iterator: Input data iterator.
+        model: The model.
+    """
+    # get batch data
+    input_data, attention_mask = get_batch(data_iterator)
+    input_tensor = (input_data, attention_mask)
+
+    def core_forward_func(*args):
+        input_data, attention_mask = args
+        output_tensor = model(input_data, attention_mask)
+        return output_tensor
+
+    return input_tensor, core_forward_func, loss_func
+
 
 def param_name_legacy2mcore(legacy_name):
     """transform legacy param name to mcore param name"""
@@ -86,6 +140,8 @@ class ParallelTransformerNet(LegacyModule):
         ):
         super().__init__(config)
         args = get_args()
+        self.pre_process = pre_process
+        self.post_process = post_process
         self.use_rope = args.position_embedding_type == 'rope'
         self.get_rotary_embedding = RotaryEmbedding(config.hidden_size
                                                     // config.num_attention_heads, rotary_percent=1.0)
@@ -95,7 +151,12 @@ class ParallelTransformerNet(LegacyModule):
     def construct(self, hidden_states, attention_mask):
         """ mindspore net forward """
         args = get_args()
-        hidden_states = hidden_states.swapaxes(0, 1)
+        if self.pre_process:
+            hidden_states = hidden_states.astype(ms.bfloat16)
+            hidden_states = hidden_states.swapaxes(0, 1)
+        else:
+            hidden_states = None
+
         if not self.use_rope:
             rotary_pos_emb = None
         else:
@@ -104,6 +165,8 @@ class ParallelTransformerNet(LegacyModule):
         output = self.parallel_transformer(hidden_states=hidden_states,
                                            attention_mask=attention_mask,
                                            rotary_pos_emb=rotary_pos_emb)
+        if self.post_process:
+            output = output.abs().mean()
         return output
 
     def set_input_tensor(self, input_tensor) -> None:
@@ -126,6 +189,8 @@ class TransformerBlockNet(McoreModule):
         ):
         super().__init__(config)
         args = get_args()
+        self.pre_process = pre_process
+        self.post_process = post_process
         self.share_embeddings_and_output_weights = False
         self.use_rope = args.position_embedding_type == 'rope'
         self.get_rotary_embedding = RotaryEmbedding(config.hidden_size
@@ -141,7 +206,12 @@ class TransformerBlockNet(McoreModule):
     def construct(self, hidden_states, attention_mask):
         """ mindspore net forward """
         args = get_args()
-        hidden_states = hidden_states.swapaxes(0, 1)
+        if self.pre_process:
+            hidden_states = hidden_states.astype(ms.bfloat16)
+            hidden_states = hidden_states.swapaxes(0, 1)
+        else:
+            hidden_states = None
+
         if not self.use_rope:
             rotary_pos_emb = None
         else:
@@ -150,7 +220,8 @@ class TransformerBlockNet(McoreModule):
         output = self.decoder(hidden_states=hidden_states,
                               attention_mask=attention_mask,
                               rotary_pos_emb=rotary_pos_emb)
-
+        if self.post_process:
+            output = output.abs().mean()
         return output
 
     def set_input_tensor(self, input_tensor) -> None:
@@ -166,7 +237,9 @@ class TransformerBlockNet(McoreModule):
 def run_legacy(data_dir, ckpt_dir):
     """ test mindspore """
     # init config
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
     # we use ms.load_param_into_net, ddp is not supported
     args.wrap_with_ddp = False
     args.use_distributed_optimizer = False
@@ -189,7 +262,7 @@ def run_legacy(data_dir, ckpt_dir):
                                          pre_process=pre_process,
                                          post_process=post_process)
         return network
-    network = get_model(model_provider_func, config)
+    network = get_model(model_provider_func, config, wrap_with_ddp=args.wrap_with_ddp)
 
     # get ckpt and dataset
     data_dict, ckpt_dict = load_ckpt_and_data(args.global_batch_size,
@@ -200,6 +273,9 @@ def run_legacy(data_dir, ckpt_dir):
                                               data_dir,
                                               ckpt_dir,
                                               network)
+    dataset = TestData(data_dict)
+    dataset = ds.GeneratorDataset(dataset, column_names=['hidden_states', "attention_mask"], shuffle=False)
+    dataset = dataset.batch(args.micro_batch_size)
 
     # load ckpt
     ms.load_param_into_net(network, ckpt_dict)
@@ -216,14 +292,17 @@ def run_legacy(data_dir, ckpt_dir):
     train_one_step_cell.set_train()
     config = train_one_step_cell.config
     for _ in range(args.train_iters):
-        loss, _, _, _, _ = train_one_step_cell(**data_dict)
-        print(f"Output not Loss: {loss.abs()}")
+        dataset_iterator = [dataset.create_dict_iterator(), dataset.create_dict_iterator()]
+        loss, _, _, _, _ = train_one_step_cell(forward_step, dataset_iterator, False)
+        print(f"Output not lm loss: {loss['lm loss'].abs()}")
 
 # 启动/入参
 def run_mcore(data_dir, ckpt_dir):
     """ test mindspore """
     # init config
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
     # we use ms.load_param_into_net, ddp is not supported
     args.wrap_with_ddp = False
     args.use_distributed_optimizer = False
@@ -246,7 +325,7 @@ def run_mcore(data_dir, ckpt_dir):
                                       pre_process=pre_process,
                                       post_process=post_process)
         return network
-    network = get_model(model_provider_func, config)
+    network = get_model(model_provider_func, config, wrap_with_ddp=args.wrap_with_ddp)
 
     # get ckpt and dataset
     data_dict, ckpt_dict = load_ckpt_and_data(args.global_batch_size,
@@ -257,6 +336,9 @@ def run_mcore(data_dir, ckpt_dir):
                                               data_dir,
                                               ckpt_dir,
                                               network)
+    dataset = TestData(data_dict)
+    dataset = ds.GeneratorDataset(dataset, column_names=['hidden_states', "attention_mask"], shuffle=False)
+    dataset = dataset.batch(args.micro_batch_size)
 
     # load ckpt
     mcore_ckpt = {}
@@ -278,8 +360,9 @@ def run_mcore(data_dir, ckpt_dir):
     train_one_step_cell.set_train()
     config = train_one_step_cell.config
     for _ in range(args.train_iters):
-        loss, _, _, _, _ = train_one_step_cell(**data_dict)
-        print(f"Output not Loss: {loss.abs()}")
+        dataset_iterator = [dataset.create_dict_iterator(), dataset.create_dict_iterator()]
+        loss, _, _, _, _ = train_one_step_cell(forward_step, dataset_iterator, False)
+        print(f"Output not lm loss: {loss['lm loss'].abs()}")
 
 
 def save_random_ckpt(model, save_path="data/alone/random_ckpt/"):
@@ -321,6 +404,7 @@ def save_random_data(batch_size,
     barrier_world()
 
 
+# pylint: disable=W0613
 def load_ckpt_and_data(batch_size,
                        seq_length,
                        hidden_size,
@@ -355,15 +439,9 @@ def load_ckpt_and_data(batch_size,
     # loading data
     data_dict = {}
     data_npy_files = glob.glob(os.path.join(data_dir, f"*_dp{dp_rank}.npy"))
-    ori_compute_dtype = compute_dtype
     for cur_npy_file in data_npy_files:
         cur_name = cur_npy_file.split('/')[-1].replace(f"_dp{dp_rank}.npy", "")
-        if 'attention_mask' in cur_name:
-            compute_dtype = ms.bool_
-        else:
-            compute_dtype = ori_compute_dtype
-        cur_data = tensor_method(np.load(cur_npy_file), dtype=compute_dtype)
-        data_dict[cur_name] = cur_data
+        data_dict[cur_name] = np.load(cur_npy_file)
 
     # loading ckpt
     ckpt_dict = {}

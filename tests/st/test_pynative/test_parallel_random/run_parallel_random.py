@@ -26,6 +26,8 @@ from mindspore import mint, Tensor, grad
 import mindspore.nn as nn
 from mindspore.communication.management import init, get_rank, get_group_size
 from mindspeed_ms.training import parse_args
+from mindspeed_ms.training.global_vars import set_global_variables
+from mindspeed_ms.training.yaml_arguments import validate_yaml
 from mindspeed_ms.core.parallel_state import initialize_model_parallel
 from mindspeed_ms.core.tensor_parallel.random import (
     RNGStateTracer,
@@ -153,7 +155,9 @@ def extra_args_provider(parser):
     return parser
 
 if __name__ == '__main__':
-    args = parse_args(extra_args_provider=extra_args_provider)
+    args, defaults = parse_args(extra_args_provider=extra_args_provider)
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
     if args.testcase == 0:
         run_random_tracer_parallel()
     else:

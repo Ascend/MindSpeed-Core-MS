@@ -30,14 +30,7 @@ try:
     from mindspore import manual_seed, get_rng_state, set_rng_state
 except ImportError:
     from mindspore.nn.generator import manual_seed, get_rng_state, set_rng_state
-from mindspeed_ms.core.parallel_state import (
-    get_tensor_model_parallel_rank,
-    get_data_parallel_rank,
-    get_pipeline_model_parallel_rank,
-    get_zero_parallel_rank,
-    get_zero_shard_size,
-    get_zero_full_shard_flag
-)
+import mindspeed_ms.core.parallel_state as parallel_state
 
 
 DATA_PARALLEL_GENERATOR = "dp_rng_generator"
@@ -47,6 +40,12 @@ EXPERT_PARALLEL_GENERATOR = "exp_rng_generator"
 IS_SEED_SET = False
 CANDIDATE_MODES = [DATA_PARALLEL_GENERATOR, TENSOR_PARALLEL_GENERATOR, EXPERT_PARALLEL_GENERATOR]
 
+def set_seed_states():
+    """ set seed states """
+    # pylint: disable=W0613
+    global IS_SEED_SET
+    if not IS_SEED_SET:
+        IS_SEED_SET = True
 
 class RNGStateTracer:
     """
@@ -119,9 +118,9 @@ def get_rng_tracer():
 def parallel_mode_manual_seed(seed):
     "parallel_mode_manual_seed"
     dp_seed = seed
-    tp_seed = seed + get_tensor_model_parallel_rank() + 2048
+    tp_seed = seed + parallel_state.get_tensor_model_parallel_rank() + 2048
     exp_seed = seed + 1024 * 1 \
-        + get_tensor_model_parallel_rank() + 2012
+        + parallel_state.get_tensor_model_parallel_rank() + 2012
 
     tracer = get_rng_tracer()
     tracer.reset()
@@ -130,17 +129,22 @@ def parallel_mode_manual_seed(seed):
     tracer.init_mode(DATA_PARALLEL_GENERATOR, dp_seed)
     tracer.init_mode(TENSOR_PARALLEL_GENERATOR, tp_seed)
     tracer.init_mode(EXPERT_PARALLEL_GENERATOR, exp_seed)
-    if not get_zero_full_shard_flag():
-        zero_seed = seed + get_zero_parallel_rank() + get_tensor_model_parallel_rank() * get_zero_shard_size() + 1024
+    if not parallel_state.get_zero_full_shard_flag():
+        zero_seed = seed + parallel_state.get_zero_parallel_rank() + \
+            parallel_state.get_tensor_model_parallel_rank() * parallel_state.get_zero_shard_size() + 1024
         tracer.init_mode(ZERO_PARALLEL_GENERATOR, zero_seed)
 
 def set_rng_seed(seed, dp_random_init=False):
-    seed = int(seed)
-    seed = seed + 1024 * get_pipeline_model_parallel_rank()
-    if dp_random_init:
-        seed = seed + 64 * get_data_parallel_rank()
-    random.seed(seed)
-    np.random.seed(seed)
-    parallel_mode_manual_seed(seed) # for parallel rng tracer
-    global IS_SEED_SET
-    IS_SEED_SET = True
+    """ set rng seed """
+    if seed is not None and seed > 0:
+        seed = int(seed)
+        seed = seed + 1024 * parallel_state.get_pipeline_model_parallel_rank()
+        if dp_random_init:
+            seed = seed + 64 * parallel_state.get_data_parallel_rank()
+        random.seed(seed)
+        np.random.seed(seed)
+        parallel_mode_manual_seed(seed) # for parallel rng tracer
+        global IS_SEED_SET
+        IS_SEED_SET = True
+    else:
+        raise ValueError("Seed ({}) should be a positive integer.".format(seed))

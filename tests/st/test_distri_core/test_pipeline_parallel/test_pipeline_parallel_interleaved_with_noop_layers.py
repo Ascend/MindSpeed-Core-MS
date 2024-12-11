@@ -55,7 +55,6 @@ class TestPipelineParallel:
         os.system(f"grep -E 'ERROR|error' {sh_path}/{log_dir}/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check {log_dir}/worker_*.log"
 
-    @pytest.mark.skip(reason="Get golden loss from records")
     @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.run(order=2)
     def test_interleaved_pipeline_with_noop_net_loss(self):
@@ -85,23 +84,22 @@ class TestPipelineParallel:
         os.system(f"grep -E 'ERROR|error' {sh_path}/{log_dir}/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check {log_dir}/worker_*.log"
 
-    @pytest.mark.skip(reason="No such file or directory error")
     @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.run(order=3)
     def test_compare_loss(self):
         """
         Feature: test_compare_loss
         Description: compare relative error between pipeline loss and golden loss which with shared weight
-        Expectation: relative error smaller than 1e-3
+        Expectation: relative error smaller than 1e-7
         """
         pp_log_path = './noop_layers/worker_1.log'
         pp_loss = read_loss_from_log(pp_log_path)
 
         pp_loss = np.array(pp_loss, np.float32)
-        golden_loss = np.array([6.1131716, 6.125305], np.float32)
+        golden_loss = np.array([6.113171577453613, 6.12530517578125], np.float32)
 
         print(f"interleaved staged pp loss: {pp_loss}", flush=True)
         print(f"golden loss: {golden_loss}", flush=True)
-        assert np.allclose(pp_loss, golden_loss, atol=1e-5), "With noop-layers interleaved pipeline net " \
+        assert np.allclose(pp_loss, golden_loss, atol=1e-7), "With noop-layers interleaved pipeline net " \
                                                                 "loss accuracy test fail !"
         print("============== Noop-layers pipeline net loss accuracy test pass !!! ==============")

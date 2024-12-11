@@ -1,70 +1,73 @@
-# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+# Copyright 2024 Huawei Technologies Co., Ltd
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ============================================================================
+"""mindspeed ms initialization."""
 
-"""Megatron initialization."""
-import logging
-import random
 import os
-
+import logging
+from datetime import timedelta
+import random
 import numpy as np
 import mindspore as ms
-from mindspeed_ms.core.parallel_state import initialize_model_parallel
-from mindspeed_ms.core.parallel_state import get_tensor_model_parallel_world_size
-from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_world_size
+import mindspore.mint as mint
+from mindspore.communication import get_rank, get_local_rank, get_group_size
 
-from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_rank
-from mindspeed_ms.core.parallel_state import get_data_parallel_rank
-from mindspeed_ms.core.tensor_parallel.random import parallel_mode_manual_seed
-
-from mindspeed_ms.training import get_args
 from mindspeed_ms.training.arguments import parse_args, validate_args
-from mindspeed_ms.training.global_vars import set_global_variables
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables, get_args
+from mindspeed_ms.core import parallel_state
+from mindspeed_ms.tools.logger import logger
+from mindspeed_ms.core.tensor_parallel.random import parallel_mode_manual_seed, set_seed_states
 
-logger = logging.getLogger(__name__)
-
-# pylint: disable=W0102, W0613, W0105
-def initialize_megatron(
+# pylint: disable=W0102,W0613
+def initialize_mindspeed_ms(
         extra_args_provider=None,
         args_defaults={},
         ignore_unknown_args=False,
         allow_no_cuda=False,
         skip_mpu_initialization=False,
 ):
-    """Set global variables, initialize distributed, and
-    set autoresume and random seeds.
-    `allow_no_cuda` should not be set unless using megatron for cpu only
-    data processing. In general this arg should not be set unless you know
-    what you are doing.
-    Returns a function to finalize distributed env initialization
-    (optionally, only when args.lazy_mpu_init == True)
-    """
-    # if not allow_no_cuda:
-    #     ms.run_check()
-    #     #Make sure Ascend NPU is available.
-    #     assert ms.hal.is_initialized("Ascend"), "MindFormers requires Ascend."
+    """ init mindspore distributed environment """
+    # parse arguments
+    args, defaults = parse_args(extra_args_provider, ignore_unknown_args)
 
-    # Parse arguments
-    args = parse_args(extra_args_provider, args_defaults, ignore_unknown_args)
-    '''
     if args.yaml_cfg is not None:
-        args = validate_yaml(args, args_defaults)
+        args = validate_yaml(args, defaults, args_defaults)
     else:
-        validate_args(args, args_defaults)
-    '''
-    if args.yaml_cfg is None:
-        validate_args(args, args_defaults)
+        setattr(defaults, "num_moe_experts", defaults.num_experts)
+        setattr(defaults, "layernorm_epsilon", defaults.norm_epsilon)
+        del defaults.num_experts
+        del defaults.norm_epsilon
+        validate_args(args, defaults, args_defaults)
 
-    # set global args, build tokenizer
+    # set global args. build tokenizer,
     set_global_variables(args)
 
     # set logging level
     setup_logging()
 
+    deterministic = "ON" if args.deterministic_mode else "OFF"
+    ms.set_context(device_target='Ascend', mode=ms.PYNATIVE_MODE, deterministic=deterministic)
+
     # mindspore.distributed initialization
     def finish_mpu_init():
         args = get_args()
-        # Mindspore distributed.
+
+        # initialize distributed communication
         _initialize_distributed()
-        # Random seeds for reproducibility.
+
+        # set random seed
         if args.rank == 0:
             print("> setting random seeds to {} ...".format(args.seed))
         _set_random_seed(args.seed, args.data_parallel_random_init)
@@ -74,17 +77,17 @@ def initialize_megatron(
 
     args = get_args()
 
-    #  Complete initialization right away.
     finish_mpu_init()
 
     return None
 
-# pylint: disable=W0212
+
 def _initialize_distributed():
-    """Initialize torch.distributed and core model parallel."""
+    " initialize distributed communication and parallel. "
     args = get_args()
 
     device_count = ms.hal.device_count(device_target="Ascend")
+    # pylint: disable=W0212
     if ms.communication._comm_helper._is_initialized():
         if args.rank == 0:
             print(
@@ -92,69 +95,72 @@ def _initialize_distributed():
                 "skipping initialization ...",
                 flush=True,
             )
-        args.rank = ms.communication.get_rank()
+        args.rank = get_rank()
 
         # Here no args, so return world_size but not group size不等于worldsize
-        args.world_size = ms.communication.get_group_size()
+        args.world_size = get_group_size()
     else:
-
-        print("> initializing MindSpore NPU distributed...", flush=True)
-        ms.communication.init(backend_name="hccl")
-        ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE)
-        args.rank = ms.communication.get_rank()
-        args.local_rank = ms.communication.get_local_rank()
-
-        device = args.rank % device_count
-        if args.local_rank is not None:
-            assert (args.local_rank == device), "expected local-rank to be the same as rank % device-count."
-        else:
-            args.local_rank = device
-        ms.set_context(device_id=device)
-
-    if device_count > 0:
-        initialize_model_parallel(
-            tensor_model_parallel_size=args.tensor_model_parallel_size,
-            pipeline_model_parallel_size=args.pipeline_model_parallel_size,
-            virtual_pipeline_model_parallel_size=args.virtual_pipeline_model_parallel_size,
-            pipeline_model_parallel_split_rank=args.pipeline_model_parallel_split_rank,
-            context_parallel_size=args.context_parallel_size,
-            expert_model_parallel_size=args.expert_model_parallel_size,
-            order="tp-cp-ep-dp-pp" if not args.use_tp_pp_dp_mapping else 'tp-pp-dp',
-            communicator_config_path=args.nccl_communicator_config_path
-        )
-
-        ## if you want to check the tp or pp group size:
-        # from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_group
-        # from mindspeed_ms.core.parallel_state import get_tensor_model_parallel_group
-        # print("get_pipeline_model_parallel_group",get_pipeline_model_parallel_group())
-        # print("get_tensor_model_parallel_group",get_tensor_model_parallel_group())
-
         if args.rank == 0:
-            print(
-                f"> initialized tensor model parallel with size "
-                f"{get_tensor_model_parallel_world_size()}"
+            print("> initializing MindSpore NPU distributed...")
+        # init mindspore device communication
+        mint.distributed.init_process_group(
+            backend=args.distributed_backend,
+            world_size=args.world_size,
+            rank=args.rank,
+            timeout=timedelta(minutes=args.distributed_timeout_minutes)
+        )
+        args.rank = get_rank()
+        args.local_rank = get_local_rank()
+        if device_count > 0:
+            device = args.rank % device_count
+            if args.local_rank is not None:
+                assert (args.local_rank == device), "expected local-rank to be the same as rank % device-count."
+            else:
+                args.local_rank = device
+            ms.set_context(device_id=device)
+
+    # set the tensor model parallel, pipeline model parallel,
+    # and data parallel communicators
+    if device_count > 0:
+        if parallel_state.model_parallel_is_initialized():
+            logger.warning("model parallel is already initialized.")
+        else:
+            parallel_state.initialize_model_parallel(
+                args.tensor_model_parallel_size,
+                args.pipeline_model_parallel_size,
+                args.virtual_pipeline_model_parallel_size,
+                args.pipeline_model_parallel_split_rank,
+                context_parallel_size=args.context_parallel_size,
+                expert_model_parallel_size=args.expert_model_parallel_size,
+                order='tp-cp-ep-dp-pp' if not args.use_tp_pp_dp_mapping else 'tp-pp-dp',
             )
-            print(
-                f"> initialized pipeline model parallel with size "
-                f"{get_pipeline_model_parallel_world_size()}"
-            )
+
+            if args.rank == 0:
+                print(
+                    f"> initialized tensor model parallel with size "
+                    f"{parallel_state.get_tensor_model_parallel_world_size()}"
+                )
+                print(
+                    f"> initialized pipeline model parallel with size "
+                    f"{parallel_state.get_pipeline_model_parallel_world_size()}"
+                )
 
 
 def _set_random_seed(seed_, data_parallel_random_init=False):
     """Set random seed for reproducibility."""
     if seed_ is not None and seed_ > 0:
         # Ensure that different pipeline MP stages get different seeds.
-        seed = seed_ + (100 * get_pipeline_model_parallel_rank())
+        seed = seed_ + (100 * parallel_state.get_pipeline_model_parallel_rank())
         # Ensure different data parallel ranks get different seeds
         if data_parallel_random_init:
-            seed = seed + (10 * get_data_parallel_rank())
+            seed = seed + (10 * parallel_state.get_data_parallel_rank())
         random.seed(seed)
         np.random.seed(seed)
         ms.set_seed(seed)
         ms.manual_seed(seed)
         if ms.hal.device_count(device_target="Ascend") > 0:
             parallel_mode_manual_seed(seed)
-
+        set_seed_states()
     else:
         raise ValueError("Seed ({}) should be a positive integer.".format(seed))
 

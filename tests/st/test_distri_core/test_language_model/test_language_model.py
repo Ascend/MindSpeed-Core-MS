@@ -24,7 +24,7 @@ def read_loss_from_file(file_path):
     losses = []
     with open(file_path, 'r') as file:
         for line in file:
-            loss_str = re.search(r'Loss: (\d+\.\d+)', line)
+            loss_str = re.search(r'lm loss: (\d+\.\d+)', line)
             if loss_str:
                 loss_value = float(loss_str.group(1))
                 losses.append(loss_value)

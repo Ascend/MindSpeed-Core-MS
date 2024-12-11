@@ -22,8 +22,7 @@ import mindspore.ops as P
 from mindspore import Tensor, mint
 from mindspore.nn import Cell
 from mindspore.common.initializer import initializer, HeUniform
-from mindspeed_ms.training.loss_func import LossWithMask
-from mindspeed_ms.training.arguments import get_args
+from mindspeed_ms.training import get_args
 from mindspeed_ms.legacy.model import get_attention_mask
 from mindspeed_ms.legacy.model.module import Module
 from mindspeed_ms.legacy.model.transformer import _get_num_layers, NoopTransformerLayer
@@ -194,13 +193,12 @@ class FinalLossLayer(Cell):
     """ final loss layer """
     def __init__(self):
         super().__init__()
-        self.entropy = LossWithMask(nn.CrossEntropyLoss())
+        self.entropy = nn.CrossEntropyLoss(reduction="none")
 
     def construct(self, logits, labels):
         """ loss layer forward """
-        input_mask = P.ones_like(labels).reshape((-1,))
         labels = labels.reshape((-1,))
-        loss = self.entropy(logits, labels, input_mask)
+        loss = self.entropy(logits, labels)
         return loss
 
 class PipelineTestNet(Module):

@@ -374,6 +374,10 @@ class ParamAndGradBuffer:
 
         return buffer_tensor
 
+    def scale_gradients(self, scaling_factor):
+        """ scale the gradient data by `scaling_factor`."""
+        self.grad_data.mul_(scaling_factor)
+
     def reset(self):
         """ reset buffer for the next iteration. """
         self.grad_data.zero_()

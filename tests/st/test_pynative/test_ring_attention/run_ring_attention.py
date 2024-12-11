@@ -24,6 +24,8 @@ from mindspore.common.tensor import Tensor
 from mindspore.ops.auto_generate.gen_ops_prim import FlashAttentionScore
 
 from mindspeed_ms.training import parse_args
+from mindspeed_ms.training.global_vars import set_global_variables
+from mindspeed_ms.training.yaml_arguments import validate_yaml
 from mindspeed_ms.core.context_parallel.utils import get_sp_chuncks, \
     get_sp_chuncks_attn_mask_general, get_sp_chuncks_general
 from mindspeed_ms.core.parallel_state import initialize_model_parallel
@@ -210,5 +212,7 @@ def test_ring_attention():
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
     test_ring_attention()

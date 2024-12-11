@@ -28,6 +28,8 @@ from mindspore.nn import SoftmaxCrossEntropyWithLogits
 from mindspore.communication.management import init
 from mindspore.communication import get_rank
 
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.core.parallel_state import initialize_model_parallel
 from mindspeed_ms.legacy.model import ParallelTransformer
 from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
@@ -150,8 +152,9 @@ if __name__ == '__main__':
     def extra_parser_provider(inner_parser):
         inner_parser.add_argument('--pretrain', action='store_true', help="model pretrain.")
         return inner_parser
-
-    main_args = parse_args(extra_args_provider=extra_parser_provider)
+    main_args, defaults = parse_args(extra_args_provider=extra_parser_provider)
+    main_args = validate_yaml(main_args, defaults, {})
+    set_global_variables(main_args, False)
     used_config = core_transformer_config_from_yaml(main_args)
     if extra_args.pretrain:
         run_parallel_transformer_pretrain(used_config, main_args)

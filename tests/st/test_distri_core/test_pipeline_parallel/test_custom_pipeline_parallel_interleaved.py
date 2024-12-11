@@ -90,16 +90,16 @@ class TestPipelineParallel:
         """
         Feature: test_compare_loss
         Description: compare relative error between pipeline loss and golden loss which with shared weight
-        Expectation: relative error smaller than 1e-3
+        Expectation: relative error smaller than 1e-7
         """
         pp_log_path = './custom_pp_interleaved/worker_3.log'
         pp_loss = read_loss_from_log(pp_log_path)
 
         pp_loss = np.array(pp_loss, np.float32)
-        golden_loss = np.array([6.1131716, 6.1253047], np.float32)
+        golden_loss = np.array([6.113171577453613, 6.12530517578125], np.float32)
 
         print(f"interleaved staged pp loss: {pp_loss}", flush=True)
         print(f"golden loss: {golden_loss}", flush=True)
-        assert np.allclose(pp_loss, golden_loss, atol=1e-3), "Custom interleaved pipeline net " \
+        assert np.allclose(pp_loss, golden_loss, atol=1e-7), "Custom interleaved pipeline net " \
                                                                 "loss accuracy test fail !"
         print("============== Custom interleaved staged pipeline net loss accuracy test pass !!! ==============")

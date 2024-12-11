@@ -17,39 +17,11 @@ import os
 
 import pytest
 import numpy as np
+from tests.st.test_distri_core.utils import read_loss_from_log
 
 
 class TestMixtral:
     """A test class for testing Linear."""
-
-    env_list = {
-        # 'PYTHONPATH': f"/path/to/your/mindspore:{os.getenv('PYTHONPATH')}",
-        }
-    for k, v in env_list.items():
-        os.environ[k] = v
-    # os.system("ps -ef|grep pytest |grep -v grep|cut -c 9-16|xargs kill -9")
-
-    def extract_loss_from_log(self, pynative_log_path: str):
-        """extract loss from log_path"""
-
-        assert os.path.exists(pynative_log_path), f"{pynative_log_path} did not exits"
-
-        # check loss with golden loss
-        pynative_loss = []
-        with open(pynative_log_path, "r") as fp:
-            for line in fp:
-                if ", Loss: " in line:
-                    line = line.strip().replace('[', '').replace(']', '').replace(',', '')
-                    line = line.split(' ')
-                    i = 0
-                    for i, s in enumerate(line):
-                        if "Loss:" in s:
-                            print(f"{i}: {s} {line[i+1]}")
-                            break
-                    loss = float(line[i + 1])
-                    pynative_loss.append(loss)
-        pynative_loss = np.array(pynative_loss)
-        return pynative_loss
 
     @pytest.mark.level0
     @pytest.mark.platform_arm_ascend910b_training
@@ -90,7 +62,7 @@ class TestMixtral:
 
         # check loss with golden loss
         pynative_log_path = f'msrun_log_pynative{postfix}/worker_4.log'
-        pynative_loss = self.extract_loss_from_log(pynative_log_path)
+        pynative_loss = read_loss_from_log(pynative_log_path)
         print(f"pynative_loss are:\n{pynative_loss}")
 
         golden_loss = [4.1485944, 4.1479816, 4.1473684, 4.146756, 4.146144,

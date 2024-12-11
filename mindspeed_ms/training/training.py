@@ -15,7 +15,6 @@
 """For Training"""
 
 import time
-import contextlib
 import os
 import gc
 import numpy as np
@@ -23,21 +22,17 @@ import numpy as np
 import mindspore as ms
 import mindspore.common.dtype as mstype
 import mindspore.communication.comm_func as comm_func
+from mindspore.common.api import _pynative_executor
 
-from mindspore import nn, Tensor, Parameter, mint, value_and_grad
-from mindspore.train import Perplexity
+from mindspore import nn, Tensor, Parameter, mint
 from mindspore.communication.management import get_rank
 from mindspore.amp import DynamicLossScaler, StaticLossScaler, all_finite
 from mindspore.experimental.optim.optimizer import Optimizer as mintOptimizer
 
 from mindspeed_ms.tools import logger
 from mindspeed_ms.tools.resume_ckpt import get_resume_checkpoint
-from mindspeed_ms.training.initialize import initialize_megatron
-from mindspeed_ms.training import (
-    get_args,
-    core_transformer_config_from_args
-)
-from mindspeed_ms.training.yaml_arguments import core_transformer_config_from_yaml
+from mindspeed_ms.training import get_args
+from mindspeed_ms.training.utils import set_weight_decay
 from mindspeed_ms.core.optimizer import optimizer_config_from_args
 from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.core.parallel_state import (
@@ -57,14 +52,13 @@ from mindspeed_ms.core.parallel_state import (
     get_zero_shard_grad_group,
     get_pipeline_model_parallel_rank,
     get_tensor_model_parallel_rank,
-    get_context_parallel_world_size
+    get_data_parallel_rank,
 )
 from mindspeed_ms.core.distributed import DistributedDataParallelConfig, \
     DistributedDataParallel
 from mindspeed_ms.core.optimizer import MixedPrecisionOptimizer, DistributedOptimizer
 from mindspeed_ms.core.pipeline_parallel.schedules import (
-    forward_backward_pipelining_without_interleaving,
-    forward_backward_pipelining_with_interleaving
+    get_forward_backward_func
 )
 from mindspeed_ms.core.dist_checkpointing import (
     save_checkpoint,
@@ -74,29 +68,52 @@ from mindspeed_ms.core.dist_checkpointing import (
 from mindspeed_ms.legacy.model.moe.utils import MoEAuxLossAutoScaler
 from mindspeed_ms.core.optimizer import get_optimizer, get_optimizer_param_scheduler
 from mindspeed_ms.core.profiler import PynativeProfiler
-from mindspeed_ms.legacy.data.data_samplers import build_pretraining_data_loader
 
-from .utils import set_weight_decay
-from .grad_handler import inplace_apply_to_tensor_list, get_grad_process_func, GradAccumulator
+from mindspeed_ms.training.initialize import initialize_mindspeed_ms
+from mindspeed_ms.core.utils import get_model_config
+
+from .grad_handler import inplace_apply_to_tensor_list, get_grad_process_func
+
+
 def get_train_valid_test_num_samples():
     """Train/valid/test num samples."""
 
     args = get_args()
 
+    eval_iters = 0
+    test_iters = 0
     # Number of train/valid/test samples.
     if args.train_samples:
         train_samples = args.train_samples
     else:
         train_samples = args.train_iters * args.global_batch_size
-    eval_iters = (args.train_iters // args.eval_interval + 1) * \
-                 args.eval_iters
-    test_iters = args.eval_iters
+    if args.eval_interval is not None and args.eval_iters is not None:
+        eval_iters = (args.train_iters // args.eval_interval + 1) * \
+                    args.eval_iters
+        test_iters = args.eval_iters
 
     return (
         train_samples,
         eval_iters * args.global_batch_size,
         test_iters * args.global_batch_size,
     )
+
+
+def get_dataset_dict_iterator(train_dataloader, epoch_step):
+    """ get dataset dict iterator """
+    args = get_args()
+    if args.resume_training:
+        if not args.new_dataset:
+            # when epoch_step > 1, means resume traing mode, will skip some data.
+            factor = args.global_batch_size // get_data_parallel_world_size() // args.micro_batch_size
+            train_data_dict_iterator = train_dataloader.skip((epoch_step - 1) * factor)\
+                .create_dict_iterator(num_epochs=1)
+        else:
+            logger.warning(f"When `resume_training = True` and `new_dataset = True`, will use a new dataset.")
+            train_data_dict_iterator = train_dataloader.create_dict_iterator(num_epochs=1)
+    else:
+        train_data_dict_iterator = train_dataloader.create_dict_iterator(num_epochs=1)
+    return train_data_dict_iterator
 
 
 def get_sp_params(config: TransformerConfig):
@@ -234,13 +251,6 @@ class ParallelTrainingReducer:
         self.inplace_reduce_dp_grad(grads, params)
         self.inplace_reduce_sp_grad(grads, params)
 
-    def reduce_dp_loss(self, loss):
-        """Reduce the loss in data parallel mode."""
-        if self.enable_loss_reduce["dp"]:
-            loss = mint.div(
-                comm_func.all_reduce(loss, "sum", get_data_parallel_group())[0], get_data_parallel_world_size())
-        return loss
-
     def reduce_overflow(self, overflow):
         """Reduce the overflow status in all parallel modes."""
         # logical or
@@ -265,7 +275,7 @@ class ParallelTrainingReducer:
         return is_finite.astype(mstype.bool_)
 
 
-def get_model(model_provider_func, config: TransformerConfig):
+def get_model(model_provider_func, model_type, wrap_with_ddp=True):
     """
     Get a network model according to the config.
 
@@ -289,20 +299,18 @@ def get_model(model_provider_func, config: TransformerConfig):
         >>> network_with_loss = get_model(model_provider_func, all_config.training_config)
     """
     args = get_args()
+    args.model_type = model_type
     model = nn.CellList(auto_prefix=False)
-    if config.bf16 and args.wrap_with_ddp and \
-            not args.accumulate_allreduce_grads_in_fp32:
-        logger.warning("Using bf16 with ddp, automatically set 'accumulate_allreduce_grads_in_fp32=True'.")
-        args.accumulate_allreduce_grads_in_fp32 = True
+
     if get_pipeline_model_parallel_world_size() > 1:
-        if config.virtual_pipeline_model_parallel_size is not None and \
-           config.virtual_pipeline_model_parallel_size > 1:
-            for i in range(config.virtual_pipeline_model_parallel_size):
+        if args.virtual_pipeline_model_parallel_size is not None:
+            for i in range(args.virtual_pipeline_model_parallel_size):
                 set_virtual_pipeline_model_parallel_rank(i)
                 pre_process = is_pipeline_first_stage()
                 post_process = is_pipeline_last_stage()
                 this_model = model_provider_func(pre_process=pre_process,
                                                  post_process=post_process)
+                this_model.model_type = model_type
                 rename_set_hidden_states_parameter(this_model, i)
                 model.append(this_model)
         else:
@@ -310,13 +318,33 @@ def get_model(model_provider_func, config: TransformerConfig):
             post_process = is_pipeline_last_stage()
             this_model = model_provider_func(pre_process=pre_process,
                                              post_process=post_process)
+            this_model.model_type = model_type
             # wrap with PP cell if pipeline parallelism is used
             model.append(this_model)
     else:
         this_model = model_provider_func(pre_process=True, post_process=True)
+        this_model.model_type = model_type
         model.append(this_model)
 
-    if args.wrap_with_ddp:
+    # print number of parameters
+    if get_data_parallel_rank() == 0:
+        logger.warning("Number of parameters on (tensor, pipeline) model parallel rank ({}, {}): {} | "
+                       "trainalbe parameters {} | untrainable parameters {}.".format(
+                           get_tensor_model_parallel_rank(),
+                           get_pipeline_model_parallel_rank(),
+                           sum([
+                               sum([p.nelement()for p in module.get_parameters()]) for module in model
+                           ]),
+                           sum([
+                               sum([p.nelement() for p in module.trainable_params()]) for module in model
+                           ]),
+                           sum([
+                               sum([p.nelement() for p in module.untrainable_params()]) for module in model
+                           ]),
+                       ))
+
+    if wrap_with_ddp:
+        config = get_model_config(model[0])
         ddp_config = DistributedDataParallelConfig(
             grad_reduce_in_fp32=args.accumulate_allreduce_grads_in_fp32,
             overlap_grad_reduce=args.overlap_grad_reduce,
@@ -339,191 +367,6 @@ def get_model(model_provider_func, config: TransformerConfig):
                             auto_prefix=False)
 
     return model
-
-
-def get_forward_backward_func(network_with_loss, params, config: TransformerConfig):
-    """
-    Returns a forward-backward function for training a network with or without pipeline parallelism.
-
-    Args:
-        network_with_loss (callable): A function that takes inputs and returns the network output and loss.
-        params (list): List of parameters to compute gradients for.
-        config (TransformerConfig): Model configuration.
-
-    Returns:
-        callable: A forward-backward function that can be used for training the network.
-
-    Raises:
-        NotImplementedError: If pipeline parallelism is not implemented yet.
-    """
-    args = get_args()
-
-    forward_backward_func = None
-    seq_length = args.seq_length
-    dp = get_data_parallel_world_size()
-    micro_batch_num = args.global_batch_size // (args.micro_batch_size * dp)
-    micro_batch_size = args.micro_batch_size
-    data_layout = args.data_layout
-
-    # no pipeline parallel
-    if get_pipeline_model_parallel_world_size() == 1:
-
-        def forward_with_loss_scale(*inputs_tuple, loss_scale=None, **inputs_dict):
-            logits = None
-            output = network_with_loss(*inputs_tuple, **inputs_dict)
-            if isinstance(output, tuple):
-                loss, logits = output[0], output[1]
-            else:
-                loss = output
-            if loss_scale is not None:
-                loss = mint.mul(loss, loss_scale.astype(loss.dtype))
-            return loss, logits
-
-        grad_position = None
-        # If parallel_config.zero_level == z3, gradient with respect to inputs and weights
-        if config.zero_level == "z3":
-            grad_position = 0
-        forward_backward_once_func = value_and_grad(
-            forward_with_loss_scale, grad_position=grad_position, weights=params, has_aux=True
-        )
-
-        # if overlap_grad_reduce, grad will be accumulate in grad buffer
-        if micro_batch_num > 1 and not args.wrap_with_ddp:
-            grad_accumulator = GradAccumulator(micro_batch_num, op="sum")
-
-        def forward_backward_func_with_grad_acc(
-                *inputs_tuple, loss_scale=None, forward_only=False, **inputs_dict
-        ):
-            loss = None
-            logits = None
-            grads = None
-
-            # reset grad buffer
-            model_zero_grad_buffer(network_with_loss, args.wrap_with_ddp)
-
-            # fuse loss scale and grad accumulation if do grad acc
-            if micro_batch_num > 1:
-                if loss_scale is None:
-                    loss_scale = Tensor(1, mstype.float32)
-                actual_loss_scale = mint.div(loss_scale, micro_batch_num)
-            else:
-                actual_loss_scale = loss_scale
-
-            if args.wrap_with_ddp:
-                no_sync_func = network_with_loss.no_sync
-            else:
-                no_sync_func = contextlib.nullcontext
-
-            def forward_backward_on_microbatch(idx):
-                nonlocal loss
-                nonlocal logits
-                nonlocal grads
-
-                # slice inputs over batch size dimension
-                inputs_tuple_micro = [
-                    input_data[idx * micro_batch_size : (idx + 1) * micro_batch_size] for input_data in inputs_tuple
-                ]
-                inputs_dict_micro = {}
-                for key, value in inputs_dict.items():
-                    if value is not None:
-                        inputs_dict_micro[key] = value[idx * micro_batch_size : (idx + 1) * micro_batch_size]
-                    else:
-                        inputs_dict_micro[key] = None
-                # step on micro batch
-                if forward_only:
-                    loss_micro, logits_micro = forward_with_loss_scale(
-                        *inputs_tuple_micro, loss_scale=actual_loss_scale, **inputs_dict_micro
-                    )
-                else:
-                    (loss_micro, logits_micro), grads_micro = forward_backward_once_func(
-                        *inputs_tuple_micro, loss_scale=actual_loss_scale, **inputs_dict_micro
-                    )
-                    if grad_position == 0:
-                        grads_micro = grads_micro[1]
-                    # accumulate grads
-                    if micro_batch_num > 1 and not args.wrap_with_ddp:
-                        grads = grad_accumulator(grads_micro)
-                    else:
-                        grads = grads_micro
-
-                # process output, loss will be averaged in loss unscaling
-                loss = loss_micro if loss is None else loss + loss_micro
-
-                if logits is None:
-                    logits = logits_micro
-                else:
-                    cat_dim = 0 if data_layout == "BSH" else 1
-                    logits = mint.cat((logits, logits_micro), dim=cat_dim)
-
-            # trigger dp reduce only on last step
-            with no_sync_func():
-                for idx in range(micro_batch_num - 1):
-                    forward_backward_on_microbatch(idx)
-            forward_backward_on_microbatch(micro_batch_num - 1)
-
-            # unscale loss
-            if loss_scale is not None:
-                loss = mint.div(loss, loss_scale)
-
-            if forward_only:
-                return loss, logits
-
-            # finalize ddp grad reduce
-            if args.wrap_with_ddp:
-                network_with_loss.final_grad_reduce()
-            return (loss, logits), grads
-
-        forward_backward_func = forward_backward_func_with_grad_acc
-
-    else:
-        def forward_backward_with_pipelining(
-                *inputs_tuple, loss_scale=None, forward_only=False, **inputs_dict
-        ):
-            # reset grad buffer
-            model_zero_grad_buffer(network_with_loss, args.wrap_with_ddp)
-
-            if loss_scale is None:
-                loss_scale = Tensor(1, mstype.float32)
-            if config.virtual_pipeline_model_parallel_size is not None and \
-               config.virtual_pipeline_model_parallel_size > 1:
-                loss, logits, grads = forward_backward_pipelining_with_interleaving(
-                    network_with_loss,
-                    micro_batch_num,
-                    seq_length,
-                    micro_batch_size,
-                    *inputs_tuple,
-                    decoder_seq_length=None,
-                    forward_only=forward_only,
-                    collect_non_loss_data=False,
-                    first_val_step=None,
-                    config=config,
-                    total_tokens_nums=None,
-                    scale_sense=loss_scale,
-                    **inputs_dict
-                )
-            else:
-                loss, logits, grads = forward_backward_pipelining_without_interleaving(
-                    network_with_loss,
-                    micro_batch_num,
-                    seq_length,
-                    micro_batch_size,
-                    *inputs_tuple,
-                    decoder_seq_length=None,
-                    forward_only=forward_only,
-                    collect_non_loss_data=False,
-                    first_val_step=None,
-                    config=config,
-                    total_tokens_nums=None,
-                    scale_sense=loss_scale,
-                    **inputs_dict
-                )
-            if forward_only:
-                return loss, logits
-            return (loss, logits), grads
-
-        forward_backward_func = forward_backward_with_pipelining
-
-    return forward_backward_func
 
 
 class TrainOneStepCell(nn.Cell):
@@ -574,7 +417,12 @@ class TrainOneStepCell(nn.Cell):
     """
 
     # pylint: disable=W0613
-    def __init__(self, network_with_loss, optimizer, opt_param_scheduler, config: TransformerConfig, **kwargs):
+    def __init__(self,
+                 network_with_loss,
+                 optimizer,
+                 opt_param_scheduler,
+                 config: TransformerConfig,
+                 **kwargs):
         super(TrainOneStepCell, self).__init__(auto_prefix=False)
         args = get_args()
         if isinstance(network_with_loss, nn.CellList) and len(network_with_loss) == 1:
@@ -602,12 +450,13 @@ class TrainOneStepCell(nn.Cell):
         self.params_with_grad = parameters if self.use_mixed_precision_optimizer else None
 
         # init loss scaler
+        loss_scaler = None
         if args.loss_scale is not None:
-            self.loss_scaler = StaticLossScaler(scale_value=args.loss_scale)
+            loss_scaler = StaticLossScaler(scale_value=args.loss_scale)
         else:
             # dynamic loss scaler is used only if the model is computed in float16
             if config.compute_dtype == mstype.float16:
-                self.loss_scaler = DynamicLossScaler(
+                loss_scaler = DynamicLossScaler(
                     scale_value=args.initial_loss_scale,
                     scale_factor=args.hysteresis,
                     scale_window=args.loss_scale_window,
@@ -616,7 +465,8 @@ class TrainOneStepCell(nn.Cell):
                 logger.warning(
                     "Dynamic loss scale is only supported for float16 computation. Not using loss scaling."
                 )
-                self.loss_scaler = StaticLossScaler(scale_value=1)
+                loss_scaler = StaticLossScaler(scale_value=1)
+        self.config.loss_scaler = loss_scaler
 
         # init grad clip func
         self.use_grad_clip = config.grad_clip_kwargs is not None
@@ -631,12 +481,15 @@ class TrainOneStepCell(nn.Cell):
         # init parallel reducer
         self.parallel_reducer = ParallelTrainingReducer(parameters, config)
 
+        # get args value
         dp = get_data_parallel_world_size()
-        self.micro_batch_num = args.global_batch_size // (args.micro_batch_size * dp)
+        self.micro_batch_size = args.micro_batch_size
+        self.seq_length = args.seq_length
+
+        # calculate num_microbatches
+        self.num_microbatches = args.global_batch_size // (self.micro_batch_size * dp)
         # init forward_backward_func
-        self.forward_backward_func = get_forward_backward_func(
-            network_with_loss, parameters, config
-        )
+        self.forward_backward_func = get_forward_backward_func()
         self.accumulate_allreduce_grads_in_fp32 = args.accumulate_allreduce_grads_in_fp32
 
 
@@ -655,21 +508,35 @@ class TrainOneStepCell(nn.Cell):
             global_norm = self.grad_clip_func(grads)
         return global_norm
 
-    def construct(self, *inputs_tuple, **inputs_dict):
+    def construct(self, forward_step_func, data_iterator, forward_only=False):
         """Forward, backward, grad process, and optimizer step."""
         # forward and backward
         if self.use_mixed_precision_optimizer:
             self.optimizer.zero_grad()
 
-        if self.loss_scaler is not None:
-            current_step_loss_scale = self.loss_scaler.scale_value
+        if self.config.loss_scaler is not None:
+            current_step_loss_scale = self.config.loss_scaler.scale_value
         else:
             current_step_loss_scale = None
         if self.config.num_moe_experts is not None and self.config.num_moe_experts > 1:
-            MoEAuxLossAutoScaler.set_loss_scale(mint.div(current_step_loss_scale, self.micro_batch_num))
+            MoEAuxLossAutoScaler.set_loss_scale(mint.div(current_step_loss_scale, self.num_microbatches))
+
+        # reset grad buffer
+        model_zero_grad_buffer(self.network_with_loss, self.wrap_with_ddp)
 
         # loss is scale and unscale in forward_backward_func
-        (loss, _), grads = self.forward_backward_func(*inputs_tuple, loss_scale=current_step_loss_scale, **inputs_dict)
+        losses_reduced, grads = self.forward_backward_func(
+            forward_step_func=forward_step_func,
+            data_iterator=data_iterator,
+            model=self.network_with_loss,
+            num_microbatches=self.num_microbatches,
+            seq_length=self.seq_length,
+            micro_batch_size=self.micro_batch_size,
+            decoder_seq_length=None,
+            forward_only=forward_only,
+            collect_non_loss_data=False,
+            first_val_step=None
+        )
 
         # apply grad reducer
         grads = list(grads)
@@ -686,8 +553,8 @@ class TrainOneStepCell(nn.Cell):
             # sync over tp and pp group
             is_finite = self.parallel_reducer.reduce_is_finite(is_finite)
 
-            if self.loss_scaler is not None:
-                self.loss_scaler.adjust(is_finite)
+            if self.config.loss_scaler is not None:
+                self.config.loss_scaler.adjust(is_finite)
 
         global_norm = None
         if is_finite:
@@ -710,10 +577,10 @@ class TrainOneStepCell(nn.Cell):
                 for individual_learning_rate in learning_rate
             )
 
-        # reduce loss if dp
-        loss = self.parallel_reducer.reduce_dp_loss(loss)
+        # reduce loss
+        loss_reduced = self._loss_reduce(losses_reduced)
 
-        return loss, is_finite, current_step_loss_scale, learning_rate, global_norm
+        return loss_reduced, is_finite, current_step_loss_scale, learning_rate, global_norm
 
     def _call_optimizer(self, grads, current_step_loss_scale):
         # scale grads and clip grads if enabled
@@ -726,14 +593,36 @@ class TrainOneStepCell(nn.Cell):
             _, global_norm, _ = self.optimizer()
         return global_norm
 
+    def _loss_reduce(self, losses_reduced):
+        """ reduce losses """
+        if is_pipeline_last_stage(ignore_virtual=True):
+            loss_reduced = {}
+            for key in losses_reduced[0].keys():
+                numerator = 0
+                denominator = 0
+                for x in losses_reduced:
+                    val = x[key]
+                    # reduce loss base on per-token
+                    if isinstance(val, (tuple, list)):
+                        numerator += val[0]
+                        denominator += val[1]
+                    else:
+                        # reduce loss base on num_microbatches
+                        numerator += val
+                        denominator += 1
+                loss_reduced[key] = numerator / denominator
+        else:
+            loss_reduced = {'lm loss': Tensor(0, mstype.float32)}
+        return loss_reduced
+
 def train(
         train_one_step_cell,
         train_dataloader,
+        forward_step_func,
         val_dataloader=None,
         metrics=None,
         evaluation_func=None,
         resume_dict=None,
-        get_batch_func=None,
         **kwargs,
 ):
     """
@@ -796,31 +685,34 @@ def train(
         initial_epoch = 0
         initial_step = 0
 
-    dataset_size = None
+    step_num_per_epoch = None
     # broadcast only support [Int32], datasize limit [-2147483648, 2147483647]
-    dataset_size_tensor = ms.Tensor(np.zeros(1), dtype=mstype.int32)
-    # There is 2 way to fetch traing step data: 1. get_batch_func; 2. train_dataloader
-    # both way need to know dataset size
-    if get_batch_func is None and train_dataloader is None:
-        # A ERROR SITUATION
-        raise ValueError(f"`get_batch_func` and `train_dataloader` should not be `None` at the same time, " + \
-                         f"but got {get_batch_func} and {train_dataloader}")
-    if train_dataloader is not None:
-        dataset_size = train_dataloader.get_dataset_size()
-        dataset_size_tensor = ms.Tensor(dataset_size, dtype=mstype.int32)
-    if get_batch_func is not None:
-        # if using `get_batch_func`, train_dataloader is None when tp_rank != 0,
-        # so we need to broadcast it to other tp_rank
-        tp_world_size = get_tensor_model_parallel_world_size()
-        src_rank = (get_rank() // tp_world_size) * tp_world_size
-        dataset_size_tensor = comm_func.broadcast(dataset_size_tensor, src_rank, get_tensor_model_parallel_group())
-    dataset_size = dataset_size_tensor.asnumpy().tolist()
-    if isinstance(dataset_size, list):
-        dataset_size = dataset_size[0]
-    if dataset_size <= 0:
-        raise ValueError(f"Expect dataset_size > 0, but got {dataset_size}")
+    step_num_per_epoch_tensor = ms.Tensor(np.zeros(1), dtype=mstype.int32)
 
-    logger.info(f"dataset size is {dataset_size}")
+    if train_dataloader is not None:
+        train_dataloader_sample = train_dataloader
+        if isinstance(train_dataloader_sample, list):
+            train_dataloader_sample = train_dataloader_sample[0]
+        factor = args.global_batch_size // get_data_parallel_world_size() // args.micro_batch_size
+        step_num_per_epoch = train_dataloader_sample.get_dataset_size() // factor
+        step_num_per_epoch_tensor = ms.Tensor(step_num_per_epoch, dtype=mstype.int32)
+
+    # if using `get_batch_func`, train_dataloader is None when tp_rank != 0,
+    # so we need to broadcast it to other tp_rank
+    tp_world_size = get_tensor_model_parallel_world_size()
+    src_rank = (get_rank() // tp_world_size) * tp_world_size
+    step_num_per_epoch_tensor = comm_func.broadcast(step_num_per_epoch_tensor, src_rank,
+                                                    get_tensor_model_parallel_group())
+    comm_func.barrier(group=get_tensor_model_parallel_group())
+    _pynative_executor.sync()
+
+    step_num_per_epoch = step_num_per_epoch_tensor.asnumpy().tolist()
+    if isinstance(step_num_per_epoch, list):
+        step_num_per_epoch = step_num_per_epoch[0]
+    if step_num_per_epoch <= 0:
+        raise ValueError(f"Expect step_num_per_epoch > 0, but got {step_num_per_epoch}")
+
+    logger.info(f"step number per epoch is {step_num_per_epoch}")
 
     train_one_step_cell.set_train()
     config = train_one_step_cell.config
@@ -829,13 +721,16 @@ def train(
     epoch_step = 1
     current_epoch = 0
     if args.resume_training:
-        global_step = initial_step + initial_epoch * dataset_size + 1
-        epoch_step = global_step % dataset_size
-        current_epoch = global_step // dataset_size
+        global_step = initial_step + initial_epoch * step_num_per_epoch + 1
+        epoch_step = global_step % step_num_per_epoch
+        current_epoch = global_step // step_num_per_epoch
+        if epoch_step == 0 and current_epoch > 0:
+            epoch_step = step_num_per_epoch
+            current_epoch -= 1
         logger.info(f"Resume training starts from global step {global_step}, epoch {current_epoch}, step {epoch_step}.")
 
     if epoch_step > 1:
-        logger.info(f"Resume training will skip {epoch_step} step data")
+        logger.info(f"Resume training will skip {epoch_step - 1} step data")
 
     evaluation_flag = (
         val_dataloader is not None
@@ -845,7 +740,9 @@ def train(
         and args.best_metric_comparison is not None
         and args.eval_metric is not None
     )
-    save_ckpt_flag = args.save_interval is not None and args.train_iters != 0
+    save_ckpt_flag = (args.save_interval is not None and
+                      args.train_iters != 0 and
+                      args.save_interval <= args.train_iters)
     correct_metric_flag = is_pipeline_last_stage() # not use pp or pp last_stage
 
     if evaluation_flag:
@@ -865,15 +762,12 @@ def train(
 
     # both `get_batch_func` and `train_dataloader` need create train_dataloader
     if train_dataloader is not None:
-        if args.resume_training:
-            if not args.new_dataset:
-                # when epoch_step > 1, means resume traing mode, will skip some data.
-                train_data_dict_iterator = train_dataloader.skip(epoch_step - 1).create_dict_iterator()
-            else:
-                logger.warning(f"When `resume_training = True` and `new_dataset = True`, will use a new dataset.")
-                train_data_dict_iterator = train_dataloader.create_dict_iterator()
+        if isinstance(train_dataloader, list):
+            train_data_dict_iterator = []
+            for cur_train_dataloader in train_dataloader:
+                train_data_dict_iterator.append(get_dataset_dict_iterator(cur_train_dataloader, epoch_step))
         else:
-            train_data_dict_iterator = train_dataloader.create_dict_iterator()
+            train_data_dict_iterator = get_dataset_dict_iterator(train_dataloader, epoch_step)
     else:
         train_data_dict_iterator = None
 
@@ -886,17 +780,18 @@ def train(
         # we need to refresh train_dataloader every epoch
         # when resume training, epoch_step > 1, so train_data_dict_iterator will not be refreshed
         if epoch_step == 1 and train_dataloader is not None:
-            train_data_dict_iterator = train_dataloader.create_dict_iterator(num_epochs=1)
+            if isinstance(train_dataloader, list):
+                train_data_dict_iterator = []
+                for cur_train_dataloader in train_dataloader:
+                    train_data_dict_iterator.append(cur_train_dataloader.create_dict_iterator(num_epochs=1))
+            else:
+                train_data_dict_iterator = train_dataloader.create_dict_iterator(num_epochs=1)
+
         start_time = time.time()
-        # get step data
-        if get_batch_func is None:
-            data = next(train_data_dict_iterator)
-        else:
-            data = get_batch_func(train_data_dict_iterator)
         profiler.step_begin(global_step)
-        loss, is_finite, loss_scale, learning_rate, global_norm = train_one_step_cell(**data)
-        cp_world_size = get_context_parallel_world_size()
-        loss = loss / cp_world_size
+        loss_reduced, is_finite, loss_scale, learning_rate, global_norm = train_one_step_cell(forward_step_func,
+                                                                                              train_data_dict_iterator,
+                                                                                              forward_only=False)
         end_time = time.time()
         if args.log_interval is not None and global_step % args.log_interval == 0:
             if not correct_metric_flag:
@@ -908,8 +803,11 @@ def train(
                 report_learning_rate += ')'
             else:
                 report_learning_rate = "{:e}".format(learning_rate)
+            print_log_str = f"Epoch: {current_epoch}, Step: {epoch_step}, "
+            for loss_key, loss_value in loss_reduced.items():
+                print_log_str += f"{loss_key}: {loss_value.item()}, "
             logger.info(
-                f"Epoch: {current_epoch}, Step: {epoch_step}, Loss: {loss}, "
+                print_log_str
                 + f"Finite_grads: {is_finite}, "
                 + f"Loss_scale: {loss_scale.value() if loss_scale is not None else None}, "
                 + f"Learning_rate: {report_learning_rate}, Grad_norm: {global_norm}, "
@@ -962,7 +860,7 @@ def train(
         global_step += 1
 
         # update epoch_step and current_epoch
-        if epoch_step > dataset_size:
+        if epoch_step > step_num_per_epoch:
             epoch_step = 1
             current_epoch += 1
 
@@ -974,11 +872,11 @@ def train(
         logger.info("Saving last step checkpoint.")
         # at the end of training loop, we use `global_step += 1`,
         # so the right global step should be 'global_step - 1',
-        epoch_step = (global_step - 1) % dataset_size
-        current_epoch = (global_step - 1) // dataset_size
+        epoch_step = (global_step - 1) % step_num_per_epoch
+        current_epoch = (global_step - 1) // step_num_per_epoch
         # to avoid situation like 'epoch 1, step 0'
         if epoch_step == 0:
-            epoch_step = dataset_size
+            epoch_step = step_num_per_epoch
             current_epoch -= 1
 
         save_checkpoint(config,
@@ -996,38 +894,89 @@ def train(
     logger.info("Training success!")
 
 
-# pylint: disable=W0613, C0330
-def pretrain(train_valid_test_datasets_provider,
-             model_provider_func,
+# pylint: disable=W0613, C0330, W0102
+def pretrain(train_valid_test_dataset_provider,
+             model_provider,
              model_type,
-             forward_step_func=None,
+             forward_step_func,
              process_non_loss_data_func=None,
              extra_args_provider=None,
-             **kwargs):
+             args_defaults={}):
     """pretrain function"""
-    # ms.context.set_context(pynative_synchronize=True)
-    initialize_megatron(extra_args_provider=extra_args_provider)
+
+        # initialize and get arguments
+    initialize_mindspeed_ms(extra_args_provider=extra_args_provider,
+                            args_defaults=args_defaults)
+
     args = get_args()
-    if args.yaml_cfg is None:
-        config = core_transformer_config_from_args(args)
+
+    model, optimizer, opt_param_scheduler, resume_dict = setup_model_and_optimizer(model_provider, model_type)
+
+    if args.virtual_pipeline_model_parallel_size is not None:
+        train_data_iterator = []
+        valid_data_iterator = []
+        test_data_iterator = []
+        for i in range(len(model)):
+            set_virtual_pipeline_model_parallel_rank(i)
+            iterators = build_train_valid_test_data_iterators(
+                train_valid_test_dataset_provider)
+            train_data_iterator.append(iterators[0])
+            valid_data_iterator.append(iterators[1])
+            test_data_iterator.append(iterators[2])
     else:
-        config = core_transformer_config_from_yaml(args)
-    optimizer_config = optimizer_config_from_args(args)
+        train_data_iterator, valid_data_iterator, test_data_iterator \
+            = build_train_valid_test_data_iterators(
+                train_valid_test_dataset_provider)
 
-    train_ds, _, _ = train_valid_test_datasets_provider(get_train_valid_test_num_samples())
-    train_data_loader = build_pretraining_data_loader(train_ds, 0)
-    get_batch_func = kwargs.get("get_batch_func", None)
+    config = get_model_config(model[0])
 
-    network_with_loss = get_model(model_provider_func, config)
+    train_one_step_cell = TrainOneStepCell(model, optimizer, opt_param_scheduler,
+                                           config)
 
-    group_params = set_weight_decay(network_with_loss.trainable_params(), optimizer_config.weight_decay)
-    optimizer = get_optimizer(
-        optimizer_config,
-        config,
-        group_params,
-        network_with_loss,
-        grad_allreduce_op="mean"
-    )
+    if not args.skip_train:
+        logger.warning("training...")
+        if args.do_train and args.train_iters > 0:
+            train(
+                train_one_step_cell=train_one_step_cell,
+                train_dataloader=train_data_iterator,
+                forward_step_func=forward_step_func,
+                val_dataloader=None,
+                metrics=None,
+                resume_dict=resume_dict,
+            )
+            logger.warning("training is done...")
+    else:
+        logger.warning("skip training...")
+
+    if args.do_valid:
+        logger.warning("validation is not supported for now.")
+
+    if args.do_test:
+        logger.warning("testing is not supported for now.")
+
+
+def setup_model_and_optimizer(model_provider_func,
+                              model_type,
+                              no_wd_decay_cond=None,
+                              scale_lr_cond=None,
+                              lr_mult=1.0):
+    """ setup model, optimizer and opt_param_scheduler. """
+    if no_wd_decay_cond is not None:
+        logger.warning("For setup_model_and_optimizer, no_wd_decay_cond is not support for now.")
+    if scale_lr_cond is not None:
+        logger.warning("For setup_model_and_optimizer, scale_lr_cond is not support for now.")
+    if lr_mult != 1.0:
+        logger.warning("For setup_model_and_optimizer, lr_mult is not support for now.")
+    args = get_args()
+
+    model = get_model(model_provider_func, model_type, wrap_with_ddp=args.wrap_with_ddp)
+
+    config = optimizer_config_from_args(args)
+    group_params = set_weight_decay(model.trainable_params(), config.weight_decay)
+    optimizer = get_optimizer(config,
+                              args,
+                              params=group_params,
+                              network=model)
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
 
     resume_dict = None
@@ -1078,8 +1027,8 @@ def pretrain(train_valid_test_datasets_provider,
                 raise FileNotFoundError(f"File {ckpt_path} not exists, please check your ckpt path.")
         logger.debug(f"ckpt_path is {ckpt_path}")
         resume_dict = load_checkpoint(
-            config=config,
-            model=network_with_loss,
+            config=get_model_config(model[0]),
+            model=model,
             optimizer=optimizer,
             opt_param_scheduler=opt_param_scheduler,
             ckpt_path=ckpt_path,
@@ -1092,19 +1041,32 @@ def pretrain(train_valid_test_datasets_provider,
             logger.warning("resume_dict extract from checkpoint is not 'None', but resume_training is 'False', "
                            "so resume_dict will be set to 'None'")
 
-    train_one_step_cell = TrainOneStepCell(
-        network_with_loss, optimizer, opt_param_scheduler, config)
+    return model, optimizer, opt_param_scheduler, resume_dict
 
-    metrics = {
-        "perplexity": Perplexity(),
-    }
 
-    train(
-        train_one_step_cell=train_one_step_cell,
-        train_dataloader=train_data_loader,
-        val_dataloader=None,
-        metrics=metrics,
-        resume_dict=resume_dict,
-        get_batch_func=get_batch_func,
-        #loss_func_type=optimizer_config.loss_func_kwargs.loss_func_type,
-    )
+def build_train_valid_test_data_loaders(build_train_valid_test_datasets_provider):
+    """ build the loader for train, validation and test set """
+    args = get_args()
+    (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
+    train_dataloader = build_train_valid_test_datasets_provider(get_train_valid_test_num_samples())
+
+    do_train = train_dataloader is not None and args.train_iters > 0
+    do_valid = valid_dataloader is not None and args.eval_iters > 0
+    do_test = test_dataloader is not None and args.eval_iters > 0
+
+    args.do_train = getattr(args, "do_train", False) or do_train
+    args.do_valid = getattr(args, "do_valid", False) or do_valid
+    args.do_test = getattr(args, "do_test", False) or do_test
+
+    return train_dataloader, valid_dataloader, test_dataloader
+
+
+def build_train_valid_test_data_iterators(build_train_valid_test_datasets_provider):
+    """ build the iterator of the data set """
+    train_dataloader, valid_dataloader, test_dataloader = \
+        build_train_valid_test_data_loaders(build_train_valid_test_datasets_provider)
+    train_data_iterator = train_dataloader
+    valid_data_iterator = valid_dataloader
+    test_data_iterator = test_dataloader
+
+    return train_data_iterator, valid_data_iterator, test_data_iterator

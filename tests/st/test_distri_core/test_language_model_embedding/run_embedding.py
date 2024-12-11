@@ -38,6 +38,8 @@ from mindspeed_ms.core.parallel_state import initialize_model_parallel, \
                                              get_data_parallel_world_size
 from mindspeed_ms.core.transformer import ModuleSpec, build_module
 from mindspeed_ms.training import parse_args, get_args, core_transformer_config_from_yaml, get_model
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.tools.utils import barrier_world
 
 seed = 2024
@@ -104,7 +106,9 @@ class LegacyEmbeddingNet(LegacyModule):
 def run_legacy(data_dir, ckpt_dir, save_output_dir):
     """ test mindspore """
     # init config
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
     config = core_transformer_config_from_yaml(args)
 
     ms.set_seed(seed)
@@ -192,7 +196,9 @@ def run_legacy(data_dir, ckpt_dir, save_output_dir):
 def run_mcore(data_dir, ckpt_dir, save_output_dir):
     """ test mindspore """
     # init config
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
     config = core_transformer_config_from_yaml(args)
 
     ms.set_seed(seed)

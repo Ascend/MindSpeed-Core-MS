@@ -90,16 +90,16 @@ class TestPipelineParallel:
         """
         Feature: test_compare_loss_without_shared_weight
         Description: compare relative error between pipeline loss and golden loss which without shared weight
-        Expectation: relative error smaller than 1e-3
+        Expectation: relative error smaller than 1e-7
         """
         pp_log_path = './pp_without_share_log/worker_3.log'
         pp_loss = read_loss_from_log(pp_log_path)
 
         pp_loss = np.array(pp_loss, np.float32)
-        golden_loss = np.array([6.1333547, 6.078737], np.float32)
+        golden_loss = np.array([6.133354663848877, 6.078737258911133], np.float32)
 
         print(f"pp loss without shared weight: {pp_loss}", flush=True)
         print(f"golden loss without shared weight: {golden_loss}", flush=True)
-        assert np.allclose(pp_loss, golden_loss, atol=1e-3), "Pipeline parallel loss without shared" \
+        assert np.allclose(pp_loss, golden_loss, atol=1e-7), "Pipeline parallel loss without shared" \
                                                                 "weight accuracy test fail !"
         print("============== Pipeline parallel loss without shared weight accuracy test pass !!! ==============")

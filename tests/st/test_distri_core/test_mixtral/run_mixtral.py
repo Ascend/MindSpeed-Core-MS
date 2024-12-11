@@ -14,13 +14,13 @@
 # ============================================================================
 """ Test Mixtral. """
 import os
-
+from functools import partial
 import numpy as np
 import torch
 
 import mindspore as ms
 import mindspore.dataset as ds
-from mindspore import Tensor
+from mindspore import Tensor, mint
 from mindspore.communication.management import init
 from mindspore.nn import SGD
 
@@ -34,6 +34,10 @@ from mindspeed_ms.training import (
     core_transformer_config_from_args,
     core_transformer_config_from_yaml
 )
+from mindspeed_ms.training.utils import average_losses_across_data_parallel_group
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
+from mindspeed_ms.core.tensor_parallel import ReduceFromContextParallelRegion
 from mindspeed_ms.core.optimizer import optimizer_config_from_args
 from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
 from mindspeed_ms.core.parallel_state import (
@@ -45,9 +49,67 @@ from mindspeed_ms.core.parallel_state import (
     get_pipeline_model_parallel_rank,
     get_tensor_model_parallel_group,
     get_tensor_model_parallel_rank,
+    get_context_parallel_world_size,
     initialize_model_parallel
 )
 from tests.st.test_distri_core.utils import MixtralModel, transform_mixtral_golden_params_to_pynative_params
+
+
+def get_batch(data_iterator):
+    """ get micro batch data """
+    if data_iterator is not None:
+        data = next(data_iterator)
+    else:
+        data = None
+    return data.values()
+
+
+def loss_func(loss_mask, output_tensor):
+    """ reduce loss func """
+    if output_tensor.ndim == 2:
+        output_tensor = output_tensor.swapaxes(0, 1).contiguous()
+    losses = output_tensor.float()
+    loss_mask = loss_mask.view(-1).float()
+    total_tokens = loss_mask.sum()
+    loss = mint.cat([mint.sum(losses.view(-1) * loss_mask).view(1), total_tokens.view(1)])
+
+    cp_world_size = get_context_parallel_world_size()
+    if cp_world_size > 1:
+        loss = ReduceFromContextParallelRegion()(loss)
+
+    # Check individual rank losses are not NaN prior to DP all-reduce.
+    if args.check_for_nan_in_loss_and_grad:
+        global_rank = ms.communication.get_rank()
+        if loss[0].isnan():
+            raise ValueError(f"Rank {global_rank}: found NaN in local forward loss calculation")
+
+    average_loss = average_losses_across_data_parallel_group([loss[0] * cp_world_size / loss[1]])
+
+    return loss[0] * cp_world_size / loss[1], {'lm loss': average_loss[0]}
+
+
+def forward_step(data_iterator, model):
+    """Forward training step
+
+    Args:
+        data_iterator: Input data iterator.
+        model: The model.
+    """
+    # pylint: disable=W0621
+    args = get_args()
+
+    # get batch data
+    input_data, labels, attention_mask = get_batch(data_iterator)
+    loss_mask = mint.ne(input_data[:, :-1], args.pad_token).astype(args.compute_dtype)
+    input_tensor = (input_data, labels, attention_mask)
+
+    # pylint: disable=W0621
+    def core_forward_func(*args):
+        input_data, labels, attention_mask = args
+        output_tensor = model(input_data, labels, attention_mask)
+        return output_tensor
+
+    return input_tensor, core_forward_func, partial(loss_func, loss_mask)
 
 
 class TestData:
@@ -149,7 +211,7 @@ def run_mixtral(config: TransformerConfig):
             )
         return network
 
-    network = get_model(model_provider_func, config)
+    network = get_model(model_provider_func, config, wrap_with_ddp=args.wrap_with_ddp)
 
     print(f"network construct is:\n{network}")
     print("network parameters are:")
@@ -186,12 +248,15 @@ def run_mixtral(config: TransformerConfig):
     optimizer = SGD(params=network.trainable_params(), learning_rate=1e-4)
     train_one_step_cell = TrainOneStepCell(network, optimizer, None, config)
     # train
-    train(train_one_step_cell, dataset)
+    train(train_one_step_cell, dataset, forward_step)
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
     args.data_layout = "BSH"
+    args.wrap_with_ddp = False
     if args.yaml_cfg is None:
         config = core_transformer_config_from_args(args)
     else:

@@ -27,7 +27,8 @@ from mindspeed_ms.core.context_parallel.ring_attention import RingAttention
 from mindspeed_ms.core.parallel_state import get_context_parallel_group_for_hybrid_ulysses, \
                                              get_context_parallel_group, initialize_model_parallel
 from mindspeed_ms.training import parse_args
-from mindspeed_ms.training.global_vars import get_args
+from mindspeed_ms.training.global_vars import get_args, set_global_variables
+from mindspeed_ms.training.yaml_arguments import validate_yaml
 from mindspeed_ms.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 
 logging.basicConfig(level=logging.INFO)
@@ -55,6 +56,7 @@ class FlashSelfAttention(ms.nn.Cell):
 def get_data_on_this_cp_rank(data, r_size, u_size, cp_rank, dim=0):
     '''get data on this cp rank'''
     cp_size = r_size * u_size
+    # pylint: disable=W0621
     args = get_args()
     if args.context_parallel_algo == "ulysses_cp_algo":
         data = data.chunk(cp_size, axis=dim)[cp_rank]
@@ -81,12 +83,14 @@ def get_data_on_this_cp_rank_general(data, r_size, u_size, cp_rank, dim=0):
 
 def get_attnmask_on_this_cp_rank_general(data, r_size, u_size, cp_rank, dim=0):
     '''get attnmask on this rank general'''
+    # pylint: disable=W0621
     args = get_args()
     attnmask = None
     if args.context_parallel_algo != "ulysses_cp_algo":
         attnmask = data.chunk(r_size, axis=dim)[cp_rank//u_size]
     return attnmask
 
+# pylint: disable=W0621
 def run_hybridattn_cp(args, dtype):
     '''Run hybrid cp test'''
     ms.set_context(device_target='Ascend', mode=ms.PYNATIVE_MODE,
@@ -185,12 +189,15 @@ def run_hybridattn_cp(args, dtype):
 
 class TestHybridCP:
 
+    # pylint: disable=W0621
     def test_hybrid_context_parallel_seq8192_bs2_bf16(self, args):
         logging.info("test_hybrid_context_parallel_seq8192_bs2_bf16")
         run_hybridattn_cp(args, mstype.bfloat16)
         logging.info("Test completed successfully.")
 
 if __name__ == "__main__":
-    config = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
     test_instance = TestHybridCP()
-    test_instance.test_hybrid_context_parallel_seq8192_bs2_bf16(config)
+    test_instance.test_hybrid_context_parallel_seq8192_bs2_bf16(args)

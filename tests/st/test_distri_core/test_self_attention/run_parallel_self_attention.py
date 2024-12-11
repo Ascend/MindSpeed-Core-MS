@@ -18,6 +18,8 @@ from mindspeed_ms.core.parallel_state import initialize_model_parallel, \
 from mindspeed_ms.training import core_transformer_config_from_args, core_transformer_config_from_yaml
 from mindspeed_ms.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
 from mindspeed_ms.training import parse_args, get_args
+from mindspeed_ms.training.yaml_arguments import validate_yaml
+from mindspeed_ms.training.global_vars import set_global_variables
 
 from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
 # transformer V1
@@ -125,8 +127,9 @@ class SelfAttentionNet(McoreModule):
 
 def run_legacy(data_dir, ckpt_dir, save_output_dir):
     """ test legacy """
-
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults)
+    set_global_variables(args, False)
     if args.yaml_cfg is not None:
         config = core_transformer_config_from_yaml(args)
     else:
@@ -227,7 +230,9 @@ def run_legacy(data_dir, ckpt_dir, save_output_dir):
 
 def run_mcore(data_dir, ckpt_dir, save_output_dir):
     """ test mcore """
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults)
+    set_global_variables(args, False)
     if args.yaml_cfg is not None:
         config = core_transformer_config_from_yaml(args)
     else:

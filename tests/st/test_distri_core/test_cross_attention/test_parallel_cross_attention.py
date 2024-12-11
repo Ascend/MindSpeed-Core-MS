@@ -36,7 +36,7 @@ class TestCrossAttention:
         Expectation: test success
         """
         scripts_name = "run_cross_attention.sh"
-        devices = "0,1,2,3,4,5,6,7"
+        devices = "0,1,2,3"
 
         log_dir = "msrun_legacy_log"
 
@@ -65,7 +65,7 @@ class TestCrossAttention:
         Expectation: test success
         """
         scripts_name = "run_cross_attention.sh"
-        devices = "0,1,2,3,4,5,6,7"
+        devices = "0,1,2,3"
         log_dir = "msrun_mcore_log"
 
         test_path = os.path.split(os.path.realpath(__file__))[0]

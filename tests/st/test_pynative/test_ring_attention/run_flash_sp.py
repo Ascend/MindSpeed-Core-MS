@@ -23,6 +23,8 @@ from mindspore.common.tensor import Tensor
 from mindspore.ops.operations.nn_ops import FlashAttentionScore
 
 from mindspeed_ms.training import parse_args
+from mindspeed_ms.training.global_vars import set_global_variables
+from mindspeed_ms.training.yaml_arguments import validate_yaml
 from mindspeed_ms.core.context_parallel.utils import get_sp_chuncks
 from mindspeed_ms.core.parallel_state import initialize_model_parallel
 from mindspeed_ms.core.context_parallel.flash_sp import FlashSP
@@ -132,5 +134,7 @@ def run_flash_sp():
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    args, defaults = parse_args()
+    args = validate_yaml(args, defaults, {})
+    set_global_variables(args, False)
     run_flash_sp()

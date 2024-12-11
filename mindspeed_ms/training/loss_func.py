@@ -109,5 +109,5 @@ def get_loss_func(optimizer_config: OptimizerConfig, return_instance: bool = Tru
     if return_instance:
         loss_func_kwargs.update(kwargs)
         loss_func_kwargs = ModuleRegistry.get_needed_params_for_init(loss_func_cls, loss_func_kwargs)
-        return LossWithMask(loss_func=loss_func_cls(**loss_func_kwargs))
+        return loss_func_cls(**loss_func_kwargs)
     return loss_func_cls

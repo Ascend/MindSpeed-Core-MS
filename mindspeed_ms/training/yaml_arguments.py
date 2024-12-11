@@ -398,10 +398,6 @@ def validate_yaml(args, args_default, defaults={}):
     # Use mcore or legacy
     args.use_legacy_models = not args.use_mcore_models
 
-    # Optimizer
-    if args.optimizer == 'adam':
-        args.optimizer = 'SpeedAdamW'
-
     # DDP and zero_level
     args.wrap_with_ddp = True
     if args.model_parallel.zero_level is not None:
