@@ -13,6 +13,7 @@
 # limitations under the License.
 # ============================================================================
 """ Pretrain Mixtral """
+import os
 from functools import partial
 import numpy as np
 
@@ -29,6 +30,7 @@ from mindspeed_ms.training import (
     core_transformer_config_from_args,
     core_transformer_config_from_yaml
 )
+from mindspeed_ms.core.tensor_parallel.mappings import ReduceFromContextParallelRegion
 from mindspeed_ms.training.utils import average_losses_across_data_parallel_group
 from mindspeed_ms.training.yaml_arguments import validate_yaml
 from mindspeed_ms.core.optimizer import optimizer_config_from_args
@@ -61,8 +63,6 @@ def loss_func(loss_mask, output_tensor):
         loss = loss[0] / loss[1]
     else:
         loss = mint.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
-
-    print(f"final micro loss: {loss}")
 
     if args.check_for_nan_in_loss_and_grad:
         global_rank = ms.communication.get_rank()
@@ -119,7 +119,7 @@ class TestData:
 # pylint: disable=W0613
 def train_valid_test_dataset_provider(unuse_args):
     """ get dataset """
-    return dataset, dataset
+    return dataset, None, None
 
 
 # pylint: disable=W0621

@@ -26,7 +26,6 @@ from mindspore.nn import SGD
 
 from mindspeed_ms.training import (
     get_model,
-    TrainOneStepCell,
     train,
     get_loss_func,
     parse_args,
@@ -246,10 +245,7 @@ def run_mixtral(config: TransformerConfig):
 
 
     optimizer = SGD(params=network.trainable_params(), learning_rate=1e-4)
-    train_one_step_cell = TrainOneStepCell(network, optimizer, None, config)
-    # train
-    train(train_one_step_cell, dataset, forward_step)
-
+    train(forward_step, network, optimizer, None, dataset, None, None, config)
 
 if __name__ == '__main__':
     args, defaults = parse_args()

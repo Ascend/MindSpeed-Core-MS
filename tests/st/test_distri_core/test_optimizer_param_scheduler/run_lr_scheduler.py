@@ -30,7 +30,7 @@ from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.core.dist_checkpointing import load_checkpoint
 from mindspeed_ms.core.optimizer import get_optimizer_param_scheduler
 from mindspeed_ms.core.parallel_state import initialize_model_parallel
-from mindspeed_ms.training import TrainOneStepCell, train, get_args
+from mindspeed_ms.training import train, get_args
 from mindspeed_ms.training import parse_args, core_transformer_config_from_yaml
 from tests.st.test_distri_core.test_pipeline_parallel.test_pipeline_net import PipelineTestNet, FakeData
 
@@ -117,9 +117,7 @@ def run_lr_scheduler():
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
 
     # init train one step cell
-    train_one_step_cell = TrainOneStepCell(network, optimizer, opt_param_scheduler, config)
-
-    train(train_one_step_cell, dataset_parallel, forward_step)
+    train(forward_step, network, optimizer, opt_param_scheduler, dataset_parallel, None, None, config)
 
     if args.yaml_cfg == 'test_iteration_tarining.yaml':
         assert optimizer.param_groups[0]['lr'] == 2.9999999999999997e-06

@@ -33,7 +33,7 @@ from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.training.utils import average_losses_across_data_parallel_group
 from mindspeed_ms.core.tensor_parallel import ReduceFromContextParallelRegion
 from mindspeed_ms.core import parallel_state
-from mindspeed_ms.training import get_model, TrainOneStepCell, train, get_loss_func, get_args
+from mindspeed_ms.training import get_model, train, get_loss_func, get_args
 from mindspeed_ms.core.optimizer import get_optimizer_param_scheduler, optimizer_config_from_args
 from mindspeed_ms.core.dist_checkpointing import load_checkpoint
 from mindspeed_ms.tools.resume_ckpt import get_resume_checkpoint
@@ -209,9 +209,7 @@ def run_resume_training(config, args):
             format=args.dist_ckpt_format
             )
 
-    train_one_step_cell = TrainOneStepCell(network, optimizer, opt_param_scheduler, config)
-    # train
-    train(train_one_step_cell, dataset, forward_step, resume_dict=resume_dict)
+    train(forward_step, network, optimizer, opt_param_scheduler, dataset, None, None, config, resume_dict=resume_dict)
 
 
 if __name__ == '__main__':

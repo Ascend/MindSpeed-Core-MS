@@ -30,6 +30,9 @@ import mindspeed_ms.core.parallel_state as parallel_state
 from .p2p_communication import P2PPrimitive
 
 
+core_step_cell = None
+
+
 def _accumulate_grads_func(accumulate_grads, current_micro_grads):
     """ Accumulate grad """
     for i, accumulate_grad in enumerate(accumulate_grads):
@@ -54,16 +57,14 @@ def _get_set_hidden_states_parameter(model):
 class ModelWithLoss(nn.Cell):
     """Model with loss cell """
     def __init__(self,
-                 core_forward_func,
-                 loss_func,
                  calculate_per_token_loss=False,
                  requires_grad=True):
         super().__init__(auto_prefix=False)
         self.set_grad(requires_grad)
-        self.core_forward_func = core_forward_func
-        self.loss_func = loss_func
-        self.post_process = parallel_state.is_pipeline_last_stage()
         self.calculate_per_token_loss = calculate_per_token_loss
+        self.core_forward_func = None
+        self.loss_func = None
+        self.post_process = None
         self.loss_reduced = None
 
     def construct(self, *args):
@@ -87,6 +88,12 @@ class ModelWithLoss(nn.Cell):
         loss_reduced = self.loss_reduced
         self.loss_reduced = None
         return loss_reduced
+
+    def set_run_func(self, core_forward_func, loss_func):
+        """ set func for running construct"""
+        self.core_forward_func = core_forward_func
+        self.loss_func = loss_func
+        self.post_process = parallel_state.is_pipeline_last_stage()
 
     def _set_loss_reduced(self, loss_reduced):
         """ set self.loss_reduced """
@@ -123,11 +130,10 @@ def forward_step(forward_step_func,
                  num_microbatches,
                  backward_loss,
                  print_loss,
-                 backward_step_cell_list,
+                 backward_func_list,
                  recv_data=None,
                  calculate_per_token_loss=False,
                  num_tokens_list=None,
-                 requires_grad=True,
                  **kwargs):
     """
     Run forward step.
@@ -161,13 +167,13 @@ def forward_step(forward_step_func,
     input_tensors, core_forward_step, loss_func = forward_step_outputs
 
     # init core forward step cell
-    core_forward_step_cell = ModelWithLoss(core_forward_step, loss_func, requires_grad)
+    core_step_cell.set_run_func(core_forward_step, loss_func)
 
     # run forward
-    output_tensors = core_forward_step_cell(*input_tensors)
+    output_tensors = core_step_cell(*input_tensors)
 
     if parallel_state.is_pipeline_last_stage():
-        loss_reduced = core_forward_step_cell.get_loss_reduced()
+        loss_reduced = core_step_cell.get_loss_reduced()
         loss_reduced_is_not_none = 1 if loss_reduced is not None else 0
         # check output
         if isinstance(output_tensors, tuple):
@@ -199,8 +205,8 @@ def forward_step(forward_step_func,
     else:
         output_tensor = output_tensors
 
-    # append 'core_forward_step_cell' for running backward
-    backward_step_cell_list.append(core_forward_step_cell)
+    # append 'core_forward_step' and 'loss_func 'for running backward
+    backward_func_list.append((core_forward_step, loss_func))
 
     input_tensors += (recv_data,)
     return output_tensor, list(input_tensors)
@@ -208,7 +214,7 @@ def forward_step(forward_step_func,
 
 # pylint: disable=W0613
 def backward_step(*input_tensor,
-                  backward_step_cell,
+                  backward_func,
                   recv_grads,
                   model,
                   weight,
@@ -261,8 +267,11 @@ def backward_step(*input_tensor,
     if not parallel_state.is_pipeline_first_stage():
         model.set_input_tensor(recv_data)
 
+    # set backward func for backpropagation
+    core_step_cell.set_run_func(*backward_func)
+
     # get grad function
-    grad_fn = C.GradOperation(get_by_list=True, sens_param=True)(backward_step_cell, weight)
+    grad_fn = C.GradOperation(get_by_list=True, sens_param=True)(core_step_cell, weight)
 
     # calculate grads
     weight_grad = grad_fn(*input_tensor, sens=recv_grads)
@@ -465,6 +474,11 @@ def forward_backward_pipelining_with_interleaving(
     for sub_model in model:
         sub_model.set_grad(requires_grad=requires_grad)
 
+    # init core step cell
+    global core_step_cell
+    core_step_cell = ModelWithLoss(calculate_per_token_loss=args.calculate_per_token_loss,
+                                   requires_grad=requires_grad)
+
     # init p2p class
     p2p_primitive = P2PPrimitive(config=config)
 
@@ -480,7 +494,9 @@ def forward_backward_pipelining_with_interleaving(
         set_hidden_states_parameters.append(set_hidden_states_parameter)
 
     # get config value
-    scale_sense = config.loss_scaler.scale_value if config.loss_scaler is not None else None
+    scale_sense = None
+    if hasattr(config, 'loss_scaler') and config.loss_scaler is not None:
+        scale_sense = config.loss_scaler.scale_value
     hidden_size = config.hidden_size
     use_sequence_parallel = config.sequence_parallel
     overlap_p2p_comm = config.overlap_p2p_comm
@@ -498,7 +514,7 @@ def forward_backward_pipelining_with_interleaving(
         output_tensor_grads = [[] for _ in range(len(model))]
         accumulate_grads_list = [None] * len(model)
     input_tensors = [[] for _ in range(len(model))]
-    backward_step_cell_list = [[] for _ in range(len(model))]
+    backward_func_list = [[] for _ in range(len(model))]
     backward_loss = []
     print_loss = []
     num_tokens_list = []
@@ -549,11 +565,10 @@ def forward_backward_pipelining_with_interleaving(
                                                        num_microbatches=num_microbatches,
                                                        backward_loss=backward_loss,
                                                        print_loss=print_loss,
-                                                       backward_step_cell_list=backward_step_cell_list[model_chunk_id],
+                                                       backward_func_list=backward_func_list[model_chunk_id],
                                                        recv_data=input_tensor,
                                                        calculate_per_token_loss=calculate_per_token_loss,
-                                                       num_tokens_list=num_tokens_list,
-                                                       requires_grad=requires_grad)
+                                                       num_tokens_list=num_tokens_list)
         input_tensors[model_chunk_id][-1] = micro_input_data
 
         if forward_only:
@@ -570,7 +585,7 @@ def forward_backward_pipelining_with_interleaving(
         # get micro data and recv_grads
         input_tensor = input_tensors[model_chunk_id].pop(0)
         recv_grads = output_tensor_grads[model_chunk_id].pop(0)
-        backward_step_cell = backward_step_cell_list[model_chunk_id].pop(0)
+        backward_func = backward_func_list[model_chunk_id].pop(0)
 
         # enable ddp grad sync before backward_step
         is_last_microbatch_cur_chunk = is_last_microbatch_for_model_chunk(microbatch_id,
@@ -583,7 +598,7 @@ def forward_backward_pipelining_with_interleaving(
 
         # run backward
         dout, accumulate_grads = backward_step(*input_tensor,
-                                               backward_step_cell=backward_step_cell,
+                                               backward_func=backward_func,
                                                recv_grads=recv_grads,
                                                model=model[model_chunk_id],
                                                weight=weights[model_chunk_id],
@@ -936,6 +951,11 @@ def forward_backward_pipelining_without_interleaving(
         requires_grad = False
     model.set_grad(requires_grad=requires_grad)
 
+    # init core step cell
+    global core_step_cell
+    core_step_cell = ModelWithLoss(calculate_per_token_loss=args.calculate_per_token_loss,
+                                   requires_grad=requires_grad)
+
     # init p2p class
     p2p_primitive = P2PPrimitive(config=config)
 
@@ -945,7 +965,9 @@ def forward_backward_pipelining_without_interleaving(
     weights.insert(0, set_hidden_states_param)
 
     # get config value
-    scale_sense = config.loss_scaler.scale_value if config.loss_scaler is not None else None
+    scale_sense = None
+    if hasattr(config, 'loss_scaler') and config.loss_scaler is not None:
+        scale_sense = config.loss_scaler.scale_value
     hidden_size = config.hidden_size
     use_sequence_parallel = config.sequence_parallel
     calculate_per_token_loss = config.calculate_per_token_loss
@@ -963,7 +985,7 @@ def forward_backward_pipelining_without_interleaving(
     # save each forward process input data for running backward
     if not forward_only:
         input_tensors = []
-    backward_step_cell_list = []
+    backward_func_list = []
     backward_loss = []
     print_loss = []
     num_tokens_list = []
@@ -990,11 +1012,10 @@ def forward_backward_pipelining_without_interleaving(
                                                        num_microbatches=num_microbatches,
                                                        backward_loss=backward_loss,
                                                        print_loss=print_loss,
-                                                       backward_step_cell_list=backward_step_cell_list,
+                                                       backward_func_list=backward_func_list,
                                                        recv_data=input_tensor,
                                                        calculate_per_token_loss=calculate_per_token_loss,
-                                                       num_tokens_list=num_tokens_list,
-                                                       requires_grad=requires_grad)
+                                                       num_tokens_list=num_tokens_list)
 
         # save micro input data for backward
         if not forward_only:
@@ -1017,11 +1038,10 @@ def forward_backward_pipelining_without_interleaving(
                                                        num_microbatches=num_microbatches,
                                                        backward_loss=backward_loss,
                                                        print_loss=print_loss,
-                                                       backward_step_cell_list=backward_step_cell_list,
+                                                       backward_func_list=backward_func_list,
                                                        recv_data=input_tensor,
                                                        calculate_per_token_loss=calculate_per_token_loss,
-                                                       num_tokens_list=num_tokens_list,
-                                                       requires_grad=requires_grad)
+                                                       num_tokens_list=num_tokens_list)
 
         if forward_only:
             # only send forward result
@@ -1036,7 +1056,7 @@ def forward_backward_pipelining_without_interleaving(
 
             # bprop func need forward's input data
             input_tensor = input_tensors.pop(0)
-            backward_step_cell = backward_step_cell_list.pop(0)
+            backward_func = backward_func_list.pop(0)
 
             # enable sync for ddp in the first pipeline stage
             if wrap_with_ddp and warm_up_steps == 0 and i == steady_steps - 1:
@@ -1045,7 +1065,7 @@ def forward_backward_pipelining_without_interleaving(
 
             # run backward
             dout, accumulate_grads = backward_step(*input_tensor,
-                                                   backward_step_cell=backward_step_cell,
+                                                   backward_func=backward_func,
                                                    recv_grads=recv_grads,
                                                    model=model,
                                                    weight=weights,
@@ -1074,10 +1094,10 @@ def forward_backward_pipelining_without_interleaving(
 
             # run backward
             input_tensor = input_tensors.pop(0)
-            backward_step_cell = backward_step_cell_list.pop(0)
+            backward_func = backward_func_list.pop(0)
             recv_grads = recv_backward(send_tensor_shapes, p2p_primitive)
             dout, accumulate_grads = backward_step(*input_tensor,
-                                                   backward_step_cell=backward_step_cell,
+                                                   backward_func=backward_func,
                                                    recv_grads=recv_grads,
                                                    model=model,
                                                    weight=weights,

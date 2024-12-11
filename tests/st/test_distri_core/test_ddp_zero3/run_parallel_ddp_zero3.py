@@ -28,7 +28,7 @@ from mindspore import Tensor
 from mindspore.communication.management import init
 from mindspore.nn import CrossEntropyLoss
 
-from mindspeed_ms.training import TrainOneStepCell, train, get_model, get_args
+from mindspeed_ms.training import train, get_model, get_args
 from mindspeed_ms.training.utils import average_losses_across_data_parallel_group
 from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.training.yaml_arguments import core_transformer_config_from_yaml, validate_yaml
@@ -174,25 +174,22 @@ def run_parallel_ddp_zero3(golden, first, args):
     from mindspeed_ms.core.optimizer import get_optimizer
     optimizer_config = optimizer_config_from_args(args)
     optimizer = get_optimizer(optimizer_config, model_config, network.trainable_params(), network)
-
-    # init train one step cell
-    train_one_step_cell = TrainOneStepCell(network, optimizer, None, model_config)
     print(f"network trainable params: {network.trainable_params()}", flush=True)
 
     if not first:
         if not golden:
-            _transform_ckpt_helper(model_config, train_one_step_cell.network_with_loss,
-                                   optimizer=train_one_step_cell.optimizer, src_ckpt_path=args.save,
+            _transform_ckpt_helper(model_config, network[0],
+                                   optimizer=optimizer, src_ckpt_path=args.save,
                                    dst_ckpt_path="./dst_ckpt", timeout=60, output_format="ckpt")
         load_ckpt_path = args.save if golden else "./dst_ckpt"
-        load_checkpoint(model_config, train_one_step_cell.network_with_loss, optimizer=train_one_step_cell.optimizer,
-                        opt_param_scheduler=train_one_step_cell.opt_param_scheduler, ckpt_path=load_ckpt_path)
-    train(train_one_step_cell, dataset, forward_step)
+        load_checkpoint(model_config, network[0], optimizer=optimizer,
+                        opt_param_scheduler=None, ckpt_path=load_ckpt_path)
+    train(forward_step, network, optimizer, None, dataset, None, None, model_config)
     if first:
         save_checkpoint(model_config,
-                        train_one_step_cell.network_with_loss,
-                        train_one_step_cell.optimizer,
-                        train_one_step_cell.opt_param_scheduler,
+                        network[0],
+                        optimizer,
+                        None,
                         args.save)
 
 

@@ -1,58 +1,43 @@
 """GPT Model."""
 
 import mindspore.common.dtype as mstype
-from mindspore import ops, nn
-from mindspeed_ms.training.global_vars import get_args
+from mindspeed_ms.training.global_vars import get_args, get_tokenizer
 from mindspeed_ms.core.tensor_parallel import VocabParallelCrossEntropy
 from mindspeed_ms.legacy.model.enums import AttnMaskType
+from mindspeed_ms.legacy.model.eos_mask import EosMask
 from .module import Module
 from .language_model import get_language_model
 from .language_model import ParallelLMLogits
 
 
-class PostLanguageModelProcessing(nn.Cell):
-    """Post Language Model Processing."""
+def post_language_model_processing(parallel_lm_logits, loss_fn, lm_output, labels, logit_weights,
+                                   parallel_output, fp16_lm_cross_entropy):
+    """ gpt model post process forward """
+    output = parallel_lm_logits(lm_output, logit_weights, parallel_output)
 
-    def __init__(self,
-                 config,
-                 **kwargs):
-        super().__init__(config, **kwargs)
-        self.parallel_lm_logits = ParallelLMLogits(config=config,
-                                                   bias=False,
-                                                   compute_dtype=config.compute_dtype)
-        self.loss_func = VocabParallelCrossEntropy()
-        self.config = config
+    if labels is None:
+        # [s, b, h] -> [b, s, h]
+        return output.swapaxes(0, 1).contiguous()
 
-    def construct(self,
-                  lm_output,
-                  labels,
-                  logit_weights,
-                  loss_mask,
-                  parallel_output,
-                  fp16_lm_cross_entropy):
-        """ Construct function of Post Language Model Processing. """
-        logits = self.parallel_lm_logits(lm_output, logit_weights, parallel_output)
+    # [b, s] -> [s, b]
+    labels = labels.swapaxes(0, 1).contiguous()
 
-        if labels is None:
-            return logits.swapaxes(0, 1).contiguous()
+    if fp16_lm_cross_entropy:
+        if output.dtype != mstype.float16:
+            raise ValueError(f"When fp16_lm_cross_entropy=True, output should be float16, but got {output.dtype}")
+        loss = loss_fn(output, labels)
+    else:
+        loss = loss_fn(output.float(), labels)
 
-        logits = logits.swapaxes(0, 1).contiguous()
+    # [s, b] -> [b, s]
+    loss = loss.swapaxes(0, 1).contiguous()
 
-        if fp16_lm_cross_entropy:
-            assert logits.dtype == mstype.float16
-            loss = self.loss_func(logits, labels)
-        else:
-            loss = self.loss_func(logits.float(), labels)
-
-        loss_mask = loss_mask.float()
-
-        loss = ops.sum(loss * loss_mask) / loss_mask.sum()
-        return loss
+    return loss
 
 
 class GPTModel(Module):
     """GPT Model."""
-
+    # pylint: disable=W0613
     def __init__(self,
                  config,
                  num_tokentypes=0,
@@ -61,21 +46,32 @@ class GPTModel(Module):
                  post_process=True,
                  **kwargs):
         args = get_args()
-        super().__init__(config, **kwargs)
+        super().__init__(config, share_embeddings_and_output_weights=args.untie_embeddings_and_output_weights)
         self.parallel_output = parallel_output
         self.pre_process = pre_process
         self.post_process = post_process
         self.fp16_lm_cross_entropy = args.fp16_lm_cross_entropy
         self.untie_embeddings_and_output_weights = args.untie_embeddings_and_output_weights
 
-        self.set_model_key()
+        self.eod = get_tokenizer().eod if args.reset_attention_mask else None
+        if self.eod:
+            self.eod_mask = EosMask(args.batch_size,
+                                    args.seq_length,
+                                    self.eod,
+                                    args.reset_position_ids)
+
         self.language_model, _ = get_language_model(config=config,
                                                     encoder_attn_mask_type=AttnMaskType.causal,
                                                     num_tokentypes=num_tokentypes,
                                                     pre_process=self.pre_process,
                                                     post_process=self.post_process,
                                                     add_pooler=False)
-        self.post_language_model_processing = PostLanguageModelProcessing(config)
+        if self.post_process:
+            self.parallel_lm_logits = ParallelLMLogits(config=config,
+                                                       bias=False,
+                                                       compute_dtype=config.compute_dtype)
+            self.loss_func = VocabParallelCrossEntropy()
+
         if not self.untie_embeddings_and_output_weights:
             self.initialize_word_embeddings()
 
@@ -83,13 +79,12 @@ class GPTModel(Module):
         """ set input_tensor to model """
         self.language_model.set_input_tensor(input_tensor)
 
-    def set_model_key(self):
-        """ set model key for differentiate PipelineCell process """
-        self.model_key = "gpt_model"
-
     def construct(self, tokens, position_ids, attention_mask,
-                  labels=None, tokentype_ids=None, inference_params=None, loss_mask=None):
+                  labels=None, tokentype_ids=None, inference_params=None):
         """ Construct function of GPT Model. """
+        if (position_ids is None or attention_mask is None) and self.eod:
+            position_ids, attention_mask = self.eod_mask(tokens)
+
         lm_output = self.language_model(tokens,
                                         position_ids,
                                         attention_mask,
@@ -101,10 +96,11 @@ class GPTModel(Module):
                 logit_weights = self.language_model.output_layer.weight
             else:
                 logit_weights = self.shared_embedding_or_output_weight()
-            return self.post_language_model_processing(lm_output,
-                                                       labels,
-                                                       logit_weights,
-                                                       loss_mask,
-                                                       self.parallel_output,
-                                                       self.fp16_lm_cross_entropy)
+            return post_language_model_processing(self.parallel_lm_logits,
+                                                  self.loss_func,
+                                                  lm_output,
+                                                  labels,
+                                                  logit_weights,
+                                                  self.parallel_output,
+                                                  self.fp16_lm_cross_entropy)
         return lm_output
