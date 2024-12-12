@@ -37,6 +37,7 @@ class TransformerConfig(ModelParallelConfig):
     ####################
     # model architecture
     ####################
+
     num_layers: int = 0
     """Number of transformer layers in a transformer block."""
 
@@ -486,6 +487,12 @@ class TransformerConfig(ModelParallelConfig):
             raise ValueError(
                 f"num_query_groups ({self.num_query_groups}) must be a multiple of "
                 f"tensor_model_parallel_size ({self.tensor_model_parallel_size})."
+            )
+
+        if self.tp_2d and self.tensor_model_parallel_size != self.tp_x * self.tp_y:
+            raise ValueError(
+                f"tensor_model_parallel_size({self.tensor_model_parallel_size}) must be equal to "
+                f"tp_x ({self.tp_x}) * tp_y ({self.tp_y})."
             )
 
         if self.apply_query_key_layer_scaling:

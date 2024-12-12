@@ -38,6 +38,8 @@ from .random import TENSOR_PARALLEL_GENERATOR
 from .random import EXPERT_PARALLEL_GENERATOR
 from .cross_entropy import VocabParallelCrossEntropy
 from .utils import split_tensor_along_last_dim
+from .parallel_linear_2d import ParallelLinear2D
+from .rms_norm_2d import RMSNorm2D
 from .layers import copy_tensor_model_parallel_attributes
 
 __all__ = [
@@ -70,4 +72,6 @@ __all__ = [
     'split_tensor_along_last_dim',
     # layers.py
     "copy_tensor_model_parallel_attributes",
+    'ParallelLinear2D',
+    'RMSNorm2D',
 ]

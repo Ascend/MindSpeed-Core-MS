@@ -14,6 +14,7 @@
 # ======================
 
 """Model and data parallel groups."""
+import abc
 import warnings
 import numpy as np
 
@@ -35,7 +36,7 @@ group_info_maps = {}
 # special_groups has a different initialization process compared to normal_groups
 normal_groups = ['tp', 'dp', 'pp', 'cp', 'dp-cp', 'tp-pp', 'tp-dp-cp', 'tp-dp', 'tp-cp']
 special_groups = ['ep', 'tp-ep', 'tp-ep-pp', 'dp-independent_ep', 'vpp', 'embedding', 'position_embedding',
-                  "dp-zero", "dp-zero-grad", "dp-zero-tp", "cp_ulysses", "cp_ring"]
+                  "dp-zero", "dp-zero-grad", "dp-zero-tp", "cp_ulysses", "cp_ring", 'tp_x', 'tp_y']
 valid_groups = normal_groups + special_groups
 
 # A list of global ranks for pipeline group
@@ -263,6 +264,45 @@ class CreateCommGroups():
             ranks.append(rank)
         return ranks
 
+    def init_tp2d_groups(self, tp_x, tp_y):
+        """init 2D TP groups"""
+        for mode in ('tp_x', 'tp_y'):
+            comm_group = get_group_info(mode)
+
+            if comm_group.group is not None:
+                raise RuntimeError(f'{mode} parallel group is already initialized.')
+
+            for ranks in self.get_tp2d_ranks(mode, tp_x, tp_y):
+                if self.rank in ranks:
+                    group = mode + '-' + '-'.join([str(i) for i in ranks])
+                    comm_group.group = group
+                    comm_group.global_ranks = ranks
+                    comm_group.world_size = len(ranks)
+
+    def get_tp2d_ranks(self, mode, tp_x, tp_y):
+        """get 2D TP ranks"""
+        num_tensor_model_parallel_group = self.world_size // self.tp
+
+        ranks = []
+        if mode == 'tp_x':
+            for i in range(num_tensor_model_parallel_group):
+                for j in range(self.tp // tp_x):
+                    rank = range(
+                        i * self.tp + j * tp_x,
+                        i * self.tp + (j + 1) * tp_x
+                    )
+                    ranks.append(list(rank))
+        if mode == 'tp_y':
+            for i in range(num_tensor_model_parallel_group):
+                for j in range(self.tp // tp_y):
+                    rank = range(
+                        i * self.tp + j,
+                        (i + 1) * self.tp,
+                        tp_x
+                    )
+                    ranks.append(list(rank))
+        return ranks
+
 
 # pylint: disable=W0613
 def initialize_model_parallel(tensor_model_parallel_size=1,
@@ -274,6 +314,9 @@ def initialize_model_parallel(tensor_model_parallel_size=1,
                               order="tp-cp-ep-dp-pp",
                               communicator_config_path=None,
                               zero_shard_size=-1,
+                              tp_2d=False,
+                              tp_x=1,
+                              tp_y=1,
                               **kwargs):
     """Initialize model data parallel groups.
     """
@@ -330,6 +373,9 @@ def initialize_model_parallel(tensor_model_parallel_size=1,
                                       ep=expert_model_parallel_size, \
                                       dp=data_parallel_size, pp=pipeline_model_parallel_size, \
                                       cp=context_parallel_size, order=order)
+
+    if tp_2d:
+        rank_generator.init_tp2d_groups(tp_x, tp_y)
 
     # Build the basic parallel groups.
     for mode in normal_groups:
@@ -427,6 +473,14 @@ def get_tensor_model_parallel_group():
     return _get_group_helper('tp')
 
 
+def get_tp_x_group():
+    return _get_group_helper('tp_x')
+
+
+def get_tp_y_group():
+    return _get_group_helper('tp_y')
+
+
 def get_zero_parallel_group():
     """Get the tensor model parallel group the caller rank belongs to."""
     return _get_group_helper('dp-zero')
@@ -516,6 +570,14 @@ def get_tensor_model_parallel_world_size():
     return _get_world_size_helper('tp')
 
 
+def get_tp_x_world_size():
+    return _get_world_size_helper('tp_x')
+
+
+def get_tp_y_world_size():
+    return _get_world_size_helper('tp_y')
+
+
 def get_context_parallel_world_size():
     """Return world size for the context parallel group."""
     return _get_world_size_helper('cp')
@@ -577,6 +639,14 @@ def _get_rank_helper(mode):
 def get_tensor_model_parallel_rank():
     """Return my rank for the tensor model parallel group."""
     return _get_rank_helper('tp')
+
+
+def get_tp_x_rank():
+    return _get_rank_helper('tp_x')
+
+
+def get_tp_y_rank():
+    return _get_rank_helper('tp_y')
 
 
 def get_zero_parallel_rank():
@@ -903,3 +973,53 @@ def initialize_context_parallel_group_for_hybrid_cp(context_parallel_size, rank_
 def is_hybrid_cp() -> bool:
     return hasattr(get_args(), 'context_parallel_algo') and \
         get_args().context_parallel_algo == "hybrid_cp_algo"
+
+class CollectiveCommIntf:
+    """Collective Comm Intf Class"""
+    @classmethod
+    @abc.abstractmethod
+    def get_comm_group_world_size(cls):
+        raise NotImplementedError
+
+    @classmethod
+    @abc.abstractmethod
+    def get_comm_group(cls):
+        raise NotImplementedError
+
+    @classmethod
+    @abc.abstractmethod
+    def get_comm_rank(cls):
+        raise NotImplementedError
+
+    def get_comm_group_name(self):
+        return self.comm_group_name
+
+
+class TPXCollectiveComm(CollectiveCommIntf):
+    """TPX Collective Comm Class"""
+    @classmethod
+    def get_comm_rank(cls):
+        return get_tp_x_rank()
+
+    @classmethod
+    def get_comm_group_world_size(cls):
+        return get_tp_x_world_size()
+
+    @classmethod
+    def get_comm_group(cls):
+        return get_tp_x_group()
+
+
+class TPYCollectiveComm(CollectiveCommIntf):
+    """TPY Collective Comm Class"""
+    @classmethod
+    def get_comm_rank(cls):
+        return get_tp_y_rank()
+
+    @classmethod
+    def get_comm_group_world_size(cls):
+        return get_tp_y_world_size()
+
+    @classmethod
+    def get_comm_group(cls):
+        return get_tp_y_group()

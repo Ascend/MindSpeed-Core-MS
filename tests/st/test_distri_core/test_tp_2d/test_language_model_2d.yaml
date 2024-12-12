@@ -1,0 +1,76 @@
+model_parallel:
+  tensor_model_parallel_size: 4
+  tp_2d: True
+  tp_x: 2
+  tp_y: 2
+  pipeline_model_parallel_size: 1
+  context_parallel_size: 1
+  expert_model_parallel_size: 1
+  sequence_parallel: False
+  pipeline_dtype: "float32"
+  params_dtype: "float32"
+  compute_dtype: "float32"
+
+language_model:
+  num_layers: 4
+  num_attention_heads: 4
+  num_query_groups: 4
+  hidden_size: 64
+  ffn_hidden_size: 256
+  hidden_dropout: 0.0
+  attention_dropout: 0.0
+  init_method: 'normal'
+  add_qkv_bias: True
+  mask_func_type: "attn_mask_add" # need add
+  normalization: "FusedRMSNorm"
+  layernorm_epsilon: 0.00001  # norm_epsilon
+  activation_func: "gelu"  # hidden_act
+
+  masked_softmax_fusion: False
+  bias_dropout_fusion: False
+
+  # Must add
+  clone_scatter_output_in_embedding: False
+  attention_softmax_in_fp32: True
+  apply_rope_fusion: False
+  add_bias_linear: True
+
+# data
+seq_length: 32
+vocab_size: 128
+padded_vocab_size: 128
+eod_id: -100
+
+# training
+position_embedding_type: 'rope'
+max_position_embeddings: 32
+epochs: 1
+train_iters: 100
+untie_embeddings_and_output_weights: False
+global_batch_size: 8
+micro_batch_size: 8
+clip_grad: 0.0
+transformer_impl: "local"
+use_post_norm: False
+shape_order: "BSH"
+
+# optimizer
+optimizer: "mint.AdamW"
+lr_decay_style: "constant"
+weight_decay_incr_style: "constant"
+clip_grad: 0.0
+
+# distributed arguments
+delay_grad_reduce: False
+
+# loss arguments
+initial_loss_scale: 1  # loss_scale_value
+hysteresis: 2   # loss_scale_factor
+loss_scale_window: 1000
+fp16_lm_cross_entropy: False # need add
+
+# logging
+log_interval: 1
+
+# custom arguments
+model_customize_staged: False
