@@ -55,12 +55,32 @@ output_dir/
 - copy-to-all-dp-ranks：配置时，将合并后的权重拷贝到该dp域内所有rank的对应文件夹下。默认不配置，仅在dp_rank == 0的文件夹下生成合并后的权重文件。
 - max-proccess-limit：最大多进程并行进程数。默认值：`8`​。
 - rank-section：指定处理的rank_id范围，默认值：`[None,None]`​。例，`--rank-section 2 6`​将处理全局rank_id为2、3、4及5的文件夹下的权重。该配置一般用于需要在多个节点上分别启动进程进行权重合并的场景。
+- use-mp-rank：配置时，表示要处理的ckpt为新命名mp_rank_x。默认不配置，处理旧命名ckpt
+- iteration：配置`--use-mp-rank`下才有效，处理指定iteration的ckpt。默认值：`-1`，不配置时，取`latest_checkpointed_iteration.txt`中的iteration。
 
 默认使用各rank权重文件夹下最后一个权重进行聚合。执行完成后，将在各rank的权重保存路径下生成以 `*_dp_merged.ckpt`​ 为后缀的合并后权重。
 
 **注**：`max_process_limit`​的设置需要考虑 host 内存，进程数过多可能导致 host 侧内存不足而报错。
 
 ### 1.2.1. 合并分布式优化器使用示例
+
+### 新命名mp_rank形式ckpt使用示例：
+
+```bash
+export PYTHONPATH=/path/to/MindSpeed-Core-MS:$PYTHONPATH
+python mindspeed_ms/tools/converter/combine_ckpt_dp_zero.py \
+    --strategy-dir /path/to/ms_ckpt/opt_shard_info/ \
+    --checkpoint-dir /path/to/ms_ckpt/ \
+    --output-dir /path/to/ms_ckpt_merge \
+    --max-proccess-limit 8 \
+    --use-mp-rank \
+    --iteration 5 \
+    > combine_ckpt_dp_zero.log 2>&1 &
+    # --copy-to-all-dp-ranks \
+tail -f combine_ckpt_dp_zero.log
+```
+
+### 旧命名global_rank形式ckpt使用示例：
 
 ```bash
 export PYTHONPATH=/path/to/MindSpeed-Core-MS:$PYTHONPATH
