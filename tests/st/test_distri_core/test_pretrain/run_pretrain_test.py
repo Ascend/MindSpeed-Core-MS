@@ -68,8 +68,9 @@ def train_valid_test_dataset_provider(unuse_args):
                                        column_names=['tokens', 'labels', 'attention_mask'],
                                        shuffle=False)
     test_dataset = test_dataset.batch(args.micro_batch_size)
+    valid_dataset = test_dataset
 
-    return test_dataset
+    return test_dataset, valid_dataset
 
 
 def loss_func(loss_mask, output_tensor):

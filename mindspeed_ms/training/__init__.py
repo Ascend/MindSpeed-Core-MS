@@ -23,7 +23,7 @@ from .global_vars import get_tensorboard_writer
 from .global_vars import get_wandb_writer
 from .global_vars import get_one_logger
 from .model_parallel_config import ModelParallelConfig
-from .training import TrainOneStepCell, pretrain, train, get_model, ParallelTrainingReducer
+from .training import TrainOneStepCell, pretrain, train, get_model, ParallelTrainingReducer, evaluate_and_print_results
 from .loss_func import get_loss_func
 from .yaml_arguments import core_transformer_config_from_yaml
 from .utils import print_rank_0
@@ -31,4 +31,4 @@ from .utils import print_rank_0
 __all__ = ["parse_args", "get_args", "core_transformer_config_from_args",
            "TrainOneStepCell", "train", "pretrain", 'get_model',
            "ModelParallelConfig", 'ParallelTrainingReducer', 'get_loss_func',
-           "core_transformer_config_from_yaml"]
+           "core_transformer_config_from_yaml", "evaluate_and_print_results"]

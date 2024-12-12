@@ -63,6 +63,7 @@ group_query_attention: False
 untie_embeddings_and_output_weights: True
 position_embedding_type: "rope"
 check_for_nan_in_loss_and_grad: False
+eval_iters: 5
 
 # data
 tokenizer_type: NullTokenizer

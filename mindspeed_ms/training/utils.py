@@ -280,3 +280,19 @@ def average_losses_across_data_parallel_group(losses):
     averaged_losses = averaged_losses / get_data_parallel_world_size()
 
     return averaged_losses
+
+
+def is_last_rank():
+    """check whether last rank"""
+    return ms.communication.get_rank() == (
+        mint.distributed.get_world_size() - 1
+    )
+
+
+def print_rank_last(message):
+    """If distributed is initialized, print only on last rank."""
+    if ms.communication._comm_helper._is_initialized():
+        if is_last_rank():
+            print(message, flush=True)
+    else:
+        print(message, flush=True)
