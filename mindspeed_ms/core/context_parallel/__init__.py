@@ -16,5 +16,6 @@
 """context parallel init"""
 from .flash_sp import FlashSP
 from .ring_attention import RingAttention
+from .sparse_attention import SparseAttention
 
-__all__ = ['FlashSP', 'RingAttention']
+__all__ = ['FlashSP', 'RingAttention', 'SparseAttention']
