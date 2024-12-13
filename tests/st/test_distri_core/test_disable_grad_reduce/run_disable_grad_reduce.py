@@ -23,8 +23,7 @@ from mindspore import nn, mint
 from mindspore.communication import init
 from mindspore.nn import AdamWeightDecay, SoftmaxCrossEntropyWithLogits
 
-from mindspeed_ms.training import train, parse_args, core_transformer_config_from_yaml, \
-    TrainOneStepCell, get_args, get_model
+from mindspeed_ms.training import train, parse_args, core_transformer_config_from_yaml, get_args, get_model
 from mindspeed_ms.training.utils import average_losses_across_data_parallel_group
 from mindspeed_ms.training.global_vars import set_global_variables
 from mindspeed_ms.training.yaml_arguments import validate_yaml
@@ -143,8 +142,7 @@ def run_disable_grad_reduce(config, args):
     dataset = dataset.batch(args.micro_batch_size)
 
     optimizer = AdamWeightDecay(params=network.get_parameters())
-    train_one_step_cell = TrainOneStepCell(network, optimizer, None, config)
-    train(train_one_step_cell, dataset, forward_step)
+    train(forward_step, network, optimizer, None, dataset, None, None, config)
 
 def extra_args_provider(inner_parser):
     inner_parser.add_argument('--run_mode', type=str, default='True',

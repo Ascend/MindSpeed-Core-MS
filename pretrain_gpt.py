@@ -4,18 +4,16 @@
 import os
 from functools import partial
 from typing import Union
-import mindspore
+import mindspore as ms
+import mindspore.communication.comm_func as comm_func
 from mindspore import mint
-from mindspeed_ms.training import get_args
-from mindspeed_ms.training import print_rank_0
-from mindspeed_ms.training import get_tokenizer
+import mindspeed_ms
+from mindspeed_ms.training import get_args, print_rank_0, get_tokenizer
 from mindspeed_ms.core import mpu
 from mindspeed_ms.core.enums import ModelType
 from mindspeed_ms.core.datasets.blended_megatron_dataset_builder import BlendedMegatronDatasetBuilder
 from mindspeed_ms.core.datasets.utils import get_blend_from_list
-from mindspeed_ms.core.datasets.gpt_dataset import GPTDatasetConfig
-from mindspeed_ms.core.datasets.gpt_dataset import MockGPTDataset, GPTDataset
-import mindspeed_ms.legacy.model
+from mindspeed_ms.core.datasets.gpt_dataset import GPTDatasetConfig, MockGPTDataset, GPTDataset
 from mindspeed_ms.core.models.gpt import GPTModel
 from mindspeed_ms.training import pretrain
 from mindspeed_ms.core.transformer.spec_utils import import_module
@@ -25,6 +23,8 @@ from mindspeed_ms.training.utils import (
 )
 from mindspeed_ms.training.arguments import core_transformer_config_from_args
 from mindspeed_ms.training.yaml_arguments import core_transformer_config_from_yaml
+from mindspeed_ms.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
+from mindspeed_ms.core.tensor_parallel.mappings import ReduceFromContextParallelRegion
 
 
 def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, mindspeed_ms.legacy.model.GPTModel]:
@@ -54,12 +54,12 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, minds
         if args.spec is not None:
             transformer_layer_spec = import_module(args.spec)
         else:
+            # pylint: disable=R1720
             if use_te:
-                transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(args.num_experts,
-                                                                                    args.moe_grouped_gemm,
-                                                                                    args.qk_layernorm)
+                raise NotImplementedError("'transformer_engine' is not supported for now.")
             else:
-                transformer_layer_spec = get_gpt_layer_local_spec(args.num_experts, args.moe_grouped_gemm,
+                transformer_layer_spec = get_gpt_layer_local_spec(args.num_experts,
+                                                                  args.moe_grouped_gemm,
                                                                   args.qk_layernorm)
 
         model = GPTModel(
@@ -77,9 +77,6 @@ def model_provider(pre_process=True, post_process=True) -> Union[GPTModel, minds
             rotary_base=args.rotary_base
         )
     else:
-        if not args.context_parallel_size == 1:
-            raise ValueError("Context parallelism is only supported with Megatron Core!")
-
         model = mindspeed_ms.legacy.model.GPTModel(
             config,
             num_tokentypes=0,
@@ -107,12 +104,12 @@ def get_batch(data_iterator):
     return batch
 
 
-def loss_func(loss_mask: mindspore.Tensor, output_tensor: mindspore.Tensor):
+def loss_func(loss_mask: ms.Tensor, output_tensor: ms.Tensor):
     """Loss function.
 
     Args:
-        loss_mask (mindspore.Tensor): Used to mask out some portions of the loss
-        output_tensor (mindspore.Tensor): The tensor with the losses
+        loss_mask (ms.Tensor): Used to mask out some portions of the loss
+        output_tensor (ms.Tensor): The tensor with the losses
 
     Returns:
         the loss scalar for this micro-batch
@@ -128,22 +125,21 @@ def loss_func(loss_mask: mindspore.Tensor, output_tensor: mindspore.Tensor):
     loss = mint.cat([mint.sum(losses.view(-1) * loss_mask).view(1), total_tokens.view(1)])
 
     if args.context_parallel_size > 1:
-        mindspore.communication.comm_func.all_reduce(loss, group=mpu.get_context_parallel_group())
-    # loss = loss[0] / loss[1]
+        loss = ReduceFromContextParallelRegion()(loss)
 
     # Check individual rank losses are not NaN prior to DP all-reduce.
     if args.check_for_nan_in_loss_and_grad:
-        global_rank = mindspore.communication.get_rank()
+        global_rank = ms.communication.get_rank()
         assert not loss[0].isnan(), (
             f'Rank {global_rank}: found NaN in local forward loss calculation. '
-            f'Device: {mindspore.hal.get_device_name()}, node: {os.uname()[1]}'
+            f'Device: {ms.hal.get_device_name()}, node: {os.uname()[1]}'
         )
 
     # Reduce loss for logging.
-    reporting_loss = loss.clone().detach()
-    mindspore.communication.comm_func.all_reduce(reporting_loss, group=mpu.get_data_parallel_group())
+    reporting_loss = loss.copy()
+    reporting_loss = comm_func.all_reduce(reporting_loss, group=mpu.get_data_parallel_group())
 
-    local_num_tokens = loss[1].clone().detach().to(mint.int)
+    local_num_tokens = loss[1].copy().to(ms.int32)
     return (
         loss[0] * args.context_parallel_size,
         local_num_tokens,
@@ -161,9 +157,14 @@ def forward_step(data_iterator, model: GPTModel):
 
     # Get the batch.
     tokens, labels, loss_mask, attention_mask, position_ids = get_batch(data_iterator)
-    output_tensor = model(tokens, position_ids, attention_mask, labels=labels)
+    input_tensor = (tokens, labels, attention_mask, position_ids)
+    def core_forward_func(*args):
+        """ core forward func """
+        tokens, labels, attention_mask, position_ids = args
+        output_tensor = model(tokens, position_ids, attention_mask, labels=labels)
+        return output_tensor
 
-    return output_tensor, partial(loss_func, loss_mask)
+    return input_tensor, core_forward_func, partial(loss_func, loss_mask)
 
 
 def is_dataset_built_on_rank():
@@ -232,6 +233,5 @@ if __name__ == "__main__":
         model_provider,
         ModelType.encoder_or_decoder,
         forward_step,
-        get_batch_func=get_batch,
         args_defaults={'tokenizer_type': 'GPT2BPETokenizer'},
     )

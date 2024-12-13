@@ -36,25 +36,7 @@ from mindspeed_ms.training import get_args
 from mindspeed_ms.training.utils import set_weight_decay
 from mindspeed_ms.core.optimizer import optimizer_config_from_args
 from mindspeed_ms.core.transformer.transformer_config import TransformerConfig
-from mindspeed_ms.core.parallel_state import (
-    get_data_parallel_world_size,
-    get_data_parallel_group,
-    get_tensor_model_parallel_world_size,
-    get_tensor_model_parallel_group,
-    get_pipeline_model_parallel_world_size,
-    get_pipeline_model_parallel_group,
-    is_pipeline_last_stage,
-    set_virtual_pipeline_model_parallel_rank,
-    is_pipeline_first_stage,
-    get_data_modulo_expert_parallel_group,
-    get_expert_model_parallel_world_size,
-    get_zero_full_shard_flag,
-    get_zero_shard_group,
-    get_zero_shard_grad_group,
-    get_pipeline_model_parallel_rank,
-    get_tensor_model_parallel_rank,
-    get_data_parallel_rank,
-)
+import mindspeed_ms.core.parallel_state as mpu
 from mindspeed_ms.core.distributed import DistributedDataParallelConfig, \
     DistributedDataParallel
 from mindspeed_ms.core.optimizer import MixedPrecisionOptimizer, DistributedOptimizer
@@ -111,7 +93,7 @@ def get_dataset_dict_iterator(train_dataloader, epoch_step):
     if args.resume_training:
         if not args.new_dataset:
             # when epoch_step > 1, means resume traing mode, will skip some data.
-            factor = args.global_batch_size // get_data_parallel_world_size() // args.micro_batch_size
+            factor = args.global_batch_size // mpu.get_data_parallel_world_size() // args.micro_batch_size
             train_data_dict_iterator = train_dataloader.skip((epoch_step - 1) * factor)\
                 .create_dict_iterator(num_epochs=1)
         else:
@@ -187,7 +169,7 @@ class ParallelTrainingReducer:
         self.expert_params = ["mlp.experts.local_experts"]
 
         # dp
-        if get_data_parallel_world_size() > 1:
+        if mpu.get_data_parallel_world_size() > 1:
             self.enable_loss_reduce["dp"] = True
             if config.zero_level is None \
                 and not args.wrap_with_ddp:
@@ -196,7 +178,7 @@ class ParallelTrainingReducer:
                 self.enable_grad_flag_reduce["dp"] = True
 
         # tp / sp
-        if get_tensor_model_parallel_world_size() > 1:
+        if mpu.get_tensor_model_parallel_world_size() > 1:
             self.enable_grad_flag_reduce["tp"] = True
             if config.sequence_parallel:
                 self.enable_grad_reduce["tp"] = True
@@ -205,12 +187,12 @@ class ParallelTrainingReducer:
                 ]
 
         # pp
-        if get_pipeline_model_parallel_world_size() > 1:
+        if mpu.get_pipeline_model_parallel_world_size() > 1:
             self.enable_loss_reduce["dp"] = False
             self.enable_grad_flag_reduce["pp"] = True
 
         # ep
-        if get_expert_model_parallel_world_size() > 1:
+        if mpu.get_expert_model_parallel_world_size() > 1:
             self.enable_grad_reduce["ep-dp"] = True
             self.expert_filter = [
                 any([ep_param in param.name for ep_param in self.expert_params]) for param in params
@@ -218,9 +200,9 @@ class ParallelTrainingReducer:
 
     def get_reduce_group(self, idx):
         if self.enable_grad_reduce["ep-dp"] and self.expert_filter[idx]:
-            group = get_data_modulo_expert_parallel_group()
+            group = mpu.get_data_modulo_expert_parallel_group()
         else:
-            group = get_data_parallel_group()
+            group = mpu.get_data_parallel_group()
         return group
 
     def inplace_reduce_dp_grad(self, grads, params=None):
@@ -232,12 +214,12 @@ class ParallelTrainingReducer:
                         continue
                     group = self.get_reduce_group(idx)
                     param.grad = comm_func.all_reduce(param.grad, "sum", group)[0]
-                    param.grad = mint.div(param.grad, get_data_parallel_world_size())
+                    param.grad = mint.div(param.grad, mpu.get_data_parallel_world_size())
             else:
                 for idx, grad in enumerate(grads):
                     group = self.get_reduce_group(idx)
                     grads[idx] = mint.div(
-                        comm_func.all_reduce(grad, "sum", group)[0], get_data_parallel_world_size())
+                        comm_func.all_reduce(grad, "sum", group)[0], mpu.get_data_parallel_world_size())
 
     def inplace_reduce_sp_grad(self, grads, params=None):
         """Reduce the gradients in sequence parallel mode over tp group."""
@@ -246,11 +228,15 @@ class ParallelTrainingReducer:
                 for idx, param in enumerate(params):
                     if param.grad is None or not self.sp_reduce_filter[idx]:
                         continue
-                    param.grad.copy_(comm_func.all_reduce(param.grad, "sum", get_tensor_model_parallel_group())[0])
+                    param.grad.copy_(comm_func.all_reduce(param.grad,
+                                                          "sum",
+                                                          mpu.get_tensor_model_parallel_group())[0])
             else:
                 for idx, reduce_flag in enumerate(self.sp_reduce_filter):
                     if reduce_flag:
-                        grads[idx] = comm_func.all_reduce(grads[idx], "sum", get_tensor_model_parallel_group())[0]
+                        grads[idx] = comm_func.all_reduce(grads[idx],
+                                                          "sum",
+                                                          mpu.get_tensor_model_parallel_group())[0]
 
     def inplace_reduce_grad(self, grads, params=None):
         """Reduce the gradients in all parallel modes."""
@@ -262,22 +248,22 @@ class ParallelTrainingReducer:
         # logical or
         overflow = Tensor(overflow, dtype=mstype.int8)
         if self.enable_grad_flag_reduce["pp"]:
-            overflow = comm_func.all_reduce(overflow, "max", get_pipeline_model_parallel_group())[0]
+            overflow = comm_func.all_reduce(overflow, "max", mpu.get_pipeline_model_parallel_group())[0]
         if self.enable_grad_flag_reduce["dp"]:
-            overflow = comm_func.all_reduce(overflow, "max", get_data_parallel_group())[0]
+            overflow = comm_func.all_reduce(overflow, "max", mpu.get_data_parallel_group())[0]
         if self.enable_grad_flag_reduce["tp"]:
-            overflow = comm_func.all_reduce(overflow, "max", get_tensor_model_parallel_group())[0]
+            overflow = comm_func.all_reduce(overflow, "max", mpu.get_tensor_model_parallel_group())[0]
 
     def reduce_is_finite(self, is_finite):
         """Reduce the is_finite status in all parallel modes."""
         # logical and
         is_finite = Tensor(is_finite, dtype=mstype.int8)
         if self.enable_grad_flag_reduce["pp"]:
-            is_finite = comm_func.all_reduce(is_finite, "prod", get_pipeline_model_parallel_group())[0]
+            is_finite = comm_func.all_reduce(is_finite, "prod", mpu.get_pipeline_model_parallel_group())[0]
         if self.enable_grad_flag_reduce["dp"]:
-            is_finite = comm_func.all_reduce(is_finite, "prod", get_data_parallel_group())[0]
+            is_finite = comm_func.all_reduce(is_finite, "prod", mpu.get_data_parallel_group())[0]
         if self.enable_grad_flag_reduce["tp"]:
-            is_finite = comm_func.all_reduce(is_finite, "prod", get_tensor_model_parallel_group())[0]
+            is_finite = comm_func.all_reduce(is_finite, "prod", mpu.get_tensor_model_parallel_group())[0]
         return is_finite.astype(mstype.bool_)
 
 
@@ -308,20 +294,20 @@ def get_model(model_provider_func, model_type, wrap_with_ddp=True):
     args.model_type = model_type
     model = nn.CellList(auto_prefix=False)
 
-    if get_pipeline_model_parallel_world_size() > 1:
+    if mpu.get_pipeline_model_parallel_world_size() > 1:
         if args.virtual_pipeline_model_parallel_size is not None:
             for i in range(args.virtual_pipeline_model_parallel_size):
-                set_virtual_pipeline_model_parallel_rank(i)
-                pre_process = is_pipeline_first_stage()
-                post_process = is_pipeline_last_stage()
+                mpu.set_virtual_pipeline_model_parallel_rank(i)
+                pre_process = mpu.is_pipeline_first_stage()
+                post_process = mpu.is_pipeline_last_stage()
                 this_model = model_provider_func(pre_process=pre_process,
                                                  post_process=post_process)
                 this_model.model_type = model_type
                 rename_set_hidden_states_parameter(this_model, i)
                 model.append(this_model)
         else:
-            pre_process = is_pipeline_first_stage()
-            post_process = is_pipeline_last_stage()
+            pre_process = mpu.is_pipeline_first_stage()
+            post_process = mpu.is_pipeline_last_stage()
             this_model = model_provider_func(pre_process=pre_process,
                                              post_process=post_process)
             this_model.model_type = model_type
@@ -333,21 +319,13 @@ def get_model(model_provider_func, model_type, wrap_with_ddp=True):
         model.append(this_model)
 
     # print number of parameters
-    if get_data_parallel_rank() == 0:
-        logger.warning("Number of parameters on (tensor, pipeline) model parallel rank ({}, {}): {} | "
-                       "trainalbe parameters {} | untrainable parameters {}.".format(
-                           get_tensor_model_parallel_rank(),
-                           get_pipeline_model_parallel_rank(),
-                           sum([
-                               sum([p.nelement()for p in module.get_parameters()]) for module in model
-                           ]),
-                           sum([
-                               sum([p.nelement() for p in module.trainable_params()]) for module in model
-                           ]),
-                           sum([
-                               sum([p.nelement() for p in module.untrainable_params()]) for module in model
-                           ]),
-                       ))
+    if mpu.get_data_parallel_rank() == 0:
+        print(' > number of parameters on (tensor, pipeline) '
+              'model parallel rank ({}, {}): {}'.format(
+                  mpu.get_tensor_model_parallel_rank(),
+                  mpu.get_pipeline_model_parallel_rank(),
+                  sum([sum([p.nelement() for p in module.get_parameters()])
+                       for module in model])), flush=True)
 
     if wrap_with_ddp:
         config = get_model_config(model[0])
@@ -363,9 +341,9 @@ def get_model(model_provider_func, model_type, wrap_with_ddp=True):
         )
         logger.info(f"Wrap model with DistributedDataParallel. Config:\n{ddp_config}")
         zero_comm_group = None
-        if not get_zero_full_shard_flag():
-            zero_comm_group = {"zero_shard_group": get_zero_shard_group(with_context_parallel=True),
-                               "zero_shard_grad_group": get_zero_shard_grad_group()}
+        if not mpu.get_zero_full_shard_flag():
+            zero_comm_group = {"zero_shard_group": mpu.get_zero_shard_group(with_context_parallel=True),
+                               "zero_shard_grad_group": mpu.get_zero_shard_grad_group()}
         model = nn.CellList([DistributedDataParallel(config=config,
                                                      ddp_config=ddp_config,
                                                      module=model_chunck,
@@ -488,7 +466,7 @@ class TrainOneStepCell(nn.Cell):
         self.parallel_reducer = ParallelTrainingReducer(parameters, config)
 
         # get args value
-        dp = get_data_parallel_world_size()
+        dp = mpu.get_data_parallel_world_size()
         self.micro_batch_size = args.micro_batch_size
         self.seq_length = args.seq_length
 
@@ -601,7 +579,7 @@ class TrainOneStepCell(nn.Cell):
 
     def _loss_reduce(self, losses_reduced):
         """ reduce losses """
-        if is_pipeline_last_stage(ignore_virtual=True):
+        if mpu.is_pipeline_last_stage(ignore_virtual=True):
             loss_reduced = {}
             for key in losses_reduced[0].keys():
                 numerator = 0
@@ -622,14 +600,18 @@ class TrainOneStepCell(nn.Cell):
         return loss_reduced
 
 def train(
-        train_one_step_cell,
-        train_dataloader,
         forward_step_func,
-        val_dataloader=None,
+        model,
+        optimizer,
+        opt_param_scheduler,
+        train_data_iterator,
+        valid_data_iterator,
+        process_non_loss_data_func,
+        config,
         metrics=None,
         evaluation_func=None,
         resume_dict=None,
-        **kwargs,
+        **kwargs
 ):
     """
     Train the model using the provided training configuration.
@@ -641,7 +623,7 @@ def train(
     Args:
         train_one_step_cell (TrainOneStepCell): The training cell object.
         train_dataloader (Dataset): The iterator for the training dataset.
-        val_dataloader (Dataset): The iterator for the validation dataset. Defaults: ``None``.
+        valid_data_iterator (Dataset): The iterator for the validation dataset. Defaults: ``None``.
         metrics (dict[str, Metric], optional): A dictionary of metrics to track during training. Defaults: ``None``.
         evaluation_func (Function, optional): The evaluation function to use for validation. Defaults: ``None``.
         resume_dict (dict): Resume training parameters. Defaults: ``None``.
@@ -683,6 +665,9 @@ def train(
         >>> train(train_one_step_cell=train_one_step_cell, train_dataloader=train_dataloader,
         >>>       training_config=training_config)
     """
+    if process_non_loss_data_func is not None:
+        raise NotImplementedError("process_non_loss_data_func is not supported for now.")
+
     args = get_args()
     if args.resume_training and resume_dict is not None:
         initial_epoch = resume_dict.get("epoch_num")
@@ -695,21 +680,21 @@ def train(
     # broadcast only support [Int32], datasize limit [-2147483648, 2147483647]
     step_num_per_epoch_tensor = ms.Tensor(np.zeros(1), dtype=mstype.int32)
 
-    if train_dataloader is not None:
-        train_dataloader_sample = train_dataloader
+    if train_data_iterator is not None:
+        train_dataloader_sample = train_data_iterator
         if isinstance(train_dataloader_sample, list):
             train_dataloader_sample = train_dataloader_sample[0]
-        factor = args.global_batch_size // get_data_parallel_world_size() // args.micro_batch_size
+        factor = args.global_batch_size // mpu.get_data_parallel_world_size() // args.micro_batch_size
         step_num_per_epoch = train_dataloader_sample.get_dataset_size() // factor
         step_num_per_epoch_tensor = ms.Tensor(step_num_per_epoch, dtype=mstype.int32)
 
-    # if using `get_batch_func`, train_dataloader is None when tp_rank != 0,
+    # if using `get_batch_func`, train_data_iterator is None when tp_rank != 0,
     # so we need to broadcast it to other tp_rank
-    tp_world_size = get_tensor_model_parallel_world_size()
+    tp_world_size = mpu.get_tensor_model_parallel_world_size()
     src_rank = (get_rank() // tp_world_size) * tp_world_size
     step_num_per_epoch_tensor = comm_func.broadcast(step_num_per_epoch_tensor, src_rank,
-                                                    get_tensor_model_parallel_group())
-    comm_func.barrier(group=get_tensor_model_parallel_group())
+                                                    mpu.get_tensor_model_parallel_group())
+    comm_func.barrier(group=mpu.get_tensor_model_parallel_group())
     _pynative_executor.sync()
 
     step_num_per_epoch = step_num_per_epoch_tensor.asnumpy().tolist()
@@ -720,6 +705,7 @@ def train(
 
     logger.info(f"step number per epoch is {step_num_per_epoch}")
 
+    train_one_step_cell = TrainOneStepCell(model, optimizer, opt_param_scheduler, config)
     train_one_step_cell.set_train()
     config = train_one_step_cell.config
 
@@ -739,7 +725,7 @@ def train(
         logger.info(f"Resume training will skip {epoch_step - 1} step data")
 
     evaluation_flag = (
-        val_dataloader is not None
+        valid_data_iterator is not None
         and evaluation_func is not None
         and metrics is not None
         and args.eval_interval is not None
@@ -749,7 +735,7 @@ def train(
     save_ckpt_flag = (args.save_interval is not None and
                       args.train_iters != 0 and
                       args.save_interval <= args.train_iters)
-    correct_metric_flag = is_pipeline_last_stage() # not use pp or pp last_stage
+    correct_metric_flag = mpu.is_pipeline_last_stage() # not use pp or pp last_stage
 
     if evaluation_flag:
         if args.best_metric_comparison == "less_equal":
@@ -766,14 +752,13 @@ def train(
             best_metric = Tensor(float("-inf"))
     profiler = PynativeProfiler()
 
-    # both `get_batch_func` and `train_dataloader` need create train_dataloader
-    if train_dataloader is not None:
-        if isinstance(train_dataloader, list):
+    if train_data_iterator is not None:
+        if isinstance(train_data_iterator, list):
             train_data_dict_iterator = []
-            for cur_train_dataloader in train_dataloader:
+            for cur_train_dataloader in train_data_iterator:
                 train_data_dict_iterator.append(get_dataset_dict_iterator(cur_train_dataloader, epoch_step))
         else:
-            train_data_dict_iterator = get_dataset_dict_iterator(train_dataloader, epoch_step)
+            train_data_dict_iterator = get_dataset_dict_iterator(train_data_iterator, epoch_step)
     else:
         train_data_dict_iterator = None
 
@@ -785,13 +770,13 @@ def train(
     ):
         # we need to refresh train_dataloader every epoch
         # when resume training, epoch_step > 1, so train_data_dict_iterator will not be refreshed
-        if epoch_step == 1 and train_dataloader is not None:
-            if isinstance(train_dataloader, list):
+        if epoch_step == 1 and train_data_iterator is not None:
+            if isinstance(train_data_iterator, list):
                 train_data_dict_iterator = []
-                for cur_train_dataloader in train_dataloader:
+                for cur_train_dataloader in train_data_iterator:
                     train_data_dict_iterator.append(cur_train_dataloader.create_dict_iterator(num_epochs=1))
             else:
-                train_data_dict_iterator = train_dataloader.create_dict_iterator(num_epochs=1)
+                train_data_dict_iterator = train_data_iterator.create_dict_iterator(num_epochs=1)
 
         start_time = time.time()
         profiler.step_begin(global_step)
@@ -822,15 +807,15 @@ def train(
 
         if evaluation_flag and global_step % args.eval_interval == 0:
             is_best = Tensor(False, dtype=mstype.int8)
-            results = evaluation_func(train_one_step_cell, val_dataloader, metrics, **kwargs)
+            results = evaluation_func(train_one_step_cell, valid_data_iterator, metrics, **kwargs)
 
             # update best_metrics only on last stage
             if correct_metric_flag and best_metric_compare_func(results[args.eval_metric], best_metric):
                 best_metric = results[args.eval_metric]
                 is_best = Tensor(True, dtype=mstype.int8)
 
-            if get_pipeline_model_parallel_world_size() > 1:
-                is_best = comm_func.all_reduce(is_best, "max", get_pipeline_model_parallel_group())[0]
+            if mpu.get_pipeline_model_parallel_world_size() > 1:
+                is_best = comm_func.all_reduce(is_best, "max", mpu.get_pipeline_model_parallel_group())[0]
 
             # save ckpt
             if is_best and save_ckpt_flag:
@@ -933,7 +918,7 @@ def pretrain(train_valid_test_dataset_provider,
         valid_data_iterator = []
         test_data_iterator = []
         for i in range(len(model)):
-            set_virtual_pipeline_model_parallel_rank(i)
+            mpu.set_virtual_pipeline_model_parallel_rank(i)
             iterators = build_train_valid_test_data_iterators(
                 train_valid_test_dataset_provider)
             train_data_iterator.append(iterators[0])
@@ -949,18 +934,19 @@ def pretrain(train_valid_test_dataset_provider,
 
     config = get_model_config(model[0])
 
-    train_one_step_cell = TrainOneStepCell(model, optimizer, opt_param_scheduler,
-                                           config)
-
     if not args.skip_train:
         logger.warning("training...")
         iteration = 0
         if args.do_train and args.train_iters > 0:
             train(
-                train_one_step_cell=train_one_step_cell,
-                train_dataloader=train_data_iterator,
                 forward_step_func=forward_step_func,
-                val_dataloader=None,
+                model=model,
+                optimizer=optimizer,
+                opt_param_scheduler=opt_param_scheduler,
+                train_data_iterator=train_data_iterator,
+                valid_data_iterator=valid_data_iterator,
+                process_non_loss_data_func=process_non_loss_data_func,
+                config=config,
                 metrics=None,
                 resume_dict=resume_dict,
             )
@@ -1040,10 +1026,10 @@ def setup_model_and_optimizer(model_provider_func,
             elif isinstance(resume_ckpt_name, str):
                 ckpt_path = os.path.join(rank_path, resume_ckpt_name)
         else:
-            pp_rank = get_pipeline_model_parallel_rank()
-            dp_size = get_data_parallel_world_size()
-            tp_size = get_tensor_model_parallel_world_size()
-            tp_rank = get_tensor_model_parallel_rank()
+            pp_rank = mpu.get_pipeline_model_parallel_rank()
+            dp_size = mpu.get_data_parallel_world_size()
+            tp_size = mpu.get_tensor_model_parallel_world_size()
+            tp_rank = mpu.get_tensor_model_parallel_rank()
             local_rank_to_dp0_rank = pp_rank * dp_size * tp_size + tp_rank
             logger.warning(f"global rank_{get_rank()} ckpt not found, will load rank_{local_rank_to_dp0_rank} ckpt.")
             rank_path = os.path.join(load_dir, f"rank_{local_rank_to_dp0_rank}")
@@ -1075,7 +1061,8 @@ def build_train_valid_test_data_loaders(build_train_valid_test_datasets_provider
     """ build the loader for train, validation and test set """
     args = get_args()
     (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
-    train_dataloader, valid_dataloader = build_train_valid_test_datasets_provider(get_train_valid_test_num_samples())
+    train_dataloader, valid_dataloader, test_dataloader = \
+        build_train_valid_test_datasets_provider(get_train_valid_test_num_samples())
 
     do_train = train_dataloader is not None and args.train_iters > 0
     do_valid = valid_dataloader is not None and args.eval_iters > 0
@@ -1144,7 +1131,7 @@ def evaluate(forward_step_func,
         )
         config.timers = get_timers()
 
-        if is_pipeline_last_stage(ignore_virtual=True):
+        if mpu.is_pipeline_last_stage(ignore_virtual=True):
             for key in losses_reduced[0].keys():
                 for x in losses_reduced:
                     if key not in total_loss_reduced:

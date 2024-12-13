@@ -24,7 +24,6 @@ from mindspore import mint
 from mindspeed_ms.legacy.model import TransformerLanguageModel
 from mindspeed_ms.core.parallel_state import initialize_model_parallel
 from mindspeed_ms.training import (
-    TrainOneStepCell,
     train,
     parse_args,
     get_args,
@@ -65,8 +64,6 @@ def loss_func(loss_mask, output_tensor):
         loss = loss[0] / loss[1]
     else:
         loss = mint.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
-
-    print(f"final micro loss: {loss}")
 
     if args.check_for_nan_in_loss_and_grad:
         global_rank = ms.communication.get_rank()
@@ -180,11 +177,7 @@ def run_parallel_language_model(config):
 
     optimizer = Adam(params=network.trainable_params(), learning_rate=0.001, beta1=0.9, beta2=0.95)
 
-    # init train one step cell
-    train_one_step_cell = TrainOneStepCell(network, optimizer, None, config)
-
-    # train
-    train(train_one_step_cell, fake_dataset, forward_step)
+    train(forward_step, network, optimizer, None, fake_dataset, None, None, config)
 
 if __name__ == '__main__':
     args, defaults = parse_args()
