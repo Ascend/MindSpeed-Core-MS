@@ -24,8 +24,17 @@ from mindspeed_ms.core import tensor_parallel
 from mindspeed_ms.core.tensor_parallel import GatherFromSequenceParallelRegion, \
     VocabParallelEmbedding, ScatterToSequenceParallelRegion, ColumnParallelLinear
 from mindspeed_ms.core.tensor_parallel.random import get_rng_tracer
-from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_world_size, get_tensor_model_parallel_world_size
+from mindspeed_ms.core.parallel_state import (get_pipeline_model_parallel_world_size,
+                                              get_tensor_model_parallel_world_size,
+                                              TPXCollectiveComm,
+                                              TPYCollectiveComm)
 from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
+from mindspeed_ms.core.comm_utils import (
+    auto_grad_scatter_along_first_dim,
+    auto_grad_scatter_along_last_dim,
+    auto_grad_gather_along_first_dim,
+    auto_grad_gather_along_last_dim
+)
 
 from .module import Module
 from .transformer import ParallelTransformer
@@ -515,6 +524,7 @@ class TransformerLanguageModel(Module):
         self.hidden_size = config.hidden_size
         padded_vocab_size = args.padded_vocab_size
         hidden_dropout_rate = config.hidden_dropout
+        self.tp_2d = config.tp_2d
 
         if self.pre_process:
             # init embedding layer
@@ -679,6 +689,12 @@ class TransformerLanguageModel(Module):
                 raise NotImplementedError("inference_params is not supported for now.")
             rotary_pos_emb = self.rotary_pos_emb(self.seq_length)
 
+        if self.tp_2d:
+            encoder_input = encoder_input.swapaxes(0, 1)
+            encoder_input = auto_grad_scatter_along_first_dim(encoder_input, TPXCollectiveComm)
+            encoder_input = auto_grad_scatter_along_last_dim(encoder_input, TPYCollectiveComm)
+            encoder_input = encoder_input.swapaxes(0, 1)
+
         # encoder
         if enc_hidden_states is None:
             if self.encoder is not None:
@@ -697,6 +713,12 @@ class TransformerLanguageModel(Module):
         if self.post_process and self.add_pooler:
             pooled_output = self.pooler(encoder_output,
                                         pooling_sequence_index)
+
+        if self.tp_2d:
+            encoder_output = encoder_output.swapaxes(0, 1)
+            encoder_output = auto_grad_gather_along_last_dim(encoder_output.contiguous(), TPYCollectiveComm)
+            encoder_output = auto_grad_gather_along_first_dim(encoder_output, TPXCollectiveComm)
+            encoder_output = encoder_output.swapaxes(0, 1)
 
         if self.add_pooler and self.post_process:
             return encoder_output, pooled_output

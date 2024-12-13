@@ -37,6 +37,15 @@ class ModelParallelConfig:
     tensor_model_parallel_size: int = 1
     """Intra-layer model parallelism. Splits tensors across GPU ranks."""
 
+    tp_2d: bool = False
+    """Intra-layer model parallelism.Using 2D TP instead of 1D TP if True."""
+
+    tp_x: int = 1
+    """Splits tensors across GPU ranks along first dimension."""
+
+    tp_y: int = 1
+    """Splits tensors across GPU ranks along last dimension."""
+
     pipeline_model_parallel_size: int = 1
     """Inter-layer model parallelism. Splits transformer layers across GPU ranks."""
 

@@ -38,6 +38,10 @@ from mindspeed_ms.core.parallel_state import (
     get_expert_model_parallel_rank,
     get_virtual_pipeline_model_parallel_world_size,
     get_pipeline_model_parallel_world_size,
+    get_tp_x_rank,
+    get_tp_x_world_size,
+    get_tp_y_rank,
+    get_tp_y_world_size,
 )
 from mindspeed_ms.core.dist_checkpointing import save_checkpoint
 from mindspeed_ms.core.optimizer import MixedPrecisionOptimizer
@@ -853,3 +857,114 @@ def compare_all_data(data_dir, compare_types=None, atol=0.0, rtol=0.0, print_err
             compare_data(value, output_dict_2[name], atol, rtol, print_error_point, save_name)
 
     print("=============== Accuracy test pass !!! ===============")
+
+
+def transform_transformerlayer_params_tp_2d(params, hidden_size, kv_hidden_size=None, prefix=""):
+    """
+    transform transformerlayer parameters.
+    """
+    if not kv_hidden_size:
+        kv_hidden_size = hidden_size
+    tp_x_rank = get_tp_x_rank()
+    tp_x_world_size = get_tp_x_world_size()
+    tp_y_rank = get_tp_y_rank()
+    tp_y_world_size = get_tp_y_world_size()
+    tp_rank = get_tensor_model_parallel_rank()
+    tp_world_size = get_tensor_model_parallel_world_size()
+    new_params = {}
+    for name, param in params.items():
+        if 'embedding_table' in name:
+            param = param.asnumpy()
+            start = tp_rank * (param.shape[0] // tp_world_size)
+            end = (tp_rank + 1) * (param.shape[0] // tp_world_size)
+            new_param = param[start: end, :]
+            new_params['language_model.embedding.word_embeddings.weight'] = (
+                ms.Parameter(new_param)
+            )
+        if "ffn_norm" in name:
+            param = param.asnumpy()
+            start = tp_y_rank * (param.shape[0] // tp_y_world_size)
+            end = (tp_y_rank + 1) * (param.shape[0] // tp_y_world_size)
+            new_param = param[start: end]
+            new_params[prefix + name.replace("ffn_norm", "post_attention_norm")] = (
+                ms.Parameter(new_param)
+            )
+        if "attention_norm" in name:
+            param = param.asnumpy()
+            start = tp_y_rank * (param.shape[0] // tp_y_world_size)
+            end = (tp_y_rank + 1) * (param.shape[0] // tp_y_world_size)
+            new_param = param[start: end]
+            new_params[prefix + name.replace("attention_norm", "input_norm")] = ms.Parameter(new_param)
+        if 'wo.weight' in name:
+            param = param.asnumpy()
+            start_x = tp_x_rank * (param.shape[1] // tp_x_world_size)
+            end_x = (tp_x_rank + 1) * (param.shape[1] // tp_x_world_size)
+            start_y = tp_y_rank * (param.shape[0] // tp_y_world_size)
+            end_y = (tp_y_rank + 1) * (param.shape[0] // tp_y_world_size)
+            new_param = param[start_y: end_y, start_x: end_x]
+            new_params[prefix + name.replace("wo", "out_proj")] = ms.Parameter(new_param)
+        if 'w_qkv.weight' in name:
+            param = param.asnumpy()
+            q = param[:hidden_size, :]
+            k = param[hidden_size: hidden_size + kv_hidden_size, :]
+            v = param[hidden_size + kv_hidden_size:, :]
+            q_start_x = tp_x_rank * (q.shape[0] // tp_x_world_size)
+            q_end_x = (tp_x_rank + 1) * (q.shape[0] // tp_x_world_size)
+            q_start_y = tp_y_rank * (q.shape[1] // tp_y_world_size)
+            q_end_y = (tp_y_rank + 1) * (q.shape[1] // tp_y_world_size)
+            kv_start_x = tp_x_rank * (k.shape[0] // tp_x_world_size)
+            kv_end_x = (tp_x_rank + 1) * (k.shape[0] // tp_x_world_size)
+            kv_start_y = tp_y_rank * (k.shape[1] // tp_y_world_size)
+            kv_end_y = (tp_y_rank + 1) * (k.shape[1] // tp_y_world_size)
+            new_param = np.concatenate([q[q_start_x: q_end_x, q_start_y: q_end_y],
+                                        k[kv_start_x: kv_end_x, kv_start_y: kv_end_y],
+                                        v[kv_start_x: kv_end_x, kv_start_y: kv_end_y]], axis=0)
+            new_params[prefix + name.replace("w_qkv.", "qkv_proj.")] = ms.Parameter(ms.Tensor(new_param))
+        if 'w_qkv.bias' in name:
+            param = param.asnumpy()
+            q = param[:hidden_size]
+            k = param[hidden_size: hidden_size + kv_hidden_size]
+            v = param[hidden_size + kv_hidden_size:]
+            q_start = tp_x_rank * (q.shape[0] // tp_x_world_size)
+            q_end = (tp_x_rank + 1) * (q.shape[0] // tp_x_world_size)
+            kv_start = tp_x_rank * (k.shape[0] // tp_x_world_size)
+            kv_end = (tp_x_rank + 1) * (k.shape[0] // tp_x_world_size)
+            new_param = np.concatenate([q[q_start: q_end],
+                                        k[kv_start: kv_end],
+                                        v[kv_start: kv_end]], axis=0)
+            new_params[prefix + name.replace("w_qkv", "qkv_proj")] = ms.Parameter(
+                ms.Tensor(new_param)
+            )
+        if "mapping.weight" in name:
+            param = param.transpose()
+            start_x = tp_x_rank * (param.shape[0] // tp_x_world_size)
+            end_x = (tp_x_rank + 1) * (param.shape[0] // tp_x_world_size)
+            start_y = tp_y_rank * (param.shape[1] // tp_y_world_size)
+            end_y = (tp_y_rank + 1) * (param.shape[1] // tp_y_world_size)
+            # new_param = param[start: end]
+            new_param = param[start_x: end_x, start_y: end_y]#.transpose()
+            # print(new_param.shape)
+            new_params[prefix + name] = ms.Parameter(new_param)
+        if 'mapping.bias' in name:
+            start = tp_x_rank * (param.shape[0] // tp_x_world_size)
+            end = (tp_x_rank + 1) * (param.shape[0] // tp_x_world_size)
+            new_param = param[start:end]
+            new_params[prefix + name] = ms.Parameter(new_param)
+        if "projection.weight" in name:
+            param = param.transpose()
+            start_x = tp_x_rank * (param.shape[1] // tp_x_world_size)
+            end_x = (tp_x_rank + 1) * (param.shape[1] // tp_x_world_size)
+            start_y = tp_y_rank * (param.shape[0] // tp_y_world_size)
+            end_y = (tp_y_rank + 1) * (param.shape[0] // tp_y_world_size)
+            # new_param = param[:, start: end]
+            new_param = param[start_y: end_y, start_x: end_x]#.transpose()
+
+            new_params[prefix + name] = ms.Parameter(new_param)
+        if 'projection.bias' in name:
+            start = tp_y_rank * (param.shape[0] // tp_y_world_size)
+            end = (tp_y_rank + 1) * (param.shape[0] // tp_y_world_size)
+            new_param = param[start:end]
+
+            new_params[prefix + name] = ms.Parameter(new_param)
+
+    return new_params

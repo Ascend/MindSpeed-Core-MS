@@ -20,6 +20,8 @@ import mindspore.common.dtype as mstype
 
 from mindspore import nn, Parameter, Tensor, mint, ops
 from mindspore.common.initializer import initializer
+from mindspeed_ms.core.tensor_parallel import RMSNorm2D
+from mindspeed_ms.core.parallel_state import TPYCollectiveComm
 
 
 class LayerNorm(nn.Cell):
@@ -131,6 +133,11 @@ def get_norm(config, scale=1.0):
     Returns:
         callable, the normalization layer.
     """
+    if config.tp_2d:
+        return RMSNorm2D(hidden_size=config.hidden_size,
+                         last_dim_split_comm_intf=TPYCollectiveComm,
+                         eps=config.layernorm_epsilon)
+
     if config.normalization == "LayerNorm":
         return LayerNorm(
             config.hidden_size,

@@ -31,6 +31,7 @@ import numpy as np
 import mindspore.common.dtype as mstype
 from mindspore import nn, ops, mint, Parameter
 import mindspore.ops.functional as F
+from mindspore.communication.comm_func import all_gather_into_tensor
 
 from mindspeed_ms.training.global_vars import get_args
 from mindspeed_ms.core.parallel_state import (
@@ -40,12 +41,16 @@ from mindspeed_ms.core.parallel_state import (
     get_data_parallel_world_size,
     get_context_parallel_world_size,
     get_virtual_pipeline_model_parallel_rank,
-    get_virtual_pipeline_model_parallel_world_size
+    get_virtual_pipeline_model_parallel_world_size,
+    get_tp_x_world_size,
+    TPXCollectiveComm,
+    TPYCollectiveComm
 )
 from mindspeed_ms.core.tensor_parallel.random import get_rng_tracer
 from mindspeed_ms.core.tensor_parallel import (
     ColumnParallelLinear,
     RowParallelLinear,
+    ParallelLinear2D,
     CopyToModelParallelRegion,
     GatherFromModelParallelRegion,
     LinearWithGradAccumulationAndAsyncCommunication
@@ -75,6 +80,9 @@ from mindspeed_ms.core.context_parallel.flash_sp import FlashSP
 from mindspeed_ms.core.recompute import (
     CheckpointedRecomputeOrientedCell,
 )
+from mindspeed_ms.core.comm_utils import (auto_grad_scatter_along_last_dim,
+                                          auto_grad_scatter_along_first_dim,
+                                          auto_grad_gather_along_last_dim)
 
 from mindspeed_ms.core.utils import divide
 from mindspeed_ms.tools import logger
@@ -381,7 +389,7 @@ class ParallelAttention(Module):
         self.layer_index = max(1, layer_number)
         self.param_init_dtype = self.config.params_dtype
         self.compute_dtype = self.config.compute_dtype
-
+        self.tp_2d = self.config.tp_2d
         self.attn_type = attention_type
         self.attn_mask_type = attn_mask_type
         self.group_query_attention = args.group_query_attention
@@ -484,15 +492,27 @@ class ParallelAttention(Module):
 
     def _init_qkv_proj(self, input_size, output_size, cell_name):
         """Construct qkv projection cell."""
-        proj = ColumnParallelLinear(
-            input_size,
-            output_size,
-            config=self.config,
-            init_method=self.config.init_method,
-            bias=self.config.add_qkv_bias or self.config.add_bias_linear,
-            gather_output=False,
-            bias_init=self.config.bias_init,
-        )
+        if self.tp_2d:
+            proj = ParallelLinear2D(
+                input_size,
+                output_size,
+                config=self.config,
+                init_method=self.config.init_method,
+                add_bias=self.config.add_qkv_bias,
+                skip_bias_add=False,
+                ag_comm_intf=TPXCollectiveComm,
+                rs_comm_intf=TPYCollectiveComm,
+            )
+        else:
+            proj = ColumnParallelLinear(
+                input_size,
+                output_size,
+                config=self.config,
+                init_method=self.config.init_method,
+                bias=self.config.add_qkv_bias or self.config.add_bias_linear,
+                gather_output=False,
+                bias_init=self.config.bias_init,
+            )
         if self.use_lora:
             proj_lora = self._get_cell_lora_config(self.config, cell_name)
             if proj_lora is not None:
@@ -514,16 +534,28 @@ class ParallelAttention(Module):
     def _init_out_proj(self, input_size, output_size, cell_name, input_is_parallel=True
                        ):
         """Construct out projection cell."""
-        out_proj = RowParallelLinear(
-            input_size,
-            output_size,
-            config=self.config,
-            init_method=self.config.init_method,
-            bias=self.config.add_bias_linear,
-            input_is_parallel=input_is_parallel,
-            skip_bias_add=True,
-            bias_init=self.config.bias_init,
-        )
+        if self.tp_2d:
+            out_proj = ParallelLinear2D(
+                input_size,
+                output_size,
+                config=self.config,
+                init_method=self.config.init_method,
+                add_bias=self.config.add_bias_linear,
+                skip_bias_add=True,
+                ag_comm_intf=TPYCollectiveComm,
+                rs_comm_intf=TPXCollectiveComm,
+            )
+        else:
+            out_proj = RowParallelLinear(
+                input_size,
+                output_size,
+                config=self.config,
+                init_method=self.config.init_method,
+                bias=self.config.add_bias_linear,
+                input_is_parallel=input_is_parallel,
+                skip_bias_add=True,
+                bias_init=self.config.bias_init,
+            )
         if self.use_lora:
             out_proj_lora = self._get_cell_lora_config(self.config, cell_name)
             if out_proj_lora is not None:
@@ -564,7 +596,21 @@ class ParallelAttention(Module):
             if self.sequence_parallel:
                 seq_len = seq_len * self.tp_group_size
             # [B, S, H] --> [B, S, H + 2 * kv_H]
-            qkv, _ = self.qkv_proj(hidden_states)
+            if self.tp_2d:
+                hidden_states = hidden_states.swapaxes(0, 1)
+                qkv = self.qkv_proj(hidden_states)
+                qkv, _ = all_gather_into_tensor(qkv, group=TPYCollectiveComm.get_comm_group())
+                dim_list = np.array(list(range(qkv.shape[2])))
+                tp_x_world_sz = get_tp_x_world_size()
+                new_shape = (3, tp_x_world_sz, -1)
+                reshaped_dim_list = dim_list.reshape(new_shape)
+                reshaped_dim_list = reshaped_dim_list.transpose(1, 0, 2)
+                sorted_index = list(reshaped_dim_list.reshape(-1))
+                qkv = qkv[:, :, sorted_index]
+                qkv = auto_grad_scatter_along_last_dim(qkv, TPYCollectiveComm)
+                qkv = qkv.swapaxes(0, 1)
+            else:
+                qkv, _ = self.qkv_proj(hidden_states)
             new_tensor_shape = qkv.shape[:-1] + (
                 self.kv_num_heads_per_partition,
                 (
@@ -722,7 +768,13 @@ class ParallelAttention(Module):
             context_layer = context_layer.swapaxes(0, 1)
 
         # apply output projection
-        output, bias = self.out_proj(context_layer)
+        if self.tp_2d:
+            bias = None
+            context_layer = auto_grad_gather_along_last_dim(context_layer.swapaxes(0, 1), TPYCollectiveComm)
+            context_layer = auto_grad_scatter_along_first_dim(context_layer, TPYCollectiveComm)
+            output = self.out_proj(context_layer).swapaxes(0, 1)
+        else:
+            output, bias = self.out_proj(context_layer)
         output = ops.cast(output, ori_dtype)
 
         return output, bias
@@ -780,20 +832,33 @@ class ParallelMLP(Module):
         self.add_bias = config.add_bias_linear
         self.act_type = args.activation_func
         self.hidden_size = config.hidden_size
+        self.tp_2d = config.tp_2d
         mapping_output_size = config.ffn_hidden_size
         if config.gated_linear_unit:
             mapping_output_size *= 2
 
-        self.mapping = ColumnParallelLinear(
-            self.hidden_size,
-            mapping_output_size,
-            config=config,
-            init_method=config.init_method,
-            bias=self.add_bias,
-            gather_output=False,
-            is_expert=is_expert,
-            bias_init=config.bias_init,
-        )
+        if self.tp_2d:
+            self.mapping = ParallelLinear2D(
+                self.hidden_size,
+                mapping_output_size,
+                config=config,
+                init_method=config.init_method,
+                add_bias=self.add_bias,
+                skip_bias_add=False,
+                ag_comm_intf=TPXCollectiveComm,
+                rs_comm_intf=TPYCollectiveComm
+            )
+        else:
+            self.mapping = ColumnParallelLinear(
+                self.hidden_size,
+                mapping_output_size,
+                config=config,
+                init_method=config.init_method,
+                bias=self.add_bias,
+                gather_output=False,
+                is_expert=is_expert,
+                bias_init=config.bias_init,
+            )
 
         self.bias_gelu_fusion = False
 
@@ -807,17 +872,29 @@ class ParallelMLP(Module):
             self.act_func = get_act_func(self.act_type)
 
         # Project back to h.
-        self.projection = RowParallelLinear(
-            config.ffn_hidden_size,
-            self.hidden_size,
-            config=config,
-            init_method=config.init_method,
-            bias=self.add_bias,
-            skip_bias_add=True,
-            input_is_parallel=True,
-            is_expert=is_expert,
-            bias_init=config.bias_init,
-        )
+        if self.tp_2d:
+            self.projection = ParallelLinear2D(
+                config.ffn_hidden_size,
+                self.hidden_size,
+                config=config,
+                init_method=config.init_method,
+                add_bias=self.add_bias,
+                skip_bias_add=True,
+                ag_comm_intf=TPYCollectiveComm,
+                rs_comm_intf=TPXCollectiveComm
+            )
+        else:
+            self.projection = RowParallelLinear(
+                config.ffn_hidden_size,
+                self.hidden_size,
+                config=config,
+                init_method=config.init_method,
+                bias=self.add_bias,
+                skip_bias_add=True,
+                input_is_parallel=True,
+                is_expert=is_expert,
+                bias_init=config.bias_init,
+            )
         use_lora = config.use_lora
         if use_lora:
             mapping_lora = self._get_cell_lora_config(config, 'mapping')
@@ -854,13 +931,25 @@ class ParallelMLP(Module):
     def construct(self, hidden_states):
         """Construct function of mlp block."""
         # [B, S, H] -> [B, S, ffn_H] / [S, B, H] -> [S, B, ffn_H]
-        intermediate_parallel, bias_parallel = self.mapping(hidden_states)
+        if self.tp_2d:
+            bias_parallel = None
+            hidden_states = hidden_states.swapaxes(0, 1)
+            intermediate_parallel = self.mapping(hidden_states)
+            intermediate_parallel = intermediate_parallel.swapaxes(0, 1)
+        else:
+            intermediate_parallel, bias_parallel = self.mapping(hidden_states)
         if bias_parallel is not None:
             intermediate_parallel = intermediate_parallel + bias_parallel
         intermediate_parallel = self.act_func(intermediate_parallel)
 
         # [B, S, ffn_H] -> [B, S, H] / [S, B, ffn_H] -> [S, B, H]
-        output, output_bias = self.projection(intermediate_parallel)
+        if self.tp_2d:
+            output_bias = None
+            intermediate_parallel = intermediate_parallel.swapaxes(0, 1)
+            output = self.projection(intermediate_parallel)
+            output = output.swapaxes(0, 1)
+        else:
+            output, output_bias = self.projection(intermediate_parallel)
         return output, output_bias
 
 
