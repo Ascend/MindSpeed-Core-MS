@@ -251,14 +251,14 @@ def _get_ltor_masks_and_position_ids(
     position_ids = torch.arange(seq_length, dtype=torch.long, device=data.device)
     # We need to clone as the ids will be modified based on batch index.
     if reset_position_ids:
-        position_ids = position_ids.copy()
+        position_ids = position_ids.clone()
 
     if reset_position_ids or reset_attention_mask:
         # Find indices where EOD token is.
         eod_index = position_ids[data == eod_token]
         # Detach indices from positions if going to modify positions.
         if reset_position_ids:
-            eod_index = eod_index.copy()
+            eod_index = eod_index.clone()
 
         # Loop through EOD indices:
         prev_index = 0
