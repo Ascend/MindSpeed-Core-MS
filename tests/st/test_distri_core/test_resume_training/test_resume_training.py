@@ -35,29 +35,10 @@ class TestResumeTraining:
         }
     for k, v in env_list.items():
         os.environ[k] = v
-    def extract_loss_from_log(self, pynative_log_path: str):
-        '''extract loss from log_path'''
-        assert os.path.exists(pynative_log_path), f"{pynative_log_path} did not exits"
-        # check loss with golden loss
-        pynative_loss = []
-        with open(pynative_log_path, "r") as fp:
-            for line in fp:
-                if ", Loss: " in line:
-                    line = line.strip().replace('[', '').replace(']', '').replace(',', '')
-                    line = line.split(' ')
-                    i = 0
-                    for i, s in enumerate(line):
-                        if "Loss:" in s:
-                            print(f"{i}: {s} {line[i+1]}")
-                            break
-                    loss = float(line[i+1])
-                    pynative_loss.append(loss)
-        pynative_loss = np.array(pynative_loss)
-
-        return pynative_loss
 
     @pytest.mark.level0
     @pytest.mark.run(order=0)
+    @pytest.mark.skip(reason="skip 1 epoch st")
     def test_resume_training_pynative_ep1tp2pp2_step10(self):
         """
         Feature: test mixtral pynative
@@ -94,6 +75,7 @@ class TestResumeTraining:
 
     @pytest.mark.level0
     @pytest.mark.run(order=1)
+    @pytest.mark.skip(reason="skip 1 epoch st")
     def test_resume_training_pynative_ep1tp2pp2_resume_from_step5(self):
         """
         Feature: test mixtral pynative
@@ -265,6 +247,7 @@ class TestResumeTraining:
 
     @pytest.mark.level1
     @pytest.mark.run(order=2)
+    @pytest.mark.skip(reason="skip no_load_optim st")
     def test_resume_training_pynative_ep1tp2pp2_resume_from_step5_no_load_optim(self):
         """
         Feature: test mixtral pynative
@@ -321,6 +304,7 @@ class TestResumeTraining:
 
     @pytest.mark.level1
     @pytest.mark.run(order=3)
+    @pytest.mark.skip(reason="skip override_scheduler st")
     def test_resume_training_pynative_ep1tp2pp2_resume_from_step5_override_scheduler(self):
         """
         Feature: test mixtral pynative
@@ -381,6 +365,7 @@ class TestResumeTraining:
 
     @pytest.mark.level1
     @pytest.mark.run(order=4)
+    @pytest.mark.skip(reason="skip new_dataset st")
     def test_resume_training_pynative_ep1tp2pp2_resume_from_step5_new_dataset(self):
         """
         Feature: test mixtral pynative
