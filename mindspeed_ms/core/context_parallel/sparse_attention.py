@@ -14,11 +14,12 @@
 # ============================================================================
 """Sparse Attention APIs."""
 import mindspore as ms
-from mindspore import Tensor, nn, ops
+from mindspore import Tensor, nn, ops, mint, hal
+from mindspore import dtype as mstype
 from mindspore.ops import Send, Receive
-from mindspore import hal
-from mindspeed_ms.ops import SparseAttentionScore, SparseAttentionScoreGrad
+import mindspore.communication.comm_func as comm_func
 
+from mindspeed_ms.ops import SparseAttentionScore, SparseAttentionScoreGrad
 from mindspeed_ms.core.parallel_state import is_hybrid_cp, get_context_parallel_group, \
     get_context_parallel_world_size, get_context_parallel_rank, get_sp_send_stream, \
     get_tensor_model_parallel_world_size, get_data_parallel_world_size, \
@@ -155,7 +156,7 @@ class SparseAttention(nn.Cell):
         parallel_mode = ms.get_auto_parallel_context("parallel_mode")
         if parallel_mode not in (
                 ms.ParallelMode.STAND_ALONE, ms.ParallelMode.DATA_PARALLEL):
-            raise ValueError(f"The ring-attention only supports stand_alone and data_parallel,"
+            raise ValueError(f"The sparse-attention only supports stand_alone and data_parallel,"
                              f"but got the paralle mode of {parallel_mode}")
 
         if self.use_alibi_mask:
@@ -167,6 +168,7 @@ class SparseAttention(nn.Cell):
         if self.attn_mask is not None:
             self.sparse_fa = self.prepare_sparse_attention()
             self.sparse_fa_grad = self.prepare_sparse_attention_grad()
+            self.cp_skip_step = self.get_cp_skip_step()
 
         if self.sp > 1:
             self.stream_send = get_sp_send_stream()
@@ -175,7 +177,7 @@ class SparseAttention(nn.Cell):
     def p2p_communicate(self, rank, send_tensor, send_dst,
                         recv_src,
                         sp_group):
-        """Point-to-point communications of KV and dKV in ring attention"""
+        """Point-to-point communications of KV and dKV in sparse attention"""
 
         stream_send = self.stream_send
         stream_recv = self.stream_recv
@@ -209,7 +211,7 @@ class SparseAttention(nn.Cell):
 
     def forward_update(self, prev_attn_out, prev_softmax_max, prev_softmax_sum,
                        cur_attn_out, cur_softmax_max, cur_softmax_sum):
-        '''Update ring attention output'''
+        '''Update sparse attention output'''
 
         softmax_max = ops.maximum(prev_softmax_max, cur_softmax_max)
         prev_scale = ops.exp(prev_softmax_max - softmax_max)
@@ -484,6 +486,21 @@ class SparseAttention(nn.Cell):
             start_indices), tuple(slice_shape))
         return cur_attn_mask
 
+    def get_cp_skip_step(self):
+        '''Get the number of skip steps for SparseAttention'''
+        sp_group, cp_size, _ = self.get_cp_parallel_data()
+        skip_flag_all = mint.zeros((cp_size,), dtype=mstype.int8)
+        for i in range(cp_size):
+            skip_flag = mint.all(self.sparse_fa[i].attn_mask)
+            skip_flag_all[i] = skip_flag
+        skip_flag_reduce_res = comm_func.all_reduce(skip_flag_all, group=sp_group)[0]
+        cp_skip_step = 0
+        for i in range(skip_flag_reduce_res.shape[0] - 1, -1, -1):
+            if skip_flag_reduce_res[i] != cp_size:
+                cp_skip_step = cp_size - 1 - i
+                break
+        return cp_skip_step
+
     def construct(self, q, k, v, attn_mask=None, alibi_mask=None, prefix=None,
                   padding_mask=None, attn_mask_type=None):
         '''Forward of SparseAttention block'''
@@ -503,6 +520,7 @@ class SparseAttention(nn.Cell):
             self.attn_mask = attn_mask
             self.sparse_fa = self.prepare_sparse_attention()
             self.sparse_fa_grad = self.prepare_sparse_attention_grad()
+            self.cp_skip_step = self.get_cp_skip_step()
 
         sp_group, cp_size, rank = self.get_cp_parallel_data()
         send_dst = (rank + 1) % cp_size
@@ -512,6 +530,7 @@ class SparseAttention(nn.Cell):
         recv_tensor = None
         send_recv_ops = []
         attn_out, softmax_max, softmax_sum = None, None, None
+        cp_size = cp_size - self.cp_skip_step
         for i in range(cp_size):
             if send_recv_ops:
                 hal.current_stream().wait_stream(self.stream_send)
@@ -551,7 +570,7 @@ class SparseAttention(nn.Cell):
         return attn_out
 
     def bprop(self, q, k, v, attn_mask, attn_out, dout, attn_mask_type=None):
-        '''Backward of RingAttention block'''
+        '''Backward of SparseAttention block'''
 
         if attn_mask_type is not None:
             raise ValueError(f"Only attn_mask_type = None is supported.")
@@ -562,6 +581,7 @@ class SparseAttention(nn.Cell):
             self.attn_mask = attn_mask
             self.sparse_fa = self.prepare_sparse_attention()
             self.sparse_fa_grad = self.prepare_sparse_attention_grad()
+            self.cp_skip_step = self.get_cp_skip_step()
 
         softmax_max = self.softmax_max
         softmax_sum = self.softmax_sum
@@ -586,6 +606,7 @@ class SparseAttention(nn.Cell):
         dk = ops.zeros_like(k)
         dv = ops.zeros_like(v)
 
+        cp_size = cp_size - self.cp_skip_step
         for i in range(cp_size):
 
             if send_recv_ops:
@@ -619,7 +640,7 @@ class SparseAttention(nn.Cell):
                 self.prepare_flash_attention_grad_input(softmax_max, softmax_sum, q, attn_out, dout,
                                                         cur_k, cur_v)
 
-            attn_grad_outs = self.sparse_fa_grad[i](
+            attn_grad_outs = self.sparse_fa_grad[i + self.cp_skip_step](
                 cur_q, cur_k, cur_v, cur_dout, pse_shift=None, drop_mask=None, padding_mask=None,
                 atten_mask=None, softmax_max=cur_softmax_max,
                 softmax_sum=cur_softmax_sum, attention_in=cur_attn_out)
