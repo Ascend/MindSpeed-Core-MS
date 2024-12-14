@@ -50,8 +50,10 @@ def print_rank_0(message):
 def decay_filter(x):
     return "norm" not in x.name.lower() and "bias" not in x.name.lower()
 
-
-def set_weight_decay(params, weight_decay=1e-1):
+# pylint:disable=C0103
+# pylint:disable=C1801
+def set_weight_decay(params, weight_decay=1e-1, no_weight_decay_cond=None,
+                     scale_lr_cond=None, use_decoupled_learning_rate=False):
     """
     Set weight decay coefficient, zero for bias and layernorm, 1e-1 for rest
 
@@ -61,14 +63,59 @@ def set_weight_decay(params, weight_decay=1e-1):
     Returns:
         list: A list of dictionaries specifying the parameter groups and their respective weight decay coefficients.
     """
-    decay_params = list(filter(decay_filter, params))
-    other_params = list(filter(lambda x: not decay_filter(x), params))
-    group_params = []
-    if decay_params:
-        group_params.append({"params": decay_params, "weight_decay": weight_decay, "wd_mult": 1.0})
-    if other_params:
-        group_params.append({"params": other_params, "weight_decay": 0.0, "wd_mult": 0.0})
-    return group_params
+
+    # Map (wd_mult, lr_mult, is_expert_parallel, is_decoupled_lr) to params.
+    params_map = {}
+    for param in params:
+        if not param.requires_grad:
+            continue
+
+        is_expert_parallel = not getattr(param, 'allreduce', True)
+
+        if no_weight_decay_cond is not None:
+            no_wd = no_weight_decay_cond(param.name, param)
+        else:
+            # Do not regularize biases and norm parameters.
+            no_wd = param.name.endswith(".bias") or len(param.shape) == 1
+
+        if scale_lr_cond is not None:
+            scale_lr = scale_lr_cond(param.name, param)
+        else:
+            scale_lr = False
+
+        if not no_wd and not scale_lr:
+            wd_mult, _lr_mult = 1.0, 1.0
+        elif not no_wd and scale_lr:
+            wd_mult, _lr_mult = 1.0, lr_mult
+        elif no_wd and not scale_lr:
+            wd_mult, _lr_mult = 0.0, 1.0
+        else:
+            wd_mult, _lr_mult = 0.0, lr_mult
+
+        is_decoupled_lr = False
+        # For input/embedding and output layer: embedding.word_embeddings.weight /
+        # output_layer.weight.
+        if use_decoupled_learning_rate and getattr(param, 'is_embedding_or_output_parameter', False):
+            is_decoupled_lr = True
+
+        key = (wd_mult, _lr_mult, is_expert_parallel, is_decoupled_lr)
+        if key not in params_map:
+            params_map[key] = []
+        params_map[key].append(param)
+
+    param_groups = []
+    for (wd_mult, _lr_mult, is_expert_parallel, is_decoupled_lr), all_params in params_map.items():
+        assert len(all_params) > 0
+        param_group = {
+            'params': all_params,
+            'weight_decay': weight_decay,
+            'wd_mult': wd_mult,
+            'lr_mult': _lr_mult,
+            'is_expert_parallel': is_expert_parallel,
+            'is_decoupled_lr': is_decoupled_lr,
+        }
+        param_groups.append(param_group)
+    return param_groups
 
 
 def set_parallel_context(config):
