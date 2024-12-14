@@ -186,7 +186,8 @@ class MixedPrecisionOptimizer(nn.Cell):
 
     lrs = property(_get_lrs, _set_lrs)
 
-    def zero_grad(self):
+    # pylint: disable=W0613
+    def zero_grad(self, set_to_none=True):
         """ zero grad data. """
         return
 
@@ -410,6 +411,8 @@ class Float16OptimizerWithFloat16Params(MixedPrecisionOptimizer):
         fp32_from_float16_groups as a memory optimization to reduce
         fragmentation; in the case of set_to_none==True, the space
         used by this field can be safely deallocated at this point."""
+        if self.wrap_with_ddp:
+            set_to_none = False
         for group in self.float16_groups:
             _zero_grad_group_helper(group, set_to_none)
         for group in self.fp32_from_float16_groups:
@@ -628,12 +631,12 @@ class Float16OptimizerWithFloat16Params(MixedPrecisionOptimizer):
                     param_state_exp_avg = self.optimizer.exp_avg[param_world_index]
                     param_state_exp_avg_sq = self.optimizer.exp_avg_sq[param_world_index]
                     self.optimizer.exp_avg[param_world_index] = ms.Parameter(
-                        param_state_exp_avg.value().astype(ms.float32),
+                        param_state_exp_avg.asnumpy().astype(np.float32),
                         name=param_state_exp_avg.name,
                         requires_grad=param_state_exp_avg.requires_grad
                     )
                     self.optimizer.exp_avg_sq[param_world_index] = ms.Parameter(
-                        param_state_exp_avg_sq.value().astype(ms.float32),
+                        param_state_exp_avg_sq.asnumpy().astype(np.float32),
                         name=param_state_exp_avg_sq.name,
                         requires_grad=param_state_exp_avg_sq.requires_grad
                     )

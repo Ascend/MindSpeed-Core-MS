@@ -474,7 +474,8 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         self.num_all_gather_handles = len(self.all_gather_handle_index_to_bucket_index_map)
 
 
-    def zero_grad(self):
+    # pylint: disable=W0613
+    def zero_grad(self, set_to_none=True):
         """ reset grads data. """
         self.grads = []
         if self.overlap_param_gather:
