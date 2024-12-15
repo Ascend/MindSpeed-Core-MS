@@ -150,6 +150,7 @@ def run_parallel_ddp_zero3(golden, first, args):
 
     init()
     initialize_model_parallel(tensor_model_parallel_size=model_config.tensor_model_parallel_size,
+                              context_parallel_size=model_config.context_parallel_size,
                               zero_shard_size=zero_shard_size)
 
     ms.set_seed(2024)
@@ -177,11 +178,30 @@ def run_parallel_ddp_zero3(golden, first, args):
     print(f"network trainable params: {network.trainable_params()}", flush=True)
 
     if not first:
-        if not golden:
+        if golden:
+            from mindspeed_ms.tools.utils import barrier_world
+            from mindspeed_ms.tools.converter.combine_ckpt_dp_zero import transform_ckpt_dp_zero
+            import shutil
+            load_ckpt_path = args.save
+            if ms.communication.get_rank() == 0:
+                transform_ckpt_dp_zero(
+                    args.save + '/opt_shard_info/',
+                    args.save,
+                    'combined_ckpt/',
+                    'ckpt',
+                    'ckpt',
+                    True,
+                    8,
+                    [None, None],
+                )
+                shutil.copytree(args.save + '/strategy', 'combined_ckpt/strategy')
+            barrier_world()
+        else:
             _transform_ckpt_helper(model_config, network[0],
-                                   optimizer=optimizer, src_ckpt_path=args.save,
+                                   optimizer=optimizer, src_ckpt_path='combined_ckpt',
                                    dst_ckpt_path="./dst_ckpt", timeout=60, output_format="ckpt")
-        load_ckpt_path = args.save if golden else "./dst_ckpt"
+            load_ckpt_path = "./dst_ckpt"
+            args.use_dist_ckpt = False
         load_checkpoint(model_config, network[0], optimizer=optimizer,
                         opt_param_scheduler=None, ckpt_path=load_ckpt_path)
     train(forward_step, network, optimizer, None, dataset, None, None, model_config)

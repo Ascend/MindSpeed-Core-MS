@@ -119,6 +119,11 @@ def _initialize_distributed():
                 args.local_rank = device
             ms.set_context(device_id=device)
 
+    if not parallel_state.HETERO_DISTRIB_COMM_ENABLED:
+        args.use_dist_ckpt = True
+        print('Warning: Heterogeneous Distributed Communication is not supported for low Mindspore version, '\
+              '--use-dist-ckpt is enabled by default.')
+
     # set the tensor model parallel, pipeline model parallel,
     # and data parallel communicators
     if device_count > 0:

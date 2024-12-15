@@ -683,6 +683,9 @@ def validate_args(args, default_args, defaults={}):
     if args.use_dist_ckpt and args.use_legacy_models:
         raise RuntimeError('--use-dist-ckpt is not supported in legacy models.')
 
+    if args.use_dist_ckpt and not args.use_distributed_optimizer:
+        raise RuntimeError('--use-dist-ckpt is not supported in non distributed optimizer.')
+
     # Data blend checks
     assert args.mock_data + \
            bool(args.data_path) + \

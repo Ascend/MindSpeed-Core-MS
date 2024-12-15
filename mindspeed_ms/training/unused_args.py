@@ -139,7 +139,6 @@ UNUSED_GLOBAL_ARGS = {
     "ckpt_step",
     "perform_initialization",
     "use_checkpoint_args",
-    "use_dist_ckpt",
     "auto_detect_ckpt_format",
     "ckpt_fully_parallel_save",
     "no_ckpt_fully_parallel_save",

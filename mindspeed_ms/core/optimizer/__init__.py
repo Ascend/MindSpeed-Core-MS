@@ -30,6 +30,7 @@ from mindspeed_ms.core.dist_checkpointing import get_checkpoint_name
 from mindspeed_ms.core.optimizer.lr_scheduler import get_learning_rate_scheduler
 from mindspeed_ms.core.optimizer.optimizer_config import OptimizerConfig
 from mindspeed_ms.core.parallel_state import (get_data_parallel_group,
+                                              get_data_parallel_group_mccl,
                                               get_zero_full_shard_flag,
                                               get_zero_shard_group)
 
@@ -67,8 +68,10 @@ def get_ditributed_optimizer(optimizer, optimizer_config, model_chunks):
     grad_scaler = None if not optimizer_config.loss_scale \
         else ops.Tensor(optimizer_config.loss_scale, mstype.float32)
     data_parallel_group = get_data_parallel_group(with_context_parallel=True)
+    data_parallel_group_mccl = get_data_parallel_group_mccl(with_context_parallel=True)
     if not get_zero_full_shard_flag():
         data_parallel_group = get_zero_shard_group(with_context_parallel=True)
+        data_parallel_group_mccl = get_zero_shard_group(with_context_parallel=True, is_mccl=True)
     distributed_optimizer = DistributedOptimizer(
         optimizer=optimizer,
         config=optimizer_config,
@@ -76,13 +79,20 @@ def get_ditributed_optimizer(optimizer, optimizer_config, model_chunks):
         init_state_fn=None,
         per_model_buffers=per_model_buffers,
         data_parallel_group=data_parallel_group,
+        data_parallel_group_mccl=data_parallel_group_mccl,
     )
     args = get_args()
     save_path = args.save if args.save is not None else './output'
     ckpt_file, _ = get_checkpoint_name(os.path.join(save_path, 'opt_shard_info'),
                                        format='json', prefix='dist_opt_shard_info', epoch_num=0, step_num=0)
 
-    distributed_optimizer.save_opt_shard_strategy(ckpt_file)
+    # add freezed zero param to be combined
+    extra_zero_list = []
+    for _, param in model_chunks.parameters_and_names():
+        if not param.requires_grad and hasattr(param, 'use_zero3') and param.use_zero3:
+            extra_zero_list.append(param.name)
+
+    distributed_optimizer.save_opt_shard_strategy(ckpt_file, extra_zero_list)
 
     return distributed_optimizer
 

@@ -1027,7 +1027,7 @@ def setup_model_and_optimizer(model_provider_func,
                 ckpt_path = os.path.join(rank_path, resume_ckpt_name)
         else:
             pp_rank = mpu.get_pipeline_model_parallel_rank()
-            dp_size = mpu.get_data_parallel_world_size()
+            dp_size = mpu.get_data_parallel_world_size(with_context_parallel=True)
             tp_size = mpu.get_tensor_model_parallel_world_size()
             tp_rank = mpu.get_tensor_model_parallel_rank()
             local_rank_to_dp0_rank = pp_rank * dp_size * tp_size + tp_rank

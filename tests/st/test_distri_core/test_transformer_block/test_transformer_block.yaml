@@ -55,6 +55,7 @@ use_post_norm: False
 save: './output'
 save_interval: 100
 bias_swiglu_fusion: False ####required
+use_dist_ckpt: True
 
 # optimizer
 optimizer: "mint.AdamW"

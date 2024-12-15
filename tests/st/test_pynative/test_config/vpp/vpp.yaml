@@ -84,6 +84,7 @@ data_path: "./data/golden_mixtral_input_and_loss.npy"
 # checkpointing arguments
 save: "./output"
 save_interval: 1
+use_dist_ckpt: True
 dist_ckpt_format: "ckpt"
 
 # optimizer

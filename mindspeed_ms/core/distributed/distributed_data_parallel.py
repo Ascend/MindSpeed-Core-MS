@@ -43,7 +43,7 @@ def reduce_scatter_grad(param, wait_grad_buffer, grad_reduce_in_fp32, average_in
         param.full_grad = ops.cast(param.full_grad, mstype.float32)
 
     if average_in_collective:
-        param.full_grad = mint.div(param.full_grad, get_data_parallel_world_size())
+        param.full_grad = mint.div(param.full_grad, get_data_parallel_world_size(with_context_parallel=True))
 
     comm_handle = reduce_scatter_tensor(param.full_grad, group=data_parallel_group, async_op=True)
     wait_grad_buffer.append(comm_handle)
@@ -67,7 +67,7 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
     ''' register fw bw hook for the zero3 params '''
     wait_buffer = deque()
     wait_grad_buffer = deque()
-    data_parallel_group = get_data_parallel_group()
+    data_parallel_group = get_data_parallel_group(with_context_parallel=True)
     if zero_comm_group is not None:
         if zero_comm_group.get("zero_shard_group") is None or zero_comm_group.get("zero_shard_grad_group") is None:
             raise ValueError("zero_comm_group is illegel, please pass the correct group info like"

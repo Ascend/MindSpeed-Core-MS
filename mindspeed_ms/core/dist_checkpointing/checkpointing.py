@@ -65,7 +65,8 @@ _FORMAT = "ckpt"
 
 # pylint: disable=W0622
 def get_checkpoint_name(ckpt_path, format=_FORMAT, get_name_from_file=False,
-                        prefix: str = "network", epoch_num: int = None, step_num: int = None):
+                        prefix: str = "network", epoch_num: int = None, step_num: int = None,
+                        ensure_exist: bool = True):
     """
     Get checkpoint file name of model and optimizer.
     The layout of the ckpt_path will be like:
@@ -84,7 +85,8 @@ def get_checkpoint_name(ckpt_path, format=_FORMAT, get_name_from_file=False,
     # ensure ckpt path exist
     ckpt_path = os.path.normpath(os.path.abspath(ckpt_path))
     ckpt_local_path = os.path.join(ckpt_path, f"rank_{rank}")
-    os.makedirs(ckpt_local_path, exist_ok=True)
+    if ensure_exist:
+        os.makedirs(ckpt_local_path, exist_ok=True)
     # get default strategy file name
     strategy_local_path = os.path.join(ckpt_path, _STRATEGY_DIR)
     strategy_file = os.path.join(strategy_local_path, f"stratey{rank}.ckpt")
@@ -146,10 +148,14 @@ def _update_zero(params_dict, shard_info, param, group):
 def _get_params_dict(model, optimizer, include_optim: bool = True):
     """ get params dict for saving checkpoint. """
     params_dict = None
+    args = get_args()
     if optimizer is None:
         params_dict = model.parameters_dict()
     elif isinstance(optimizer, MixedPrecisionOptimizer):
-        params_dict = optimizer.state_dict(include_optim)
+        if args.use_dist_ckpt:
+            params_dict = optimizer.state_dict(include_optim)
+        else:
+            params_dict = optimizer.get_parameter_state_dp_zero(include_optim)
         for _, param in model.parameters_and_names():
             if not param.requires_grad and "set_hidden_states" not in param.name:
                 params_dict[param.name] = param
@@ -301,12 +307,16 @@ def save_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
     # validator check
     validator.check_value_type("model", model, [nn.Cell], "save_checkpoint")
     validator.check_value_type("optimizer", optimizer, [nn.Cell, type(None)], "save_checkpoint")
-    rank_path = os.path.join(ckpt_path, f"rank_{get_rank()}")
-    ckpt_file, strategy_file = get_checkpoint_name(ckpt_path, format=format, prefix=prefix, epoch_num=epoch_num,
-                                                   step_num=step_num)
     for key in kwargs:
         logger.warning(f"The parameter '{key}' is not used in save_checkpoint.")
-    logger.info(f"Saving model to {ckpt_file}")
+
+    file_saving = args.use_dist_ckpt or (get_data_parallel_rank(with_context_parallel=True) == 0)
+    rank_path = os.path.join(ckpt_path, f"rank_{get_rank()}")
+
+    ckpt_file, strategy_file = get_checkpoint_name(ckpt_path, format=format, prefix=prefix, epoch_num=epoch_num,
+                                                   step_num=step_num, ensure_exist=file_saving)
+    if file_saving:
+        logger.info(f"Saving model to {ckpt_file}")
 
     # generate sharded info
     shard_info = generate_state_dict(model, optimizer, not args.no_save_optim)
@@ -323,10 +333,12 @@ def save_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
         append_dict.update({"epoch_num": epoch_num, "step_num": step_num})
         # ensure ckpt number is less than `keep_checkpoint_max` after saving,
         # so make 1 free space for incoming ckpt
-        ensure_total_ckpt_is_less_than_limit(ckpt_path=rank_path, limit=keep_checkpoint_max - 1, format=format)
-        ms.save_checkpoint(params_dict, ckpt_file, append_dict=append_dict, format=format, crc_check=crc_check)
-        record_last_ckpt_to_json(epoch=epoch_num, step=step_num, ckpt_file=os.path.basename(ckpt_file),
-                                 meta_json=os.path.join(rank_path, 'meta.json'))
+
+        if file_saving:
+            ensure_total_ckpt_is_less_than_limit(ckpt_path=rank_path, limit=keep_checkpoint_max - 1, format=format)
+            ms.save_checkpoint(params_dict, ckpt_file, append_dict=append_dict, format=format, crc_check=crc_check)
+            record_last_ckpt_to_json(epoch=epoch_num, step=step_num, ckpt_file=os.path.basename(ckpt_file),
+                                     meta_json=os.path.join(rank_path, 'meta.json'))
     logger.info("ckpt saved")
 
 

@@ -200,7 +200,8 @@ def run_pipeline(model_config, train_args, dynamic_dataset=False):
                                          grad_scaler=None,
                                          init_state_fn=None,
                                          per_model_buffers=per_model_buffers,
-                                         data_parallel_group=get_data_parallel_group(with_context_parallel=True))
+                                         data_parallel_group=get_data_parallel_group(with_context_parallel=True),
+                                         data_parallel_group_mccl=None)
     else:
         optimizer = Adam(params=network.trainable_params(), learning_rate=0.001, beta1=0.9, beta2=0.95)
 

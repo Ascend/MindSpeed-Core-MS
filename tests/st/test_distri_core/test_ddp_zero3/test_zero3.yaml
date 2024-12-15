@@ -1,5 +1,5 @@
 model_parallel:
-  tensor_model_parallel_size: 2
+  tensor_model_parallel_size: 1
   pipeline_model_parallel_size: 1
   context_parallel_size: 1
   expert_model_parallel_size: 1
@@ -14,8 +14,8 @@ model_parallel:
 language_model:
   num_layers: 1
   num_attention_heads: 2
-  hidden_size: 8192
-  ffn_hidden_size: 4096
+  hidden_size: 128
+  ffn_hidden_size: 512
   hidden_dropout: 0.0
   attention_dropout: 0.0
   init_method: 'normal'
@@ -29,7 +29,7 @@ language_model:
   clone_scatter_output_in_embedding: False
   attention_softmax_in_fp32: True
   apply_rope_fusion: False
-  add_bias_linear: False
+  add_bias_linear: True
 
 # data
 seq_length: 32
@@ -52,10 +52,12 @@ loss_scale: 1.0
 wrap_with_ddp: True
 overlap_grad_reduce: True
 bucket_size: 1
+enable_mem_align: True
 average_in_collective: True
 use_distributed_optimizer: True
 save: "./saved_ckpt"
-save_interval: 1
+save_interval: 5
+use_dist_ckpt: True
 
 # optimizer
 optimizer: "mint.AdamW"

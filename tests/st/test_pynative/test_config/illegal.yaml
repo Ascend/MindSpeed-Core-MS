@@ -131,6 +131,7 @@ use_checkpoint_opt_param_scheduler: False
 # checkpointing arguments
 save: null
 save_interval: 20000
+use_dist_ckpt: True
 no_save_optim: null
 no_save_rng: null
 load: null

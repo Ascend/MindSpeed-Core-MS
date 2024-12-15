@@ -20,6 +20,11 @@ import numpy as np
 
 import mindspore
 from mindspore.communication import create_group, destroy_group, get_group_size, get_rank
+try:
+    from mindspore.mint.distributed import new_group
+    HETERO_DISTRIB_COMM_ENABLED = True
+except ImportError:
+    HETERO_DISTRIB_COMM_ENABLED = False
 from mindspore import hal
 from mindspeed_ms.tools import logger
 from mindspeed_ms.training.global_vars import get_args
@@ -52,19 +57,23 @@ class GroupInfo:
 
     def __init__(self):
         self.group = None
+        self.group_mccl = None
         self.world_size = None
         self.rank = None
         self.global_ranks = None
         self.is_group_created = False
+        self.is_group_mccl_created = False
 
     def reset(self):
         if self.group is not None and self.is_group_created:
             destroy_group(self.group)
         self.group = None
+        self.group_mccl = None
         self.world_size = None
         self.rank = None
         self.global_ranks = None
         self.is_group_created = False
+        self.is_group_mccl_created = False
 
 
 def get_group_info(mode):
@@ -320,7 +329,6 @@ def initialize_model_parallel(tensor_model_parallel_size=1,
                               **kwargs):
     """Initialize model data parallel groups.
     """
-
     # pylint: disable=W0212
     if not mindspore.communication._comm_helper._is_initialized():
         raise RuntimeError('mindspore.communication._comm_helper is not initialized.')
@@ -457,15 +465,22 @@ def model_parallel_is_initialized():
 
 ### get group
 # pylint: disable=C0330
-def _get_group_helper(mode):
+def _get_group_helper(mode, is_mccl=False):
+    '''get group info global ranks '''
     comm_group = get_group_info(mode)
     if comm_group.group is None:
         raise RuntimeError(f"{mode} parallel group is not initialized. Please check whether communication "
                            f"is initialized and {mode} in order.")
-    if not comm_group.is_group_created:
+
+    if is_mccl and not comm_group.is_group_mccl_created:
+        comm_group.group_mccl = new_group(comm_group.global_ranks, backend="mccl")
+        comm_group.is_group_mccl_created = True
+
+    elif not comm_group.is_group_created:
         create_group(comm_group.group, comm_group.global_ranks)
         comm_group.is_group_created = True
-    return comm_group.group
+
+    return comm_group.group_mccl if is_mccl else comm_group.group
 
 
 def get_tensor_model_parallel_group():
@@ -498,6 +513,13 @@ def get_expert_model_parallel_group():
 def get_data_parallel_group(with_context_parallel=False):
     """Get the data parallel group the caller rank belongs to."""
     return _get_group_helper('dp-cp') if with_context_parallel else _get_group_helper('dp')
+
+
+def get_data_parallel_group_mccl(with_context_parallel=False):
+    """Get the data parallel group the caller rank belongs to."""
+    if get_args().use_dist_ckpt:
+        return None
+    return _get_group_helper('dp-cp', is_mccl=True) if with_context_parallel else _get_group_helper('dp', is_mccl=True)
 
 
 def get_pipeline_model_parallel_group():
@@ -896,13 +918,13 @@ def _local_rank_in_zero_shard_group(dp_rank):
     return current_rank_list_in_zero, group_rank_id
 
 
-def get_zero_shard_group(with_context_parallel=False):
+def get_zero_shard_group(with_context_parallel=False, is_mccl=False):
     """Get the data parallel group the caller rank belongs to."""
     global _ZERO_WITH_CP
     _ZERO_WITH_CP = with_context_parallel
-    group = get_group_info("dp-cp") if with_context_parallel else get_group_info("dp")
     if get_zero_full_shard_flag():
-        return group.group
+        return _get_group_helper("dp-cp") if with_context_parallel else _get_group_helper("dp")
+    group = get_group_info("dp-cp") if with_context_parallel else get_group_info("dp")
     dp_rank = group.global_ranks
     zero_shard_size = get_zero_shard_size()
     # [0, 1, 2, 3, 4, 5, 6, 7] -> [0, 1, 2, 3], [4, 5, 6, 7]
@@ -916,15 +938,15 @@ def get_zero_shard_group(with_context_parallel=False):
     comm_group.global_ranks = current_rank_list_in_zero
     comm_group.world_size = zero_shard_size
     comm_group.rank = idx
-    return _get_group_helper("dp-zero")
+    return _get_group_helper("dp-zero", is_mccl=is_mccl)
 
 
 def get_zero_shard_grad_group():
     """Get the data parallel group the caller rank belongs to."""
     zero_shard_size = get_zero_shard_size()
-    group = get_group_info("dp-cp") if _ZERO_WITH_CP else get_group_info("dp")
     if get_zero_full_shard_flag():
-        return group.group
+        return _get_group_helper("dp-cp") if _ZERO_WITH_CP else _get_group_helper("dp")
+    group = get_group_info("dp-cp") if _ZERO_WITH_CP else get_group_info("dp")
     dp_rank = group.global_ranks
     current_rank_list_in_zero, group_rank_id = _local_rank_in_zero_shard_group(dp_rank)
     group_name = "dp-zero-grad-" + "-".join([str(i) for i in current_rank_list_in_zero])

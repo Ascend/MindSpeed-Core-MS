@@ -46,6 +46,7 @@ next_tockens: 2147483647
 eval_iters: 2
 save: "./saved_ckpt"
 save_interval: 3 # not save
+use_dist_ckpt: True
 
 # loss arguments
 initial_loss_scale: 1  # loss_scale_value
