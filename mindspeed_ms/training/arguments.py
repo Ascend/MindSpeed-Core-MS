@@ -2016,11 +2016,11 @@ def _add_moe_args(parser):
                        help='Enable checkpointing for moe_layer, should be used when memory is not sufficient.')
     group.add_argument('--moe-extended-tp', action='store_true',
                        help='Alternative to expert parallelism, all experts are sharded across TPXEP domain.')
-    group.add_argument('--use-pipe-expert-layer', type=bool, default=False,
+    group.add_argument('--use-pipe-expert-layer', action='store_true',
                        help='When set to true, ep-communication is overlapped by computing via pipe experts.')
-    group.add_argument('--use-pipe-expert-recompute', type=bool, default=False,
+    group.add_argument('--use-pipe-expert-recompute', action='store_true',
                        help='When set to true, activations of silu and mul are recomputed.')
-    group.add_argument('--use-pipe-expert-swap', type=bool, default=False,
+    group.add_argument('--use-pipe-expert-swap', action='store_true',
                        help='When set to true, weights and activations selected are copied to host.')
 
     return parser
