@@ -167,7 +167,7 @@ def _set_random_seed(seed_, data_parallel_random_init=False):
             parallel_mode_manual_seed(seed)
         set_seed_states()
     else:
-        raise ValueError("Seed ({}) should be a positive integer.".format(seed))
+        raise ValueError("Seed ({}) should be a positive integer.".format(seed_))
 
 
 def write_args_to_tensorboard():

@@ -145,6 +145,7 @@ def forward_step(data_iterator, model):
 
 def run_pretrain():
     """ run pretrain process """
+    train_valid_test_dataset_provider.is_distributed = True
     pretrain(
         train_valid_test_dataset_provider=train_valid_test_dataset_provider,
         model_provider=model_provider_func,

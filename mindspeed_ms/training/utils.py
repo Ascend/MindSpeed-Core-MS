@@ -235,20 +235,16 @@ def get_batch_on_this_tp_rank(data_iterator):
             _broadcast(batch['loss_mask'])
             _broadcast(batch['attention_mask'])
     else:
-        tokens = Tensor(
-            np.empty((args.global_batch_size // get_data_parallel_world_size(), args.seq_length), dtype=np.int32))
-        labels = Tensor(
-            np.empty((args.global_batch_size // get_data_parallel_world_size(), args.seq_length), dtype=np.int32))
-        loss_mask = Tensor(
-            np.empty((args.global_batch_size // get_data_parallel_world_size(), args.seq_length), dtype=np.float32))
+        tokens = Tensor(np.empty((args.micro_batch_size, args.seq_length), dtype=np.int32))
+        labels = Tensor(np.empty((args.micro_batch_size, args.seq_length), dtype=np.int32))
+        loss_mask = Tensor(np.empty((args.micro_batch_size, args.seq_length), dtype=np.float32))
         if args.create_attention_mask_in_dataloader:
             attention_mask = Tensor(np.empty(
-                (args.global_batch_size // get_data_parallel_world_size(), 1, args.seq_length, args.seq_length),
+                (args.micro_batch_size, 1, args.seq_length, args.seq_length),
                 dtype=np.int8))
         else:
             attention_mask = None
-        position_ids = Tensor(
-            np.empty((args.global_batch_size // get_data_parallel_world_size(), args.seq_length), dtype=np.int32))
+        position_ids = Tensor(np.empty((args.micro_batch_size, args.seq_length), dtype=np.int32))
 
         if args.pipeline_model_parallel_size == 1:
             _broadcast(tokens)
@@ -333,9 +329,7 @@ def average_losses_across_data_parallel_group(losses):
 
 def is_last_rank():
     """check whether last rank"""
-    return ms.communication.get_rank() == (
-        mint.distributed.get_world_size() - 1
-    )
+    return ms.communication.get_rank() == (mint.distributed.get_world_size() - 1)
 
 
 def print_rank_last(message):

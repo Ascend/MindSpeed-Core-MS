@@ -98,7 +98,7 @@ msrun $DISTRIBUTED_ARGS pretrain_gpt.py \
     $GPT_ARGS \
     $DATA_ARGS \
     $OUTPUT_ARGS \
-    --distributed-backend nccl \
+    --distributed-backend hccl \
     --jit-compile \
     --save ${CKPT_SAVE_DIR} \
     | tee logs/train_qwen15_4b.log

@@ -167,6 +167,7 @@ def main(config: TransformerConfig, args):
         )
         return network
 
+    train_valid_test_dataset_provider.is_distributed = True
     pretrain(
         train_valid_test_dataset_provider=train_valid_test_dataset_provider,
         model_provider=model_provider_func,

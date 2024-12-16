@@ -55,7 +55,7 @@ class GPTModel(Module):
 
         self.eod = get_tokenizer().eod if args.reset_attention_mask else None
         if self.eod:
-            self.eod_mask = EosMask(args.batch_size,
+            self.eod_mask = EosMask(args.micro_batch_size,
                                     args.seq_length,
                                     self.eod,
                                     args.reset_position_ids)

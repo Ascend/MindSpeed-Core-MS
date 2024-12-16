@@ -54,6 +54,8 @@ from mindspeed_ms.core.profiler import PynativeProfiler
 
 from mindspeed_ms.training.initialize import initialize_mindspeed_ms
 from mindspeed_ms.core.utils import get_model_config
+from mindspeed_ms.legacy.data.data_samplers import build_pretraining_data_loader
+from mindspeed_ms.training.utils import print_rank_0
 
 from .grad_handler import inplace_apply_to_tensor_list, get_grad_process_func
 from .utils import print_rank_last, print_rank_0, is_last_rank
@@ -781,7 +783,7 @@ def train(
 
     if train_data_iterator is not None:
         train_dataloader_sample = train_data_iterator
-        if isinstance(train_dataloader_sample, list):
+        if isinstance(train_dataloader_sample, (list, tuple)):
             train_dataloader_sample = train_dataloader_sample[0]
         factor = args.global_batch_size // mpu.get_data_parallel_world_size() // args.micro_batch_size
         step_num_per_epoch = train_dataloader_sample.get_dataset_size() // factor
@@ -1107,6 +1109,7 @@ def setup_model_and_optimizer(model_provider_func,
         args.resume_training = False
 
     if load_dir is not None:
+        args.iteration = 0
         rank_path = os.path.join(load_dir, f"rank_{get_rank()}")
         if os.path.exists(rank_path):
             meta_path = os.path.join(rank_path, "meta.json")
@@ -1152,24 +1155,77 @@ def setup_model_and_optimizer(model_provider_func,
             resume_dict = None
             logger.warning("resume_dict extract from checkpoint is not 'None', but resume_training is 'False', "
                            "so resume_dict will be set to 'None'")
+    else:
+        args.iteration = 0
 
     return model, optimizer, opt_param_scheduler, resume_dict
 
 
-def build_train_valid_test_data_loaders(build_train_valid_test_datasets_provider):
-    """ build the loader for train, validation and test set """
+def build_train_valid_test_datasets(build_train_valid_test_datasets_provider):
+    """Build pretraining datasets."""
+    train_valid_test_num_samples = get_train_valid_test_num_samples()
+    print_rank_0(' > datasets target sizes (minimum size):')
+    print_rank_0('    train:      {}'.format(train_valid_test_num_samples[0]))
+    print_rank_0('    validation: {}'.format(train_valid_test_num_samples[1]))
+    print_rank_0('    test:       {}'.format(train_valid_test_num_samples[2]))
+    return build_train_valid_test_datasets_provider(train_valid_test_num_samples)
+
+
+def build_train_valid_test_data_loaders(
+        build_train_valid_test_datasets_provider):
+    """Build pretraining data loaders."""
+
     args = get_args()
+
     (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
-    train_dataloader, valid_dataloader, test_dataloader = \
-        build_train_valid_test_datasets_provider(get_train_valid_test_num_samples())
 
-    do_train = train_dataloader is not None and args.train_iters > 0
-    do_valid = valid_dataloader is not None and args.eval_iters > 0
-    do_test = test_dataloader is not None and args.eval_iters > 0
+    print_rank_0('> building train, validation, and test datasets ...')
 
-    args.do_train = getattr(args, "do_train", False) or do_train
-    args.do_valid = getattr(args, "do_valid", False) or do_valid
-    args.do_test = getattr(args, "do_test", False) or do_test
+    # Backward compatibility, assume fixed batch size.
+    if args.iteration > 0 and args.consumed_train_samples == 0:
+        assert args.train_samples is None, \
+            'only backward compatibility support for iteration-based training'
+        args.consumed_train_samples = args.iteration * args.global_batch_size
+    if args.iteration > 0 and args.consumed_valid_samples == 0:
+        if args.train_samples is None:
+            args.consumed_valid_samples = (args.iteration // args.eval_interval) * \
+                args.eval_iters * args.global_batch_size
+
+    # Rely on distributed-aware core datasets, temporary
+    is_distributed = getattr(build_train_valid_test_datasets_provider, "is_distributed", False)
+
+    # Construct the data pipeline
+    if is_distributed or mpu.get_tensor_model_parallel_rank() == 0:
+
+        # Build datasets.
+        train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
+            build_train_valid_test_datasets_provider)
+        # Build dataloders.
+        train_dataloader = build_pretraining_data_loader(
+            train_ds, args.consumed_train_samples)
+        if args.skip_train:
+            valid_dataloader = build_pretraining_data_loader(valid_ds, 0)
+        else:
+            valid_dataloader = build_pretraining_data_loader(
+                valid_ds, args.consumed_valid_samples)
+        test_dataloader = build_pretraining_data_loader(test_ds, 0)
+
+        # Flags to know if we need to do training/validation/testing.
+        do_train = train_dataloader is not None and args.train_iters > 0
+        do_valid = valid_dataloader is not None and args.eval_iters > 0
+        do_test = test_dataloader is not None and args.eval_iters > 0
+        flags = ms.tensor(
+            [int(do_train), int(do_valid), int(do_test)],
+            dtype=ms.int32)
+    else:
+        # communication op do not support int64
+        flags = ms.tensor([0, 0, 0], dtype=ms.int32)
+
+    flags = ms.communication.comm_func.broadcast(flags, 0)
+
+    args.do_train = getattr(args, "do_train", False) or flags[0].item()
+    args.do_valid = getattr(args, "do_valid", False) or flags[1].item()
+    args.do_test = getattr(args, "do_test", False) or flags[2].item()
 
     return train_dataloader, valid_dataloader, test_dataloader
 
