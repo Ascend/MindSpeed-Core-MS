@@ -25,6 +25,47 @@ import numpy as np
 import mindspore as ms
 from mindspore import _checkparam as validator
 
+def get_convert_iteration_path(checkpoints_path, iteration):
+    """Tracker file rescords the chckpoint which want to convert"""
+    if iteration == -1:
+        with open(os.path.join(checkpoints_path, 'latest_checkpointed_iteration.txt'), 'r') as f:
+            iteration = int(f.read().strip())
+    return os.path.join(checkpoints_path, "iter_{:07d}".format(iteration))
+
+def get_dp_tp_pp_size(iteration_path):
+    """Get dp_size, tp_size and pp_size."""
+    mp_rank_list = [
+        dir_name for dir_name in os.listdir(iteration_path)
+        if dir_name.startswith('mp_rank')
+    ]
+
+    tp_size = 0
+    pp_size = 0
+
+    for dir_name in mp_rank_list:
+        split_list = dir_name.split("_")
+        tp_size = max(int(dir_name.split("_")[2]) + 1, tp_size)
+        if len(split_list) == 4:
+            pp_size = max(int(dir_name.split("_")[3])+1, pp_size)
+        else:
+            pp_size = 1
+    ckpt_list = [
+        checkpoint for checkpoint in os.listdir(os.path.join(iteration_path, mp_rank_list[0]))
+        if "model_optim_rng" in checkpoint
+    ]
+    dp_size = len(ckpt_list)
+
+    return dp_size, tp_size, pp_size
+
+
+def get_global_rank(tp_rank, tp_size, dp_rank, dp_size, pp_rank):
+    """map tp-dp-pp rank to global rank util. Assume init order is tp-cp-ep-dp-pp"""
+    global_rank = (
+        pp_rank * dp_size * tp_size +
+        dp_rank * tp_size +
+        tp_rank
+    )
+    return global_rank
 
 def get_last_checkpoint(ckpt_path, format_="ckpt"):
     """Get last timestamp checkpoint under ckpt_path."""
@@ -164,6 +205,8 @@ def transform_ckpt_dp_zero_by_rank(
         dst_format="ckpt",
         copy_to_all_dp_ranks=True,
         no_save_optim=False,
+        mp_rank_dir_name=None,
+        iteration=-1,
     ):
     '''transform dp0 ckpt'''
     with open(shard_info_file, 'r') as f:
@@ -178,10 +221,26 @@ def transform_ckpt_dp_zero_by_rank(
     print("[{}][Rank {}] Start collecting checkpoints from all dp rank.".format(
         datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), rank_id))
     param_total_dict = OrderedDict()
-    for rank in dp_rank_list:
-        checkpoint_file = get_last_checkpoint(os.path.join(checkpoints_dir, "rank_{}".format(rank)), format_=src_format)
-        state_dict = ms.load_checkpoint(checkpoint_file, format=src_format)
-        param_total_dict[rank] = state_dict
+
+    if mp_rank_dir_name is not None:
+        mp_rank_dir_path = os.path.join(get_convert_iteration_path(checkpoints_dir, iteration), mp_rank_dir_name)
+        ckpt_list = [
+            checkpoint for checkpoint in os.listdir(mp_rank_dir_path)
+            if checkpoint.endswith('.ckpt')
+        ]
+        ckpt_list.sort()
+        i = 0
+        for rank in dp_rank_list:
+            checkpoint_file = os.path.join(mp_rank_dir_path, ckpt_list[i])
+            state_dict = ms.load_checkpoint(checkpoint_file, format=src_format)
+            param_total_dict[rank] = state_dict
+            i += 1
+    else:
+        for rank in dp_rank_list:
+            checkpoint_file = get_last_checkpoint(
+                os.path.join(checkpoints_dir, "rank_{}".format(rank)), format_=src_format)
+            state_dict = ms.load_checkpoint(checkpoint_file, format=src_format)
+            param_total_dict[rank] = state_dict
     print("[{}][Rank {}] End collecting checkpoints from all dp rank.".format(
         datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), rank_id))
 
@@ -189,15 +248,20 @@ def transform_ckpt_dp_zero_by_rank(
     param_state_dict = get_parameter_state_dp_zero(strategy, param_total_dict, no_save_optim)
 
     # save combined checkpoint
-    this_rank_ckpt_file = get_last_checkpoint(
-        os.path.join(checkpoints_dir, "rank_{}".format(rank_id)),
-        format_=src_format,
-    ).split('/')[-1]
-    this_rank_ckpt_file = this_rank_ckpt_file.replace(
-        '.{}'.format(src_format),
-        '_dp_merged.{}'.format(dst_format),
-    )
-    save_dir = os.path.join(output_dir, "rank_{}".format(rank_id))
+    if mp_rank_dir_name is not None:
+        this_rank_ckpt_file = "model_optim_rng.{}".format(dst_format)
+        iteration = get_convert_iteration_path(checkpoints_dir, iteration).split('/')[-1]
+        save_dir = os.path.join(os.path.join(output_dir, iteration), mp_rank_dir_name)
+    else:
+        this_rank_ckpt_file = get_last_checkpoint(
+            os.path.join(checkpoints_dir, "rank_{}".format(rank_id)),
+            format_=src_format,
+        ).split('/')[-1]
+        this_rank_ckpt_file = this_rank_ckpt_file.replace(
+            '.{}'.format(src_format),
+            '_dp_merged.{}'.format(dst_format),
+        )
+        save_dir = os.path.join(output_dir, "rank_{}".format(rank_id))
     os.makedirs(save_dir, exist_ok=True)
     save_file_path = os.path.join(
         save_dir,
@@ -207,7 +271,7 @@ def transform_ckpt_dp_zero_by_rank(
     print("[{}][Rank {}] Save dp combined checkpoint under: {}".format(
         datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), rank_id, save_file_path))
 
-    if copy_to_all_dp_ranks:
+    if copy_to_all_dp_ranks and mp_rank_dir_name is None:
         # copy generated checkpoint file to each dp rank's checkpoint directory
         for rank in dp_rank_list:
             # skip current rank
@@ -231,6 +295,8 @@ def transform_ckpt_dp_zero(
         max_proccess_limit=8,
         rank_section=None,
         no_save_optim=False,
+        use_mp_rank=False,
+        iteration=-1
     ):
     '''transform dp0 ckpt'''
     if rank_section is None:
@@ -261,8 +327,11 @@ def transform_ckpt_dp_zero(
     def _shard_info_dir_filter(dir_path):
         nonlocal start_passed_, end_passed_
         rank_id = int(dir_path.split('/')[-1].split('_')[-1])
-        shard_info_file_exist_ = os.path.exists(
-            os.path.join(dir_path, "dist_opt_shard_info_rank_{}-0_0.json".format(rank_id)))
+        if use_mp_rank:
+            shard_info_file_exist_ = os.path.exists(os.path.join(dir_path, "dist_opt_shard_info.json"))
+        else:
+            shard_info_file_exist_ = os.path.exists(
+                os.path.join(dir_path, "dist_opt_shard_info_rank_{}-0_0.json".format(rank_id)))
         in_section_ = True
         if start_passed_ and end_passed_:
             in_section_ = start_rank <= rank_id < end_rank
@@ -274,9 +343,25 @@ def transform_ckpt_dp_zero(
     processes = []
     activate_processes = 0
     # multiprocessing transform checkpoints
+    if use_mp_rank:
+        dp_size, tp_size, pp_size = get_dp_tp_pp_size(get_convert_iteration_path(checkpoints_dir, iteration))
+        print(f"dp_size {dp_size} tp_size {tp_size} pp_size {pp_size}")
+    mp_rank_dir_name = None
     for dir_path in shard_info_dirs:
-        rank_id = int(dir_path.split('/')[-1].split('_')[-1])
-        shard_info_file = os.path.join(dir_path, "dist_opt_shard_info_rank_{}-0_0.json".format(rank_id))
+        print(f"dir_path {dir_path}")
+        if use_mp_rank:
+            mp_rank_dir_name = dir_path.split('/')[-1]
+            tp_rank = int(mp_rank_dir_name.split('_')[2])
+            pp_rank = 0
+            if len(mp_rank_dir_name.split('_')) == 4:
+                pp_rank = int(mp_rank_dir_name.split('_')[3])
+            rank_id = get_global_rank(tp_rank, tp_size, 0, dp_size, pp_rank)
+            print(f"tp_rank {tp_rank} pp_rank {pp_rank} rank_id {rank_id}")
+            shard_info_file = os.path.join(dir_path, "dist_opt_shard_info.json")
+        else:
+            rank_id = int(dir_path.split('/')[-1].split('_')[-1])
+            shard_info_file = os.path.join(dir_path, "dist_opt_shard_info_rank_{}-0_0.json".format(rank_id))
+
         p = Process(
             target=transform_ckpt_dp_zero_by_rank,
             args=(
@@ -288,6 +373,8 @@ def transform_ckpt_dp_zero(
                 dst_format,
                 copy_to_all_dp_ranks,
                 no_save_optim,
+                mp_rank_dir_name,
+                iteration,
             )
         )
         p.start()
@@ -303,6 +390,21 @@ def transform_ckpt_dp_zero(
     for p in processes:
         p.join()
 
+    if use_mp_rank:
+        if os.path.exists(os.path.join(output_dir, "strategy")):
+            shutil.rmtree(os.path.join(output_dir, "strategy"))
+        if os.path.exists(os.path.join(checkpoints_dir, "strategy")):
+            shutil.copytree(os.path.join(checkpoints_dir, "strategy"), os.path.join(output_dir, "strategy"))
+
+        src_txt_path = os.path.join(checkpoints_dir, "latest_checkpointed_iteration.txt")
+        target_txt_path = os.path.join(output_dir, "latest_checkpointed_iteration.txt")
+        if iteration != -1:
+            with open(target_txt_path, 'w') as file:
+                file.write(str(iteration))
+        else:
+            if os.path.exists(src_txt_path):
+                shutil.copy(src_txt_path, output_dir)
+    print("-------------end combine-------------")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -356,6 +458,17 @@ if __name__ == '__main__':
         action='store_true',
         help='Filter optimizer parameters'
     )
+    parser.add_argument(
+        '--use-mp-rank',
+        action='store_true',
+        help='combine_ckpt_dp_zero for the ckpt_dir named "mp_rank_xx_xxx".'
+    )
+    parser.add_argument(
+        '--iteration',
+        type=int,
+        default=-1,
+        help='Iteration ckpt to be converted, only supported with use-mp-rank.'
+    )
 
     args = parser.parse_args()
     transform_ckpt_dp_zero(
@@ -368,4 +481,6 @@ if __name__ == '__main__':
         args.max_proccess_limit,
         args.rank_section,
         args.no_save_optim,
+        args.use_mp_rank,
+        args.iteration,
     )
