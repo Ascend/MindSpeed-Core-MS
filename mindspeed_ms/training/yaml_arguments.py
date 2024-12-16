@@ -469,6 +469,18 @@ def validate_yaml(args, args_default, defaults={}):
         assert not args.model_parallel.fp16, \
             "Expert parallelism is not supported with fp16 training."
 
+    # Pipe expert layer check
+    if args.language_model.use_pipe_expert_layer:
+        assert args.model_parallel.expert_model_parallel_size > 1, "Pipe expert is only supported with ep > 1."
+        assert not (args.language_model.use_pipe_expert_recompute and args.language_model.use_pipe_expert_swap), \
+            "Do not support recompute and swap at the same time now."
+        assert args.model_parallel.tensor_model_parallel_size == 1, "Pipe expert is only supported with tp == 1 currently."
+    else:
+        assert not args.language_model.use_pipe_expert_recompute, \
+            "Pipe expert recompute is only supported when using pipe expert layer."
+        assert not args.language_model.use_pipe_expert_swap, \
+            "Pipe expert swap is only supported when using pipe expert layer."
+
     if args.profile_save_path is None and args.save:
         args.profile_save_path = os.path.join(args.save, "profile")
 

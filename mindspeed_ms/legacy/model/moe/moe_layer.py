@@ -119,11 +119,13 @@ class MoELayer(Module):
         if self.use_pipe_expert_layer:
             self.pipe_expert_layer.probs, self.pipe_expert_layer.indices = self.router(hidden_states)
             if self.pipe_expert_layer.probs.ndim != 2:
-                raise ValueError(f"expect 'probs' is 2d tensor, \
-                                 but got shape {self.pipe_expert_layer.probs.shape}.")
+                raise ValueError(f"The second dim of 'probs' is the probability of each expert processing"\
+                                 f"each token, and the first dim is the number of tokens, so 'probs' is a"\
+                                 f"2d tensor, but got shape {self.pipe_expert_layer.probs.shape}.")
             if self.pipe_expert_layer.indices.ndim != 2:
-                raise ValueError(f"expect 'indices' is 2d tensor, \
-                                 but got shape {self.pipe_expert_layer.indices.shape}.")
+                raise ValueError(f"'indices' includes indexes of topk experts responsible for each token."\
+                                 f"The first dim is the number of tokens and the second is topk, so 'indices'"\
+                                 f"is a 2d tensor, but got shape {self.pipe_expert_layer.indices.shape}.")
             hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
             sorted_local_input_tokens, local_input_sorted_map = token_sort(
                 hidden_states,
@@ -150,6 +152,6 @@ class MoELayer(Module):
                 self.token_dispatcher.token_permutation(hidden_states, scores, indices)
             expert_output, _ = self.experts(dispatched_input, tokens_per_expert)
 
-            output, _ = self.token_dispatcher.token_unpermutation(expert_output, bias=None)
+            output, _ = self.token_dispatcher.token_unpermutation(expert_output)
         output = output.reshape(hidden_shape)
         return output, None
