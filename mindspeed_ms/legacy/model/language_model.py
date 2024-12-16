@@ -225,7 +225,7 @@ class Embedding(Module):
 
         >>> import mindspore as ms
         >>> from mindspore.communication import init
-        >>> from mindspeed_ms.core.config import TransformerConfig, ModelParallelConfig
+        >>> from mindspeed_ms.core.transformer import TransformerConfig
         >>> from mindspeed_ms.legacy.model.language_model import (
         ...     Embedding as Pynative_Embedding
         ... )
@@ -241,13 +241,12 @@ class Embedding(Module):
         >>> init()
         >>> initialize_model_parallel()
         >>> def get_config():
-        ...     parallel_config = ModelParallelConfig(tensor_model_parallel_size=1)
-        ...     config = TransformerConfig(vocab_size=1,
+        ...     config = TransformerConfig(tensor_model_parallel_size=1,
+        ...                                vocab_size=1,
         ...                                num_layers=1,
         ...                                num_attention_heads=1,
         ...                                hidden_size=1,
-        ...                                ffn_hidden_size=1,
-        ...                                parallel_config=parallel_config)
+        ...                                ffn_hidden_size=1)
         ...     return config
         >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic="ON")
         >>> x = initializer('normal', (1, 8, 4096, 64), ms.dtype.bfloat16)
@@ -452,31 +451,28 @@ class TransformerLanguageModel(Module):
             <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
             for more details.
 
+            You need to save the following codes as a python file and run command:
+            msrun --worker_num 1 --local_worker_num 1 --master_port 8848 --log_dir log --join True \
+                  --cluster_time_out 300 example.py --micro-batch-size 8 --num-layers 4 --hidden-size 64 \
+                  --num-attention-heads 4 --seq-length 32 --max-position-embeddings 32 --vocab-size 128 \
+                  --tokenizer-type NullTokenizer --no-masked-softmax-fusion --position-embedding-type rope
+
         >>> import os
         >>> import numpy as np
         >>> import mindspore as ms
         >>> from mindspore import Tensor
         >>> from mindspore.communication import init
-        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> from mindspeed_ms.legacy.model import TransformerLanguageModel
-        >>> from mindspeed_ms.core.config import (
-        ...     init_configs_from_yaml,
-        ...     TrainingConfig,
-        ...     ModelParallelConfig,
-        ...     TransformerConfig,
-        ...     DatasetConfig,
-        ... )
+        >>> from mindspeed_ms.training import core_transformer_config_from_args, get_args
+        >>> from mindspeed_ms.training.initialize import initialize_mindspeed_ms
         >>> os.environ['HCCL_BUFFSIZE'] = "1"
-        >>> CONFIG_PATH = "test_language_model.yaml"
-        >>> training_config, parallel_config, dataset_config, model_config = init_configs_from_yaml(
-        ...     CONFIG_PATH, [TrainingConfig, ModelParallelConfig, DatasetConfig, TransformerConfig]
-        ... )
-        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic="ON")
         >>> init()
-        >>> initialize_model_parallel()
-        >>> language_model = TransformerLanguageModel(model_config, encoder_attn_mask_type=None)
-        >>> input_data = Tensor(np.random.random((model_config.seq_length, model_config.seq_length)).astype(np.float32))
-        >>> label_data = Tensor(np.zeros((model_config.seq_length, model_config.seq_length)).astype(np.int32))
+        >>> initialize_mindspeed_ms()
+        >>> args = get_args()
+        >>> config = core_transformer_config_from_args(args)
+        >>> language_model = TransformerLanguageModel(config, encoder_attn_mask_type=None)
+        >>> input_data = Tensor(np.random.random((args.seq_length, args.seq_length)).astype(np.int32))
+        >>> label_data = Tensor(np.zeros((args.seq_length, args.seq_length)).astype(np.int32))
         >>> hidden_states = language_model(input_data, None, label_data)
         >>> print(hidden_states.shape)
         (32, 32, 64)
@@ -762,13 +758,14 @@ def get_language_model(config, num_tokentypes, add_pooler,
             for more details.
 
         >>> import os
-        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.core.transformer import TransformerConfig
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> from mindspeed_ms.legacy.model.language_model import get_language_model
         >>> init()
         >>> initialize_model_parallel()
-        >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=tensor_parallel)
-        >>> config = TransformerConfig(seq_length=16,
+        >>> parallel_config = ModelParallelConfig()
+        >>> config = TransformerConfig(tensor_model_parallel_size=tensor_parallel,
+        >>>                            seq_length=16,
         >>>                            vocab_size=1,
         >>>                            num_layers=1,
         >>>                            num_attention_heads=8,

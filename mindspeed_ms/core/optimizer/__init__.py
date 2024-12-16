@@ -203,23 +203,41 @@ def get_optimizer(optimizer_config, config, params=None, network=None, return_in
             ``None``.
 
     Examples:
-        >>> from mindspeed_ms.core.optimizer import get_optimizer
+        .. note::
+            Before running the following examples, you need to configure the communication environment variables.
+
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
+            You need to save the following codes as a python file and run command:
+            msrun --worker_num 1 --local_worker_num 1 --master_port 8848 --log_dir log --join True \
+                  --cluster_time_out 300 example.py --micro-batch-size 8 --num-layers 4 --hidden-size 64 \
+                  --num-attention-heads 4 --seq-length 32 --max-position-embeddings 32 --vocab-size 128 \
+                  --tokenizer-type NullTokenizer --no-masked-softmax-fusion --lr 0.0001
+
+        >>> from mindspore.communication import init
+        >>> from mindspeed_ms.core.optimizer import get_optimizer, optimizer_config_from_args
         >>> from mindspeed_ms.training import get_model
         >>> from mindspeed_ms.legacy.model.language_model import get_language_model
         >>> from mindspeed_ms.training.utils import set_weight_decay
-        >>> from mindspeed_ms.core.config import init_configs_from_yaml
-        >>> def model_provider_func(model_config, pre_process=True, post_process=True):
-        ...     network_with_loss, _ = get_language_model(config=model_config, num_tokentypes=0,
+        >>> from mindspeed_ms.training import core_transformer_config_from_args, get_args
+        >>> from mindspeed_ms.training.initialize import initialize_mindspeed_ms
+        >>> def model_provider_func(pre_process=True, post_process=True):
+        ...     config = core_transformer_config_from_args(get_args())
+        ...     network_with_loss, _ = get_language_model(config=config, num_tokentypes=0,
         ...         add_pooler=False, encoder_attn_mask_type=None, pre_process=pre_process, post_process=post_process)
         ...     return network_with_loss
-        >>> config_file = "/path/to/config/file"
-        >>> all_config = init_configs_from_yaml(config_file)
-        >>> training_config = all_config.training_config
-        >>> optimizer_config = all_config.optimizer_config
-        >>> network_with_loss = get_model(model_provider_func, training_config)
+        >>> init()
+        >>> initialize_mindspeed_ms()
+        >>> args = get_args()
+        >>> config = core_transformer_config_from_args(args)
+        >>> optimizer_config = optimizer_config_from_args(args)
+        >>> network_with_loss = get_model(model_provider_func, config)
         >>> group_params = set_weight_decay(network_with_loss.trainable_params(), optimizer_config.weight_decay)
-        >>> optimizer = get_optimizer(optimizer_config, training_config, group_params, network_with_loss,
-        >>>                           grad_allreduce_op=training_config.loss_reduction)
+        >>> optimizer = get_optimizer(optimizer_config, config, group_params, network_with_loss)
     """
     args = get_args()
     optimizer_config.zero_without_ddp = config.zero_level is not None and \

@@ -279,16 +279,37 @@ def get_model(model_provider_func, model_type, wrap_with_ddp=True):
         nn.Cell, return a pre-configured network model with the config.
 
     Examples:
-        >>> from mindspeed_ms.training import get_model
+        .. note::
+            Before running the following examples, you need to configure the communication environment variables.
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
+            You need to save the following codes as a python file and run command:
+            msrun --worker_num 1 --local_worker_num 1 --master_port 8848 --log_dir log --join True \
+                  --cluster_time_out 300 example.py --micro-batch-size 8 --num-layers 4 --hidden-size 64 \
+                  --num-attention-heads 4 --seq-length 32 --max-position-embeddings 32 --vocab-size 128 \
+                  --tokenizer-type NullTokenizer --no-masked-softmax-fusion
+
+        >>> from mindspore.communication import init
         >>> from mindspeed_ms.legacy.model.language_model import get_language_model
-        >>> from mindspeed_ms.core.config import init_configs_from_yaml
-        >>> def model_provider_func(model_config, pre_process=True, post_process=True):
-        ...     network_with_loss, _ = get_language_model(config=model_config, num_tokentypes=0,
+        >>> from mindspeed_ms.training import (
+        ...     get_model,
+        ...     get_args,
+        ...     core_transformer_config_from_args
+        ... )
+        >>> from mindspeed_ms.training.initialize import initialize_mindspeed_ms
+        >>> def model_provider_func(pre_process=True, post_process=True):
+        ...     config = core_transformer_config_from_args(get_args())
+        ...     network_with_loss, _ = get_language_model(config=config, num_tokentypes=0,
         ...         add_pooler=False, encoder_attn_mask_type=None, pre_process=pre_process, post_process=post_process)
         ...     return network_with_loss
-        >>> config_file = "/path/to/config/file"
-        >>> all_config = init_configs_from_yaml(config_file)
-        >>> network_with_loss = get_model(model_provider_func, all_config.training_config)
+        >>> init()
+        >>> initialize_mindspeed_ms()
+        >>> config = core_transformer_config_from_args(get_args())
+        >>> network_with_loss = get_model(model_provider_func, config)
     """
     args = get_args()
     args.model_type = model_type
@@ -379,24 +400,40 @@ class TrainOneStepCell(nn.Cell):
         - **global_norm** (Tensor) - A tensor means the global norm of the gradients.
 
     Examples:
-        >>> from mindspeed_ms.core.optimizer import get_optimizer
+        .. note::
+            Before running the following examples, you need to configure the communication environment variables.
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
+            You need to save the following codes as a python file and run command:
+            msrun --worker_num 1 --local_worker_num 1 --master_port 8848 --log_dir log --join True \
+                  --cluster_time_out 300 example.py --micro-batch-size 8 --num-layers 4 --hidden-size 64 \
+                  --num-attention-heads 4 --seq-length 32 --max-position-embeddings 32 --vocab-size 128 \
+                  --tokenizer-type NullTokenizer --no-masked-softmax-fusion --lr 0.0001
+
+        >>> from mindspore.communication import init
+        >>> from mindspeed_ms.core.optimizer import get_optimizer, optimizer_config_from_args
         >>> from mindspeed_ms.training import get_model, TrainOneStepCell
         >>> from mindspeed_ms.legacy.model.language_model import get_language_model
         >>> from mindspeed_ms.training.utils import set_weight_decay
-        >>> from mindspeed_ms.core.config import init_configs_from_yaml
-        >>> def model_provider_func(config, pre_process=True, post_process=True):
+        >>> from mindspeed_ms.training import core_transformer_config_from_args, get_args
+        >>> from mindspeed_ms.training.initialize import initialize_mindspeed_ms
+        >>> def model_provider_func(pre_process=True, post_process=True):
+        ...     config = core_transformer_config_from_args(get_args())
         ...     network_with_loss, _ = get_language_model(config=config, num_tokentypes=0,
         ...         add_pooler=False, encoder_attn_mask_type=None, pre_process=pre_process, post_process=post_process)
         ...     return network_with_loss
-        >>> config_file = "/path/to/config/file"
-        >>> all_config = init_configs_from_yaml(config_file)
-        >>> training_config = all_config.training_config
-        >>> optimizer_config = all_config.optimizer_config
-        >>> config = all_config.config
-        >>> network_with_loss = get_model(model_provider_func, training_config)
+        >>> init()
+        >>> initialize_mindspeed_ms()
+        >>> args = get_args()
+        >>> config = core_transformer_config_from_args(args)
+        >>> optimizer_config = optimizer_config_from_args(args)
+        >>> network_with_loss = get_model(model_provider_func, config)
         >>> group_params = set_weight_decay(network_with_loss.trainable_params(), optimizer_config.weight_decay)
-        >>> optimizer = get_optimizer(optimizer_config, training_config, group_params, network_with_loss,
-        >>>                           grad_allreduce_op=training_config.loss_reduction)
+        >>> optimizer = get_optimizer(optimizer_config, config, group_params, network_with_loss)
         >>> train_one_step_cell = TrainOneStepCell(network_with_loss, optimizer, None, config)
     """
 
@@ -642,28 +679,81 @@ def train(
             <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
             for more details.
 
-        >>> from mindspeed_ms.core.optimizer import get_optimizer
-        >>> from mindspeed_ms.training import get_model, TrainOneStepCell, train
-        >>> from mindspeed_ms.legacy.model.language_model import get_language_model
-        >>> from mindspeed_ms.training.utils import set_weight_decay
-        >>> from mindspeed_ms.core.config import init_configs_from_yaml
-        >>> def model_provider_func(model_config, pre_process=True, post_process=True):
-        ...     network_with_loss, _ = get_language_model(config=model_config, num_tokentypes=0, add_pooler=False,
-        ...         encoder_attn_mask_type=None, pre_process=pre_process, post_process=post_process)
-        ...     return network_with_loss
-        >>> config_file = "/path/to/config/file"
-        >>> all_config = init_configs_from_yaml(config_file)
-        >>> training_config = all_config.training_config
-        >>> optimizer_config = all_config.optimizer_config
-        >>> model_config = all_config.model_config
-        >>> network_with_loss = get_model(model_provider_func, training_config)
-        >>> group_params = set_weight_decay(network_with_loss.trainable_params(), optimizer_config.weight_decay)
-        >>> optimizer = get_optimizer(optimizer_config, training_config, group_params, network_with_loss,
-        >>>                           grad_allreduce_op=training_config.loss_reduction)
-        >>> train_one_step_cell = TrainOneStepCell(network_with_loss, optimizer, None, training_config, model_config)
-        >>> train_dataset_iterator, val_dataset_iterator = get_dataset(all_config.dataset_config)
-        >>> train(train_one_step_cell=train_one_step_cell, train_dataloader=train_dataloader,
-        >>>       training_config=training_config)
+            You need to save the following codes as a python file and run command:
+            msrun --worker_num 1 --local_worker_num 1 --master_port 8848 --log_dir log --join True \
+                  --cluster_time_out 300 example.py --micro-batch-size 8 --num-layers 4 --hidden-size 64 \
+                  --num-attention-heads 4 --seq-length 32 --max-position-embeddings 32 --vocab-size 128 \
+                  --tokenizer-type NullTokenizer --no-masked-softmax-fusion --train-iters 1 \
+                  --position-embedding-type rope
+
+        >>> from functools import partial
+        >>> import numpy as np
+        >>> import mindspore as ms
+        >>> import mindspore.dataset as ds
+        >>> from mindspore.communication import init
+        >>> from mindspeed_ms.training import (
+        ...     get_args,
+        ...     core_transformer_config_from_args,
+        ...     TrainOneStepCell,
+        ...     train
+        ... )
+        >>> from mindspeed_ms.training.initialize import initialize_mindspeed_ms
+        >>> from mindspeed_ms.training.utils import average_losses_across_data_parallel_group
+        >>> from mindspeed_ms.legacy.model import TransformerLanguageModel
+        >>> from mindspore.nn import Adam, SoftmaxCrossEntropyWithLogits
+        >>> def loss_func(loss_mask, output_tensor):
+        >>>     args = get_args()
+        >>>     losses = output_tensor.float()
+        >>>     loss_mask = loss_mask.view(-1).float()
+        >>>     loss = ms.mint.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+        >>>     average_loss = average_losses_across_data_parallel_group([loss])
+        >>>     return loss * args.context_parallel_size, {'lm loss': average_loss[0]}
+        >>> def forward_step(data_iterator, model):
+        >>>     input_data, labels, attention_mask = next(data_iterator).values()
+        >>>     loss_mask = ms.mint.ones_like(labels)
+        >>>     loss_mask = ms.ops.sum(loss_mask, dim=-1, keepdim=False)
+        >>>     input_tensor = (input_data, attention_mask, labels)
+        >>>     def core_forward_func(*args):
+        >>>         input_data, attention_mask, labels = args
+        >>>         output_tensor = model(input_data, attention_mask, labels)
+        >>>         return output_tensor
+        >>>     return input_tensor, core_forward_func, partial(loss_func, loss_mask)
+        >>> class TestData:
+        ...     def __init__(self, data_num, seq_length):
+        ...         input_data = np.random.randint(0, 100, (data_num, seq_length + 1))
+        ...         self.input_data = input_data[:, :-1]
+        ...         self.labels = input_data[:, 1:]
+        ...         ones = np.ones((data_num, 1, seq_length, seq_length), dtype=np.int32)
+        ...         self.attention_mask = np.tril(ones)
+        ...     def __getitem__(self, index):
+        ...         return ms.Tensor(self.input_data[index], dtype=ms.int32), \
+        ...             ms.Tensor(self.labels[index], dtype=ms.float32), \
+        ...             ms.Tensor(self.attention_mask[index], dtype=ms.int32)
+        ...     def __len__(self):
+        ...         return self.input_data.shape[0]
+        >>> class LanguageModelNet(ms.nn.Cell):
+        ...     def __init__(self, config):
+        ...         super().__init__()
+        ...         self.config = config
+        ...         self.language_model = TransformerLanguageModel(config, encoder_attn_mask_type=None)
+        ...         self.loss = SoftmaxCrossEntropyWithLogits(reduction="mean")
+        ...     def construct(self, input_ids, attention_mask, labels):
+        ...         hidden_states = self.language_model(input_ids, None, attention_mask)
+        ...         output = ms.ops.sum(hidden_states, dim=-1, keepdim=False)
+        ...         return self.loss(output, labels)
+        >>> init()
+        >>> initialize_mindspeed_ms()
+        >>> args = get_args()
+        >>> args.wrap_with_ddp = False
+        >>> args.data_layout = "BSH"
+        >>> config = core_transformer_config_from_args(args)
+        >>> dataset = TestData(data_num=16, seq_length=args.seq_length)
+        >>> fake_dataset = ds.GeneratorDataset(dataset, column_names=['input_ids', 'labels', 'attention_mask'],
+        >>>                                    shuffle=False).batch(args.global_batch_size)
+        >>> network = LanguageModelNet(config)
+        >>> optimizer = Adam(params=network.trainable_params(), learning_rate=0.001, beta1=0.9, beta2=0.95)
+        >>> train_one_step_cell = TrainOneStepCell(network, optimizer, None, config)
+        >>> train(train_one_step_cell, fake_dataset, forward_step)
     """
     if process_non_loss_data_func is not None:
         raise NotImplementedError("process_non_loss_data_func is not supported for now.")

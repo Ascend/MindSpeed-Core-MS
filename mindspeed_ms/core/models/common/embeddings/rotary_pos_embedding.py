@@ -71,7 +71,7 @@ class RotaryEmbedding(Module):
         >>> from mindspore import Tensor
         >>> from mindspore.communication import init
         >>> from mindspore import ops
-        >>> from mindspeed_ms.core.config import TransformerConfig
+        >>> from mindspeed_ms.core.transformer import TransformerConfig
         >>> from mindspeed_ms.core.models.common.embeddings.rotary_pos_embedding import (
         ...     RotaryEmbedding,
         ...     apply_rotary_pos_emb

@@ -94,8 +94,12 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         ... RowParallelLinear)
         >>> from mindspeed_ms.core.parallel_state import (initialize_model_parallel,
         ... get_data_parallel_world_size, get_data_parallel_rank, get_data_parallel_group)
-        >>> from mindspeed_ms.core.config import (OptimizerConfig, ModelParallelConfig,
-        ... TransformerConfig, TrainingConfig)
+        >>> from mindspeed_ms.training import (
+        ...     get_args,
+        ...     core_transformer_config_from_yaml,
+        ...     core_transformer_config_from_args
+        ... )
+        >>> from mindspeed_ms.training.initialize import initialize_mindspeed_ms
         >>> from mindspeed_ms.core.distributed import (DistributedDataParallel,
         ... DistributedDataParallelConfig)
         >>> from mindspeed_ms.core.optimizer.distrib_optimizer import DistributedOptimizer
@@ -106,10 +110,10 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         ...         hidden_size = config.hidden_size
         ...         self.columnlinear = ColumnParallelLinear(input_size=hidden_size, output_size=hidden_size,
         ...                                                  config=config, init_method=config.init_method,
-        ...                                                  bias=config.add_mlp_bias, gather_output=False,
+        ...                                                  bias=config.add_bias_linear, gather_output=False,
         ...                                                  skip_bias_add=False, bias_init=config.bias_init)
         ...         self.rowlinear = RowParallelLinear(input_size=hidden_size, output_size=hidden_size, config=config,
-        ...                                            init_method=config.init_method, bias=config.add_mlp_bias,
+        ...                                            init_method=config.init_method, bias=config.add_bias_linear,
         ...                                            input_is_parallel=True, skip_bias_add=False,
         ...                                            bias_init=config.bias_init)
         ...         self.loss = SoftmaxCrossEntropyWithLogits()
@@ -121,10 +125,16 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         ...         loss = self.loss(output, label_)
         ...         return loss
         ...
+        >>> initialize_mindspeed_ms()
+        >>> args = get_args()
+        >>> if args.yaml_cfg is not None:
+        >>>     config = core_transformer_config_from_yaml(args)
+        >>> else:
+        >>>     config = core_transformer_config_from_args(args)
+        >>> optimizer_config = optimizer_config_from_args(args)
         >>> ms.set_context(device_target='Ascend', mode=ms.PYNATIVE_MODE)
         >>> ms.set_seed(2024)
         >>> init()
-        >>> initialize_model_parallel(tensor_model_parallel_size=2)
         >>> batch_size = 1
         >>> dataset_size = 6
         >>> seq_length = 8
@@ -138,18 +148,10 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         >>>                               num_shards=get_data_parallel_world_size(),
         >>>                               shard_id=get_data_parallel_rank())
         >>> dataset = dataset.batch(batch_size)
-        >>> parallel_config = ModelParallelConfig()
-        >>> training_config = TrainingConfig(parallel_config=parallel_config)
-        >>> optimizer_config = OptimizerConfig(parallel_config=parallel_config)
-        >>> model_config = TransformerConfig(vocab_size=40000, num_layers=1, num_attention_heads=1, add_mlp_bias=True,
-        >>>                                  gated_linear_unit=False, hidden_size=hidden_size,
-        >>>                                  ffn_hidden_size=4*hidden_size, hidden_act='gelu',
-        >>>                                  parallel_config=parallel_config, params_dtype='float32',
-        >>>                                  compute_dtype='float32')
         >>> ddp_config = DistributedDataParallelConfig(overlap_grad_reduce=True, use_distributed_optimizer=True,
         >>>     bucket_size=bucket_size, average_in_collective=True, enable_mem_align=True)
-        >>> network = TestNet2(config=model_config)
-        >>> network_with_ddp = DistributedDataParallel(config=training_config, ddp_config=ddp_config, module=network)
+        >>> network = TestNet2(config=config)
+        >>> network_with_ddp = DistributedDataParallel(config=config, ddp_config=ddp_config, module=network)
         >>> optimizer = AdamW(params=network_with_ddp.get_parameters(), lr=1.0)
         >>> optimizer = DistributedOptimizer(optimizer=optimizer, config=optimizer_config, grad_scaler=None,
         >>>     init_state_fn=None, per_model_buffers=network_with_ddp.buffers,
