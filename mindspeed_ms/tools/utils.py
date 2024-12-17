@@ -688,6 +688,8 @@ def is_pynative():
 def barrier_world(action: str = None):
     """barrier all rank until action is done"""
     from mindspore.common.api import _pynative_executor
+    from mindspeed_ms.training import get_args
+    args = get_args()
     if get_real_group_size() > 1:
         from .logger import logger
         if action is not None:
@@ -695,7 +697,11 @@ def barrier_world(action: str = None):
         else:
             logger.info("Now barriered...")
 
-        comm_func.barrier()
+        if args.use_dist_ckpt:
+            comm_func.barrier()
+        else:
+            from mindspeed_ms.core import mpu
+            comm_func.barrier(group=mpu.get_model_parallel_group())
         _pynative_executor.sync()
 
 
