@@ -121,13 +121,13 @@ def get_sp_params(config: TransformerConfig):
         sp_params = ["norm", "mlp.projection.bias", "attention.out_proj.bias",
                      "attention.linear_proj.bias", "mlp.linear_fc2.bias"]
     return sp_params
+
 def rename_set_hidden_states_parameter(model, model_chunk_id=None):
     """ rename set_hidden_states parameter """
     weight_untrainable = model.untrainable_params()
     for param in weight_untrainable:
         if "set_hidden_states" in param.name:
             param.name = param.name + f"_{model_chunk_id}_chunk"
-
 
 def model_zero_grad_buffer(model, wrap_with_ddp):
     """ zero grad buffer if wrap_with_ddp=True """
@@ -165,11 +165,12 @@ class ParallelTrainingReducer:
             "tp": False,
         }
 
+        self.with_context_parallel = mpu.get_context_parallel_world_size() > 1
         self.sp_reduce_params = get_sp_params(config)
         self.expert_params = ["mlp.experts.local_experts"]
 
         # dp
-        if mpu.get_data_parallel_world_size() > 1:
+        if mpu.get_data_parallel_world_size(with_context_parallel=self.with_context_parallel) > 1:
             self.enable_loss_reduce["dp"] = True
             if config.zero_level is None \
                 and not args.wrap_with_ddp:
@@ -202,7 +203,7 @@ class ParallelTrainingReducer:
         if self.enable_grad_reduce["ep-dp"] and self.expert_filter[idx]:
             group = mpu.get_data_modulo_expert_parallel_group()
         else:
-            group = mpu.get_data_parallel_group()
+            group = mpu.get_data_parallel_group(with_context_parallel=self.with_context_parallel)
         return group
 
     def inplace_reduce_dp_grad(self, grads, params=None):
@@ -214,12 +215,16 @@ class ParallelTrainingReducer:
                         continue
                     group = self.get_reduce_group(idx)
                     param.grad = comm_func.all_reduce(param.grad, "sum", group)[0]
-                    param.grad = mint.div(param.grad, mpu.get_data_parallel_world_size())
+                    param.grad = mint.div(param.grad, mpu.get_data_parallel_world_size(
+                        with_context_parallel=self.with_context_parallel
+                    ))
             else:
                 for idx, grad in enumerate(grads):
                     group = self.get_reduce_group(idx)
                     grads[idx] = mint.div(
-                        comm_func.all_reduce(grad, "sum", group)[0], mpu.get_data_parallel_world_size())
+                        comm_func.all_reduce(grad, "sum", group)[0], mpu.get_data_parallel_world_size(
+                            with_context_parallel=self.with_context_parallel
+                        ))
 
     def inplace_reduce_sp_grad(self, grads, params=None):
         """Reduce the gradients in sequence parallel mode over tp group."""
@@ -250,7 +255,9 @@ class ParallelTrainingReducer:
         if self.enable_grad_flag_reduce["pp"]:
             overflow = comm_func.all_reduce(overflow, "max", mpu.get_pipeline_model_parallel_group())[0]
         if self.enable_grad_flag_reduce["dp"]:
-            overflow = comm_func.all_reduce(overflow, "max", mpu.get_data_parallel_group())[0]
+            overflow = comm_func.all_reduce(overflow, "max", mpu.get_data_parallel_group(
+                with_context_parallel=self.with_context_parallel
+            ))[0]
         if self.enable_grad_flag_reduce["tp"]:
             overflow = comm_func.all_reduce(overflow, "max", mpu.get_tensor_model_parallel_group())[0]
 
@@ -261,7 +268,9 @@ class ParallelTrainingReducer:
         if self.enable_grad_flag_reduce["pp"]:
             is_finite = comm_func.all_reduce(is_finite, "prod", mpu.get_pipeline_model_parallel_group())[0]
         if self.enable_grad_flag_reduce["dp"]:
-            is_finite = comm_func.all_reduce(is_finite, "prod", mpu.get_data_parallel_group())[0]
+            is_finite = comm_func.all_reduce(is_finite, "prod", mpu.get_data_parallel_group(
+                with_context_parallel=self.with_context_parallel
+            ))[0]
         if self.enable_grad_flag_reduce["tp"]:
             is_finite = comm_func.all_reduce(is_finite, "prod", mpu.get_tensor_model_parallel_group())[0]
         return is_finite.astype(mstype.bool_)

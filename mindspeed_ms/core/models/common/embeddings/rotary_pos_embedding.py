@@ -27,6 +27,40 @@ from mindspeed_ms.core.transformer.transformer_block import TransformerBlock
 from mindspeed_ms.core import parallel_state
 
 
+def get_pos_emb_on_this_cp_rank(pos_emb, seq_dim):
+    """
+    Retrieve the positional embedding for the current compute node (CP rank).
+    """
+    args = get_args()
+    if args.context_parallel_algo == 'megatron_cp_algo':
+        if args.cp_attention_mask_type == 'general':
+            pos_emb = _get_pos_emb_on_this_cp_rank_in_ulysses_cp(pos_emb, seq_dim)
+        else:
+            pos_emb = _get_pos_emb_on_this_cp_rank_in_megatron_cp(pos_emb, seq_dim)
+    elif args.context_parallel_algo == 'ulysses_cp_algo':
+        pos_emb = _get_pos_emb_on_this_cp_rank_in_ulysses_cp(pos_emb, seq_dim)
+    elif args.context_parallel_algo == 'hybrid_cp_algo':
+        raise ValueError(f"Only megatron_cp_algo and ulysses_cp_algo supported")
+    return pos_emb
+
+def _get_pos_emb_on_this_cp_rank_in_ulysses_cp(pos_emb, seq_dim):
+    cp_size = parallel_state.get_context_parallel_world_size()
+    cp_rank = parallel_state.get_context_parallel_rank()
+    pos_emb = ops.chunk(pos_emb, cp_size, seq_dim)[cp_rank]
+
+    return pos_emb
+
+def _get_pos_emb_on_this_cp_rank_in_megatron_cp(pos_emb, seq_dim):
+    cp_size = parallel_state.get_context_parallel_world_size()
+    cp_rank = parallel_state.get_context_parallel_rank()
+    cp_idx = Tensor([cp_rank, (2 * cp_size - cp_rank - 1)], ms.int32)
+    pos_emb = pos_emb.view(
+        *pos_emb.shape[0:seq_dim], 2 * cp_size, -1, *pos_emb.shape[(seq_dim + 1):]
+    )
+    pos_emb = ops.index_select(pos_emb, seq_dim, cp_idx)
+    pos_emb = pos_emb.view(*pos_emb.shape[0:seq_dim], -1, *pos_emb.shape[(seq_dim + 2) :])
+    return pos_emb
+
 class RotaryEmbedding(Module):
     r"""
     Rotary positional embedding for language model.
@@ -175,9 +209,10 @@ class RotaryEmbedding(Module):
         # emb [S, ..., D]
         emb = emb[:, None, None, :]
         if parallel_state.get_context_parallel_world_size() > 1:
-            raise NotImplementedError('Rotary is not supported context parallel for now.')
-
+            # slice rotary_pos_emb along sequence dimension and select the partition of the current CP rank
+            emb = get_pos_emb_on_this_cp_rank(emb, 0)
         return Tensor(emb)
+
 
     def get_rotary_seq_len(
             self,

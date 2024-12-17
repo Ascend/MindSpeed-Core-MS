@@ -13,206 +13,172 @@
 # limitations under the License.
 # ============================================================================
 """Test Ring Attention."""
+import random
 import math
+import logging
 import numpy as np
 
 import mindspore as ms
-from mindspore.communication import init
-from mindspore.common import dtype as mstype
-from mindspore import ops
-from mindspore.common.tensor import Tensor
-from mindspore.ops.auto_generate.gen_ops_prim import FlashAttentionScore
-
-from mindspeed_ms.training import parse_args
-from mindspeed_ms.training.global_vars import set_global_variables
-from mindspeed_ms.training.yaml_arguments import validate_yaml
-from mindspeed_ms.core.context_parallel.utils import get_sp_chuncks, \
-    get_sp_chuncks_attn_mask_general, get_sp_chuncks_general
-from mindspeed_ms.core.parallel_state import initialize_model_parallel
+from mindspore import Tensor, ops, value_and_grad, mint
+from mindspore import dtype as mstype
+from mindspore.communication.management import init, get_rank
+from mindspore.ops.operations.nn_ops import FlashAttentionScore
 from mindspeed_ms.core.context_parallel.ring_attention import RingAttention
+from mindspeed_ms.core.parallel_state import initialize_model_parallel
+from mindspeed_ms.training import parse_args
+from mindspeed_ms.training.global_vars import get_args, set_global_variables
+from mindspeed_ms.training.yaml_arguments import validate_yaml
 
+logging.basicConfig(level=logging.INFO)
 
-def generate_inputs(b, n1, n2, s1, s2, d1, input_layout,
-                    dtype, return_tensor=True):
-    '''generate inputs'''
-    min_value = -1
-    max_value = 1
-    np.random.seed(42)
-    if input_layout == "BSH":
-        query = np.random.uniform(min_value, max_value, [b, s1, n1 * d1])
-        key = np.random.uniform(min_value, max_value, [b, s2, n2 * d1])
-        value = np.random.uniform(min_value, max_value, [b, s2, n2 * d1])
-    elif input_layout == "BNSD":
-        query = np.random.uniform(min_value, max_value, [b, n1, s1, d1])
-        key = np.random.uniform(min_value, max_value, [b, n2, s2, d1])
-        value = np.random.uniform(min_value, max_value, [b, n2, s2, d1])
-    elif input_layout == "SBH":
-        query = np.random.uniform(min_value, max_value, [s1, b, n1 * d1])
-        key = np.random.uniform(min_value, max_value, [s2, b, n2 * d1])
-        value = np.random.uniform(min_value, max_value, [s2, b, n2 * d1])
-    elif input_layout == "BSND":
-        query = np.random.uniform(min_value, max_value, [b, s1, n1, d1])
-        key = np.random.uniform(min_value, max_value, [b, s2, n2, d1])
-        value = np.random.uniform(min_value, max_value, [b, s2, n2, d1])
-    elif input_layout == "TND":
-        query = np.random.uniform(min_value, max_value, [b * s1, n1, d1])
-        key = np.random.uniform(min_value, max_value, [b * s2, n2, d1])
-        value = np.random.uniform(min_value, max_value, [b * s2, n2, d1])
+def set_random_seed(seed):
+    '''set random seed'''
+    random.seed(seed)
+    np.random.seed(seed)
+    ms.set_seed(seed)
+
+class FlashSelfAttention(ms.nn.Cell):
+    '''Flash Self Attention Net'''
+    def __init__(self, head_num, input_layout, scale):
+        super(FlashSelfAttention, self).__init__()
+
+        self.flash_attention = FlashAttentionScore(head_num=head_num,
+                                                   input_layout=input_layout,
+                                                   scale_value=scale)
+
+    def construct(self, *inputs):
+        '''construct.'''
+        output = self.flash_attention(*inputs)
+        return output[-1]
+
+def get_data_on_this_cp_rank(data, r_size, u_size, cp_rank, dim=0):
+    '''get data on this cp rank'''
+    cp_size = r_size * u_size
+    # pylint: disable=W0621
+    args = get_args()
+    if args.context_parallel_algo == "ulysses_cp_algo":
+        data = data.chunk(cp_size, axis=dim)[cp_rank]
+    elif args.context_parallel_algo == "megatron_cp_algo":
+        data = data.view(*data.shape[0:dim], 2 * cp_size, data.shape[dim] // (2 * cp_size), *data.shape[dim+1:])
+        index = ms.tensor([cp_rank, (2 * cp_size - cp_rank - 1)])
+        data = mint.index_select(data, dim, index)
+        data = data.view(*data.shape[0:dim], -1, *data.shape[dim+2:])
     else:
-        raise ValueError(f"input_layout is invalid.")
-    alibi_mask = None
-    prefix = None
-    drop_mask = None
-    attn_mask = None
-    padding_mask = None
-    if return_tensor:
-        return Tensor(query, dtype=dtype), Tensor(key, dtype=dtype), Tensor(value, dtype=dtype), alibi_mask, \
-            drop_mask, padding_mask, attn_mask, prefix
-    return query, key, value, alibi_mask, drop_mask, padding_mask, attn_mask, prefix
+        r_rank = cp_rank // u_size
+        u_rank = cp_rank % u_size
+        data = data.view(*data.shape[0:dim], 2 * r_size, data.shape[dim] // (2 * r_size), *data.shape[dim+1:])
+        index = ms.tensor([r_rank, (2 * r_size - r_rank - 1)])
+        data = mint.index_select(data, dim, index)
+        data = data.view(*data.shape[0:dim], -1, *data.shape[dim+2:])
+        data = data.chunk(u_size, axis=dim)[u_rank]
+    return data
 
+def get_data_on_this_cp_rank_general(data, r_size, u_size, cp_rank, dim=0):
+    '''get data on this rank general'''
+    cp_size = r_size * u_size
+    data = data.chunk(cp_size, axis=dim)[cp_rank]
+    return data
 
-def _count_unequal_element(data_expected, data_me, rtol, atol):
-    """Statistics error location and ratio"""
-    assert data_expected.shape == data_me.shape
-    total_count = len(data_expected.flatten())
-    error = np.abs(data_expected - data_me)
-    greater = np.greater(error, atol + np.abs(data_me) * rtol)
-    nan_diff = np.not_equal(np.isnan(data_expected), np.isnan(data_me))
-    inf_diff = np.not_equal(np.isinf(data_expected), np.isinf(data_me))
-    neginf_diff = np.not_equal(np.isneginf(
-        data_expected), np.isneginf(data_me))
-    greater = greater + nan_diff + inf_diff + neginf_diff
-    loss_count = np.count_nonzero(greater)
-    print(
-        "data_expected_std:{0}\ndata_me_error:{1}\ngap:{2}\nerror_percent_num:{3}\nerror_percent_max:{4}".format(
-            data_expected[greater],
-            data_me[greater],
-            error[greater],
-            str(loss_count / total_count),
-            np.max(np.abs(error[greater] / data_expected[greater])),
-        )
-    )
-    assert (
-        loss_count / total_count
-    ) < rtol, "\ndata_expected_std:{0}\ndata_me_error:{1}\ngap:{2}\nerror_percent:{3}".format(
-        data_expected[greater],
-        data_me[greater],
-        error[greater],
-        str(loss_count / total_count),
-    )
+def get_attnmask_on_this_cp_rank_general(data, r_size, u_size, cp_rank, dim=0):
+    '''get attnmask on this rank general'''
+    # pylint: disable=W0621
+    args = get_args()
+    attnmask = None
+    if args.context_parallel_algo != "ulysses_cp_algo":
+        attnmask = data.chunk(r_size, axis=dim)[cp_rank//u_size]
+    return attnmask
 
+# pylint: disable=W0621
+def run_ringattn_cp(args, dtype):
+    '''Run RingAttention cp test'''
+    ms.set_context(device_target='Ascend', mode=ms.PYNATIVE_MODE,
+                   deterministic='ON', pynative_synchronize=True)
+    cp_size = args.context_parallel_size
+    print("args.context_parallel_size: ", args.context_parallel_size)
+    args.context_parallel_algo = "megatron_cp_algo"
+    u_size = 1
+    r_size = cp_size
 
-def allclose_nparray(data_expected, data_me, rtol, atol, equal_nan=True):
-    if not np.allclose(data_expected, data_me, rtol,
-                       atol, equal_nan=equal_nan):
-        _count_unequal_element(data_expected, data_me, rtol, atol)
-    else:
-        assert np.array(data_expected).shape == np.array(data_me).shape
+    seq_len = args.seq_length
+    logging.info("Step 1: Setting random seed.")
+    set_random_seed(1234)
 
-
-def test_ring_attention():
-    """
-    Feature: Test RingAttention.
-    Description: Test RingAttention functional.
-    Expectation: Success.
-    """
-    ms.set_context(device_target="Ascend",
-                   mode=ms.PYNATIVE_MODE, deterministic='ON')
-
+    logging.info("Step 2: initialize model parallel.")
     init()
+    initialize_model_parallel(context_parallel_size=cp_size)
+    logging.info("initialize model parallel succeeded!")
 
-    # Init parameter
-    # dp = 1 # Automatically calculated
-    sp = 8
-    initialize_model_parallel(context_parallel_size=sp)
+    rank_id = get_rank()
 
-    bs = 16
-    n = 8
-    s = 4096
-    hidden_size = 128
-    scale = 1.0 / math.sqrt(hidden_size)
-    test_layout = "BSH"
-    test_mask_type = "causal"
-    test_dtype = mstype.float16
-    query_output, key_output, value_output, alibi_mask_output, drop_mask_output, \
-        padding_mask_output, ring_attn_mask_output, prefix_out = generate_inputs(bs, n, n, s, s,
-                                                                                 hidden_size, test_layout,
-                                                                                 test_dtype)
-    if test_layout == "SBH":
-        # batch_dim_ = 1
-        seq_dim_ = 0
-    elif test_layout == "BSH":
-        # batch_dim_ = 0
-        seq_dim_ = 1
-    elif test_layout == "BNSD":
-        # batch_dim_ = 0
-        seq_dim_ = 2
-    if test_mask_type == "causal":
-        q2 = get_sp_chuncks(query_output, test_layout,
-                            enable_dp_shard=True, enable_flash_sp=False)
-        k2 = get_sp_chuncks(key_output, test_layout,
-                            enable_dp_shard=True, enable_flash_sp=False)
-        v2 = get_sp_chuncks(value_output, test_layout,
-                            enable_dp_shard=True, enable_flash_sp=False)
+    b, n, s, d = 2, args.num_attention_heads, seq_len, 128
+    scale = 1.0 / math.sqrt(d)
+
+    attn_mask_type = "causal" # causal user_defined
+    attn_mask_np = ~np.tril(np.ones((seq_len, seq_len), dtype=bool))
+    attn_mask_ms_whole = Tensor(attn_mask_np, dtype=ms.bool_)
+
+    q_ms = Tensor(np.random.randn(s, b, n * d), dtype=dtype)
+    k_ms = Tensor(np.random.randn(s, b, n * d), dtype=dtype)
+    v_ms = Tensor(np.random.randn(s, b, n * d), dtype=dtype)
+
+    logging.info("Step 3: Calculating full attention output.")
+    core_attention_whole = FlashSelfAttention(head_num=n,
+                                              input_layout='SBH',
+                                              scale=scale)
+    grad_fn = value_and_grad(core_attention_whole, grad_position=(0, 1, 2))
+    out_whole, grads_whole = grad_fn(q_ms, k_ms, v_ms, None, None, None, attn_mask_ms_whole)
+    kdgrad_whole, vdgrad_whole = grads_whole[1:]
+    if attn_mask_type == "user_defined":
+        out_whole_ = get_data_on_this_cp_rank_general(out_whole, r_size, u_size, rank_id)
+        kdgrad_whole_ = get_data_on_this_cp_rank_general(kdgrad_whole, r_size, u_size, rank_id)
+        vdgrad_whole_ = get_data_on_this_cp_rank_general(vdgrad_whole, r_size, u_size, rank_id)
     else:
-        q2 = get_sp_chuncks_general(query_output, test_layout)
-        k2 = get_sp_chuncks_general(key_output, test_layout)
-        v2 = get_sp_chuncks_general(value_output, test_layout)
+        out_whole_ = get_data_on_this_cp_rank(out_whole, r_size, u_size, rank_id)
+        kdgrad_whole_ = get_data_on_this_cp_rank(kdgrad_whole, r_size, u_size, rank_id)
+        vdgrad_whole_ = get_data_on_this_cp_rank(vdgrad_whole, r_size, u_size, rank_id)
 
-    if test_mask_type == "user_defined":
-        np.random.seed(112)
-        ring_attn_mask = Tensor(np.random.randint(0, 2, size=(s, s)))
-        ring_attn_mask = ring_attn_mask.astype(ms.uint8)
-
-        ring_attn_mask_output = get_sp_chuncks_attn_mask_general(ring_attn_mask)
-    ring_attention = RingAttention(head_num=n,
-                                   input_layout=test_layout,
-                                   scale_value=scale)
-
-    if test_mask_type == "user_defined":
-        ring_attention_output = ring_attention(q2, k2, v2, ring_attn_mask_output, alibi_mask_output, prefix_out,
-                                               padding_mask_output)
+    logging.info("Step 4: Calculating context parallel attention output.")
+    if attn_mask_type == "user_defined":
+        q_ = get_data_on_this_cp_rank_general(q_ms, r_size, u_size, rank_id)
+        k_ = get_data_on_this_cp_rank_general(k_ms, r_size, u_size, rank_id)
+        v_ = get_data_on_this_cp_rank_general(v_ms, r_size, u_size, rank_id)
     else:
-        ring_attention_output = ring_attention(q2, k2, v2, ring_attn_mask_output, alibi_mask_output, prefix_out,
-                                               padding_mask_output, test_mask_type)
+        q_ = get_data_on_this_cp_rank(q_ms, r_size, u_size, rank_id)
+        k_ = get_data_on_this_cp_rank(k_ms, r_size, u_size, rank_id)
+        v_ = get_data_on_this_cp_rank(v_ms, r_size, u_size, rank_id)
 
-    if test_mask_type == "full":
-        flash_attn_mask = None
-    elif test_mask_type == "causal":
-        flash_attn_mask = ops.ones(
-            (query_output.shape[seq_dim_], key_output.shape[seq_dim_]), dtype=mstype.uint8)
-        flash_attn_mask = ops.triu(flash_attn_mask, diagonal=1)
-    else:
-        flash_attn_mask = ring_attn_mask
-    flash_attention = FlashAttentionScore(
-        head_num=n, input_layout=test_layout, scale_value=scale)
-    _, _, _, flash_attention_output = flash_attention(query_output,
-                                                      key_output,
-                                                      value_output,
-                                                      alibi_mask_output,
-                                                      drop_mask_output,
-                                                      padding_mask_output,
-                                                      flash_attn_mask)
+    attn_mask_ms_ = None
+    if attn_mask_type == "user_defined":
+        attn_mask_ms_ = get_attnmask_on_this_cp_rank_general(attn_mask_ms_whole, r_size, u_size, rank_id)
 
-    if test_mask_type == "causal":
-        flash_attention_output = get_sp_chuncks(
-            flash_attention_output, test_layout, enable_dp_shard=True, enable_flash_sp=False)
-    else:
-        flash_attention_output = get_sp_chuncks_general(flash_attention_output, test_layout)
-    ring_attention_output = ms.ops.cast(ring_attention_output, mstype.float16)
+    core_attention = RingAttention(head_num=n, input_layout='SBH', scale_value=scale)
+    grad_fn = value_and_grad(core_attention, grad_position=(0, 1, 2))
+    out_, grads = grad_fn(q_, k_, v_, attn_mask_ms_)
+    kdgrad_, vdgrad_ = grads[1:]
 
-    tols = dict(atol=1e-3, rtol=1e-3)
-    allclose_nparray(
-        flash_attention_output.asnumpy(),
-        ring_attention_output.asnumpy(),
-        **tols,
-        equal_nan=True)
+    logging.info("Step 5: context parallel attention output output calculated.")
+    tols = {'atol': 5e-3, 'rtol': 5e-3}
+    if dtype == ms.bfloat16:
+        tols = {'atol': 2.5e-2, 'rtol': 2.5e-2}
 
-    print("Test case success!", flush=True)
+    out_is_close = ops.isclose(out_, out_whole_, rtol=tols['rtol'], atol=tols['atol'])
+    k_grad_is_close = ops.isclose(kdgrad_, kdgrad_whole_, rtol=tols['rtol'], atol=tols['atol'])
+    v_grad_is_close = ops.isclose(vdgrad_, vdgrad_whole_, rtol=tols['rtol'], atol=tols['atol'])
 
+    assert out_is_close.all(), "output tensors are not close enough"
+    assert k_grad_is_close.all(), "kdgrad tensors are not close enough"
+    assert v_grad_is_close.all(), "vdgrad tensors are not close enough"
+    logging.info("Test completed successfully.")
+class TestRingAttnCP:
+
+    # pylint: disable=W0621
+    def test_ringattn_context_parallel_seq8192_bs2_bf16(self, args):
+        logging.info("test_ring_context_parallel_seq8192_bs2_bf16")
+        run_ringattn_cp(args, mstype.bfloat16)
 
 if __name__ == "__main__":
     args, defaults = parse_args()
     args = validate_yaml(args, defaults, {})
     set_global_variables(args, False)
-    test_ring_attention()
+    test_instance = TestRingAttnCP()
+    test_instance.test_ringattn_context_parallel_seq8192_bs2_bf16(args)

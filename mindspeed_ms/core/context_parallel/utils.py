@@ -13,11 +13,12 @@
 # limitations under the License.
 # ============================================================================
 """Ring Attention utils."""
-import numpy as np
 
+import mindspore as ms
 from mindspore import Tensor
 from mindspore import ops
 from mindspore.communication import get_group_size, get_rank
+from mindspeed_ms.training.global_vars import get_args
 
 from mindspeed_ms.core.parallel_state import get_context_parallel_rank, \
     get_data_parallel_world_size, get_context_parallel_world_size
@@ -223,93 +224,88 @@ def get_sp_chuncks_attn_mask_general(attn_mask):
     return attn_mask
 
 
-def get_batch_on_this_cp_rank_with_ringattention(
-        input_ids, labels, attention_mask):
+def get_batch_on_this_cp_rank(batch, enable_flash_sp=False):
     """
-    Transformed batch data to support ringattention.
+    Retrieve the batch data for the current compute node (CP rank).
+    This function further slices the batch tensor along the sequence
+    dimension to obtain the data for the current sequence parallel rank.
+    The sliced batch tensor is then returned.
     """
-    return get_batch_on_this_cp_rank(
-        input_ids, labels, attention_mask, enable_flash_sp=False)
+    args = get_args()
+    cp_size = get_context_parallel_world_size()
+    if not cp_size > 1:
+        return batch
 
+    if args.context_parallel_algo == 'megatron_cp_algo':
+        if args.cp_attention_mask_type == 'general' or enable_flash_sp:
+            batch = _get_batch_on_this_cp_rank_in_megatron_cp_general(batch)
+        else:
+            batch = _get_batch_on_this_cp_rank_in_megatron_cp(batch, enable_flash_sp=False)
+    elif args.context_parallel_algo == 'ulysses_cp_algo':
+        batch = _get_batch_on_this_cp_rank_in_ulysses_cp(batch)
+    return batch
 
-def get_batch_on_this_cp_rank_with_flashsp(input_ids, labels, attention_mask):
+def _get_batch_on_this_cp_rank_in_megatron_cp(batch, enable_flash_sp=False):
     """
-    Transformed batch data to support flashsp.
+    Retrieve the batch data for the current compute node (CP rank).
+    To support ring attention or flash sp with causal attention mask.
     """
-    return get_batch_on_this_cp_rank(
-        input_ids, labels, attention_mask, enable_flash_sp=True)
-
-
-def get_batch_on_this_cp_rank(
-        input_ids, labels, attention_mask, enable_flash_sp=True):
-    """
-    Transformed batch data to support sequence parallelism.
-    """
-    sp_size = get_context_parallel_world_size()
-    if sp_size > 1:
-        sp_rank = get_context_parallel_rank()
-        for i in range(3):
-            if i == 0:
-                val = input_ids
-                seq_dim = 1
-            elif i == 1:
-                val = labels
-                seq_dim = 1
-            else:
-                val = attention_mask
-                seq_dim = 2
-
-            val = val.reshape(
+    cp_rank = get_context_parallel_rank()
+    cp_size = get_context_parallel_world_size()
+    for key, val in batch.items():
+        if key == 'attention_mask':
+            continue
+        if val is not None:
+            seq_dim = 1 if key != 'attention_mask' else 2
+            val = val.view(
                 *val.shape[0:seq_dim],
-                2 * sp_size,
-                val.shape[seq_dim] // (2 * sp_size),
+                2 * cp_size,
+                val.shape[seq_dim] // (2 * cp_size),
                 *val.shape[(seq_dim + 1):],
             )
             if enable_flash_sp:
-                index = ([2 * sp_rank, 2 * sp_rank + 1])
+                index = Tensor([2 * cp_rank, 2 * cp_rank + 1], ms.int32)
             else:
-                index = [sp_rank, (2 * sp_size - sp_rank - 1)]
-            val = np.take(val, index, axis=seq_dim)
-            val = val.reshape(
+                index = Tensor([cp_rank, (2 * cp_size - cp_rank - 1)], ms.int32)
+
+            val = ops.index_select(val, seq_dim, index)
+            val = val.view(
                 *val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2):])
 
-            if i == 0:
-                input_ids = val
-            elif i == 1:
-                labels = val
-            else:
-                attention_mask = val
+            batch[key] = val
 
-    return input_ids, labels, attention_mask
+    return batch
 
 
-def get_batch_on_this_cp_rank_general(
-        input_ids, labels, attention_mask):
+def _get_batch_on_this_cp_rank_in_megatron_cp_general(batch):
     """
-    Transformed batch data to support sequence parallelism.
+    Retrieve the batch data for the current compute node (CP rank).
+    To support ring attention with general attention mask.
     """
-    sp_size = get_context_parallel_world_size()
-    sp_rank = get_context_parallel_rank()
+    cp_rank = get_context_parallel_rank()
+    cp_size = get_context_parallel_world_size()
+    for key, val in batch.items():
+        if val is not None:
+            seq_dim = 1 if key != 'attention_mask' else 2
+            val = ops.chunk(val, cp_size, seq_dim)[cp_rank]
 
-    if sp_size > 1:
-        for i in range(3):
-            if i == 0:
-                val = input_ids
-                seq_dim = 1
-            elif i == 1:
-                val = labels
-                seq_dim = 1
-            else:
-                val = attention_mask
-                seq_dim = 2
+            batch[key] = val
 
-            val = np.split(val, sp_size, axis=seq_dim)[sp_rank]
+    return batch
 
-            if i == 0:
-                input_ids = val
-            elif i == 1:
-                labels = val
-            else:
-                attention_mask = val
+def _get_batch_on_this_cp_rank_in_ulysses_cp(batch):
+    """
+    Retrieve the batch data for the current compute node (CP rank).
+    To support ulysses context parallel.
+    """
+    cp_rank = get_context_parallel_rank()
+    cp_size = get_context_parallel_world_size()
+    for key, val in batch.items():
+        if key == 'attention_mask':
+            continue
+        if val is not None:
+            seq_dim = 1 if key != 'attention_mask' else 2
+            val = ops.chunk(val, cp_size, seq_dim)[cp_rank]
+            batch[key] = val
 
-    return input_ids, labels, attention_mask
+    return batch

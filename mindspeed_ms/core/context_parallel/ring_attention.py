@@ -766,4 +766,4 @@ class RingAttention(nn.Cell):
 
         if attn_mask_type == "user_defined":
             return dq, dk, dv, ops.zeros_like(attn_mask)
-        return dq, dk, dv
+        return dq, dk, dv, None
