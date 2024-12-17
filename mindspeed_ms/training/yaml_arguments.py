@@ -197,6 +197,15 @@ def validate_yaml(args, args_default, defaults={}):
                 print('WARNING: Setting args.overlap_p2p_comm to False since non-interleaved '
                       'schedule does not support overlapping p2p communication')
     else:
+        if args.model_parallel.overlap_p2p_comm:
+            assert args.model_parallel.pipeline_model_parallel_size > 1, \
+                'when interleaved schedule is used, pipeline-model-parallel size ' \
+                'should be greater than 1'
+        else:
+            assert args.model_parallel.pipeline_model_parallel_size > 2, \
+                'when interleaved schedule is used and p2p communication overlap is disabled, ' \
+                'pipeline-model-parallel size should be greater than 2 to avoid having multiple ' \
+                'p2p sends and recvs between same 2 ranks per communication batch'
         assert args.num_layers_per_virtual_pipeline_stage is None, \
             "num_layers_per_virtual_pipeline_stage must be None when virtual_pipeline_model_parallel_size is specified"
         # check noop_layers

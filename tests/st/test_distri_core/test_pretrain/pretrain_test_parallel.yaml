@@ -7,6 +7,7 @@ model_parallel:
   virtual_pipeline_model_parallel_size: 2
   sequence_parallel: True
   deterministic_mode: True
+  overlap_p2p_comm: True
 
   # mixed precision
   params_dtype: "float32"
