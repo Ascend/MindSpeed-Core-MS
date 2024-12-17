@@ -26,7 +26,6 @@ class TestPipelineParallel:
     """A test class for pipeline parallel interleaved. """
 
     @pytest.mark.skip(reason="Get golden loss from records")
-    @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.run(order=1)
     def test_generate_pipeline_net_golden(self):
         """
@@ -55,7 +54,6 @@ class TestPipelineParallel:
         os.system(f"grep -E 'ERROR|error' {sh_path}/{log_dir}/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check {log_dir}/worker_*.log"
 
-    @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.run(order=2)
     def test_interleaved_pipeline_net_loss(self):
         """
@@ -84,7 +82,6 @@ class TestPipelineParallel:
         os.system(f"grep -E 'ERROR|error' {sh_path}/{log_dir}/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check {log_dir}/worker_*.log"
 
-    @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.run(order=3)
     def test_compare_loss(self):
         """
@@ -104,7 +101,6 @@ class TestPipelineParallel:
                                                                 "loss accuracy test fail !"
         print("============== Interleaved staged pipeline net loss accuracy test pass !!! ==============")
 
-    @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.run(order=4)
     def test_evaluation_loss(self):
         """

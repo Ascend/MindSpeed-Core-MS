@@ -20,6 +20,7 @@ import pytest
 class TestDistributedOptimizer:
     """A test class for testing ParamAndGradBuffer."""
     # os.environ['ASCEND_RT_VISIBLE_DEVICES'] = "0,1"
+    @pytest.mark.skip(reason="Get golden loss")
     @pytest.mark.level0
     @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.env_single

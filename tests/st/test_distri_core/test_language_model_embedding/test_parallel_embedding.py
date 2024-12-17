@@ -18,12 +18,12 @@ import shutil
 import pytest
 from tests.st.test_distri_core.utils import compare_all_data
 
-@pytest.mark.level0
+
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_single
 class TestLanguageModelEmbedding:
     """A test class for LanguageModelEmbedding. """
-    @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.run(order=1)
     def test_parallel_embedding_legacy(self):
         """
@@ -57,7 +57,6 @@ class TestLanguageModelEmbedding:
         ret = os.system(cmd)
         assert ret == 0, f"msrun failed, please check {test_path}/{log_dir}/worker_*.log"
 
-    @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.run(order=2)
     def test_parallel_embedding_mcore(self):
         """
@@ -85,7 +84,6 @@ class TestLanguageModelEmbedding:
         ret = os.system(cmd)
         assert ret == 0, f"msrun failed, please check {test_path}/{log_dir}/worker_*.log"
 
-    @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.run(order=3)
     def test_compare_loss(self):
         """

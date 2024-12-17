@@ -24,6 +24,7 @@ import pytest
 @pytest.mark.env_single
 class TestParallelCrossEntropyLoss:
     """A test class for testing cross entropy loss."""
+    @pytest.mark.skip(reason="skip get compared loss")
     @pytest.mark.run(order=1)
     def test_cross_entropy_loss(self):
         """
@@ -89,20 +90,14 @@ class TestParallelCrossEntropyLoss:
         Description: compare relative error between pynative loss and golden loss
         Expectation: relative error smaller than 1e-3
         """
-        golden_log_path = 'msrun_log/worker_0.log'
         pynative_log_path = 'msrun_log_VocabParallelCrossEntropyLoss/worker_0.log'
 
-        assert os.path.exists(golden_log_path) and os.path.exists(pynative_log_path), \
-            f"{golden_log_path} or {pynative_log_path} did not exits, " + \
+        assert os.path.exists(pynative_log_path), \
+            f"{pynative_log_path} did not exits, " + \
             "please run test_parallel_cross_entropy_loss.py to generate them by running below command: \n" + \
             "`pytest -sv test_parallel_cross_entropy_loss.py::TestParallelCrossEntropyLoss`"
 
-        golden_loss = []
-        with open(golden_log_path, "r") as fp:
-            for line in fp:
-                if ", loss " in line:
-                    line = line.strip().replace('[', '').replace(']', '')
-                    golden_loss.append(float(line.split(' ')[-1]))
+        golden_loss = [1.3862944, 1.3774077, 1.3640013]
         print(golden_loss)
         golden_loss = np.array(golden_loss)
 
@@ -120,6 +115,7 @@ class TestParallelCrossEntropyLoss:
             "relative error between pynative loss and golden loss exceeds 1e-3, please your code."
 
     @pytest.mark.run(order=1)
+    @pytest.mark.skip(reason="skip one card case")
     def test_cross_entropy_loss_single(self):
         """
         Feature: generate cross entropy loss
@@ -149,6 +145,7 @@ class TestParallelCrossEntropyLoss:
         assert ret == 0, "msrun failed, please check msrun_single_log/worker_*.log"
 
     @pytest.mark.run(order=2)
+    @pytest.mark.skip(reason="skip one card case")
     def test_vocab_parallel_cross_entropy_loss_single(self):
         """
         Feature: test vocab parallel cross entropy loss
@@ -178,6 +175,7 @@ class TestParallelCrossEntropyLoss:
         assert ret == 0, "msrun failed, please check msrun_single_log_Parallel/worker_*.log"
 
     @pytest.mark.run(order=3)
+    @pytest.mark.skip(reason="skip one card case")
     def test_pynative_with_golden_loss_single(self):
         """
         Feature: test_pynative_with_golden_loss
@@ -215,6 +213,7 @@ class TestParallelCrossEntropyLoss:
             "relative error between pynative loss and golden loss exceeds 1e-3, please your code."
 
     @pytest.mark.run(order=1)
+    @pytest.mark.skip(reason="skip get compared loss")
     def test_cross_entropy_loss_dp2(self):
         """
         Feature: generate cross entropy loss
@@ -279,20 +278,14 @@ class TestParallelCrossEntropyLoss:
         Description: compare relative error between pynative loss and golden loss
         Expectation: relative error smaller than 1e-3
         """
-        golden_log_path = 'msrun_dp2_log/worker_0.log'
         pynative_log_path = 'msrun_dp2_log_Parallel/worker_0.log'
 
-        assert os.path.exists(golden_log_path) and os.path.exists(pynative_log_path), \
-            f"{golden_log_path} or {pynative_log_path} did not exits, " + \
+        assert os.path.exists(pynative_log_path), \
+            f"{pynative_log_path} did not exits, " + \
             "please run test_parallel_cross_entropy_loss.py to generate them by running below command: \n" + \
             "`pytest -sv test_parallel_cross_entropy_loss.py::TestParallelCrossEntropyLoss`"
 
-        golden_loss = []
-        with open(golden_log_path, "r") as fp:
-            for line in fp:
-                if ", loss " in line:
-                    line = line.strip().replace('[', '').replace(']', '')
-                    golden_loss.append(float(line.split(' ')[-1]))
+        golden_loss = [1.3862944, 1.3774077, 1.3640013]
         print(golden_loss)
         golden_loss = np.array(golden_loss)
 

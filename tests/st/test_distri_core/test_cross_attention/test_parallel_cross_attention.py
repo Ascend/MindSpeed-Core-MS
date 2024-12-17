@@ -18,7 +18,7 @@ import pytest
 from tests.st.test_distri_core.utils import compare_all_data
 
 
-@pytest.mark.level0
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_single
 class TestCrossAttention:

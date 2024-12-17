@@ -17,13 +17,11 @@ import os
 import pytest
 
 
-@pytest.mark.level0
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
-@pytest.mark.env_single
+@pytest.mark.env_onecard
 class TestOptimizerParameterScheduler:
     """A test class for learning rate"""
-
-    @pytest.mark.platform_arm_ascend910b_training
     def test_lr_base_iteration_tarining(self):
         """
         Feature: lr adjustment policy base on iteration tarining
@@ -50,7 +48,6 @@ class TestOptimizerParameterScheduler:
         os.system(f"grep -E 'ERROR|error' {sh_path}/{log_dir}/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check {log_dir}/worker_*.log"
 
-    @pytest.mark.platform_arm_ascend910b_training
     def test_lr_base_sample_tarining(self):
         """
         Feature: lr adjustment policy base on sample tarining
