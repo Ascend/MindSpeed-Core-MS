@@ -991,11 +991,12 @@ def pretrain(train_valid_test_datasets_provider,
              process_non_loss_data_func=None,
              **kwargs):
     """
-    Main training program.
+    Pre-training interface.
 
     This function will run the followings in the order provided:
-        1) setup model, optimizer and lr schedule using the model_provider.
-        2) train the model using the forward_step_func.
+
+    1. setup model, optimizer and lr schedule using the model_provider.
+    2. train the model using the forward_step_func.
 
     Args:
         train_valid_test_datasets_provider (function): a function that takes the size of
@@ -1003,16 +1004,17 @@ def pretrain(train_valid_test_datasets_provider,
         model_provider_func (function): a function that returns a vanilla version of the
             model. By vanilla we mean a simple model with no fp16 or ddp.
         model_type (enum): an enum that specifies the type of model being trained. Currently not in use.
-        forward_step_func (function): a function that takes a `data iterator` and `model`,
+        forward_step_func (function, optional): a function that takes a `data iterator` and `model`,
             and returns a `loss` scalar with a dictionary with key:values being
             the info we would like to monitor during training, for example
             `lm_loss: value`. We also require that this function add
             `batch generator` to the timers class. Currently not in use. Default: ``None``.
-        process_non_loss_data_func (function): a function to post process outputs of the
+        process_non_loss_data_func (function, optional): a function to post process outputs of the
             network. It can be used for dumping output tensors (e.g images) to
             tensorboard. It takes `collected data`(list of tensors),
             `current iteration index` and `tensorboard writer` as arguments. Currently not in use.
             Default: ``None``.
+        kwargs (dict): Other input.
 
     Raises:
         ValueError: If all_config is not passed in with kwargs.

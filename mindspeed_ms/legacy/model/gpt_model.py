@@ -40,25 +40,29 @@ class GPTModel(Module):
     Args:
         config (TransformerConfig): The config of the transformer model. For details, please refer to TransformerConfig.
         num_tokentypes (int, optional): size of the token-type embeddings.
-          If > 0, using tokentypes embedding. Default: ``0``.
-        parallel_output (bool): Specifies whether return paralleled output on
-          each tensor parallel rank. Default: ``True``.
-        pre_process (bool): When using pipeline parallel, indicate whether it's the first stage. Default: ``True``.
-        post_process (bool): When using pipeline parallel, indicate whether it's the last stage. Default: ``True``.
+            If > 0, using tokentypes embedding. Default: ``0``.
+        parallel_output (bool, optional): Specifies whether return paralleled output on
+            each tensor parallel rank. Default: ``True``.
+        pre_process (bool, optional): When using pipeline parallel, indicate whether it's the first stage. Default:
+            ``True``.
+        post_process (bool, optional): When using pipeline parallel, indicate whether it's the last stage. Default:
+            ``True``.
+        kwargs (dict): Other input.
 
     Inputs:
         - **tokens** (Tensor) - Input indices. Shape :math:`(B, S)`.
         - **position_ids** (Tensor) - Position offset. Shape :math:`(B, S)`.
         - **attention_mask** (Tensor) - Attention mask. Shape :math:`(B, S)`.
         - **loss_mask** (Tensor) - Loss mask. Shape :math:`(B, S)`.
-        - **retriever_input_ids** (Tensor) - Retriever input token indices. Shape: Depends on the input shape
+        - **retriever_input_ids** (Tensor, optional) - Retriever input token indices. Shape: Depends on the input shape
           of the retrieval task. Default: ``None``.
-        - **retriever_position_ids** (Tensor) - Retriever input position indices. Shape: Depends on the input
+        - **retriever_position_ids** (Tensor, optional) - Retriever input position indices. Shape: Depends on the input
           shape of the retrieval task. Default: ``None``.
-        - **labels** (Tensor) - Tensor of shape (N, ). The ground truth label of the sample. Default: ``None``.
-        - **tokentype_ids** (Tensor) - List of token type ids to be fed to a model.
+        - **labels** (Tensor, optional) - Tensor of shape :math:`(N, )`. The ground truth label of the sample.
+          Default: ``None``.
+        - **tokentype_ids** (Tensor, optional) - List of token type ids to be fed to a model.
           Shape :math:`(B, S)`. Default: ``None``.
-        - **inference_params** (Tensor) - Inference parameters. Used to specify specific settings during
+        - **inference_params** (Tensor, optional) - Inference parameters. Used to specify specific settings during
           inference, such as maximum generation length, max batch size, etc. Default: ``None``.
 
     Outputs:
@@ -77,10 +81,48 @@ class GPTModel(Module):
             <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
             for more details.
 
-        >>> from mindspeed_ms.core.config import TransformerConfig
+        >>> import os
+        >>> import numpy as np
+        >>> import mindspore as ms
+        >>> from mindspore import Tensor
+        >>> from mindspore.communication.management import init
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.core.config import (
+        ...     ModelParallelConfig,
+        ...     TrainingConfig,
+        ...     DatasetConfig,
+        ...     TransformerConfig
+        ... )
         >>> from mindspeed_ms.legacy.model.gpt_model import GPTModel
-        >>> config = TransformerConfig()
-        >>> model = GPTModel(config)
+        >>> ms.set_context(device_target='Ascend', mode=ms.PYNATIVE_MODE)
+        >>> init()
+        >>> initialize_model_parallel()
+        >>> os.environ['HCCL_BUFFSIZE'] = "200"
+        >>> batch_size = 8
+        >>> seq_length = 32
+        >>> parallel_config = ModelParallelConfig()
+        >>> data_config = DatasetConfig(batch_size=batch_size)
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
+        >>> config = TransformerConfig(vocab_size=128,
+        ...                            seq_length=seq_length,
+        ...                            num_layers=4,
+        ...                            num_attention_heads=4,
+        ...                            num_query_groups=32,
+        ...                            hidden_size=64,
+        ...                            ffn_hidden_size=256,
+        ...                            parallel_config=parallel_config,
+        ...                            training_config=training_config,
+        ...                            dataset_config=data_config)
+        >>> gpt_model = GPTModel(config)
+        >>> input_data = Tensor(np.random.random((batch_size, seq_length)).astype(np.int32))
+        >>> attention_mask = Tensor(np.zeros((batch_size, 1, seq_length, seq_length)).astype(np.int32))
+        >>> loss_mask = Tensor(np.random.random((batch_size, seq_length)).astype(np.int32))
+        >>> lm_output = gpt_model(tokens=input_data,
+        ...                       position_ids=None,
+        ...                       attention_mask=attention_mask,
+        ...                       loss_mask=loss_mask)
+        >>> print(lm_output.shape)
+        (8, 32, 64)
     """
     def __init__(self,
                  config,
@@ -125,7 +167,12 @@ class GPTModel(Module):
             self.initialize_word_embeddings()
 
     def set_input_tensor(self, input_tensor):
-        """ set input_tensor to model """
+        """
+        set input_tensor to model
+
+        Args:
+            input_tensor (Tensor): the input tensor.
+        """
         self.language_model.set_input_tensor(input_tensor)
 
     def construct(self, tokens, position_ids, attention_mask, loss_mask,

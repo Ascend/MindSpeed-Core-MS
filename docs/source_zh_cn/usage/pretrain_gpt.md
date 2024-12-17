@@ -2,7 +2,7 @@
 
 ## 概述
 
-本教程演示如何使用MindSpeed-Core-MS动态图并行框架训练GPT模型，此框架支持张量并行、流水线并行、序列并行等并行场景，还有支持使用分布式优化器动态学习率等场景，帮助开发者快速、便捷地构建和训练基于动态图并行框架的GPT预训练模型。
+本教程演示如何使用MindSpeed-Core-MS动态图并行框架训练GPT模型，此框架支持张量并行、流水线并行、序列并行等并行场景，还支持使用分布式优化器、动态学习率等场景，帮助开发者快速、便捷地构建和训练基于动态图并行框架的GPT预训练模型。
 
 ## 操作实践
 
@@ -10,21 +10,24 @@
 
 ### 样例代码参考
 
-目录结构可以参考如下配置：
+目录结构可以参考如下[配置](https://codehub-y.huawei.com/MindSpore-enterprise/Production/38Bv3/files?ref=refactor&filePath=pangu_sophon_pytorch-master%2FPanGu_ms)：
 
 ```text
 └─ gpt
     ├─ pretrain_gpt.py
     ├─ pretrain_gpt.sh
-    └─ pretrain_gpt_38BV3.yaml
-    ...
+    └─ config
+        └─ 38BV3
+            ├─ model_38BV3_seq_4K.yaml
+            ├─ model_38BV3_seq_4K_device_B2_accelerate.yaml
+            └─ model_38BV3_seq_4K_train.yaml
 ```
 
-其中，`pretrain_gpt.py`是环境配置、模型对象创建及训练的脚本。`pretrain_gpt.sh`是启动执行脚本。`pretrain_gpt_38BV3.yaml`是配置项。
+其中，`pretrain_gpt.py`是环境配置、模型对象创建及训练的脚本。`pretrain_gpt.sh`是启动执行脚本。`config/38Bv3`文件夹里是配置项。
 
 ### 模型结构
 
-GPT以`Transformer`模型为主要架构，网络结构主要围绕`Transformer`的基本构建块构建。本框架目前提供了一个构建[GPT模型的高阶接口](https://gitee.com/ascend/MindSpeed-Core-MS/blob/r0.1.0/mindspeed_ms/legacy/model/gpt_model.py#L36)，供开发者参考，便于快速搭建网络。下面以此接口为例讲一下模型结构。
+GPT以`Transformer`模型为主要架构，网络结构主要围绕`Transformer`的基本构建块构建。本框架目前提供了一个构建GPT模型的高阶接口[GPTModel](https://gitee.com/ascend/MindSpeed-Core-MS/blob/r0.1.0/mindspeed_ms/legacy/model/gpt_model.py#L36)，供开发者参考，便于快速搭建网络。下面以此接口为例讲一下模型结构。
 
 在模型中，初始化五个参数，`config`是模型配置项（在yaml文件的`model_config`中），`num_tokentypes`指定embedding的类型，`parallel_output`用来确认是否输出每一个并行Tensor的输出，`pre_process`和`post_process`分别指定是否为第一阶段和最后一阶段。
 
@@ -232,7 +235,7 @@ def post_language_model_processing(parallel_lm_logits, loss_fn, lm_output, label
 | log_interval                         | training_config.log_interval                         | 日志记录间隔，指定每多少迭代后记录一次训练日志，默认值：None                        |
 | train_iters                          | training_config.training_iters                       | 训练迭代次数，默认值：0                                            |
 | save_interval                        | training_config.save_interval                        | 模型保存间隔，默认值：None                                         |
-| eval_interval                        | training_config.eval_interval                        | 模型保存间隔，默认值：None                                         |
+| eval_interval                        | training_config.eval_interval                        | 模型验证间隔，默认值：None                                         |
 | accumulate_allreduce_grads_in_fp32   | training_config.accumulate_allreduce_grads_in_fp32   | 是否在 FP32 精度下累积和进行梯度归约操作，默认值：False                       |
 | clip_grad                            | optimizer_config.clip_grad                           | 梯度裁剪相关配置，以字典形式传入裁剪参数，默认值：0.0                            |
 | bf16                                 | training_config.bf16                                 | 是否启用BF16数据格式进行计算，默认值：False                              |
@@ -456,7 +459,7 @@ def model_provider_func(pre_process=True, post_process=True):
 
 ### 执行训练
 
-构建完网络，并加载好权重后，可以开始执行训练。`pretrain`接口相关说明可以参考[接口说明文档](https://gitee.com/ascend/MindSpeed-Core-MS/blob/r0.1.0/docs/api/api_python/mindspeed_ms.training.training.pretrain.rst)
+构建完网络，并加载好权重后，可以开始执行训练。`pretrain`接口相关说明可以参考[接口说明文档](https://gitee.com/ascend/MindSpeed-Core-MS/blob/r0.1.0/docs/api/api_python/mindspeed_ms.training.training.pretrain.rst)。
 
 ```python
 from mindspeed_ms.training.training import pretrain

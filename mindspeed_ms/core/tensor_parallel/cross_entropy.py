@@ -31,13 +31,13 @@ class VocabParallelCrossEntropy(nn.Cell):
     Calculate the paralleled cross entropy loss.
 
     Inputs:
-        - **vocab_parallel_logits** (Tensor) - Tensor of shape (N, C). Data type must be float16 or float32.
+        - **vocab_parallel_logits** (Tensor) - Tensor of shape :math:`(N, C)`. Data type must be float16 or float32.
           The output logits of the backbone.
-        - **target** (Tensor) - Tensor of shape (N, ). The ground truth label of the sample.
-        - **label_smoothing** (Float) - smoothing factor, must be in range[0.0, 1.0).
+        - **target** (Tensor) - Tensor of shape :math:`(N, )`. The ground truth label of the sample.
+        - **label_smoothing** (float, optional) - smoothing factor, must be in range[0.0, 1.0). Default: ``0.0``.
 
     Outputs:
-        The corresponding cross entropy loss.
+        - **loss** (Tensor) - The corresponding cross entropy loss.
 
     Examples:
         .. note::
@@ -51,8 +51,8 @@ class VocabParallelCrossEntropy(nn.Cell):
 
         >>> from mindspore import dtype as mstype
         >>> from mindspore import Tensor
-        >>> from mindspeed_ms.core.tensor_parallel.cross_entropy import VocabParallelCrossEntropy
         >>> from mindspore.communication.management import init
+        >>> from mindspeed_ms.core.tensor_parallel.cross_entropy import VocabParallelCrossEntropy
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> init()
         >>> initialize_model_parallel()

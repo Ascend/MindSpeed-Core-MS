@@ -41,7 +41,8 @@ from .utils import token_sort, token_unsort
 
 class MoEAlltoAllTokenDispatcher():
     """
-    AlltoAll Token Dispatcher, perform a dp <-> ep permutation.
+    In the MoE architecture, the MoEAlltoAllTokenDispatcher scheduler is responsible for assigning token tokens to
+    various experts for processing, and reassembling the processed results back to the original token order.
 
     Args:
         num_local_experts (int): how many local experts on this rank.
@@ -49,8 +50,51 @@ class MoEAlltoAllTokenDispatcher():
         config (TransformerConfig): Configuration object for the transformer model.
 
     Raises:
-        ValueError: If `num_local_experts` is not larger than 0.
-        ValueError: If the length of `local_expert_indices` is not equal to `num_local_experts`.
+        ValueError: If `num_local_experts` is not larger than ``0``.
+        ValueError: If the length of `local_expert_indices` is not equal to ``num_local_experts``.
+
+    Examples:
+        >>> import numpy as np
+        >>> import mindspore as ms
+        >>> from mindspore.communication import init
+        >>> from mindspeed_ms.core.config import TransformerConfig, ModelParallelConfig, TrainingConfig, MoEConfig
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model.moe.token_dispatcher import MoEAlltoAllTokenDispatcher
+        >>> num_local_experts = 4
+        >>> ms.set_seed(1024)
+        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
+        >>> init()
+        >>> initialize_model_parallel()
+        >>> parallel_config = ModelParallelConfig()
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
+        >>> moe_config = MoEConfig(num_experts=num_local_experts,
+        ...                        moe_router_topk=2)
+        >>> config = TransformerConfig(vocab_size=128,
+        ...                            num_layers=1,
+        ...                            num_attention_heads=1,
+        ...                            num_query_groups=1,
+        ...                            hidden_size=64,
+        ...                            ffn_hidden_size=128,
+        ...                            parallel_config=parallel_config,
+        ...                            training_config=training_config,
+        ...                            moe_config=moe_config)
+        >>> dispatcher = MoEAlltoAllTokenDispatcher(num_local_experts=num_local_experts,
+        ...                                         local_expert_indices=range(num_local_experts),
+        ...                                         config=config)
+        >>> indices = ms.Tensor(np.random.randint(0, num_local_experts, (16, 2)), dtype=ms.int32)
+        >>> scores_first_column = np.random.rand(16, 1)
+        >>> complementary_scores = 1 - scores_first_column
+        >>> scores = ms.Tensor(np.hstack((scores_first_column, complementary_scores)))
+        >>> hidden_states = ms.Tensor(np.random.standard_normal((8, 2, 64)).astype(np.float32))
+        >>> dispatched_input, tokens_per_expert = dispatcher.token_permutation(hidden_states, scores, indices)
+        >>> print(dispatched_input.shape)
+        (32, 64)
+        >>> print(tokens_per_expert)
+        [ 7 13  3  9]
+        >>> expert_output = ms.Tensor(np.random.standard_normal((16, 64)).astype(np.float32))
+        >>> output, _ = dispatcher.token_unpermutation(expert_output, bias=None)
+        >>> print(output.shape)
+        (16, 64)
     """
     def __init__(self, num_local_experts: int, local_expert_indices: List[int], config: TransformerConfig):
         self.config = config

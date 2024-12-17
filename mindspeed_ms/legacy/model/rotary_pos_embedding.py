@@ -64,12 +64,12 @@ class RotaryEmbedding(Module):
     Args:
         kv_channels (int): Projection weights dimension in multi-head attention. Obtained from transformer config.
         rotary_percent (float, optional): Percent of rotary dimension to use for rotary position embeddings.
-            Default: 1.0.
+            Default: ``1.0``.
         rotary_interleaved (bool, optional): Determines the method of applying rotary embeddings to the input
-            dimensions. Default: False.
+            dimensions. Default: ``False``.
         seq_len_interpolation_factor (float, optional): scale of linearly interpolating RoPE for longer sequences.
-            The value must be a float larger than 1.0. Default: None.
-        rotary_base (int, optional): Base period for rotary position embeddings. Default: 10000.
+            The value must be a float larger than 1.0. Default: ``None``.
+        rotary_base (int, optional): Base period for rotary position embeddings. Default: ``10000``.
 
     Inputs:
         - **max_seq_len** (int) - Max sequence length of inputs.

@@ -71,13 +71,15 @@ class Embedding(Module):
     An embedding layer contain word embedding, position embedding and tokentypes embedding.
 
     Args:
-        hidden_size (int): hidden states size for embedding layer.
-        vocab_size (int): vocabulary size.
-        max_sequence_length (int): maximum size of sequence. This is used for positional embedding. if using position
+        hidden_size (int): Hidden states size for embedding layer.
+        vocab_size (int): Vocabulary size.
+        max_sequence_length (int): Maximum size of sequence. This is used for positional embedding. if using position
             embedding, it is necessary to set the maximum sequence length.
-        embedding_dropout_prob (float): dropout rate for embedding layer.
+        embedding_dropout_prob (float): Dropout rate for embedding layer.
         config (TransformerConfig): The transformer configuration include init_method, parallel_config, etc.
-        num_tokentypes (int, optional): size of the token-type embeddings. If > 0, using tokentypes embedding.
+        num_tokentypes (int, optional): Size of the token-type embeddings. If > 0, using tokentypes embedding. Default:
+            ``0``.
+        kwargs (dict): Other input.
 
     Inputs:
         - **input_ids** (Tensor) - The tokenized inputs with datatype int32, shape :math:`(B, S)`.
@@ -105,6 +107,7 @@ class Embedding(Module):
             Please see the `msrun start up
             <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
             for more details.
+
         >>> import numpy as np
         >>> import mindspore as ms
         >>> from mindspore.communication import init
@@ -266,43 +269,49 @@ class TransformerLanguageModel(Module):
     Args:
         config (TransformerConfig): The transformer configuration includes init_method, parallel_config, etc.
         encoder_attn_mask_type (int): Encoder attention mask type.
-        num_tokentypes (int): If > 0, using tokentypes embedding.
-        add_encoder (bool): If True, use encoder.
-        use_decoder (bool): If True, use decoder.
-        decoder_attn_mask_type (int): Decoder attention mask type.
-        add_pooler (bool): If True, use pooler.
-        pre_process (bool): When using pipeline parallel, indicate whether it's the first stage.
-        post_process (bool): When using pipeline parallel, indicate whether it's the last stage.
-        visual_encoder (nn.Cell): Visual encoder.
+        num_tokentypes (int, optional): If > 0, using tokentypes embedding. Default: ``0``.
+        add_encoder (bool, optional): If True, use encoder. Default: ``True``.
+        use_decoder (bool, optional): If True, use decoder. Default: ``False``.
+        decoder_attn_mask_type (int, optional): Decoder attention mask type. Default: ``AttnMaskType.causal``.
+        add_pooler (bool, optional): If True, use pooler. Default: ``False``.
+        pre_process (bool, optional): When using pipeline parallel, indicate whether it's the first stage. Default:
+            ``True``.
+        post_process (bool, optional): When using pipeline parallel, indicate whether it's the last stage. Default:
+            ``True``.
+        visual_encoder (nn.Cell, optional): Visual encoder. Default: ``None``.
+        kwargs (dict): Other input.
 
     Inputs:
         - **enc_input_ids** (Tensor) - Encoder input indexes. Shape :math:`(B, S)`.
         - **enc_position_ids** (Tensor) - Encoder position offset. Shape :math:`(B, S)`.
         - **enc_attn_mask** (Tensor) - Encoder attention mask. Shape :math:`(B, S)`.
-        - **dec_input_ids** (Tensor) - Decoder input indexes. Shape :math:`(B, S)`.
-        - **dec_position_ids** (Tensor, optional) - Decoder input position indices. Shape :math:`(B, S)`.
-        - **dec_attn_mask** (Tensor, optional) - Decoder attention mask. Shape :math:`(B, S)`.
+        - **dec_input_ids** (Tensor, optional) - Decoder input indexes. Shape :math:`(B, S)`. Default: ``None``.
+        - **dec_position_ids** (Tensor, optional) - Decoder input position indices. Shape :math:`(B, S)`. Default:
+          ``None``.
+        - **dec_attn_mask** (Tensor, optional) - Decoder attention mask. Shape :math:`(B, S)`. Default: ``None``.
         - **retriever_input_ids** (Tensor, optional) - Retriever input token indices. Shape: Depends on the input shape
-          of the retrieval task.
+          of the retrieval task. Default: ``None``.
         - **retriever_position_ids** (Tensor, optional) - Retriever input position indices. Shape: Depends on the input
-          shape of the retrieval task.
+          shape of the retrieval task. Default: ``None``.
         - **retriever_attn_mask** (Tensor, optional) - Retriever attention mask. Used to control the attention range in
           the retriever when calculating attention. Shape: Depends on the attention calculation shape of the retriever.
+          Default: ``None``.
         - **enc_dec_attn_mask** (Tensor, optional) - Encoder-decoder attention mask. Shape: Depends on the attention
-          calculation between the encoder and decoder.
+          calculation between the encoder and decoder. Default: ``None``.
         - **tokentype_ids** (Tensor, optional) - List of token type ids to be fed to a model. Shape :math:`(B, S)`.
-        - **inference_params** (InferenceParams) - Inference parameters. Used to specify specific settings during
-          inference, such as maximum generation length, max batch size, etc.
-        - **pooling_sequence_index** (int) - Pooling sequence index.
+          Default: ``None``.
+        - **inference_params** (InferenceParams, optional) - Inference parameters. Used to specify specific settings
+          during inference, such as maximum generation length, max batch size, etc. Default: ``None``.
+        - **pooling_sequence_index** (int, optional) - Pooling sequence index. Default: ``0``.
         - **enc_hidden_states** (Tensor, optional) - Encoder hidden states. Shape: Depends on the output shape of the
-          encoder.
-        - **output_enc_hidden** (bool, optional) - Whether to output encoder hidden states.
+          encoder. Default: ``None``.
+        - **output_enc_hidden** (bool, optional) - Whether to output encoder hidden states. Default: ``False``.
         - **input_image** (Tensor, optional) - Tensor of the input image. Shape :math:`(N, C_{in}, H_{in}, W_{in})` or
-          :math:`(N, H_{in}, W_{in}, C_{in}, )` depending on `data_format`.
+          :math:`(N, H_{in}, W_{in}, C_{in}, )` depending on `data_format`. Default: ``None``.
         - **delimiter_position** (Tensor, optional) - Delimiter position tensor. Shape :math:`(B, N)`, where :math:`N`
-          represents the number of delimiters.
+          represents the number of delimiters. Default: ``None``.
         - **image_embedding** (Tensor, optional) - Image embedding tensor. The shape depends on the dimension of the
-          image embedding, for example (batch_size, embedding_dim).
+          image embedding, for example (batch_size, embedding_dim). Default: ``None``.
 
     Outputs:
         - **encoder_output** - Output Tensor of shape :math:`(B, S, H)` or :math:`(S, B, H)`.
@@ -465,7 +474,12 @@ class TransformerLanguageModel(Module):
                 )
 
     def set_input_tensor(self, input_tensor):
-        """ set input_tensor to model """
+        r"""
+        Set input_tensor to model.
+
+        Args:
+            input_tensor (Tensor): the input tensor.
+        """
         if not isinstance(input_tensor, (list, tuple)):
             input_tensor = [input_tensor]
 
@@ -475,7 +489,12 @@ class TransformerLanguageModel(Module):
         self.encoder.set_input_tensor(input_tensor[0])
 
     def visual_forward(self, input_image):
-        """ visual encoder forward """
+        """
+        Visual encoder forward.
+
+        Args:
+            input_image (Tensor): the input tensor with shape :math:`(B, C, H, W)` or :math:`(B, N, C, H, W)`.
+        """
         n_image = 1
         if input_image.ndim == 5:
             bs, n_image, channel, height, width = input_image.shape
@@ -487,7 +506,14 @@ class TransformerLanguageModel(Module):
         return image_embedding
 
     def mixed_embedding(self, text_embedding, image_embedding, delimiter_position):
-        """ mixing text embedding and image embedding """
+        """
+        Mixing text embedding and image embedding.
+
+        Args:
+            text_embedding (Tensor): Text embedding tensor. Shape depends on text encoding.
+            image_embedding (Tensor): Image embedding tensor. Dimensions relate to image feature encoding.
+            delimiter_position (Tensor): Positions for splitting text embedding.
+        """
         mix_embeddings = []
         for cur_batch in range(text_embedding.shape[0]):
             mix_embedding = []
