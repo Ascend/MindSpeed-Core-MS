@@ -813,7 +813,8 @@ class ParallelMLP(Module):
         >>> import mindspore.common.dtype as mstype
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> from mindspeed_ms.training import ModelParallelConfig
+        >>> from mindspeed_ms.core.transformer import TransformerConfig
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> from mindspeed_ms.legacy.model.transformer import ParallelMLP
         >>> init()
