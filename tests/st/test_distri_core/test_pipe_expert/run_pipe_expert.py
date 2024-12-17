@@ -59,7 +59,13 @@ def get_batch(data_iterator):
         data = next(data_iterator)
     else:
         data = None
-    return data.values()
+    batch = {
+        'input_ids': data["input_ids"][:, :-1].astype(ms.int32),
+        'labels': data["labels"][:, 1:].astype(ms.int32),
+        'attention_mask': data["attention_mask"].astype(ms.int32),
+    }
+
+    return batch.values()
 
 
 def loss_func(loss_mask, output_tensor):
@@ -98,7 +104,7 @@ def forward_step(data_iterator, model):
 
     # get batch data
     input_data, labels, attention_mask = get_batch(data_iterator)
-    loss_mask = mint.ne(input_data[:, :-1], args.pad_token).astype(args.compute_dtype)
+    loss_mask = mint.ne(input_data, args.pad_token).astype(args.compute_dtype)
     input_tensor = (input_data, labels, attention_mask)
 
     # pylint: disable=W0621
