@@ -38,7 +38,7 @@ class ParallelMLP(Module):
 
     Args:
         config (TransformerConfig): Configuration object for the transformer model.
-        is_expert (bool): This block is an expert block. Default: False.
+        is_expert (bool, optional): This block is an expert block. Default: ``False``.
 
     Inputs:
         - **hidden_states** (Tensor) - Tensor of shape :math:`(B, S, H)` or :math:`(S, B, H)`.
@@ -84,19 +84,7 @@ class ParallelMLP(Module):
         >>> mlp = ParallelMLP(config=model_config)
         >>> input_data = Tensor(np.random.random((seq_length, dataset_size, hidden_size)).astype(np.float32))
         >>> output, _ = mlp(input_data)
-        >>> print(output)
         >>> print(output.shape)
-        [[[ 5.48791955e-04  8.83690300e-05  1.07215295e-04  2.60132801e-04
-           -1.54528883e-04  1.37216761e-04 -2.34742456e-05 -6.80858910e-04]]
-
-         [[-1.18107520e-04  7.55574380e-04  4.63687058e-04  2.46438613e-05
-           -5.33341779e-04 -8.02219874e-05  4.61738018e-05 -3.20632127e-04]]
-
-         [[ 6.21827901e-04  3.96674819e-04  2.33924671e-04  4.48272709e-04
-           -5.07581688e-04  1.82211792e-04 -5.41418740e-05 -9.06977919e-04]]
-
-         [[ 1.69299601e-04  5.86488168e-04  5.28354394e-05  1.38810661e-04
-           -3.43915017e-04 -1.08063505e-05  1.31181096e-05 -7.85819371e-04]]]
         (4, 1, 8)
     """
 

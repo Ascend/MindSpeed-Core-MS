@@ -42,7 +42,7 @@ class SequentialMLP(Module):
     Args:
         num_local_experts (int): The number of local experts.
         config (TransformerConfig): Configuration object for the transformer model.
-        submoduals: reserve arguments, not used now.
+        submodules (MLPSubmodules): Type of the linear fully connected layer. Reserved parameter, currently not in use.
 
     Inputs:
         - **permuted_local_hidden_states** (Tensor) - The permuted input hidden states of the local experts.
@@ -52,10 +52,38 @@ class SequentialMLP(Module):
         Tuple of 2 Tensor.
 
         - **output_local** (Tensor) - The output of the local experts.
-        - **output_bias_local** (Tensor) - The output of the local experts with bias, default is None.
+        - **output_bias_local** (Tensor) - The output of the local experts with bias. Default: ``None``.
 
     Raises:
-        NotImplementedError: if `submoduals` is not None.
+        NotImplementedError: If `submodules` is not None.
+
+    Examples:
+        >>> import numpy as np
+        >>> import mindspore as ms
+        >>> from mindspore.communication import init
+        >>> from mindspeed_ms.core.config import TransformerConfig, ModelParallelConfig, TrainingConfig
+        >>> from mindspeed_ms.legacy.model.moe.experts import SequentialMLP
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
+        >>> init()
+        >>> initialize_model_parallel()
+        >>> parallel_config = ModelParallelConfig()
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
+        >>> config = TransformerConfig(vocab_size=128,
+        ...                            num_layers=1,
+        ...                            num_attention_heads=8,
+        ...                            num_query_groups=4,
+        ...                            hidden_size=64,
+        ...                            ffn_hidden_size=128,
+        ...                            parallel_config=parallel_config,
+        ...                            training_config=training_config)
+        >>> expert = SequentialMLP(num_local_experts=2, config=config)
+        >>> shape = (32, 64)
+        >>> tokens_per_expert = [20, 12]
+        >>> permuted_local_hidden_states = ms.Tensor(np.random.standard_normal(shape).astype(np.float32))
+        >>> output_local, output_bias_local= expert(permuted_local_hidden_states, tokens_per_expert)
+        >>> print(output_local.shape)
+        (32, 64)
     """
     def __init__(self, num_local_experts: int, config: TransformerConfig, submodules=None):
         super(SequentialMLP, self).__init__()

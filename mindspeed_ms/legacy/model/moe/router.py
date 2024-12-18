@@ -28,7 +28,7 @@ from .utils import MoEAuxLossAutoScaler, switch_load_balancing_loss_func, topk_s
 
 class TopKRouter(nn.Cell):
     """
-    TopK router.
+    TopK router. Calculates scores based on input data and selects top-K experts to process input data.
 
     Args:
         config (TransformerConfig): Configuration object for the transformer model.
@@ -43,8 +43,8 @@ class TopKRouter(nn.Cell):
         - **indices** (Tensor) - The indices tensor after top-k selection.
 
     Raises:
-        NotImplementedError: If `self.routing_type` is equal to "sinkhorn".
-        ValueError: If `self.routing_type` is not equal to "none".
+        NotImplementedError: If `moe_config.moe_router_load_balancing_type` is equal to ``sinkhorn``.
+        ValueError: If `moe_config.moe_router_load_balancing_type` is not equal to `sinkhorn`, `aux_loss` or `none`.
 
     Examples:
         .. note::

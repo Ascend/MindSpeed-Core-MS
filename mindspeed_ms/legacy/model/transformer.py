@@ -121,20 +121,20 @@ def _merge_heads(x):
 
 class CoreAttention(nn.Cell):
     """
-    This class can get the weighted score along the seq_length. It is used within a larger framework to compute the
-    context layer based on query, key, and value layers and an attention mask.
+    Core attention mechanism for calculating attention weights and context representations between queries, key and
+    value layers.
 
     Args:
         layer_number (int): Number which indicates the index of this transformer layer in the whole transformer block.
         config (dict): A configuration dictionary that provides various settings for the attention mechanism.
-        attn_mask_type (int): Attention mask type. Support [AttnMaskType::padding = 1, AttnMaskType::causal = 2].
-            Default: ``1``.
+        attn_mask_type (int, optional): Attention mask type. Support [AttnMaskType::padding = 1,
+            AttnMaskType::causal = 2]. Default: ``1``.
 
     Inputs:
-        - **query_layer** (Tensor) - The shape of query Tensor is :math:`(S, B, N, D)`.
-        - **key_layer** (Tensor) - The shape of key Tensor is :math:`(S, B, N, D)`.
-        - **value_layer** (Tensor) - The shape of value Tensor is :math:`(S, B, N, D)`.
-        - **attention_mask** (Tensor) - The shape of attention mask Tensor is :math:`(B, S_q, S_k)`.
+        - **query_layer** (Tensor) - Query layer. The shape of query Tensor is :math:`(S, B, N, D)`.
+        - **key_layer** (Tensor) - Key layer. The shape of key Tensor is :math:`(S, B, N, D)`.
+        - **value_layer** (Tensor) - Value layer. The shape of value Tensor is :math:`(S, B, N, D)`.
+        - **attention_mask** (Tensor) - Attention mask. The shape of attention mask Tensor is :math:`(B, S_q, S_k)`.
 
     Outputs:
         - **context_layer** (Tensor) - The shape of context_layer Tensor is :math:`(S, B, H)`.
@@ -303,17 +303,18 @@ class ParallelAttention(Module):
         config (dict): Configuration dictionary for the parallel attention.
         layer_number (int): Number which indicates the index of this transformer layer in the
             whole transformer block.
-        attention_type (int): Attention type. Support [AttnType::self_attn = 1, AttnType::cross_attn = 2].
-            Default: ``1``.
-        attn_mask_type (int): Attention mask type. Support [AttnMaskType::padding = 1, AttnMaskType::causal = 2].
-            Default: ``1``.
+        attention_type (int, optional): Attention type. Support [AttnType::self_attn = 1, AttnType::cross_attn = 2].
+            Default: ``AttnType.self_attn``.
+        attn_mask_type (int, optional): Attention mask type. Support [AttnMaskType::padding = 1,
+            AttnMaskType::causal = 2]. Default: ``AttnMaskType.padding``.
 
     Inputs:
         - **hidden_states** (Tensor) - The shape of hidden_states Tensor is :math:`(B, S, H)`.
-        - **attention_mask** (Tensor) - The shape of attention_mask Tensor is :math:`(B, N, S_q, S_k)'.
-        - **encoder_output** (Tensor) - Tensor of encoder output used for cross attention. Default: None.
-        - **inference_params** (Tensor) - Tensor of inference params. Currently not supported. Default: None.
-        - **rotary_pos_emb** (Tensor) - Tensor of rotary position embedding. Default: None.
+        - **attention_mask** (Tensor) - The shape of attention_mask Tensor is :math:`(B, N, S_q, S_k)`.
+        - **encoder_output** (Tensor, optional) - Tensor of encoder output used for cross attention. Default: ``None``.
+        - **inference_params** (Tensor, optional) - Tensor of inference params. Currently not supported. Default:
+          ``None``.
+        - **rotary_pos_emb** (Tensor, optional) - Tensor of rotary position embedding. Default: ``None``.
 
     Outputs:
         - **output** (Tensor) - The shape of output Tensor is :math:`(B, S, H)`.
@@ -778,24 +779,26 @@ class ParallelTransformerLayer(Module):
         config (dict): Configuration dictionary for the transformer layer.
         layer_number (int): Number which indicates the index of this transformer layer in the
             whole transformer block.
-        layer_type (int): Type of the layer. Support [LayerType::encoder = 1, LayerType::decoder = 2,
+        layer_type (int, optional): Type of the layer. Support [LayerType::encoder = 1, LayerType::decoder = 2,
             LayerType::retro_encoder = 3, LayerType::retro_decoder = 4, LayerType::retro_decoder_with_retriever = 5].
-            Default: ``1``.
-        self_attn_mask_type (int): Attention mask type. Support [AttnMaskType::padding = 1, AttnMaskType::causal = 2].
-            Default: ``1``.
-        drop_path_rate（float）：Drop path rate. Currently not supported if greater than 0. Default: ``0.0``
+            Default: ``LayerType.encoder``.
+        self_attn_mask_type (int, optional): Attention mask type. Support [AttnMaskType::padding = 1,
+            AttnMaskType::causal = 2]. Default: ``AttnMaskType.padding``.
+        drop_path_rate (float, optional): Drop path rate. Currently not supported if greater than 0. Default: ``0.0``.
 
     Inputs:
         - **hidden_states** (Tensor) - The shape of hidden_states tensor is :math:`(B, S, H)`.
         - **attention_mask** (Tensor) - Tensor of attention mask.
-        - **encoder_output** (Tensor) - Encoder output tensor. Currently not supported. Default: None.
-        - **enc_dec_attn_mask** (Tensor) - Encoder-decoder attention mask tensor. Currently not supported.
-          Default: None.
-        - **retriever_input** (Tensor) - Retriever input tensor. Currently not supported. Default: None.
-        - **retriever_output** (Tensor) - Retriever output tensor. Currently not supported. Default: None.
-        - **retriever_attn_mask** (Tensor) - Retriever attention mask tensor. Currently not supported. Default: None.
-        - **inference_params** (Tensor) - Tensor of inference params. Currently not supported. Default: None.
-        - **rotary_pos_emb** (Tensor) - Tensor of rotary position embedding. Default: None.
+        - **encoder_output** (Tensor, optional) - Encoder output tensor. Currently not supported. Default: ``None``.
+        - **enc_dec_attn_mask** (Tensor, optional) - Encoder-decoder attention mask tensor. Currently not supported.
+          Default: ``None``.
+        - **retriever_input** (Tensor, optional) - Retriever input tensor. Currently not supported. Default: ``None``.
+        - **retriever_output** (Tensor, optional) - Retriever output tensor. Currently not supported. Default: ``None``.
+        - **retriever_attn_mask** (Tensor, optional) - Retriever attention mask tensor. Currently not supported.
+          Default: ``None``.
+        - **inference_params** (Tensor, optional) - Tensor of inference params. Currently not supported.
+          Default: ``None``.
+        - **rotary_pos_emb** (Tensor, optional) - Tensor of rotary position embedding. Default: ``None``.
 
     Outputs:
         - **output** (Tensor) - The shape of output tensor is :math:`(B, S, H)`.
@@ -1154,27 +1157,31 @@ class ParallelTransformer(Module):
         config (dict): Configuration dictionary for the parallel transformer.
         model_type (int): Type of the model. Support [ModelType::encoder_or_decoder = 1,
             ModelType::encoder_and_decoder = 2, ModelType::retro_encoder = 3, ModelType::retro_decoder = 4].
-        layer_type (int): Type of the layer. Support [LayerType::encoder = 1, LayerType::decoder = 2,
+        layer_type (int, optional): Type of the layer. Support [LayerType::encoder = 1, LayerType::decoder = 2,
             LayerType::retro_encoder = 3, LayerType::retro_decoder = 4, LayerType::retro_decoder_with_retriever = 5].
-            Default: ``1``.
-        self_attn_mask_type (int): Attention mask type. Support [AttnMaskType::padding = 1, AttnMaskType::causal = 2].
-            Default: ``1``.
-        post_norm (bool): Insert normalization layer at the end of transformer block. Default: ``True``.
-        pre_process (bool): When using pipeline parallel, indicate whether it's the first stage. Default: ``False``.
-        post_process (bool): When using pipeline parallel, indicate whether it's the last stage. Default: ``False``.
-        drop_path_rate (float): Drop path rate. Currently not supported if greater than 0. Default: ``0.0``
+            Default: ``LayerType.encoder``.
+        self_attn_mask_type (int, optional): Attention mask type. Support [AttnMaskType::padding = 1,
+            AttnMaskType::causal = 2]. Default: ``AttnMaskType.padding``.
+        post_norm (bool, optional): Insert normalization layer at the end of transformer block. Default: ``True``.
+        pre_process (bool, optional): When using pipeline parallel, indicate whether it's the first stage. Default:
+            ``False``.
+        post_process (bool, optional): When using pipeline parallel, indicate whether it's the last stage. Default:
+            ``False``.
+        drop_path_rate (float, optional): Drop path rate. Currently not supported if greater than 0. Default: ``0.0``.
 
     Inputs:
         - **hidden_states** (Tensor) - The shape of hidden_states tensor is :math:`(B, S, H)`.
         - **attention_mask** (Tensor) - Tensor of attention mask.
-        - **encoder_output** (Tensor) - Encoder output tensor. Currently not supported. Default: None.
-        - **enc_dec_attn_mask** (Tensor) - Encoder-decoder attention mask tensor. Currently not supported.
-          Default: None.
-        - **retriever_input** (Tensor) - Retriever input tensor. Currently not supported. Default: None.
-        - **retriever_output** (Tensor) - Retriever output tensor. Currently not supported. Default: None.
-        - **retriever_attn_mask** (Tensor) - Retriever attention mask tensor. Currently not supported. Default: None.
-        - **inference_params** (Tensor) - Tensor of inference params. Currently not supported. Default: None.
-        - **rotary_pos_emb** (Tensor) - Tensor of rotary position embedding. Default: None.
+        - **encoder_output** (Tensor, optional) - Encoder output tensor. Currently not supported. Default: ``None``.
+        - **enc_dec_attn_mask** (Tensor, optional) - Encoder-decoder attention mask tensor. Currently not supported.
+          Default: ``None``.
+        - **retriever_input** (Tensor, optional) - Retriever input tensor. Currently not supported. Default: ``None``.
+        - **retriever_output** (Tensor, optional) - Retriever output tensor. Currently not supported. Default: ``None``.
+        - **retriever_attn_mask** (Tensor, optional) - Retriever attention mask tensor. Currently not supported.
+          Default: ``None``.
+        - **inference_params** (Tensor, optional) - Tensor of inference params. Currently not supported. Default:
+          ``None``.
+        - **rotary_pos_emb** (Tensor, optional) - Tensor of rotary position embedding. Default: ``None``.
 
     Outputs:
         - **hidden_states** (Tensor) - The shape of hidden_states tensor is :math:`(B, S, H)`.
@@ -1504,6 +1511,9 @@ class ParallelTransformer(Module):
         """
         In pipeline parallel, the receiving data from previous stage will be set into class.
         Construct function's input will be replaced by self.set_hidden_states.
+
+        Args:
+            input_tensor (Tensor): the input tensor with shape :math:`(B, S, H)` or :math:`(S, B, H)`.
         """
         self.set_hidden_states.set_data(input_tensor, slice_shape=True)
 
@@ -1560,16 +1570,16 @@ class ParallelLMLogits(nn.Cell):
     Head to get the logits of each token in the vocab.
 
     Args:
-        config (dict): Parallel configuration.
-        bias (bool): Specifies whether the layer uses a bias vector. Default: ``False``.
-        compute_dtype (dtype.Number): The computation type. Default: ``None``.
+        config (dict): Transformer configuration. For details, please refer to TransformerConfig.
+        bias (bool, optional): Specifies whether the layer uses a bias vector. Default: ``False``.
+        compute_dtype (dtype.Number, optional): The computation type. Default: ``None``.
 
     Inputs:
         - **input_** (Tensor) - Tensor of hidden states.
         - **word_embedding_table** (Parameter) - Weight matrix passed from embedding layer.
-        - **parallel_output** (bool) - Specifies whether return paralleled output on each tensor parallel rank.
-          Default: True.
-        - **bias** (Tensor) - The trainable bias parameter.
+        - **parallel_output** (bool, optional) - Specifies whether return paralleled output on each tensor parallel
+          rank. Default: ``True``.
+        - **bias** (Tensor, optional) - The trainable bias parameter. Default: ``None``.
 
     Outputs:
         - **logits_parallel** (Tensor) - If ``parallel_output`` is ``True``, the output is a paralleled logits tensor

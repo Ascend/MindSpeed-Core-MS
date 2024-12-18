@@ -383,32 +383,36 @@ class ColumnParallelLinear(nn.Cell):
     Args:
         input_size (int): The number of channels in the input space.
         output_size (int): The number of channels in the output space.
+
+    Keyword Args:
         config (dict): The config of the transformer model. For details, please refer to TransformerConfig.
         init_method (Union[Tensor, str, Initializer, numbers.Number]): The trainable weight_init parameter. The values
             of str refer to the function `initializer`.
-        bias (bool): Specifies whether the layer uses a bias vector. Default: ``True``.
-        gather_output (bool): Specifies whether gather the output on each tensor parallel rank. Default: ``False``.
-        stride (int): For the strided linear layers. Default: ``1``.
-        keep_master_weight_for_test (bool): For testing and should be set to False. It returns the master weights used
-            for initialization. Default: ``False``.
-        skip_bias_add (bool): If True, do not add the bias term, instead return it for fusion. Default: ``False``.
-        skip_weight_param_allocation (bool): Specifies whether skip the initialization of weight parameter.
+        bias (bool, optional): Specifies whether the layer uses a bias vector. Default: ``True``.
+        gather_output (bool, optional): Specifies whether gather the output on each tensor parallel rank. Default:
+            ``False``.
+        stride (int, optional): For the strided linear layers. Default: ``1``.
+        keep_master_weight_for_test (bool, optional): For testing and should be set to False. It returns the master
+            weights used for initialization. Default: ``False``.
+        skip_bias_add (bool, optional): If True, do not add the bias term, instead return it for fusion. Default:
+            ``False``.
+        skip_weight_param_allocation (bool, optional): Specifies whether skip the initialization of weight parameter.
             When set True, an weight tensor should be passed to construct function. Default: ``False``.
-        embedding_activation_buffer (Tensor): This buffer holds the input activations of the final embedding linear
+        embedding_activation_buffer (Tensor, optional): This buffer holds the input activations of the final embedding
+            linear layer on the last pipeline stage. Default: ``None``.
+        grad_output_buffer (Tensor, optional): This buffer holds the gradient outputs of the final embedding linear
             layer on the last pipeline stage. Default: ``None``.
-        grad_output_buffer (Tensor): This buffer holds the gradient outputs of the final embedding linear layer on
-            the last pipeline stage. Default: ``None``.
-        is_expert (bool): Specifies whether this linear layer is an expert. Default: ``False``.
-        tp_comm_buffer_name (str): Communication buffer name is not used in non-Transformer-Engine modules.
+        is_expert (bool, optional): Specifies whether this linear layer is an expert. Default: ``False``.
+        tp_comm_buffer_name (str, optional): Communication buffer name is not used in non-Transformer-Engine modules.
             Default: ``None``.
-        disable_grad_reduce (bool): If True, reduction of output gradients across tensor-parallel ranks will be
-            disabled. Default: ``False``.
-        bias_init (Union[Tensor, str, Initializer, numbers.Number]): The trainable bias_init parameter. The values
-            of str refer to the function `initializer`. Default: ``Zero()``.
-        param_init_dtype (dtype.Number): The parameter initialization type. Default: ``None``.
-        compute_dtype (dtype.Number): The computation type. Default: ``None``.
-        transpose_b (bool): Specifies whether the weight parameter will be initialized as a transposed shape. Default:
-            ``True``.
+        disable_grad_reduce (bool, optional): If True, reduction of output gradients across tensor-parallel ranks will
+            be disabled. Default: ``False``.
+        bias_init (Union[Tensor, str, Initializer, numbers.Number], optional): The trainable bias_init parameter.
+            The values of str refer to the function `initializer`. Default: ``Zero()``.
+        param_init_dtype (dtype.Number, optional): The parameter initialization type. Default: ``None``.
+        compute_dtype (dtype.Number, optional): The computation type. Default: ``None``.
+        transpose_b (bool, optional): Specifies whether the weight parameter will be initialized as a transposed shape.
+            Default: ``True``.
 
     Inputs:
         - **input\_** (Tensor) - Tensor of shape :math:`(*, in\_channels)` . The `input_size` in `Args` should be equal
@@ -746,25 +750,28 @@ class RowParallelLinear(nn.Cell):
     Args:
         input_size (int): The number of channels in the input space.
         output_size (int): The number of channels in the output space.
+
+    Keyword Args:
         config (dict): The config of the transformer model. For details, please refer to TransformerConfig.
         init_method (Union[Tensor, str, Initializer, numbers.Number]): The trainable weight_init parameter. The values
             of str refer to the function `initializer`.
         bias (bool): Specifies whether the layer uses a bias vector.
         input_is_parallel (bool): If True, we assume that the input is already split across the tensor parallel group
             and we do not split again.
-        skip_bias_add (bool): If True, do not add the bias term, instead return it for fusion. Default: ``True``.
-        stride (int): For the strided linear layers. Default: ``1``.
-        keep_master_weight_for_test (bool): For tesing and should be set to False. It returns the master weights used
-            for initialization. Default: ``False``.
-        is_expert (bool): Specifies whether this linear layer is an expert. Default: ``False``.
-        tp_comm_buffer_name (str): Communication buffer name is not used in non-Transformer-Engine modules.
-            Default: ``None``.
-        bias_init (Union[Tensor, str, Initializer, numbers.Number]): The trainable bias_init parameter. The values
-            of str refer to the function `initializer`. Default: ``Zero()``.
-        param_init_dtype (dtype.Number): The parameter initialization type. Default: ``None``.
-        compute_dtype (dtype.Number): The computation type. Default: ``None``.
-        transpose_b (bool): Specifies whether the weight parameter will be initialized as a transposed shape. Default:
+        skip_bias_add (bool, optional): If True, do not add the bias term, instead return it for fusion. Default:
             ``True``.
+        stride (int, optional): For the strided linear layers. Default: ``1``.
+        keep_master_weight_for_test (bool, optional): For tesing and should be set to False. It returns the master
+            weights used for initialization. Default: ``False``.
+        is_expert (bool, optional): Specifies whether this linear layer is an expert. Default: ``False``.
+        tp_comm_buffer_name (str, optional): Communication buffer name is not used in non-Transformer-Engine modules.
+            Default: ``None``.
+        bias_init (Union[Tensor, str, Initializer, numbers.Number], optional): The trainable bias_init parameter.
+            The values of str refer to the function `initializer`. Default: ``Zero()``.
+        param_init_dtype (dtype.Number, optional): The parameter initialization type. Default: ``None``.
+        compute_dtype (dtype.Number, optional): The computation type. Default: ``None``.
+        transpose_b (bool, optional): Specifies whether the weight parameter will be initialized as a transposed shape.
+            Default: ``True``.
 
     Inputs:
         - **input\_** (Tensor) - Tensor of shape :math:`(*, in\_channels)`. The `input_size` in `Args` should be equal
@@ -1053,12 +1060,14 @@ class VocabParallelEmbedding(nn.Cell):
     Args:
         num_embeddings (int): vocabulary size.
         embedding_dim (int): size of hidden state.
+
+    Keyword Args:
         init_method (Union[Tensor, str, Initializer, numbers.Number]): The trainable weight_init parameter. The values
             of str refer to the function `initializer`.
-        reduce_scatter_embeddings (bool): Decides whether to perform ReduceScatter after embedding lookup. Default:
-            ``False``.
+        reduce_scatter_embeddings (bool, optional): Decides whether to perform ReduceScatter after embedding lookup.
+            Default: ``False``.
         config (dict): The config of the transformer model. For details, please refer to TransformerConfig.
-        param_init_dtype (dtype.Number): The parameter initialization type. Default: ``None``.
+        param_init_dtype (dtype.Number, optional): The parameter initialization type. Default: ``None``.
 
     Inputs:
         - **input\_** (Tensor) - Tensor of shape :math:`(B, S)` or :math:`(S, B)`.

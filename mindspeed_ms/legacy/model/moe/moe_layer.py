@@ -33,9 +33,10 @@ class MoELayer(Module):
     Expert layer.
 
     Args:
-        config (TransformerConfig): Configuration object for the transformer model.
-        submodules: reserve arguments, not used now.
-        layer_number: reserve arguments, not used now.
+        config (TransformerConfig): Configuration object for the transformer model. For details, refer to
+            TransformerConfig class.
+        submodules (MLPSubmodules, optional): The parameter is reserved and is not currently in use. Default: ``None``.
+        layer_number (int, optional): The parameter is reserved and is not currently in use. Default: ``None``.
 
     Inputs:
         - **hidden_states** (Tensor) - The input hidden states of the local experts.
@@ -43,16 +44,46 @@ class MoELayer(Module):
     Outputs:
         Tuple of 2 Tensor.
 
-        - **output* (Tensor) - The output of the local experts
+        - **output* (Tensor) - The output of the local experts.
         - **mlp_bias** (Tensor) - Not used now.
 
     Raises:
-        ValueError: if `ep_world_size` is less than or equal to 0.
-        ValueError: if `num_experts % ep_world_size` is not equal to 0.
-        ValueError: if the elements of `local_expert_indices` is larger than or equal to `num_experts`.
-        ValueError: if `moe_config.moe_token_dispatcher_type` is not "alltoall"
-        ValueError: if `self.training` is true and `get_tensor_model_parallel_world_size()` is larger than 1,
-            and `self.sp` is not true
+        ValueError: if `ep_world_size` is less than or equal to ``0``.
+        ValueError: if `num_experts % ep_world_size` is not equal to ``0``.
+        ValueError: if the elements of `local_expert_indices` is larger than or equal to ``num_experts``.
+        ValueError: if `moe_config.moe_token_dispatcher_type` is not ``alltoall``.
+        ValueError: if `self.training` is ``True`` and `get_tensor_model_parallel_world_size()` is larger than ``1``,
+            and `self.sp` is not ``True``.
+
+    Examples:
+        >>> import numpy as np
+        >>> import mindspore as ms
+        >>> from mindspore.communication import init
+        >>> from mindspeed_ms.core.config import TransformerConfig, ModelParallelConfig, TrainingConfig, MoEConfig
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model.moe.moe_layer import MoELayer
+        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
+        >>> init()
+        >>> initialize_model_parallel()
+        >>> parallel_config = ModelParallelConfig()
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
+        >>> moe_config = MoEConfig(num_experts=4,
+        ...                        moe_router_topk=2)
+        >>> config = TransformerConfig(vocab_size=128,
+        ...                            num_layers=1,
+        ...                            num_attention_heads=1,
+        ...                            num_query_groups=1,
+        ...                            hidden_size=64,
+        ...                            ffn_hidden_size=128,
+        ...                            parallel_config=parallel_config,
+        ...                            training_config=training_config,
+        ...                            moe_config=moe_config)
+        >>> mlp = MoELayer(config)
+        >>> shape = (8, 2, 64)
+        >>> hidden_states = ms.Tensor(np.random.standard_normal(shape).astype(np.float32))
+        >>> output, mlp_bias= mlp(hidden_states)
+        >>> print(output.shape)
+        (8, 2, 64)
     """
     # pylint: disable=C0103
     def __init__(self, config: TransformerConfig, submodules=None, layer_number: int = None):
