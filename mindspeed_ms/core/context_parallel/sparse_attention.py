@@ -213,9 +213,9 @@ class SparseAttention(nn.Cell):
                        cur_attn_out, cur_softmax_max, cur_softmax_sum):
         '''Update sparse attention output'''
 
-        softmax_max = ops.maximum(prev_softmax_max, cur_softmax_max)
-        prev_scale = ops.exp(prev_softmax_max - softmax_max)
-        cur_scale = ops.exp(cur_softmax_max - softmax_max)
+        softmax_max = mint.maximum(prev_softmax_max, cur_softmax_max)
+        prev_scale = mint.exp(prev_softmax_max - softmax_max)
+        cur_scale = mint.exp(cur_softmax_max - softmax_max)
 
         prev_softmax_sum_scaled = prev_softmax_sum * prev_scale
         cur_softmax_sum_scaled = cur_softmax_sum * cur_scale
@@ -339,76 +339,26 @@ class SparseAttention(nn.Cell):
         return cur_q, cur_k, cur_v, cur_dout, cur_attn_mask, cur_softmax_max, cur_softmax_sum, cur_attn_out
 
     def backward_update(self, cur_dq, cur_dk, cur_dv, dq, dk, dv, recv_dkv, recv_kv_dkv,
-                        i, rank, cp_size, attn_mask_type):
+                        i, cp_size):
         '''Update the gradient during the backward pass'''
-        if attn_mask_type == "causal":
-            if i == 0:
-                hal.current_stream().wait_stream(self.stream_send)
-                if rank == cp_size - 1:
-                    cur_dq = cur_dq.view(dq.shape)
-                    dq = cur_dq
-                    dk[(slice(None),) * self.seq_dim + (0,)] = cur_dk
-                    dv[(slice(None),) * self.seq_dim + (0,)] = cur_dv
-                else:
-                    dq[(slice(None),) * self.seq_dim + (1,)] = cur_dq
-                    cur_dk = cur_dk.view(dk.shape)
-                    cur_dv = cur_dv.view(dv.shape)
-                    dk = cur_dk
-                    dv = cur_dv
-            else:
-                hal.current_stream().wait_stream(self.stream_send)
-
-                if i == cp_size - 1:
-                    dkv = recv_dkv
-                else:
-                    send_kv_dkv = recv_kv_dkv
-                    dkv = send_kv_dkv[1]
-
-                dk, dv = dkv[0], dkv[1]
-
-                if i >= cp_size - rank - 1:
-                    if i == cp_size - 1:
-
-                        cur_dq = cur_dq.view(dq.shape)
-                        cur_dk = cur_dk.view(dk.shape)
-                        cur_dv = cur_dv.view(dv.shape)
-
-                        dq = dq.add(cur_dq)
-                        dk = dk.add(cur_dk)
-                        dv = dv.add(cur_dv)
-                    else:
-                        cur_dq = cur_dq.view(dq.shape)
-                        dq = dq.add(cur_dq)
-
-                        dk[(slice(None),) * self.seq_dim + (0,)
-                           ] = dk[(slice(None),) * self.seq_dim + (0,)].add(cur_dk)
-                        dv[(slice(None),) * self.seq_dim + (0,)
-                           ] = dv[(slice(None),) * self.seq_dim + (0,)].add(cur_dv)
-                else:
-                    dq[(slice(None),) * self.seq_dim + (1,)] = dq[(slice(None),) * self.seq_dim + (1,)].add(cur_dq)
-                    cur_dk = cur_dk.view(dk.shape)
-                    cur_dv = cur_dv.view(dv.shape)
-                    dk = dk.add(cur_dk)
-                    dv = dv.add(cur_dv)
+        if i == 0:
+            hal.current_stream().wait_stream(self.stream_send)
+            dq = cur_dq
+            dk = cur_dk
+            dv = cur_dv
         else:
-            if i == 0:
-                hal.current_stream().wait_stream(self.stream_send)
-                dq = cur_dq
-                dk = cur_dk
-                dv = cur_dv
+            hal.current_stream().wait_stream(self.stream_send)
+
+            if i == cp_size - 1:
+                dkv = recv_dkv
             else:
-                hal.current_stream().wait_stream(self.stream_send)
+                send_kv_dkv = recv_kv_dkv
+                dkv = send_kv_dkv[1]
 
-                if i == cp_size - 1:
-                    dkv = recv_dkv
-                else:
-                    send_kv_dkv = recv_kv_dkv
-                    dkv = send_kv_dkv[1]
-
-                dk, dv = dkv[0], dkv[1]
-                dq = dq.add(cur_dq)
-                dk = dk.add(cur_dk)
-                dv = dv.add(cur_dv)
+            dk, dv = dkv[0], dkv[1]
+            dq = dq.add(cur_dq)
+            dk = dk.add(cur_dk)
+            dv = dv.add(cur_dv)
         return dq, dk, dv
 
     def get_cp_parallel_data(self):
@@ -490,9 +440,11 @@ class SparseAttention(nn.Cell):
         '''Get the number of skip steps for SparseAttention'''
         sp_group, cp_size, _ = self.get_cp_parallel_data()
         skip_flag_all = mint.zeros((cp_size,), dtype=mstype.int8)
+        self.skip_loop_flag = []
         for i in range(cp_size):
             skip_flag = mint.all(self.sparse_fa[i].attn_mask)
             skip_flag_all[i] = skip_flag
+            self.skip_loop_flag.append(skip_flag.item())
         skip_flag_reduce_res = comm_func.all_reduce(skip_flag_all, group=sp_group)[0]
         cp_skip_step = 0
         for i in range(skip_flag_reduce_res.shape[0] - 1, -1, -1):
@@ -526,10 +478,11 @@ class SparseAttention(nn.Cell):
         send_dst = (rank + 1) % cp_size
         recv_src = (rank + cp_size - 1) % cp_size
 
-        send_kv = ops.cat((k.unsqueeze(0), v.unsqueeze(0)), axis=0)
+        send_kv = mint.cat((k.unsqueeze(0), v.unsqueeze(0)), 0)
         recv_tensor = None
         send_recv_ops = []
-        attn_out, softmax_max, softmax_sum = None, None, None
+        softmax_max, softmax_sum = None, None
+        attn_out = mint.zeros_like(q)
         cp_size = cp_size - self.cp_skip_step
         for i in range(cp_size):
             if send_recv_ops:
@@ -542,6 +495,9 @@ class SparseAttention(nn.Cell):
                                                                   recv_src, sp_group)
             cur_q, cur_k, cur_v, _ = self.prepare_qkv(q, k, v, send_kv, i)
 
+            if self.skip_loop_flag[i]:
+                continue
+
             drop_mask = None
             all_att_outs = self.sparse_fa[i](
                 cur_q, cur_k, cur_v, alibi_mask, drop_mask, padding_mask, None, prefix)
@@ -549,7 +505,7 @@ class SparseAttention(nn.Cell):
             cur_softmax_max = all_att_outs[0]
             cur_softmax_sum = all_att_outs[1]
 
-            if i == 0:
+            if softmax_max is None or softmax_sum is None:
                 attn_out = cur_attn_out
                 softmax_max = cur_softmax_max
                 softmax_sum = cur_softmax_sum
@@ -595,16 +551,16 @@ class SparseAttention(nn.Cell):
         recv_src = (rank + 1) % cp_size
 
 
-        kv = ops.cat((k.unsqueeze(0), v.unsqueeze(0)), axis=0)
+        kv = mint.cat((k.unsqueeze(0), v.unsqueeze(0)), 0)
 
-        send_kv_dkv = ops.zeros((2, *kv.shape), dtype=kv.dtype)
+        send_kv_dkv = mint.zeros((2, *kv.shape), dtype=kv.dtype)
         recv_kv_dkv = None
         recv_kv = None
         recv_dkv = None
         send_recv_ops = []
-        dq = ops.zeros_like(q)
-        dk = ops.zeros_like(k)
-        dv = ops.zeros_like(v)
+        dq = mint.zeros_like(q)
+        dk = mint.zeros_like(k)
+        dv = mint.zeros_like(v)
 
         cp_size = cp_size - self.cp_skip_step
         for i in range(cp_size):
@@ -618,7 +574,7 @@ class SparseAttention(nn.Cell):
                     send_kv_dkv = recv_kv_dkv
 
             if i > 0:
-                dkv = ops.cat((dk.unsqueeze(0), dv.unsqueeze(0)), axis=0)
+                dkv = mint.cat((dk.unsqueeze(0), dv.unsqueeze(0)), 0)
                 send_kv_dkv[1] = dkv
             self.stream_send.wait_stream(hal.current_stream())
             if i == 0:
@@ -648,6 +604,6 @@ class SparseAttention(nn.Cell):
             cur_dq, cur_dk, cur_dv = attn_grad_outs[0], attn_grad_outs[1], attn_grad_outs[2]
 
             dq, dk, dv = self.backward_update(
-                cur_dq, cur_dk, cur_dv, dq, dk, dv, recv_dkv, recv_kv_dkv, i, rank, cp_size, attn_mask_type)
+                cur_dq, cur_dk, cur_dv, dq, dk, dv, recv_dkv, recv_kv_dkv, i, cp_size)
 
-        return dq, dk, dv, ops.zeros_like(attn_mask)
+        return dq, dk, dv, mint.zeros_like(attn_mask)
