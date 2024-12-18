@@ -14,25 +14,22 @@
 # ============================================================================
 """ Distributed optimizer wrapper. """
 
-from collections import OrderedDict
 import json
+import mindspore as ms
+import mindspore.communication.comm_func as comm_func
+import mindspore.ops as ops
+import numpy as np
 import os
 import stat
-import numpy as np
-
-import mindspore as ms
-import mindspore.ops as ops
+from collections import OrderedDict
 from mindspore import _no_grad
-from mindspore.common import dtype as mstype
-from mindspore.communication.management import get_group_size, get_rank
-import mindspore.communication.comm_func as comm_func
-from mindspore.common.initializer import Zero
-
 from mindspore import log as logger
-from .param_and_grad_buffer import ParamAndGradBuffer
+from mindspore.common import dtype as mstype
+from mindspore.common.initializer import Zero
+from mindspore.communication.management import get_group_size, get_rank
 
 from .optimizer import MixedPrecisionOptimizer
-
+from .param_and_grad_buffer import ParamAndGradBuffer
 from .utils import _update_adamw_var
 
 
@@ -155,13 +152,14 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         >>>     data_parallel_group=get_data_parallel_group(with_context_parallel=True))
         >>> losses = train(epoch_num=1, dataset=dataset, network=network_with_ddp, optimizer=optimizer)
     """
+
     @classmethod
     def _build_param_ranges_map(
             cls,
             param_index_map,
             bucket_world_range,
             bucket_offset
-        ):
+    ):
         """ Build parameter range map. """
         # param_range_map
         param_range_map = {}
@@ -202,7 +200,6 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
                 }
 
         return param_range_map
-
 
     @classmethod
     def _build_bucket_ranges_map(cls, param_and_grad_buffer, bucket_index):
@@ -270,7 +267,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
             param_to_bucket_map,
             sharded_param_groups,
             buffers,
-        ):
+    ):
         """ Build shards of param and grad buffer. """
         param_fp16_groups = []
         param_fp32_groups = []
@@ -328,7 +325,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
                         sharded_param_fp32_from_fp16.name = param.name
                         param.main_param = sharded_param_fp32_from_fp16
                         sharded_grad_fp32_from_fp16 = ops.cast(buffers[buffer_idx].grad_data[param_start_in_buffer: \
-                                                               param_end_in_buffer],
+                                                                                             param_end_in_buffer],
                                                                mstype.float32)
                         param.grad = sharded_grad_fp32_from_fp16
                         sharded_param_fp32_from_fp16.grad = sharded_grad_fp32_from_fp16
@@ -374,7 +371,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
             init_state_fn,
             per_model_buffers,
             data_parallel_group,
-        ):
+    ):
         super().__init__(
             optimizer,
             config,
@@ -472,7 +469,6 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
             for param in self.buffers[buffer_index].buckets[bucket_index].params_list:
                 self.param_to_all_gather_handle_index_map[param] = all_gather_handle_index
         self.num_all_gather_handles = len(self.all_gather_handle_index_to_bucket_index_map)
-
 
     def zero_grad(self):
         """ reset grads data. """
@@ -578,8 +574,8 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
             # saved shape is 2d, need to reshape to 1d
             param.assign_value(loaded_param)
             param_id_in_opt = self.param_idx_in_opt[param.name]
-            self.optimizer.exp_avg[param_id_in_opt].assign_value(state_dict['exp_avg.'+param.name].value())
-            self.optimizer.exp_avg_sq[param_id_in_opt].assign_value(state_dict['exp_avg_sq.'+param.name].value())
+            self.optimizer.exp_avg[param_id_in_opt].assign_value(state_dict['exp_avg.' + param.name].value())
+            self.optimizer.exp_avg_sq[param_id_in_opt].assign_value(state_dict['exp_avg_sq.' + param.name].value())
 
         if 'state_step' in state_dict.keys():
             self.optimizer.state_step.assign_value(state_dict['state_step'].value())
@@ -600,11 +596,11 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         for group_idx, _ in enumerate(self.optimizer.param_groups):
             # update params in this group
             self.optimizer.param_groups[group_idx]['params'] = [
-                *self.sharded_param_fp32_groups[group_idx],\
+                *self.sharded_param_fp32_groups[group_idx], \
                 *self.sharded_param_fp32_from_fp16_groups[group_idx]
             ]
             self.optimizer.group_start_id[group_idx + 1] = self.optimizer.group_start_id[group_idx] + \
-                len(self.optimizer.param_groups[group_idx]['params'])
+                                                           len(self.optimizer.param_groups[group_idx]['params'])
             self.optimizer.lrs[group_idx] = self.optimizer.param_groups[group_idx]['lr']
             self.optimizer.parameters += tuple(self.optimizer.param_groups[group_idx]['params'])
 
@@ -635,6 +631,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         group. For fp16 gradients, a fp32 copy will be created and optimizer will update using fp32 gradients instead of
         original fp16 gradients.
         """
+
         def copy_group_grads(model_groups, main_groups):
             for model_group, main_group in zip(model_groups, main_groups):
                 for model_param, main_param in zip(model_group, main_group):
@@ -647,7 +644,6 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
                         main_param.grad.copy_(ops.cast(model_param.main_grad.view(-1)[param_start: param_end],
                                                        mstype.float32))
 
-
         copy_group_grads(self.param_fp16_groups, self.sharded_param_fp32_from_fp16_groups)
 
     def _copy_model_params_to_main_params(self):
@@ -656,6 +652,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         group. For fp16 params, a fp32 copy will be created and optimizer will update the fp32 params instead of
         original fp16 params.
         """
+
         def copy_group_params(model_groups, main_groups):
             for model_group, main_group in zip(model_groups, main_groups):
                 for model_param, main_param in zip(model_group, main_group):
@@ -667,7 +664,6 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
                         param_start, param_end = range_map['range_in_param']
                         main_param.copy_(ops.cast(model_param.view(-1)[param_start:param_end], mstype.float32))
 
-
         copy_group_params(self.param_fp16_groups, self.sharded_param_fp32_from_fp16_groups)
 
     def _copy_main_params_to_model_params(self):
@@ -676,6 +672,7 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         For parameters with fp16 data type, a fp32 copy is used for optimizer update, their update result will be cast
         to original param data type and be copied back to param_data buffer with fp16 data type.
         """
+
         def copy_group_params(main_groups, model_groups):
             for main_group, model_group in zip(main_groups, model_groups):
                 for main_param, model_param in zip(main_group, model_group):
@@ -686,7 +683,6 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
                         range_map = self.param_ranges_map[buffer_idx][bucket_idx][model_param]
                         param_start, param_end = range_map['range_in_param']
                         model_param.view(-1)[param_start:param_end].copy_(ops.cast(main_param, model_param.dtype))
-
 
         copy_group_params(self.sharded_param_fp32_from_fp16_groups, self.param_fp16_groups)
 
@@ -757,7 +753,6 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
             remove_cell_param_gather_handle = self.remove_cell_param_gather_handles.pop()
             remove_cell_param_gather_handle.remove()
             remove_cell_param_gather_handle = None
-
 
     def _finish_param_sync_helper(self, all_gather_handle_index):
         """ sycn allgather"""

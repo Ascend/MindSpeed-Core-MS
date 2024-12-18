@@ -184,7 +184,7 @@ class CreateCommGroups():
         global _PP_GROUP
         global _PIPELINE_GLOBAL_RANKS
         assert (
-            _PP_GROUP is None
+                _PP_GROUP is None
         ), 'pipeline model parallel group is already initialized'
         global _EMBEDDING_GROUP
         global _EMBEDDING_GLOBAL_RANKS
@@ -240,7 +240,7 @@ class CreateCommGroups():
         global _TENSOR_AND_DP_GROUP
 
         assert (
-            _TENSOR_AND_DP_GROUP is None
+                _TENSOR_AND_DP_GROUP is None
         ), 'Tensor + data parallel group is already initialized'
         for ranks in self.get_ranks('tp-dp'):
             if self.rank in ranks:
@@ -250,6 +250,7 @@ class CreateCommGroups():
 
     def _dispatch_comm_ranks(self, world_size, parallel_size, mask):
         """dispatch comm ranks"""
+
         def prefix_product(a, init=1):
             r = [init]
             for v in a:
@@ -262,7 +263,7 @@ class CreateCommGroups():
                 stride = prefix_product(shape)
             idx = [(index // d) % s for s, d in zip(shape, stride)]
             assert (
-                sum([x * y for x, y in zip(idx, stride[:-1])]) == index
+                    sum([x * y for x, y in zip(idx, stride[:-1])]) == index
             ), "idx {} with shape {} mismatch the return idx {}".format(index, shape, idx)
             return idx
 
@@ -403,8 +404,8 @@ def is_unitialized() -> bool:
 def get_model_parallel_group():
     """Get the model parallel group the caller rank belongs to."""
     assert _MODEL_PARALLEL_GROUP is not None, \
-            ("model parallel group is not initialized. Please check whether communication "
-             "is initialized and 'tp-pp' in order.")
+        ("model parallel group is not initialized. Please check whether communication "
+         "is initialized and 'tp-pp' in order.")
     return _MODEL_PARALLEL_GROUP
 
 
@@ -468,6 +469,7 @@ def get_embedding_group():
         ("pipeline parallel group is not initialized. Please check whether communication "
          "is initialized and 'pp' in order.")
     return _EMBEDDING_GROUP
+
 
 def get_tp_world_size():
     """Return world size for the tensor model parallel group."""

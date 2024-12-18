@@ -13,47 +13,49 @@
 # limitations under the License.
 # ============================================================================
 """ Distributed data parallel wrapper. """
-from contextlib import contextmanager
+import numpy as np
 from collections import deque
-from mindspore import mint, ops, _no_grad, Parameter, Tensor
-from mindspore.common.initializer import Zero
+from contextlib import contextmanager
+from mindspore import mint, ops, _no_grad, Parameter
+from mindspore import nn
 from mindspore.common import dtype as mstype
+from mindspore.common.api import _pynative_executor
+from mindspore.common.initializer import Zero
 from mindspore.communication import get_group_size, create_group
 from mindspore.communication.comm_func import all_gather_into_tensor, reduce_scatter_tensor, all_reduce
-from mindspore.common.api import _pynative_executor
+
 from mindspeed_ms.core.ddp.create_comm import get_dp_world_size as get_data_parallel_world_size, \
     get_dp_group as get_data_parallel_group
 from .parallel_state import get_zero_full_shard_flag
 from .param_and_grad_buffer import ParamAndGradBuffer
-from mindspore import nn
-import numpy as np
 
 __all__ = ['DistributedDataParallel']
 
+
 @_no_grad()
 def all_gather_param(cell, wait_buffer, data_parallel_group):
-    #print("all_gather_param before: ",cell.weight.name,cell.cell_id, cell.weight.shape, _pynative_executor.enable_grad(), cell._has_config_recompute, cell.weight.gathered,flush=True)
+    # print("all_gather_param before: ",cell.weight.name,cell.cell_id, cell.weight.shape, _pynative_executor.enable_grad(), cell._has_config_recompute, cell.weight.gathered,flush=True)
     if not hasattr(cell, 'sharded_weight'):
         cell.sharded_weight = Parameter(0.0)
     cell.sharded_weight.assign_value(cell.weight)
     (param, comm_handle) = all_gather_into_tensor(cell.sharded_weight, group=data_parallel_group, async_op=True)
     param.name = cell.weight.name
     cell.weight.gathered = 1
-    wait_buffer.append((param,comm_handle,cell))
+    wait_buffer.append((param, comm_handle, cell))
 
 
 @_no_grad()
 def bp_all_gather_param(cell, bp_wait_buffer, data_parallel_group):
-    if cell.cell_id in bp_wait_buffer or (hasattr(cell.weight, 'gathered') and cell.weight.gathered==1):
+    if cell.cell_id in bp_wait_buffer or (hasattr(cell.weight, 'gathered') and cell.weight.gathered == 1):
         return
-    #print("all_gather_param before: ",cell.weight.name,cell.cell_id, cell.weight.shape, _pynative_executor.enable_grad(), cell._has_config_recompute, cell.weight.gathered,flush=True)
+    # print("all_gather_param before: ",cell.weight.name,cell.cell_id, cell.weight.shape, _pynative_executor.enable_grad(), cell._has_config_recompute, cell.weight.gathered,flush=True)
     if not hasattr(cell, 'sharded_weight'):
         cell.sharded_weight = Parameter(0.0)
     cell.sharded_weight.assign_value(cell.weight)
     (param, comm_handle) = all_gather_into_tensor(cell.sharded_weight, group=data_parallel_group, async_op=True)
     param.name = cell.weight.name
     cell.weight.gathered = 1
-    bp_wait_buffer[cell.cell_id]=(param,comm_handle,cell)
+    bp_wait_buffer[cell.cell_id] = (param, comm_handle, cell)
 
 
 @_no_grad()
@@ -70,10 +72,12 @@ def reduce_scatter_grad(param, wait_grad_buffer, grad_reduce_in_fp32, average_in
     (grad, comm_handle) = reduce_scatter_tensor(param.full_grad, group=data_parallel_group, async_op=True)
     wait_grad_buffer.append((grad, comm_handle, param))
 
+
 @_no_grad()
 def all_reduce_grad(grad, zero_shard_grad_group):
     reduced_grad, _ = all_reduce(grad, group=zero_shard_grad_group, async_op=False)
     return reduced_grad
+
 
 def wait_grad(wait_grad_buffer, zero_comm_group):
     ''' wait for grad reduction, and do grad accumulation'''
@@ -89,6 +93,8 @@ def wait_grad(wait_grad_buffer, zero_comm_group):
 
 
 z3_optim_cells = []
+
+
 def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, zero_comm_group, depth):
     ''' register fw bw hook for the zero3 params '''
     wait_buffer = deque()
@@ -105,15 +111,16 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
 
     def recursion_cells(cell):
         sub_cells_list = cell.cells()
- 
+
         for sub_cell in sub_cells_list:
-            if sub_cell.__class__.__name__ in ["ColumnParallelLinear", "ParallelLinear"] and sub_cell.use_zero3 and sub_cell.weight.requires_grad:
+            if sub_cell.__class__.__name__ in ["ColumnParallelLinear",
+                                               "ParallelLinear"] and sub_cell.use_zero3 and sub_cell.weight.requires_grad:
                 sub_cell.pre_cell_id = sub_cell.next_cell_id = None
                 z3_optim_cells.append(sub_cell)
-                #print("recursion_cells: ",sub_cell.weight.name,sub_cell.weight.shape,flush=True)
+                # print("recursion_cells: ",sub_cell.weight.name,sub_cell.weight.shape,flush=True)
             else:
                 recursion_cells(sub_cell)
- 
+
     chunk_size = 4
     recursion_cells(network)
     comm_op_nums = len(z3_optim_cells)
@@ -125,27 +132,28 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
     for i in range(layer_comm_op_size):
         weight_size_list += [np.prod(np.array(z3_optim_cells[i].weight.shape))]
     dispatch_index = np.argmax(weight_size_list)
- 
-    layer_begin_list =  range(0, len(z3_optim_cells), layer_comm_op_size)
-    chunk_begin_list = sorted([x + dispatch_index for x in layer_begin_list]+ [x+dispatch_index+1 for x in layer_begin_list])
+
+    layer_begin_list = range(0, len(z3_optim_cells), layer_comm_op_size)
+    chunk_begin_list = sorted(
+        [x + dispatch_index for x in layer_begin_list] + [x + dispatch_index + 1 for x in layer_begin_list])
     single_begin_list = range(len(z3_optim_cells))
-    actual_chunk_begin_id=chunk_begin_list[0]
+    actual_chunk_begin_id = chunk_begin_list[0]
     for begin_layer in chunk_begin_list:
         if begin_layer < actual_chunk_begin_id:
             begin_layer = actual_chunk_begin_id
-        chunk_list = range(begin_layer, begin_layer+chunk_size)
+        chunk_list = range(begin_layer, begin_layer + chunk_size)
         single_begin_list = [x for x in single_begin_list if x not in chunk_list]
         actual_chunk_begin_id = begin_layer + chunk_size
-    actual_chunk_begin_id=0
+    actual_chunk_begin_id = 0
 
     # pylint: disable=W0622
     def _pre_forward_cell_hook(cell, input):
-        #print("pre forward cell hook: ",cell.weight.name,cell.cell_id, cell.weight.shape, _pynative_executor.enable_grad(), cell._has_config_recompute, cell.weight.gathered,flush=True)
+        # print("pre forward cell hook: ",cell.weight.name,cell.cell_id, cell.weight.shape, _pynative_executor.enable_grad(), cell._has_config_recompute, cell.weight.gathered,flush=True)
         cell_id = cell.cell_id
         if cell._has_config_recompute and _pynative_executor.enable_grad():
             bp_all_gather_param(cell, bp_wait_buffer, data_parallel_group)
             if cell_id in bp_wait_buffer:
-                (full_param, handle,pre_cell) = bp_wait_buffer.pop(cell_id)
+                (full_param, handle, pre_cell) = bp_wait_buffer.pop(cell_id)
                 handle.wait()
                 pre_cell.weight.assign_value(full_param)
             next_cell_id = cell_id - layer_comm_op_size
@@ -155,14 +163,14 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
         else:
             global actual_chunk_begin_id
             if hasattr(cell, 'zero_start'):
-                actual_chunk_begin_id=chunk_begin_list[0]
+                actual_chunk_begin_id = chunk_begin_list[0]
                 all_gather_param(cell, wait_buffer, data_parallel_group)
             if cell.cell_id in chunk_begin_list:
                 dispatch_cell_id = cell.cell_id
                 if dispatch_cell_id < actual_chunk_begin_id:
                     dispatch_cell_id = actual_chunk_begin_id
                 if dispatch_cell_id < len(z3_optim_cells):
-                    cell_ = z3_optim_cells[dispatch_cell_id+1]
+                    cell_ = z3_optim_cells[dispatch_cell_id + 1]
                     for _ in range(chunk_size):
                         all_gather_param(cell_, wait_buffer, data_parallel_group)
                         next_cell_id = cell_.next_cell_id
@@ -171,12 +179,12 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
                         cell_ = z3_optim_cells[cell_.next_cell_id]
                     actual_chunk_begin_id = dispatch_cell_id + chunk_size
             elif cell.cell_id in single_begin_list:
-                if cell.cell_id < len(z3_optim_cells)-1:
+                if cell.cell_id < len(z3_optim_cells) - 1:
                     cell_ = z3_optim_cells[cell.next_cell_id]
                     all_gather_param(cell_, wait_buffer, data_parallel_group)
 
             if wait_buffer:
-                (full_param, handle,post_cell) = wait_buffer.popleft()
+                (full_param, handle, post_cell) = wait_buffer.popleft()
                 handle.wait()
                 post_cell.weight.assign_value(full_param)
         return input
@@ -190,21 +198,21 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
 
     # pylint: disable=W0622, W0613
     def _pre_backward_cell_hook(cell, grad_output):
-        #print("_pre_backward_cell_hook ",cell.weight.name,cell.cell_id, cell.weight.shape, cell._has_config_recompute, flush=True)
+        # print("_pre_backward_cell_hook ",cell.weight.name,cell.cell_id, cell.weight.shape, cell._has_config_recompute, flush=True)
         cell_id = cell.cell_id
         bp_all_gather_param(cell, bp_wait_buffer, data_parallel_group)
         if cell_id in bp_wait_buffer:
-            (full_param, handle,post_cell) = bp_wait_buffer.pop(cell_id)
+            (full_param, handle, post_cell) = bp_wait_buffer.pop(cell_id)
             handle.wait()
             post_cell.weight.assign_value(full_param)
-        pre_cell_id = cell.cell_id-layer_comm_op_size
+        pre_cell_id = cell.cell_id - layer_comm_op_size
         if pre_cell_id > 0:
             pre_cell = z3_optim_cells[pre_cell_id]
             bp_all_gather_param(pre_cell, bp_wait_buffer, data_parallel_group)
 
     # pylint: disable=W0622, W0613
     def _post_backward_cell_hook(cell, grad_input, grad_output):
-        #print("_post_backward_cell_hook: ", cell.weight.name, cell.cell_id, cell.weight.shape,flush=True)
+        # print("_post_backward_cell_hook: ", cell.weight.name, cell.cell_id, cell.weight.shape,flush=True)
         cell.weight.assign_value(cell.sharded_weight)
         cell.weight.gathered = 3
 
@@ -214,7 +222,6 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
             while wait_grad_buffer:
                 wait_grad(wait_grad_buffer, zero_comm_group)
             check_post_hook()
-
 
     if z3_optim_cells:
         z3_optim_cells[0].zero_start = True
@@ -232,12 +239,11 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
         sub_cell.register_backward_pre_hook(_pre_backward_cell_hook)
         sub_cell.register_backward_hook(_post_backward_cell_hook)
 
-
     def _make_param_hook_zero3(param):
         """ make closure function as the param hook. """
 
         def param_hook(grad):
-            #print("_make_param_hook_zero3: ", param.name, flush=True)
+            # print("_make_param_hook_zero3: ", param.name, flush=True)
             param.full_grad = grad
             if grad.shape != param.grad.shape:
                 reduce_scatter_grad(param, wait_grad_buffer, grad_reduce_in_fp32, average_in_collective,
@@ -255,11 +261,10 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
 def check_post_hook():
     global z3_optim_cells
     for cell in z3_optim_cells:
-        #print("check: ", cell.weight.name, cell.cell_id, cell.weight.shape,cell.weight.gathered, flush=True)
+        # print("check: ", cell.weight.name, cell.cell_id, cell.weight.shape,cell.weight.gathered, flush=True)
         if cell.weight.gathered == 1:
             cell.weight.assign_value(cell.sharded_weight)
             cell.weight.gathered = 3
-
 
 
 class DistributedDataParallel(nn.Cell):
@@ -499,4 +504,3 @@ class DistributedDataParallel(nn.Cell):
             return param.grad
 
         return param_hook
-

@@ -14,18 +14,13 @@
 # ======================
 
 """Model and data parallel groups."""
-import warnings
 import numpy as np
+from mindspore import log as logger
+from mindspore.communication import create_group, destroy_group, get_rank
 
-import mindspore
-from mindspore.communication import create_group, destroy_group, get_group_size, get_rank
 import mindspeed_ms.core.ddp.create_comm as create_comm
 from mindspeed_ms.core.ddp.create_comm import get_dp_world_size as get_data_parallel_world_size, \
     get_dp_group as get_data_parallel_group
-from mindspore import hal
-
-from mindspore import log as logger
-
 
 group_info_maps = {}
 

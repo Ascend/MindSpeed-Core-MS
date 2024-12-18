@@ -16,9 +16,7 @@
 import numpy as np
 from collections import deque
 from contextlib import contextmanager
-from mindspeed_ms.core.ddp.create_comm import get_dp_world_size as get_data_parallel_world_size, \
-    get_dp_group as get_data_parallel_group
-from mindspore import mint, ops, _no_grad, Parameter, Tensor
+from mindspore import mint, ops, _no_grad, Parameter
 from mindspore import nn
 from mindspore.common import dtype as mstype
 from mindspore.common.api import _pynative_executor
@@ -26,6 +24,8 @@ from mindspore.common.initializer import Zero
 from mindspore.communication import get_group_size, create_group
 from mindspore.communication.comm_func import all_gather_into_tensor, reduce_scatter_tensor, all_reduce
 
+from mindspeed_ms.core.ddp.create_comm import get_dp_world_size as get_data_parallel_world_size, \
+    get_dp_group as get_data_parallel_group
 from .parallel_state import get_zero_full_shard_flag
 from .param_and_grad_buffer import ParamAndGradBuffer
 

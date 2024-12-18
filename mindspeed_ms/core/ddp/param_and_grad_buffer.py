@@ -14,16 +14,14 @@
 # ============================================================================
 """ Param and grad buffer, bucket implemenatrion. """
 import math
-from enum import Enum
+import mindspore.communication.comm_func as comm_func
 import numpy as np
-
+from enum import Enum
+from mindspore import log as logger
 from mindspore import ops, mint, Tensor
 from mindspore.common import dtype as mstype
 from mindspore.common.initializer import Zero
 from mindspore.communication.management import get_rank, get_group_size
-import mindspore.communication.comm_func as comm_func
-from mindspore import log as logger
-
 
 __all__ = ['Bucket', 'ParamAndGradBuffer']
 

@@ -15,8 +15,10 @@
 """ utils for distri_core optimizer. """
 
 from mindspore import Tensor, Parameter, ParameterTuple
-from mindspore.common.initializer import Zero
 from mindspore.common import dtype as mstype
+from mindspore.common.initializer import Zero
+
+
 def ensure_divisibility(numerator, denominator):
     """Ensure that numerator is divisible by the denominator."""
     assert numerator % denominator == 0, "{} is not divisible by {}".format(numerator, denominator)

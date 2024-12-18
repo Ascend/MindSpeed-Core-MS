@@ -14,11 +14,9 @@
 # ============================================================================
 """clip grad and scale grad"""
 from mindspore import mint
-import mindspore.ops as ops
-import mindspore.common.dtype as mstype
 from mindspore.communication import get_group_size, GlobalComm
 from mindspore.communication.comm_func import all_reduce
-import mindspore as ms
+
 
 def inplace_apply_to_tensor_list(func: callable):
     """Apply a function to a list of tensors in place.
@@ -41,20 +39,16 @@ def param_is_not_shared(param):
 
 
 def get_grad_norm_fp32(grads_for_norm, norm_type=2, parallel_group=None):
-
-
     total_norm = mint.norm(mint.stack([mint.norm(grad, norm_type) for grad in grads_for_norm], ),
-                                 norm_type) ** norm_type
+                           norm_type) ** norm_type
 
     if parallel_group is None:
         parallel_group = GlobalComm.WORLD_COMM_GROUP
     if get_group_size(parallel_group) > 1:
         total_norm = all_reduce(total_norm, "sum", parallel_group)[0]
 
-
     total_norm = total_norm.item() ** (1.0 / norm_type)
     return total_norm
-
 
 
 def clip_grad_by_total_norm_fp32(parameters, max_norm, total_norm):

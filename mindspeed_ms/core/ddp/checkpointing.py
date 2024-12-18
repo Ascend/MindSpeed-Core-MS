@@ -1,13 +1,12 @@
-import os
 import glob
 import json
-
 import mindspore as ms
-from mindspore import nn
-from mindspore.communication import get_rank
+import os
 from mindspore import _checkparam as validator
 from mindspore import log as logger
+from mindspore import nn
 from mindspore.communication import get_group_size
+from mindspore.communication import get_rank
 from mindspore.ops import operations as P
 from mindspore.train.serialization import _update_param
 

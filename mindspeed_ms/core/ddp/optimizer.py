@@ -20,9 +20,10 @@ from mindspore.communication import GlobalComm
 from mindspore.communication.comm_func import all_reduce
 from mindspore.communication.management import get_rank, create_group
 
+from mindspeed_ms.core.ddp.parallel_state import get_zero_full_shard_flag, get_zero_shard_group
 from .grad_handler import inplace_apply_to_tensor_list, \
     get_grad_norm_fp32, clip_grad_by_total_norm_fp32
-from mindspeed_ms.core.ddp.parallel_state import get_zero_full_shard_flag, get_zero_shard_group
+
 
 class MixedPrecisionOptimizer(nn.Cell):
     """
@@ -118,7 +119,7 @@ class MixedPrecisionOptimizer(nn.Cell):
             )
             is_shard = (
                     ('x_embedder.' not in param.name) and ('t_embedder.' not in param.name) and (
-                        'y_embedder.y_proj.fc1.' not in param.name))
+                    'y_embedder.y_proj.fc1.' not in param.name))
             if grad_not_none and is_not_tp_duplicate:
                 grads_for_norm.append(grad)
             else:
