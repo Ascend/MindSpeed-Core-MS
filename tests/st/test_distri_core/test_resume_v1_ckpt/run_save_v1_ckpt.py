@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-""" Test Resume_Training. """
-import argparse
+""" Test Saving 1.0 Checkpoint """
 import os
+import re
+import argparse
 from functools import partial
 import numpy as np
 
@@ -25,7 +26,11 @@ from mindspore.communication.management import init
 from mindspore.mint.optim import AdamW
 from mindspore import mint
 
-from mindspeed_ms.training import parse_args, core_transformer_config_from_yaml
+from mindspeed_ms.training import (
+    parse_args, get_args,
+    get_model, get_loss_func,
+    core_transformer_config_from_yaml,
+)
 from mindspeed_ms.training.arguments import _print_args
 from mindspeed_ms.training.yaml_arguments import validate_yaml
 from mindspeed_ms.training.global_vars import set_global_variables
@@ -33,10 +38,10 @@ from mindspeed_ms.training.utils import average_losses_across_data_parallel_grou
 from mindspeed_ms.training.training import get_resume_ckpt_path
 from mindspeed_ms.core.tensor_parallel import ReduceFromContextParallelRegion
 from mindspeed_ms.core import parallel_state
-from mindspeed_ms.training import get_model, train, get_loss_func, get_args
 from mindspeed_ms.core.optimizer import get_optimizer_param_scheduler, optimizer_config_from_args
 from mindspeed_ms.core.dist_checkpointing import load_checkpoint
 from tests.st.test_distri_core.utils import MixtralModel
+from tests.st.test_distri_core.test_resume_v1_ckpt.checkpointing_v1 import save_checkpoint
 
 
 def get_batch(data_iterator):
@@ -100,6 +105,7 @@ def forward_step(data_iterator, model):
 
     return input_tensor, core_forward_func, partial(loss_func, loss_mask)
 
+
 class TestData:
     """
     generate a test dataset
@@ -122,7 +128,7 @@ class TestData:
         return self.dataset_size
 
 
-def run_resume_training(config, args):
+def run_save_v1_ckpt(config, args):
     """ Test ParallelTransformer. """
     print(f"config is:\n{config}")
     _print_args("final args", args)
@@ -183,22 +189,37 @@ def run_resume_training(config, args):
         print(f"{param.name} {param.dtype} {param.shape}")
     optimizer = AdamW(params=network.trainable_params(), lr=1e-4)
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
-    # load golden ckpt
-    if args.load is not None and os.path.exists(args.load):
-        args.finetune = False
-        ckpt_version, ckpt_path, release = get_resume_ckpt_path(args.load)
-        print(f"ckpt_path is {ckpt_path}")
-        load_checkpoint(
-            config=config,
-            model=network,
-            optimizer=optimizer,
-            opt_param_scheduler=opt_param_scheduler,
-            ckpt_path=ckpt_path,
-            format=args.dist_ckpt_format,
-            ckpt_version=ckpt_version,
-            release=release)
 
-    train(forward_step, network, optimizer, opt_param_scheduler, dataset, None, None, config)
+    # Load golden ckpt
+    assert args.load is not None and os.path.exists(args.load), \
+        "source checkpoint dir to save 1.0 checkpoint must be provided"
+
+    args.finetune = False
+    ckpt_version, ckpt_path, release = get_resume_ckpt_path(args.load)
+    print(f"ckpt_path is {ckpt_path}")
+    load_checkpoint(
+        config=config,
+        model=network,
+        optimizer=optimizer,
+        opt_param_scheduler=opt_param_scheduler,
+        ckpt_path=ckpt_path,
+        format=args.dist_ckpt_format,
+        ckpt_version=ckpt_version,
+        release=release)
+
+    # Save 1.0 checkpoint
+    save_checkpoint(
+        config,
+        network,
+        optimizer,
+        opt_param_scheduler,
+        args.save,
+        format=args.dist_ckpt_format,
+        prefix=args.prefix,
+        epoch_num=args.save_epoch,
+        step_num=args.save_step,
+        crc_check=args.crc_check,
+        keep_checkpoint_max=args.keep_checkpoint_max)
 
 
 if __name__ == '__main__':
@@ -212,8 +233,6 @@ if __name__ == '__main__':
     parser.add_argument('--load_checkpoint', type=str, default="", help="where to load ckpt")
     parser.add_argument('--training_iters', type=int, default=10, help="training_iters")
     parser.add_argument('--save_interval', type=int, default=None, help="training_iters")
-    parser.add_argument('--no_load_optim', action='store_true', help="load optim or not")
-    parser.add_argument('--no_load_rng', action='store_true', help="load rng or not")
     parser.add_argument('--new_dataset', action='store_true', help="use new dataset or not")
     parser.add_argument('--learning_rate', type=float, default=0.0009, help="learning_rate")
     parser.add_argument('--override_opt_param_scheduler', action='store_true', help="use config scheduler")
@@ -221,8 +240,7 @@ if __name__ == '__main__':
     parser.add_argument('--pp', type=int, default=2, help="pp size")
     parser.add_argument('--gbs', type=int, default=1, help="global batch size")
     parser.add_argument('--epochs', type=int, default=1, help="epochs")
-    parser.add_argument('--latest_epoch_step', type=str, default='0_10', help="saved latest epoch and step")
-    parser.add_argument('--load_epoch_step', type=str, default='0_5', help="specified a epoch and step to load")
+    parser.add_argument('--save_epoch_step', type=str, default='0_5', help="specified a epoch and step to save")
     parser.add_argument('--ckpt_step', type=int, default=0, help="step to resume")
     cli_args = parser.parse_args()
 
@@ -238,17 +256,14 @@ if __name__ == '__main__':
         inner_parser.add_argument('--load_checkpoint', type=str, default="", help="where to load ckpt")
         inner_parser.add_argument('--training_iters', type=int, default=10, help="training_iters")
         inner_parser.add_argument('--save_interval', type=int, default=None, help="training_iters")
-        inner_parser.add_argument('--no_load_optim', action='store_true', help="load optim or not")
-        inner_parser.add_argument('--no_load_rng', action='store_true', help="load rng or not")
         inner_parser.add_argument('--new_dataset', action='store_true', help="use new dataset or not")
         inner_parser.add_argument('--learning_rate', type=float, default=0.0009, help="learning_rate")
         inner_parser.add_argument('--override_opt_param_scheduler', action='store_true', help="use config scheduler")
         inner_parser.add_argument('--tp', type=int, default=2, help="tp size")
         inner_parser.add_argument('--pp', type=int, default=2, help="pp size")
         inner_parser.add_argument('--gbs', type=int, default=1, help="global batch size")
-        inner_parser.add_argument('--latest_epoch_step', type=str, default='0_10', help="saved latest epoch and step")
-        inner_parser.add_argument('--load_epoch_step', type=str, default='0_5',
-                                  help="specified a epoch and step to load")
+        inner_parser.add_argument('--save_epoch_step', type=str, default='0_5',
+                                  help="specified a epoch and step to save")
         inner_parser.add_argument('--ckpt_step', type=int, default=0, help="step to resume")
         return inner_parser
 
@@ -259,8 +274,9 @@ if __name__ == '__main__':
     all_config.tensor_model_parallel_size = cli_args.tp
     all_config.pipeline_model_parallel_size = cli_args.pp
 
-    main_args.latest_epoch_step = cli_args.latest_epoch_step
-    main_args.load_epoch_step = cli_args.load_epoch_step
+    tmp = re.findall(r"\d+", cli_args.save_epoch_step)
+    assert len(tmp) == 2, "--save_epoch_step is expected to be <epoch>_<step>"
+
     main_args.tensor_model_parallel_size = cli_args.tp
     main_args.pipeline_model_parallel_size = cli_args.pp
     main_args.global_batch_size = cli_args.gbs
@@ -272,17 +288,17 @@ if __name__ == '__main__':
     else:
         main_args.compile_cache_path = cli_args.compile_cache_path
     main_args.crc_check = cli_args.crc_check
-    main_args.save = cli_args.output_dir
     main_args.profile_save_path = os.path.join(cli_args.output_dir, "profile")
     main_args.load = cli_args.load_checkpoint
     main_args.train_iters = cli_args.training_iters
+    main_args.save = cli_args.output_dir
     main_args.save_interval = cli_args.save_interval
-    main_args.no_load_optim = cli_args.no_load_optim
-    main_args.no_load_rng = cli_args.no_load_rng
+    main_args.save_epoch = int(tmp[0])
+    main_args.save_step = int(tmp[1])
     main_args.new_dataset = cli_args.new_dataset
     main_args.lr = cli_args.learning_rate
     main_args.override_opt_param_scheduler = cli_args.override_opt_param_scheduler
     main_args.ckpt_step = cli_args.ckpt_step
     if cli_args.override_opt_param_scheduler:
         main_args.use_checkpoint_opt_param_scheduler = False
-    run_resume_training(all_config, main_args)
+    run_save_v1_ckpt(all_config, main_args)

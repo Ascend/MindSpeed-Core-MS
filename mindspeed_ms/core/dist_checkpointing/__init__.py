@@ -18,8 +18,12 @@ from .checkpointing import get_checkpoint_name
 from .checkpointing import save_checkpoint
 from .checkpointing import load_checkpoint
 from .checkpointing import get_last_checkpoint
+from .checkpointing import detect_checkpoint_version_by_dir
+from .checkpointing import CkptVersion
 
 __all__ = ["get_checkpoint_name",
            "save_checkpoint",
            "load_checkpoint",
-           "get_last_checkpoint"]
+           "get_last_checkpoint",
+           "detect_checkpoint_version_by_dir",
+           "CkptVersion"]

@@ -46,7 +46,10 @@ from mindspeed_ms.core.pipeline_parallel.schedules import (
 from mindspeed_ms.core.dist_checkpointing import (
     save_checkpoint,
     load_checkpoint,
-    get_last_checkpoint
+    get_last_checkpoint,
+    get_checkpoint_name,
+    detect_checkpoint_version_by_dir,
+    CkptVersion
 )
 from mindspeed_ms.legacy.model.moe.utils import MoEAuxLossAutoScaler
 from mindspeed_ms.core.optimizer import get_optimizer, get_optimizer_param_scheduler
@@ -89,19 +92,19 @@ def get_train_valid_test_num_samples():
     )
 
 
-def get_dataset_dict_iterator(train_dataloader, epoch_step):
+def get_dataset_dict_iterator(train_dataloader, skip_step):
     """ get dataset dict iterator """
     args = get_args()
-    if args.resume_training:
-        if not args.new_dataset:
-            # when epoch_step > 1, means resume traing mode, will skip some data.
-            factor = args.global_batch_size // mpu.get_data_parallel_world_size() // args.micro_batch_size
-            train_data_dict_iterator = train_dataloader.skip((epoch_step - 1) * factor)\
-                .create_dict_iterator(num_epochs=1)
-        else:
-            logger.warning(f"When `resume_training = True` and `new_dataset = True`, will use a new dataset.")
-            train_data_dict_iterator = train_dataloader.create_dict_iterator(num_epochs=1)
-    else:
+    train_data_dict_iterator = None
+    if args.resume_training and not args.new_dataset and skip_step > 0:
+        # when skip_step > 0, means resume traing mode, will skip some data.
+        factor = args.global_batch_size // mpu.get_data_parallel_world_size() // args.micro_batch_size
+        train_data_dict_iterator = train_dataloader.skip(skip_step * factor)\
+            .create_dict_iterator(num_epochs=1)
+    if train_data_dict_iterator is None:
+        if args.resume_training and args.new_dataset:
+            logger.warning("When `resume_training = True` and `new_dataset = True`, "
+                           "will use a new dataset.")
         train_data_dict_iterator = train_dataloader.create_dict_iterator(num_epochs=1)
     return train_data_dict_iterator
 
@@ -658,7 +661,6 @@ def train(
         config,
         metrics=None,
         evaluation_func=None,
-        resume_dict=None,
         **kwargs
 ):
     """
@@ -674,7 +676,6 @@ def train(
         valid_data_iterator (Dataset): The iterator for the validation dataset. Defaults: ``None``.
         metrics (dict[str, Metric], optional): A dictionary of metrics to track during training. Defaults: ``None``.
         evaluation_func (Function, optional): The evaluation function to use for validation. Defaults: ``None``.
-        resume_dict (dict): Resume training parameters. Defaults: ``None``.
         get_batch_func (Function): A function to get the batch size in the dataset_config. Defaults: ``None``.
         **kwargs: Additional keyword arguments.
 
@@ -770,15 +771,8 @@ def train(
         raise NotImplementedError("process_non_loss_data_func is not supported for now.")
 
     args = get_args()
-    if args.resume_training and resume_dict is not None:
-        initial_epoch = resume_dict.get("epoch_num")
-        initial_step = resume_dict.get("step_num")
-    else:
-        initial_epoch = 0
-        initial_step = 0
-
     step_num_per_epoch = None
-    # broadcast only support [Int32], datasize limit [-2147483648, 2147483647]
+    # broadcast only support [Int32], step_num_per_epoch_tensor limit [-2147483648, 2147483647]
     step_num_per_epoch_tensor = ms.Tensor(np.zeros(1), dtype=mstype.int32)
 
     if train_data_iterator is not None:
@@ -805,25 +799,20 @@ def train(
         raise ValueError(f"Expect step_num_per_epoch > 0, but got {step_num_per_epoch}")
 
     logger.info(f"step number per epoch is {step_num_per_epoch}")
-
     train_one_step_cell = TrainOneStepCell(model, optimizer, opt_param_scheduler, config)
     train_one_step_cell.set_train()
     config = train_one_step_cell.config
 
-    global_step = 1
-    epoch_step = 1
-    current_epoch = 0
+    print_resume_flag = args.resume_training
     if args.resume_training:
-        global_step = initial_step + initial_epoch * step_num_per_epoch + 1
-        epoch_step = global_step % step_num_per_epoch
-        current_epoch = global_step // step_num_per_epoch
-        if epoch_step == 0 and current_epoch > 0:
-            epoch_step = step_num_per_epoch
-            current_epoch -= 1
-        logger.info(f"Resume training starts from global step {global_step}, epoch {current_epoch}, step {epoch_step}.")
-
-    if epoch_step > 1:
-        logger.info(f"Resume training will skip {epoch_step - 1} step data")
+        if args.ckpt_version == CkptVersion.V1:
+            epoch_num = getattr(args, "epoch_num", 0)
+            step_num = getattr(args, "step_num", 0)
+            iteration = step_num + epoch_num * step_num_per_epoch
+        else:
+            iteration = getattr(args, "iteration", 0)
+    else:
+        iteration = 0
 
     evaluation_flag = (
         valid_data_iterator is not None
@@ -854,24 +843,20 @@ def train(
     profiler = PynativeProfiler()
 
     if train_data_iterator is not None:
+        skip_step = iteration % step_num_per_epoch
         if isinstance(train_data_iterator, list):
             train_data_dict_iterator = []
             for cur_train_dataloader in train_data_iterator:
-                train_data_dict_iterator.append(get_dataset_dict_iterator(cur_train_dataloader, epoch_step))
+                train_data_dict_iterator.append(get_dataset_dict_iterator(cur_train_dataloader, skip_step))
         else:
-            train_data_dict_iterator = get_dataset_dict_iterator(train_data_iterator, epoch_step)
+            train_data_dict_iterator = get_dataset_dict_iterator(train_data_iterator, skip_step)
     else:
         train_data_dict_iterator = None
 
     # training loop
-    while not (
-            args.epochs is not None
-            and current_epoch >= args.epochs
-            or global_step > args.train_iters
-    ):
+    while iteration < args.train_iters:
         # we need to refresh train_dataloader every epoch
-        # when resume training, epoch_step > 1, so train_data_dict_iterator will not be refreshed
-        if epoch_step == 1 and train_data_iterator is not None:
+        if iteration % step_num_per_epoch == 0 and train_data_iterator is not None:
             if isinstance(train_data_iterator, list):
                 train_data_dict_iterator = []
                 for cur_train_dataloader in train_data_iterator:
@@ -879,13 +864,18 @@ def train(
             else:
                 train_data_dict_iterator = train_data_iterator.create_dict_iterator(num_epochs=1)
 
+        iteration += 1
+        if print_resume_flag:
+            print_resume_flag = False
+            logger.info(f"Resume training starts from iteration {iteration}")
+
         start_time = time.time()
-        profiler.step_begin(global_step)
+        profiler.step_begin(iteration)
         loss_reduced, is_finite, loss_scale, learning_rate, global_norm = train_one_step_cell(forward_step_func,
                                                                                               train_data_dict_iterator,
                                                                                               forward_only=False)
         end_time = time.time()
-        if args.log_interval is not None and global_step % args.log_interval == 0:
+        if args.log_interval is not None and iteration % args.log_interval == 0:
             if not correct_metric_flag:
                 logger.warning("Metrics is only calculated on the last stage.")
             if isinstance(learning_rate, (tuple, list)):
@@ -895,7 +885,7 @@ def train(
                 report_learning_rate += ')'
             else:
                 report_learning_rate = "{:e}".format(learning_rate)
-            print_log_str = f"Epoch: {current_epoch}, Step: {epoch_step}, "
+            print_log_str = f"Iteration: {iteration}, "
             for loss_key, loss_value in loss_reduced.items():
                 print_log_str += f"{loss_key}: {loss_value.item()}, "
             logger.info(
@@ -906,7 +896,7 @@ def train(
                 + f"Time: {(end_time - start_time) * 1000:.2f} ms"
             )
 
-        if evaluation_flag and global_step % args.eval_interval == 0:
+        if evaluation_flag and iteration % args.eval_interval == 0:
             is_best = Tensor(False, dtype=mstype.int8)
             results = evaluation_func(train_one_step_cell, valid_data_iterator, metrics, **kwargs)
 
@@ -929,12 +919,11 @@ def train(
                                     args.save,
                                     format=args.dist_ckpt_format,
                                     prefix=args.prefix + "_best",
-                                    epoch_num=current_epoch,
-                                    step_num=epoch_step,
+                                    iteration=iteration,
                                     crc_check=args.crc_check,
                                     keep_checkpoint_max=args.keep_checkpoint_max + 1)
 
-        if save_ckpt_flag and global_step % args.save_interval == 0:
+        if save_ckpt_flag and iteration % args.save_interval == 0:
             save_checkpoint(config,
                             train_one_step_cell.network_with_loss,
                             train_one_step_cell.optimizer,
@@ -942,19 +931,11 @@ def train(
                             args.save,
                             format=args.dist_ckpt_format,
                             prefix=args.prefix,
-                            epoch_num=current_epoch,
-                            step_num=epoch_step,
+                            iteration=iteration,
                             crc_check=args.crc_check,
                             keep_checkpoint_max=args.keep_checkpoint_max)
             gc.collect()
-        profiler.step_end(global_step)
-        epoch_step += 1
-        global_step += 1
-
-        # update epoch_step and current_epoch
-        if epoch_step > step_num_per_epoch:
-            epoch_step = 1
-            current_epoch += 1
+        profiler.step_end(iteration)
 
     if isinstance(train_one_step_cell.optimizer, DistributedOptimizer) \
             and args.overlap_param_gather:
@@ -962,15 +943,6 @@ def train(
 
     if save_ckpt_flag:
         logger.info("Saving last step checkpoint.")
-        # at the end of training loop, we use `global_step += 1`,
-        # so the right global step should be 'global_step - 1',
-        epoch_step = (global_step - 1) % step_num_per_epoch
-        current_epoch = (global_step - 1) // step_num_per_epoch
-        # to avoid situation like 'epoch 1, step 0'
-        if epoch_step == 0:
-            epoch_step = step_num_per_epoch
-            current_epoch -= 1
-
         save_checkpoint(config,
                         train_one_step_cell.network_with_loss,
                         train_one_step_cell.optimizer,
@@ -978,12 +950,12 @@ def train(
                         args.save,
                         format=args.dist_ckpt_format,
                         prefix=args.prefix,
-                        epoch_num=current_epoch,
-                        step_num=epoch_step,
+                        iteration=iteration,
                         crc_check=args.crc_check,
                         keep_checkpoint_max=args.keep_checkpoint_max)
         gc.collect()
     logger.info("Training success!")
+    return iteration
 
 
 # pylint: disable=W0613, C0330, W0102
@@ -1010,7 +982,7 @@ def pretrain(train_valid_test_dataset_provider,
     timers = get_timers()
 
     timers('model-and-optimizer-setup', log_level=0).start(barrier=True)
-    model, optimizer, opt_param_scheduler, resume_dict = setup_model_and_optimizer(model_provider, model_type)
+    model, optimizer, opt_param_scheduler = setup_model_and_optimizer(model_provider, model_type)
     timers('model-and-optimizer-setup').stop()
 
     timers('train/valid/test-data-iterators-setup', log_level=0).start(barrier=True)
@@ -1039,7 +1011,7 @@ def pretrain(train_valid_test_dataset_provider,
         logger.warning("training...")
         iteration = 0
         if args.do_train and args.train_iters > 0:
-            train(
+            iteration = train(
                 forward_step_func=forward_step_func,
                 model=model,
                 optimizer=optimizer,
@@ -1049,13 +1021,10 @@ def pretrain(train_valid_test_dataset_provider,
                 process_non_loss_data_func=process_non_loss_data_func,
                 config=config,
                 metrics=None,
-                resume_dict=resume_dict,
             )
-            iteration = args.train_iters
             logger.warning("training is done...")
     else:
-        # TODO: Make iteration sense
-        iteration = 0
+        iteration = getattr(args, "iteration", 0)
         logger.warning("skip training...")
 
     if args.do_valid:
@@ -1093,7 +1062,6 @@ def setup_model_and_optimizer(model_provider_func,
                               network=model)
     opt_param_scheduler = get_optimizer_param_scheduler(optimizer)
 
-    resume_dict = None
     load_dir = None
     if args.load is not None and \
        os.path.exists(args.load):
@@ -1110,55 +1078,90 @@ def setup_model_and_optimizer(model_provider_func,
 
     if load_dir is not None:
         args.iteration = 0
-        rank_path = os.path.join(load_dir, f"rank_{get_rank()}")
-        if os.path.exists(rank_path):
-            meta_path = os.path.join(rank_path, "meta.json")
-            resume_by_meta = True
-            if not os.path.exists(meta_path):
-                logger.warning(f"Could not find meta.json in directory {rank_path}, using latest ckpt in {rank_path}")
-                resume_by_meta = False
-            resume_ckpt_name = get_resume_checkpoint(
-                checkpoint_dir=load_dir,
-                resume_training=args.resume_training,
-                resume_by_meta=resume_by_meta
-                )
-            logger.debug(f"resume_ckpt_name is {resume_ckpt_name}")
-            if resume_ckpt_name is True:
-                ckpt_path = load_dir
-            elif isinstance(resume_ckpt_name, str):
-                ckpt_path = os.path.join(rank_path, resume_ckpt_name)
-        else:
-            pp_rank = mpu.get_pipeline_model_parallel_rank()
-            dp_size = mpu.get_data_parallel_world_size(with_context_parallel=True)
-            tp_size = mpu.get_tensor_model_parallel_world_size()
-            tp_rank = mpu.get_tensor_model_parallel_rank()
-            local_rank_to_dp0_rank = pp_rank * dp_size * tp_size + tp_rank
-            logger.warning(f"global rank_{get_rank()} ckpt not found, will load rank_{local_rank_to_dp0_rank} ckpt.")
-            rank_path = os.path.join(load_dir, f"rank_{local_rank_to_dp0_rank}")
-            if not os.path.exists(rank_path):
-                raise FileNotFoundError(f"Path {rank_path} not exists, please check your ckpt path.")
-            ckpt_path = get_last_checkpoint(rank_path)
-            if not ckpt_path or not os.path.exists(ckpt_path):
-                raise FileNotFoundError(f"File {ckpt_path} not exists, please check your ckpt path.")
+        ckpt_version, ckpt_path, release = get_resume_ckpt_path(load_dir)
         logger.debug(f"ckpt_path is {ckpt_path}")
-        resume_dict = load_checkpoint(
+        load_checkpoint(
             config=get_model_config(model[0]),
             model=model,
             optimizer=optimizer,
             opt_param_scheduler=opt_param_scheduler,
             ckpt_path=ckpt_path,
-            format=args.dist_ckpt_format
-        )
-        logger.info(f"Checkpoint has trained {resume_dict.get('epoch_num', 0)} epochs, "
-                    f"{resume_dict.get('step_num', 0)} steps.")
-        if resume_dict is not None and args.resume_training is False:
-            resume_dict = None
-            logger.warning("resume_dict extract from checkpoint is not 'None', but resume_training is 'False', "
-                           "so resume_dict will be set to 'None'")
+            format=args.dist_ckpt_format,
+            ckpt_version=ckpt_version,
+            release=release)
     else:
         args.iteration = 0
+    return model, optimizer, opt_param_scheduler
 
-    return model, optimizer, opt_param_scheduler, resume_dict
+
+def get_resume_ckpt_path(load_dir):
+    """get resume ckpt path"""
+    ckpt_versions = detect_checkpoint_version_by_dir(load_dir)
+    release = False
+    if CkptVersion.V2 in ckpt_versions:
+        ckpt_version = CkptVersion.V2
+        ckpt_path, release = _get_resume_ckpt_path_v2(load_dir)
+    elif CkptVersion.V1 in ckpt_versions:
+        ckpt_version = CkptVersion.V1
+        ckpt_path = _get_resume_ckpt_path_v1(load_dir)
+    else:
+        raise ValueError("Not a valid checkpoint directory")
+    return (ckpt_version, ckpt_path, release)
+
+
+def _get_resume_ckpt_path_v2(load_dir):
+    """get resume ckpt path for checkpoint version 2.0 """
+    args = get_args()
+    release = False
+    if args.ckpt_step is not None:
+        ckpt_path, _ = get_checkpoint_name(
+            load_dir,
+            format=args.dist_ckpt_format,
+            iteration=args.ckpt_step,
+            dist_ckpt=args.use_dist_ckpt,
+            ckpt_version=CkptVersion.V2,
+            prefix=args.prefix)
+    else:
+        _, ckpt_path, release = get_last_checkpoint(
+            load_dir,
+            format=args.dist_ckpt_format,
+            ckpt_versions=[CkptVersion.V2])
+    return (ckpt_path, release)
+
+
+def _get_resume_ckpt_path_v1(load_dir):
+    """get resume ckpt path for checkpoint version 1.0 """
+    args = get_args()
+    rank_path = os.path.join(load_dir, f"rank_{get_rank()}")
+    if os.path.exists(rank_path):
+        meta_path = os.path.join(rank_path, "meta.json")
+        resume_by_meta = True
+        if not os.path.exists(meta_path):
+            logger.warning(f"Could not find meta.json in directory {rank_path}, using latest ckpt in {rank_path}")
+            resume_by_meta = False
+        resume_ckpt_name = get_resume_checkpoint(
+            checkpoint_dir=load_dir,
+            resume_training=args.resume_training,
+            resume_by_meta=resume_by_meta)
+        logger.debug(f"resume_ckpt_name is {resume_ckpt_name}")
+        if resume_ckpt_name is True:
+            ckpt_path = load_dir
+        elif isinstance(resume_ckpt_name, str):
+            ckpt_path = os.path.join(rank_path, resume_ckpt_name)
+    else:
+        pp_rank = mpu.get_pipeline_model_parallel_rank()
+        dp_size = mpu.get_data_parallel_world_size(with_context_parallel=True)
+        tp_size = mpu.get_tensor_model_parallel_world_size()
+        tp_rank = mpu.get_tensor_model_parallel_rank()
+        local_rank_to_dp0_rank = pp_rank * dp_size * tp_size + tp_rank
+        logger.warning(f"global rank_{get_rank()} ckpt not found, will load rank_{local_rank_to_dp0_rank} ckpt.")
+        rank_path = os.path.join(load_dir, f"rank_{local_rank_to_dp0_rank}")
+        if not os.path.exists(rank_path):
+            raise FileNotFoundError(f"Path {rank_path} not exists, please check your ckpt path.")
+        ckpt_path = get_last_checkpoint(rank_path, ckpt_versions=[CkptVersion.V1])
+        if not ckpt_path or not os.path.exists(ckpt_path):
+            raise FileNotFoundError(f"File {ckpt_path} not exists, please check your ckpt path.")
+    return ckpt_path
 
 
 def build_train_valid_test_datasets(build_train_valid_test_datasets_provider):

@@ -13,7 +13,11 @@
 # limitations under the License.
 # ============================================================================
 
-"""Model and parameters serialization."""
+"""
+Model and parameters serialization.
+
+Checkpoint version: 1.0 (latest: 2.0)
+"""
 
 __all__ = [
     "get_checkpoint_name",
@@ -22,17 +26,14 @@ __all__ = [
     'save_pre_process',
     'load_post_process',
     "save_checkpoint",
-    "load_checkpoint",
-    "detect_checkpoint_version_by_dir",
-    "CkptVersion"
+    "load_checkpoint"
 ]
 
-import re
 import os
 import sys
 import stat
 import glob
-import shutil
+import json
 import numpy as np
 import mindspore as ms
 from mindspore import nn
@@ -52,9 +53,7 @@ from mindspeed_ms.core.parallel_state import (
     get_data_parallel_group,
     get_data_parallel_rank,
     get_data_parallel_world_size,
-    get_tensor_model_parallel_rank,
     get_pipeline_model_parallel_world_size,
-    get_pipeline_model_parallel_rank,
     get_expert_model_parallel_world_size
 )
 from mindspeed_ms.core.tensor_parallel.random import (
@@ -66,122 +65,13 @@ from mindspeed_ms.core.optimizer.optimizer import MixedPrecisionOptimizer
 # Distribution configurations.
 _STRATEGY_DIR = "strategy"
 _FORMAT = "ckpt"
-RE_ITER = re.compile("iter_([0-9]+)")
-
-
-class CkptVersion:
-    """Supported checkpoint versions"""
-    # V1: Global Rank+Epoch+Step base
-    # ie. rank_0/network_rank_0-0_1.ckpt
-    V1 = 1.0
-
-    # V2: Iteration+TP+PP+DP base
-    # ie. iter_0000001/mp_rank_00_000/model_optim_rng_000.ckpt
-    V2 = 2.0
-
-    @classmethod
-    def validate(cls, ckpt_version):
-        if ckpt_version not in [cls.V1, cls.V2]:
-            raise ValueError(f"Invalid checkpoint version:{ckpt_version}! "
-                             f"Supports:{[cls.V1, cls.V2]}")
-
-
-def get_checkpoint_tracker_filename(ckpt_path):
-    """ Get the path of tracker file """
-    return os.path.join(ckpt_path, "latest_checkpointed_iteration.txt")
 
 
 # pylint: disable=W0622
 def get_checkpoint_name(ckpt_path, format=_FORMAT, get_name_from_file=False,
                         prefix: str = "network", epoch_num: int = None, step_num: int = None,
-                        ckpt_version: float = CkptVersion.V2,
-                        base_name: str = "model_optim_rng", iteration: int = None,
-                        release: bool = False, return_base_dir: bool = False,
-                        dist_ckpt: bool = False, ensure_exist: bool = True):
+                        ensure_exist: bool = True):
     """
-    Get checkpoint file name of model and optimizer.
-    The strategy file will be saved in a standalone dir for the possible subsequent merging.
-    The checkpoint file will be separated in different dir for the possible subsequent transformation.
-    """
-    validator.check_value_type("ckpt_path", ckpt_path, [str])
-    CkptVersion.validate(ckpt_version)
-    if ckpt_version == CkptVersion.V1:
-        return _get_checkpoint_name_v1(
-            ckpt_path, format, get_name_from_file,
-            prefix, epoch_num, step_num, ensure_exist)
-    return _get_checkpoint_name_v2(
-        ckpt_path, format, prefix, base_name,
-        iteration, release, return_base_dir,
-        dist_ckpt, ensure_exist)
-
-
-# pylint: disable=W0622
-def _get_checkpoint_name_v2(ckpt_path, format=_FORMAT, prefix: str = "",
-                            base_name: str = "model_optim_rng",
-                            iteration: int = None, release: bool = False,
-                            return_base_dir: bool = False,
-                            dist_ckpt: bool = False,
-                            ensure_exist: bool = True):
-    """For checkpoint version: 2.0
-    Get checkpoint file name of model and optimizer.
-    The layout of the ckpt_path will be like:
-    ckpt_path/
-    ├── latest_checkpointed_iteration.txt
-    ├── iter_0000001
-    │   ├── mp_rank_00_000
-    │   │   ├── model_optim_rng_000.ckpt
-    │   │   └── model_optim_rng_001.ckpt
-    │   ├── mp_rank_00_001
-    │   ├── mp_rank_01_000
-    │   └── mp_rank_01_001
-    └── iter_0000002
-    The strategy file will be saved in a standalone dir for the possible subsequent merging.
-    The checkpoint file will be separated in different dir for the possible subsequent transformation.
-    """
-    ckpt_file = None
-    strategy_file = None
-
-    if release:
-        directory = "release"
-    elif iteration is not None:
-        directory = f"iter_{iteration:07d}"
-    else:
-        directory = ""
-
-    ckpt_path = os.path.normpath(os.path.abspath(ckpt_path))
-    ckpt_local_path = os.path.join(ckpt_path, directory)
-    if return_base_dir:
-        return ckpt_local_path
-
-    rank = get_rank()
-    dp_rank = get_data_parallel_rank(with_context_parallel=True)
-    tp_rank = get_tensor_model_parallel_rank()
-    pp_rank = get_pipeline_model_parallel_rank()
-
-    # Assemble path of ckpt file
-    ckpt_local_path = os.path.join(ckpt_local_path, f"mp_rank_{tp_rank:02d}")
-    if get_pipeline_model_parallel_world_size() > 1:
-        ckpt_local_path += f"_{pp_rank:03d}"
-    if ensure_exist:
-        os.makedirs(ckpt_local_path, exist_ok=True)
-
-    suffix = f"{dp_rank:03d}" \
-        if dist_ckpt and get_data_parallel_world_size(with_context_parallel=True) > 1 else ""
-    ckpt_file = os.path.join(ckpt_local_path, "_".join([
-        part for part in [prefix, base_name, suffix] if part
-    ]) + f".{format}")
-
-    # Assemble path of strategy file
-    strategy_local_path = os.path.join(ckpt_path, _STRATEGY_DIR)
-    strategy_file = os.path.join(strategy_local_path, f"strategy{rank}.ckpt")
-    return ckpt_file, strategy_file
-
-
-# pylint: disable=W0622
-def _get_checkpoint_name_v1(ckpt_path, format=_FORMAT, get_name_from_file=False,
-                            prefix: str = "network", epoch_num: int = None, step_num: int = None,
-                            ensure_exist: bool = True):
-    """For checkpoint version: 1.0
     Get checkpoint file name of model and optimizer.
     The layout of the ckpt_path will be like:
     ckpt_path/
@@ -194,6 +84,7 @@ def _get_checkpoint_name_v1(ckpt_path, format=_FORMAT, get_name_from_file=False,
     The strategy file will be saved in a standalone dir for the possible subsequent merging.
     The checkpoint file will be separated in different dir for the possible subsequent transformation.
     """
+    validator.check_value_type("ckpt_path", ckpt_path, [str])
     rank = get_rank()
     # ensure ckpt path exist
     ckpt_path = os.path.normpath(os.path.abspath(ckpt_path))
@@ -380,7 +271,7 @@ def load_post_process(config, params_dict, optimizer=None, load_optim: bool = Tr
                     )
                 )
             splited_tensor = split(params_dict[name])[shard_id]
-            params_dict[name] = ms.Parameter(splited_tensor, name=name)
+            params_dict[moments1_name] = ms.Parameter(splited_tensor, name=name)
 
         for idx, param in enumerate(optimizer._parameters):
             if load_optim and (optimizer._status_splited[idx] or optimizer._parameter_splited[idx]):
@@ -396,7 +287,7 @@ def load_post_process(config, params_dict, optimizer=None, load_optim: bool = Tr
 
 # pylint: disable=W0622
 def save_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckpt_path="./", format=_FORMAT,
-                    only_save_strategy=False, prefix: str = 'network', iteration: int = 0,
+                    only_save_strategy=False, prefix: str = 'network', epoch_num: int = 0, step_num: int = 0,
                     crc_check: bool = False, keep_checkpoint_max: int = 5, **kwargs):
     """
     Save checkpoint of distributed network to a specified file in the process of specified rank.
@@ -424,8 +315,10 @@ def save_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
         logger.warning(f"The parameter '{key}' is not used in save_checkpoint.")
 
     file_saving = args.use_dist_ckpt or (get_data_parallel_rank(with_context_parallel=True) == 0)
-    ckpt_file, strategy_file = get_checkpoint_name(ckpt_path, format=format, prefix=prefix, iteration=iteration,
-                                                   dist_ckpt=args.use_dist_ckpt, ensure_exist=file_saving)
+    rank_path = os.path.join(ckpt_path, f"rank_{get_rank()}")
+
+    ckpt_file, strategy_file = get_checkpoint_name(ckpt_path, format=format, prefix=prefix, epoch_num=epoch_num,
+                                                   step_num=step_num, ensure_exist=file_saving)
     if file_saving:
         logger.info(f"Saving model to {ckpt_file}")
 
@@ -441,17 +334,19 @@ def save_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
             append_dict.update(save_rng_state())
         if not args.no_save_optim and opt_param_scheduler is not None:
             append_dict.update(opt_param_scheduler.state_dict())
-        append_dict.update({"iteration": iteration, "checkpoint_version": CkptVersion.V2})
+        append_dict.update({"epoch_num": epoch_num, "step_num": step_num})
         # ensure ckpt number is less than `keep_checkpoint_max` after saving,
         # so make 1 free space for incoming ckpt
+
         if file_saving:
-            ensure_total_ckpt_is_less_than_limit(ckpt_path=ckpt_path, limit=keep_checkpoint_max - 1)
+            ensure_total_ckpt_is_less_than_limit(ckpt_path=rank_path, limit=keep_checkpoint_max - 1, format=format)
             ms.save_checkpoint(params_dict, ckpt_file, append_dict=append_dict, format=format, crc_check=crc_check)
-            record_last_ckpt_to_json(iteration, get_checkpoint_tracker_filename(ckpt_path))
+            record_last_ckpt_to_json(epoch=epoch_num, step=step_num, ckpt_file=os.path.basename(ckpt_file),
+                                     meta_json=os.path.join(rank_path, 'meta.json'))
     logger.info("ckpt saved")
 
 
-def ensure_total_ckpt_is_less_than_limit(ckpt_path: str, limit: int = 5):
+def ensure_total_ckpt_is_less_than_limit(ckpt_path: str, limit: int = 5, format: str = _FORMAT):
     """
     make sure the provided path contain less than limited number of checkpoint file
     Args:
@@ -459,24 +354,24 @@ def ensure_total_ckpt_is_less_than_limit(ckpt_path: str, limit: int = 5):
         limit (int): limited number of checkpoint file. Default: 5
         format (str): checkpoint format. Default: '_format'
     """
-    if get_rank() != 0:
-        return
-    # Sorting ckpt by iteration and remove early iterations
-    ckpt_list = sorted(
-        glob.glob(os.path.join(ckpt_path, "iter_*")),
-        key=lambda x: int(RE_ITER.findall(x)[0])
-    )
+    ckpt_list = [
+        checkpoint for checkpoint in os.listdir(ckpt_path)
+        if checkpoint.endswith(f'.{format}')
+    ]
+    # ckpt_list: [oldest, ..., newest]
+    ckpt_list = sorted(ckpt_list, key=lambda x: os.path.getmtime(os.path.join(ckpt_path, x)))
     ckpt_num = len(ckpt_list)
     if ckpt_num > limit:
-        for rm_ckpt_path in ckpt_list[: (ckpt_num - limit)]:
+        for rm_ckpt_name in ckpt_list[: (ckpt_num - limit)]:
             logger.warning(f"Current checkpoint file exceed keep_checkpoint_max, "
-                           f"removing {os.path.basename(rm_ckpt_path)}")
-            shutil.rmtree(rm_ckpt_path, ignore_errors=True)
+                           f"removing {rm_ckpt_name}")
+            rm_ckpt_path = os.path.join(ckpt_path, rm_ckpt_name)
+            os.remove(rm_ckpt_path)
 
 
 # pylint: disable=W0622
 def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckpt_path="./", format=_FORMAT,
-                    crc_check=False, ckpt_version=CkptVersion.V2, release=False, **kwargs):
+                    crc_check=False, **kwargs):
     """
     Load checkpoint info from a specified file in process of rank 0.
 
@@ -495,10 +390,8 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
         raise ValueError("crc_check does not support format 'safetensors' for now.")
     validator.check_value_type("model", model, [nn.Cell], "load_checkpoint")
     validator.check_value_type("optimizer", optimizer, [nn.Cell, type(None)], "load_checkpoint")
-    CkptVersion.validate(ckpt_version)
-
     if os.path.isdir(ckpt_path):
-        ckpt_version, src_ckpt_file, release = get_last_checkpoint(ckpt_path, format)
+        src_ckpt_file = get_last_checkpoint(os.path.join(ckpt_path, f"rank_{get_rank()}"), format=format)
     elif os.path.isfile(ckpt_path):
         src_ckpt_file = ckpt_path
     else:
@@ -510,8 +403,7 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
             logger.error("--exit-on-missing-checkpoint is set and exit now")
             sys.exit()
         logger.warning("Unable to load any checkpoint and will start from random.")
-        args.resume_training = False
-        return
+        return None
 
     for key in kwargs:
         logger.warning(f"The parameter '{key}' is not used in load_checkpoint.")
@@ -519,41 +411,19 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
 
     logger.info(f"Loading latest checkpoint: {src_ckpt_file}, this may take a while.")
     param_dict = ms.load_checkpoint(src_ckpt_file, format=format, crc_check=crc_check)
-
-    if "checkpoint_version" in param_dict:
-        tmp_ckpt_version = param_dict.get("checkpoint_version")
-        if ckpt_version is not None and ckpt_version != tmp_ckpt_version:
-            logger.warning(
-                f"Loaded checkpoint version is not consistent with provided checkpoint version. "
-                f"Loaded version is {tmp_ckpt_version} and "
-                f"provided version is {ckpt_version}."
-            )
-        args.ckpt_version = tmp_ckpt_version
+    if args.finetune:
+        resume_dict = {"epoch_num": 0, "step_num": 0}
     else:
-        if ckpt_version == CkptVersion.V2:
-            logger.warning(
-                f"Unable to get 'checkpoint_version' from ckpt "
-                f"and it is expected to contained in ckpt "
-                f"when provided ckpt_version is {ckpt_version}"
-            )
-        args.ckpt_version = CkptVersion.V1
-    CkptVersion.validate(args.ckpt_version)
+        resume_dict = {
+            "epoch_num": int(param_dict.pop("epoch_num", 0)),
+            "step_num": int(param_dict.pop("step_num", 0))
+        }
 
-    if args.resume_training:
-        if args.ckpt_version == CkptVersion.V1:
-            # 'step_num' and 'epoch_num' are deprecated in the latest training progress
-            args.epoch_num = int(param_dict.pop("epoch_num", 0))
-            args.step_num = int(param_dict.pop("step_num", 0))
-            logger.info(f"Checkpoint has trained {args.epoch_num} epochs, {args.step_num} steps.")
-        else:
-            args.iteration = int(param_dict.pop("iteration", 0))
-            logger.info(f"Checkpoint has trained {args.iteration} iterations.")
-
-    load_rng = not (release or args.finetune or args.no_load_rng)
+    load_rng = not (args.finetune or args.no_load_rng)
     if load_rng:
         load_rng_state(param_dict)
 
-    load_optim = not (release or args.finetune or args.no_load_optim)
+    load_optim = not(args.finetune or args.no_load_optim)
     if load_optim and opt_param_scheduler is not None:
         opt_param_scheduler.load_state_dict(param_dict)
 
@@ -564,7 +434,7 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
         optimizer.load_state_dict(param_dict, load_optim)
         # synchronize parameters in optimizer to model
         optimizer.reload_main_params()
-        if (args.fp16 or args.bf16) and not load_optim:
+        if (args.fp16 or args.bf16) and args.no_load_optim:
             optimizer.reload_model_params()
         for _, param in model.parameters_and_names():
             if not param.requires_grad and "set_hidden_states" not in param.name:
@@ -573,6 +443,8 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
                     logger.warning(f"Fail to get the weight of '{param.name}' from state dict.")
                     continue
                 _update_param(param, new_param, False)
+        if (args.fp16 and args.bf16) and not load_optim:
+            optimizer.reload_model_params()
     else:
         param_not_load, ckpt_not_load = ms.load_param_into_net(model, param_dict)
         if param_not_load:
@@ -587,89 +459,11 @@ def load_checkpoint(config, model, optimizer=None, opt_param_scheduler=None, ckp
                 logger.warning(f"When loading ckpt into the optimizer, ckpt_not_load:{ckpt_not_load}")
 
     logger.info(f"Checkpoint: {src_ckpt_file} is loaded successfully!")
+    return resume_dict
 
 
-def detect_checkpoint_version_by_dir(ckpt_path):
-    """Detect checkpoint version based on directory arrangement"""
-    logger.info(f"Detecting checkpoint versions of: {ckpt_path}")
-    ckpt_versions = []
-    # checkpoint version 2.0
-    ckpt_list = glob.glob(os.path.join(ckpt_path, "iter_*"))
-    if ckpt_list:
-        ckpt_versions.append(CkptVersion.V2)
-    # checkpoint version 1.0
-    ckpt_list = glob.glob(os.path.join(ckpt_path, "rank_*"))
-    if ckpt_list:
-        ckpt_versions.append(CkptVersion.V1)
-    logger.info(f"Detected  checkpoint versions: {ckpt_versions}")
-    return ckpt_versions
-
-
-def get_last_checkpoint(ckpt_path: str, format: str = _FORMAT, ckpt_versions: list = None):
-    """Get latest checkpoint under ckpt_path."""
-    if not ckpt_versions:
-        ckpt_versions = detect_checkpoint_version_by_dir(ckpt_path)
-    # Get new version first
-    if CkptVersion.V2 in ckpt_versions:
-        ckpt_version = CkptVersion.V2
-        ckpt_file, release = _get_last_checkpoint_v2(ckpt_path, format)
-    elif CkptVersion.V1 in ckpt_versions:
-        ckpt_version = CkptVersion.V1
-        ckpt_path = os.path.join(ckpt_path, f"rank_{get_rank()}")
-        ckpt_file = _get_last_checkpoint_v1(ckpt_path, format)
-        release = False
-    else:
-        raise ValueError(f"No a valid checkpoint directory: {ckpt_path}")
-    return (ckpt_version, ckpt_file, release)
-
-
-def _get_last_checkpoint_v2(ckpt_path: str, format: str = _FORMAT):
-    """For checkpoint version: 2.0
-    Get last iteration checkpoint under ckpt_path.
-    """
-    args = get_args()
-    ckpt_file = None
-    iteration = 0
-    release = False
-    tracker_file = get_checkpoint_tracker_filename(ckpt_path)
-
-    if os.path.exists(tracker_file):
-        with open(tracker_file, 'r') as fp:
-            metastring = fp.read().strip()
-            try:
-                iteration = int(metastring)
-            except ValueError:
-                release = (metastring == 'release')
-        assert iteration > 0 or release, \
-            f"The content of tracker file is expected to be iteration or 'release', " \
-            f"but got: '{metastring}'"
-    else:
-        ckpt_list = sorted(
-            glob.glob(os.path.join(ckpt_path, "iter_*")),
-            key=lambda x: int(RE_ITER.findall(x)[-1])
-        )
-        if not ckpt_list:
-            logger.warning(f"No ckpts found in {ckpt_path}")
-            return (ckpt_file, release)
-        iteration = int(RE_ITER.findall(ckpt_list[-1])[-1])
-        logger.warning(f"No tracker files found in {ckpt_path}. "
-                       f"Using the latest ckpt: {os.path.basename(ckpt_list[-1])}")
-
-    ckpt_file, _ = get_checkpoint_name(
-        ckpt_path, format=format,
-        iteration=iteration,
-        release=release,
-        dist_ckpt=args.use_dist_ckpt,
-        ckpt_version=CkptVersion.V2,
-        prefix=args.prefix
-    )
-    return (ckpt_file, release)
-
-
-def _get_last_checkpoint_v1(ckpt_path: str, format: str = _FORMAT):
-    """For checkpoint version: 1.0
-    Get last timestamp checkpoint under ckpt_path.
-    """
+def get_last_checkpoint(ckpt_path: str, format: str = _FORMAT):
+    """Get last timestamp checkpoint under ckpt_path."""
     ckpt_list = [
         checkpoint for checkpoint in os.listdir(ckpt_path)
         if checkpoint.endswith(f'.{format}')
@@ -680,9 +474,14 @@ def _get_last_checkpoint_v1(ckpt_path: str, format: str = _FORMAT):
     return os.path.join(ckpt_path, ckpt_list[-1])
 
 
-def record_last_ckpt_to_json(iteration: int, meta_file: str):
+def record_last_ckpt_to_json(epoch: int, step: int, ckpt_file: str, meta_json: str):
     """record last ckpt info to json"""
+    meta_data = {
+        "last_epoch": epoch,
+        "last_step": step,
+        "last_ckpt_file": ckpt_file
+    }
     flags = os.O_WRONLY | os.O_CREAT
     mode = stat.S_IWUSR | stat.S_IRUSR
-    with os.fdopen(os.open(meta_file, flags, mode), 'w', encoding="utf-8") as fp:
-        fp.write(str(iteration))
+    with os.fdopen(os.open(meta_json, flags, mode), 'w', encoding="utf-8") as fp:
+        json.dump(meta_data, fp)
