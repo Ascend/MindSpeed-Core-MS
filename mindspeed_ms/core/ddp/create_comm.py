@@ -14,9 +14,8 @@
 # ======================
 
 """Model and data parallel groups."""
-
-import mindspore
 import warnings
+import mindspore
 from mindspore import hal
 from mindspore.communication import create_group, get_group_size, get_rank
 

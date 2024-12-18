@@ -15,12 +15,12 @@
 """ Distributed optimizer wrapper. """
 
 import json
+import os
+import stat
+import numpy as np
 import mindspore as ms
 import mindspore.communication.comm_func as comm_func
 import mindspore.ops as ops
-import numpy as np
-import os
-import stat
 from collections import OrderedDict
 from mindspore import _no_grad
 from mindspore import log as logger

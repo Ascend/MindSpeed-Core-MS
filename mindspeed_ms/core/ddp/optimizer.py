@@ -111,7 +111,6 @@ class MixedPrecisionOptimizer(nn.Cell):
         for param in params:
             grad = param.grad
             grad_not_none = grad is not None
-            # import numpy,mindspore;numpy.save(f"/home/ma-user/work/l00611878/dump_path/ms_data/{param.name}_rank_{get_rank()}", param.grad.to(mindspore.float32).asnumpy())
             is_not_tp_duplicate = not (
                     ("norm" in param.name)
                     or ("mlp.projection.bias" in param.name)

@@ -14,9 +14,9 @@
 # ============================================================================
 """ Param and grad buffer, bucket implemenatrion. """
 import math
-import mindspore.communication.comm_func as comm_func
 import numpy as np
 from enum import Enum
+import mindspore.communication.comm_func as comm_func
 from mindspore import log as logger
 from mindspore import ops, mint, Tensor
 from mindspore.common import dtype as mstype
