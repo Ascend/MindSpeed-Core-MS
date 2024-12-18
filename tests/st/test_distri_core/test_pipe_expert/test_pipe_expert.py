@@ -23,7 +23,7 @@ from tests.st.test_distri_core.utils import read_loss_from_log
 class TestPipeExpert:
     """A test class for testing Linear."""
 
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.env_single
     @pytest.mark.run(order=1)
@@ -71,7 +71,7 @@ class TestPipeExpert:
                "please check your code."
 
 
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.env_single
     @pytest.mark.run(order=2)
@@ -119,7 +119,7 @@ class TestPipeExpert:
                "please check your code."
 
 
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.env_single
     @pytest.mark.run(order=3)
