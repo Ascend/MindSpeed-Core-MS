@@ -59,7 +59,7 @@ class TestFinetune:
                     pynative_loss.append(loss)
         return np.asarray(pynative_loss) if pynative_loss else []
 
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.env_single
     @pytest.mark.run(order=0)
@@ -113,7 +113,7 @@ class TestFinetune:
         os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
 
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.platform_arm_ascend910b_training
     @pytest.mark.env_single
     @pytest.mark.run(order=1)
