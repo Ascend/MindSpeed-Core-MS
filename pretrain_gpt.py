@@ -101,7 +101,7 @@ def get_batch(data_iterator):
     # slice batch along sequence dimension for context parallelism
     batch = get_batch_on_this_cp_rank(batch)
 
-    return batch
+    return batch.values()
 
 
 def loss_func(loss_mask: ms.Tensor, output_tensor: ms.Tensor):
@@ -137,7 +137,7 @@ def loss_func(loss_mask: ms.Tensor, output_tensor: ms.Tensor):
 
     # Reduce loss for logging.
     reporting_loss = loss.copy()
-    reporting_loss = comm_func.all_reduce(reporting_loss, group=mpu.get_data_parallel_group())
+    reporting_loss = comm_func.all_reduce(reporting_loss, group=mpu.get_data_parallel_group())[0]
 
     local_num_tokens = loss[1].copy().to(ms.int32)
     return (

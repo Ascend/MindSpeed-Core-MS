@@ -114,10 +114,6 @@ def _zero_grad_group_helper(group: List[ms.Parameter], set_to_none: bool):
             if set_to_none:
                 param.grad = None
             else:
-                if param.grad.grad_fn is not None:
-                    param.grad.detach_()
-                else:
-                    param.grad.requires_grad_(False)
                 param.grad.zero_()
 
 
@@ -441,6 +437,11 @@ class Float16OptimizerWithFloat16Params(MixedPrecisionOptimizer):
 
         return main_grads
 
+
+    def reload_main_params(self):
+        """ reload main params to model params. """
+        self._copy_main_params_to_model_params()
+
     def _get_model_and_main_params_data_float16(self):
         model_data = []
         main_data = []
@@ -456,15 +457,10 @@ class Float16OptimizerWithFloat16Params(MixedPrecisionOptimizer):
         for model_group, main_group in zip(self.float16_groups, self.fp32_from_float16_groups):
             for model_param, main_param in zip(model_group, main_group):
                 if hasattr(model_param, 'main_grad'):
-                    main_param.grad = model_param.main_grad.float()
+                    main_param.grad = model_param.main_grad.astype(ms.float32)
                 else:
                     if model_param.grad is not None:
-                        main_param.grad = model_param.grad.float()
-
-                # Safe to deallocate model's grad/main_grad after copying.
-                # (If using contiguous buffers, main_grad's memory should
-                # persist and therefore should not be deallocated.)
-                model_param.grad = None
+                        main_param.grad = model_param.grad.astype(ms.float32)
 
         # For fp32 grads, we need to reset the grads to main grad.
         for model_group in self.fp32_from_fp32_groups:
@@ -627,27 +623,25 @@ class Float16OptimizerWithFloat16Params(MixedPrecisionOptimizer):
                 param_world_index = self.optimizer.group_start_id[group_idx] + param_idx
                 self.optimizer.parameters[param_world_index] = main_param
                 # update state
-                if isinstance(self.optimizer, mint.optim.AdamW):
-                    param_state_exp_avg = self.optimizer.exp_avg[param_world_index]
-                    param_state_exp_avg_sq = self.optimizer.exp_avg_sq[param_world_index]
-                    self.optimizer.exp_avg[param_world_index] = ms.Parameter(
-                        param_state_exp_avg.asnumpy().astype(np.float32),
-                        name=param_state_exp_avg.name,
-                        requires_grad=param_state_exp_avg.requires_grad
-                    )
-                    self.optimizer.exp_avg_sq[param_world_index] = ms.Parameter(
-                        param_state_exp_avg_sq.asnumpy().astype(np.float32),
-                        name=param_state_exp_avg_sq.name,
-                        requires_grad=param_state_exp_avg_sq.requires_grad
-                    )
 
-                    self.main_param_to_exp_avg[main_param] = self.optimizer.exp_avg[param_world_index]
-                    self.main_param_to_exp_avg_sq[main_param] = self.optimizer.exp_avg_sq[param_world_index]
+                param_state_exp_avg = self.optimizer.exp_avg[param_world_index]
+                param_state_exp_avg_sq = self.optimizer.exp_avg_sq[param_world_index]
+                self.optimizer.exp_avg[param_world_index] = ms.Parameter(
+                    param_state_exp_avg.asnumpy().astype(np.float32),
+                    name=param_state_exp_avg.name,
+                    requires_grad=param_state_exp_avg.requires_grad
+                )
+                self.optimizer.exp_avg_sq[param_world_index] = ms.Parameter(
+                    param_state_exp_avg_sq.asnumpy().astype(np.float32),
+                    name=param_state_exp_avg_sq.name,
+                    requires_grad=param_state_exp_avg_sq.requires_grad
+                )
 
-        # self.optimizer.parameters = ms.ParameterTuple(self.optimizer.parameters)
-        if isinstance(self.optimizer, mint.optim.AdamW):
-            self.optimizer.exp_avg = ms.ParameterTuple(self.optimizer.exp_avg)
-            self.optimizer.exp_avg_sq = ms.ParameterTuple(self.optimizer.exp_avg_sq)
+                self.main_param_to_exp_avg[main_param] = self.optimizer.exp_avg[param_world_index]
+                self.main_param_to_exp_avg_sq[main_param] = self.optimizer.exp_avg_sq[param_world_index]
+
+        self.optimizer.exp_avg = ms.ParameterTuple(self.optimizer.exp_avg)
+        self.optimizer.exp_avg_sq = ms.ParameterTuple(self.optimizer.exp_avg_sq)
 
     def _reuse_fp32_param_init(self):
         """Reuse BF16 parameter init"""

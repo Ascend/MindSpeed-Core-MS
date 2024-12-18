@@ -95,3 +95,5 @@ delay_grad_reduce: False
 
 # logging
 log_interval: 1
+
+dataloader_type: "external"

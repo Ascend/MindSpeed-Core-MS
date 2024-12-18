@@ -20,7 +20,6 @@ def build_pretraining_data_loader(dataset, consumed_samples):
             total_samples=len(dataset),
             consumed_samples=consumed_samples,
             micro_batch_size=args.micro_batch_size,
-            global_batch_size=args.global_batch_size,
             data_parallel_rank=get_data_parallel_rank(),
             data_parallel_size=get_data_parallel_world_size())
     elif args.dataloader_type == 'cyclic':
@@ -44,12 +43,11 @@ def build_pretraining_data_loader(dataset, consumed_samples):
     return ds.GeneratorDataset(dataset, batch_sampler=batch_sampler, column_names=["dataset"])
 
 
-class MegatronPretrainingSampler(ds.Sampler):
+class MegatronPretrainingSampler:
     """Megatron Pretraining Sampler."""
 
-    def __init__(self, total_samples, consumed_samples, micro_batch_size, global_batch_size,
+    def __init__(self, total_samples, consumed_samples, micro_batch_size,
                  data_parallel_rank, data_parallel_size, drop_last=True):
-        super().__init__()
         # Keep a copy of input params for later use.
         self.total_samples = total_samples
         self.consumed_samples = consumed_samples
@@ -58,12 +56,6 @@ class MegatronPretrainingSampler(ds.Sampler):
         self.micro_batch_times_data_parallel_size = \
             self.micro_batch_size * data_parallel_size
         self.drop_last = drop_last
-        batch_per_dp = global_batch_size // data_parallel_size
-        self.micro_batch_num = batch_per_dp // self.micro_batch_size
-        self.micro_batch_times_data_parallel_size = \
-            self.micro_batch_size * data_parallel_size
-        self.full_batch_data_parallel_size = \
-            self.micro_batch_size * self.micro_batch_num * data_parallel_size
 
         # Sanity checks.
         assert self.total_samples > 0, \
@@ -78,11 +70,10 @@ class MegatronPretrainingSampler(ds.Sampler):
             '{}'.format(self.data_parallel_rank, data_parallel_size)
 
     def __len__(self):
-        return self.total_samples // self.full_batch_data_parallel_size
+        return self.total_samples
 
-    def get_start_end_idx(self, micro_batch_idx):
-        start_idx = (self.data_parallel_rank * self.micro_batch_size +
-                     micro_batch_idx * self.micro_batch_times_data_parallel_size)
+    def get_start_end_idx(self):
+        start_idx = self.data_parallel_rank * self.micro_batch_size
         end_idx = start_idx + self.micro_batch_size
         return start_idx, end_idx
 
@@ -92,14 +83,10 @@ class MegatronPretrainingSampler(ds.Sampler):
         # Last batch will be dropped if drop_last is not set False
         for idx in range(self.consumed_samples, self.total_samples):
             batch.append(idx)
-            if len(batch) == self.full_batch_data_parallel_size:
-                batch_per_dp = []
-                for micro_batch_idx in range(self.micro_batch_num):
-                    start_idx, end_idx = self.get_start_end_idx(micro_batch_idx)
-                    batch_per_dp += batch[start_idx:end_idx]
-                yield batch_per_dp
+            if len(batch) == self.micro_batch_times_data_parallel_size:
+                start_idx, end_idx = self.get_start_end_idx()
+                yield batch[start_idx:end_idx]
                 batch = []
-                batch_per_dp = []
 
         # Check the last partial batch and see drop_last is set
         if len(batch) > 0 and not self.drop_last:
