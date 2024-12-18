@@ -118,7 +118,7 @@ class MixedPrecisionOptimizer(nn.Cell):
             )
             is_shard = (
                 ('x_embedder.' not in param.name) and ('t_embedder.' not in param.name) and (
-                'y_embedder.y_proj.fc1.' not in param.name))
+                    'y_embedder.y_proj.fc1.' not in param.name))
             if grad_not_none and is_not_tp_duplicate:
                 grads_for_norm.append(grad)
             else:

@@ -41,7 +41,7 @@ def param_is_not_shared(param):
 
 def get_grad_norm_fp32(grads_for_norm, norm_type=2, parallel_group=None):
     """ get grad norm fp32 """
-    total_norm = mint.norm(mint.stack([mint.norm(grad, norm_type) for grad in grads_for_norm], ),
+    total_norm = mint.norm(mint.stack([mint.norm(grad, norm_type) for grad in grads_for_norm],),
                            norm_type) ** norm_type
 
     if parallel_group is None:
