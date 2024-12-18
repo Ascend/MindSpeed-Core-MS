@@ -76,7 +76,7 @@ class ModelWithLoss(nn.Cell):
                 outputs = list(outputs)
                 output_length = len(outputs)
                 self._set_loss_reduced(outputs.pop())
-                if output_length == 3 and not self.calculate_per_token_loss:
+                if output_length == 3 and self.calculate_per_token_loss:
                     num_tokens = outputs[1]
                     outputs[0] /= num_tokens
                 outputs = tuple(outputs)
