@@ -103,7 +103,7 @@ class MixedPrecisionOptimizer(nn.Cell):
         rank_group = "tp-pp-" + str(rank_id)
         create_group(rank_group, rank_id)
         return rank_group
-
+    # pylint: disable=W0612
     def get_main_grads_for_grad_norm(self):
         """ collect main gradients for grad norm compute. """
         params = self.get_parameters_()
@@ -112,13 +112,13 @@ class MixedPrecisionOptimizer(nn.Cell):
             grad = param.grad
             grad_not_none = grad is not None
             is_not_tp_duplicate = not (
-                    ("norm" in param.name)
-                    or ("mlp.projection.bias" in param.name)
-                    or ("attention.out_proj.bias" in param.name)
+                ("norm" in param.name)
+                or ("mlp.projection.bias" in param.name)
+                or ("attention.out_proj.bias" in param.name)
             )
             is_shard = (
-                    ('x_embedder.' not in param.name) and ('t_embedder.' not in param.name) and (
-                    'y_embedder.y_proj.fc1.' not in param.name))
+                ('x_embedder.' not in param.name) and ('t_embedder.' not in param.name) and (
+                'y_embedder.y_proj.fc1.' not in param.name))
             if grad_not_none and is_not_tp_duplicate:
                 grads_for_norm.append(grad)
             else:

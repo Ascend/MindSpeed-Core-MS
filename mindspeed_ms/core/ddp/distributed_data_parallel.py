@@ -13,9 +13,10 @@
 # limitations under the License.
 # ============================================================================
 """ Distributed data parallel wrapper. """
-import numpy as np
+
 from collections import deque
 from contextlib import contextmanager
+import numpy as np
 from mindspore import mint, ops, _no_grad, Parameter
 from mindspore import nn
 from mindspore.common import dtype as mstype
@@ -46,6 +47,7 @@ def all_gather_param(cell, wait_buffer, data_parallel_group):
 
 @_no_grad()
 def bp_all_gather_param(cell, bp_wait_buffer, data_parallel_group):
+    ''' all gather param '''
     if cell.cell_id in bp_wait_buffer or (hasattr(cell.weight, 'gathered') and cell.weight.gathered == 1):
         return
     # print("all_gather_param before: ",cell.weight.name,cell.cell_id, cell.weight.shape, _pynative_executor.enable_grad(), cell._has_config_recompute, cell.weight.gathered,flush=True)
@@ -94,7 +96,7 @@ def wait_grad(wait_grad_buffer, zero_comm_group):
 
 z3_optim_cells = []
 
-
+# pylint: disable=W0621, W0612
 def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, zero_comm_group, depth):
     ''' register fw bw hook for the zero3 params '''
     wait_buffer = deque()
@@ -114,10 +116,9 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
 
         for sub_cell in sub_cells_list:
             if sub_cell.__class__.__name__ in ["ColumnParallelLinear",
-                                               "ParallelLinear"] and sub_cell.use_zero3 and sub_cell.weight.requires_grad:
+                    "ParallelLinear"] and sub_cell.use_zero3 and sub_cell.weight.requires_grad:
                 sub_cell.pre_cell_id = sub_cell.next_cell_id = None
                 z3_optim_cells.append(sub_cell)
-                # print("recursion_cells: ",sub_cell.weight.name,sub_cell.weight.shape,flush=True)
             else:
                 recursion_cells(sub_cell)
 
@@ -146,7 +147,7 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
         actual_chunk_begin_id = begin_layer + chunk_size
     actual_chunk_begin_id = 0
 
-    # pylint: disable=W0622
+    # pylint: disable=W0622, W0212, W0601
     def _pre_forward_cell_hook(cell, input):
         # print("pre forward cell hook: ",cell.weight.name,cell.cell_id, cell.weight.shape, _pynative_executor.enable_grad(), cell._has_config_recompute, cell.weight.gathered,flush=True)
         cell_id = cell.cell_id
@@ -188,7 +189,7 @@ def set_model_fw_bw_hook(network, grad_reduce_in_fp32, average_in_collective, ze
                 handle.wait()
                 post_cell.weight.assign_value(full_param)
         return input
-
+    # pylint: disable=W0613, W0212
     def _post_forward_cell_hook(cell, input, output):
         if cell._has_config_recompute and _pynative_executor.enable_grad():
             return output

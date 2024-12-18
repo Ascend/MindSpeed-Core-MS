@@ -41,8 +41,7 @@ def get_zero3_flag():
 def set_zero3_flag(use_zero3):
     global _USE_ZERO3
     _USE_ZERO3 = use_zero3
-    return
-    
+
 class GroupInfo:
     """ Comm Group Info """
 
@@ -83,7 +82,7 @@ def initialize_zero_group(zero_shard_size=-1):
         get_zero_shard_grad_group()
 
 
-### get global rank
+# pylint: disable=W0212
 def get_dp_global_ranks(with_context_parallel=False):
     return create_comm._DATA_PARALLEL_GLOBAL_RANKS_WITH_CP if with_context_parallel \
         else create_comm._DATA_PARALLEL_GLOBAL_RANKS
@@ -173,6 +172,7 @@ def get_zero_full_shard_flag():
 
 
 def _local_rank_in_zero_shard_group():
+    """get loacl rank in zero shard group"""
     dp_rank = get_dp_global_ranks(_ZERO_WITH_CP)
     zero_shard_size = get_zero_shard_size()
     # [0, 1, 2, 3, 4, 5, 6, 7] -> [0, 1, 4, 5], [2, 3, 6, 7]

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ======================
+"""checkponiting"""
 
 import glob
 import json
@@ -30,7 +31,7 @@ from mindspeed_ms.core.ddp.optimizer import MixedPrecisionOptimizer
 _STRATEGY_DIR = "strategy"
 _FORMAT = "ckpt"
 
-
+# pylint: disable=W0622
 def get_checkpoint_name(ckpt_path, format=_FORMAT, get_name_from_file=False,
                         prefix: str = "network", global_step=0):
     """
@@ -88,13 +89,12 @@ def _get_params_dict(model, optimizer):
         raise ValueError("None of params dict has been extract from model and optimizer.")
     return params_dict
 
-
-def save_pre_process(model, optimizer, untie_embeddings_and_output_weights):
+def save_pre_process(model, optimizer):
     """ preprocess before saving, split qkv and handle pp embedding share """
     params_dict = _get_params_dict(model, optimizer)
     return params_dict
 
-
+# pylint: disable=W0622
 def ensure_total_ckpt_is_less_than_limit(ckpt_path: str, limit: int = 5, format: str = _FORMAT):
     """
     make sure the provided path contain less than limited number of checkpoint file
@@ -119,6 +119,7 @@ def ensure_total_ckpt_is_less_than_limit(ckpt_path: str, limit: int = 5, format:
 
 def record_last_ckpt_to_json(global_step: int, ckpt_file: str, meta_json: str):
     """record last ckpt info to json"""
+
     meta_data = {
         "last_global_step": global_step,
         "last_ckpt_file": ckpt_file
@@ -126,11 +127,13 @@ def record_last_ckpt_to_json(global_step: int, ckpt_file: str, meta_json: str):
     with open(meta_json, 'w', encoding="utf-8") as fp:
         json.dump(meta_data, fp)
 
-
+# pylint: disable=W0612, W0613
 def save_checkpoint(model, optimizer=None, opt_param_scheduler=None, ckpt_path="./", format=_FORMAT,
                     only_save_strategy=False, prefix: str = 'network', global_step=0,
                     crc_check: bool = False, keep_checkpoint_max: int = 5, untie_embeddings_and_output_weights=False,
                     append_dict=None, **kwargs):
+    """ save checkpoint. """
+
     if crc_check and format == "safetensors":
         raise ValueError("crc_check does not support format 'safetensors' for now.")
     if keep_checkpoint_max < 1:
@@ -140,7 +143,7 @@ def save_checkpoint(model, optimizer=None, opt_param_scheduler=None, ckpt_path="
     rank_path = os.path.join(ckpt_path, f"rank_{get_rank()}")
     ckpt_file, strategy_file = get_checkpoint_name(ckpt_path, format=format, prefix=prefix, global_step=global_step)
 
-    params_dict = save_pre_process(model, optimizer, untie_embeddings_and_output_weights)
+    params_dict = save_pre_process(model, optimizer)
     if not only_save_strategy:
         append_dict = {} if append_dict is None else append_dict
         if opt_param_scheduler is not None:
@@ -155,9 +158,10 @@ def save_checkpoint(model, optimizer=None, opt_param_scheduler=None, ckpt_path="
                                  meta_json=os.path.join(rank_path, 'meta.json'))
     logger.info("ckpt saved")
 
-
+# pylint: disable=W0212
 def get_last_checkpoint(ckpt_path: str, format: str = _FORMAT):
     """Get last timestamp checkpoint under ckpt_path."""
+
     ckpt_list = [
         checkpoint for checkpoint in os.listdir(ckpt_path)
         if checkpoint.endswith(f'.{format}')
@@ -170,6 +174,7 @@ def get_last_checkpoint(ckpt_path: str, format: str = _FORMAT):
 
 def load_post_process(params_dict, optimizer=None):
     """ load post processing, concat qkv """
+
     if optimizer is not None and hasattr(optimizer, "zero_level") and optimizer.zero_level in ["z1", "z2", "z3"]:
         shard_id = get_rank()
         split = P.Split(0, get_group_size())
@@ -194,9 +199,11 @@ def load_post_process(params_dict, optimizer=None):
                 params_dict[param.name] = ms.Parameter(splited_tensor, name=param.name)
     return params_dict
 
-
+# pylint: disable=W0613
 def load_checkpoint(model, optimizer=None, opt_param_scheduler=None, ckpt_path="./", format=_FORMAT,
                     crc_check=False, **kwargs):
+    """load ckpt """
+
     if crc_check and format == "safetensors":
         raise ValueError("crc_check does not support format 'safetensors' for now.")
     validator.check_value_type("model", model, [nn.Cell], "load_checkpoint")

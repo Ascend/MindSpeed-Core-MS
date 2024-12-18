@@ -39,6 +39,7 @@ def all_to_all_sp2hp(input):
 
 # pylint: disable=W0622
 def all_to_all_hp2sp(input):
+    """ all to all hp to sp. """
     world_size = get_tp_world_size()
     tp_group = get_tp_group()
     all_to_all = AllToAll(tp_group, world_size, 0, 0)
@@ -227,7 +228,7 @@ class ScatterToSequenceParallelRegion(nn.Cell):
 
         dim_size = input_.shape[0]
         assert (
-                dim_size % self.world_size == 0
+            dim_size % self.world_size == 0
         ), "First dimension of the tensor should be divisible by tensor parallel size"
         local_dim_size = dim_size // self.world_size
 
@@ -269,7 +270,7 @@ class GatherFromSequenceParallelRegion(nn.Cell):
             return self.reduce_scatter(dout.contiguous())
         dim_size = dout.shape[0]
         assert (
-                dim_size % self.world_size == 0
+            dim_size % self.world_size == 0
         ), "First dimension of the tensor should be divisible by tensor parallel size"
         local_dim_size = dim_size // self.world_size
 

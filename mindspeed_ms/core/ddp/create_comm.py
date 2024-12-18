@@ -183,7 +183,7 @@ class CreateCommGroups():
         global _PP_GROUP
         global _PIPELINE_GLOBAL_RANKS
         assert (
-                _PP_GROUP is None
+            _PP_GROUP is None
         ), 'pipeline model parallel group is already initialized'
         global _EMBEDDING_GROUP
         global _EMBEDDING_GLOBAL_RANKS
@@ -239,7 +239,7 @@ class CreateCommGroups():
         global _TENSOR_AND_DP_GROUP
 
         assert (
-                _TENSOR_AND_DP_GROUP is None
+            _TENSOR_AND_DP_GROUP is None
         ), 'Tensor + data parallel group is already initialized'
         for ranks in self.get_ranks('tp-dp'):
             if self.rank in ranks:
@@ -262,7 +262,7 @@ class CreateCommGroups():
                 stride = prefix_product(shape)
             idx = [(index // d) % s for s, d in zip(shape, stride)]
             assert (
-                    sum([x * y for x, y in zip(idx, stride[:-1])]) == index
+                sum([x * y for x, y in zip(idx, stride[:-1])]) == index
             ), "idx {} with shape {} mismatch the return idx {}".format(index, shape, idx)
             return idx
 

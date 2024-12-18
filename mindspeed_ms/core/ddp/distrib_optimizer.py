@@ -17,11 +17,11 @@
 import json
 import os
 import stat
+from collections import OrderedDict
 import numpy as np
 import mindspore as ms
 import mindspore.communication.comm_func as comm_func
 import mindspore.ops as ops
-from collections import OrderedDict
 from mindspore import _no_grad
 from mindspore import log as logger
 from mindspore.common import dtype as mstype
