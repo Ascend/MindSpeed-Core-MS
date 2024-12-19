@@ -209,15 +209,14 @@ class LinearWithGradAccumulationAndAsyncCommunication(nn.Cell):
         if bias is None:
             self.use_bias = False
         self.weight_param = weight_param
+        if _pynative_executor.grad_flag() and not self.recompute_comm:
+            self.input_parallel.append(input)
         if self.sequence_parallel:
             if self.data_layout == "BSH":
                 input = input.swapaxes(0, 1)
             input = comm_func.all_gather_into_tensor(input, group=self.tp_group)[0]
             if self.data_layout == "BSH":
                 input = input.swapaxes(0, 1)
-
-        if _pynative_executor.grad_flag() and not self.recompute_comm:
-            self.input_parallel.append(input)
 
         output_parallel = self.matmul(input, weight)
         if self.use_bias:
@@ -249,7 +248,16 @@ class LinearWithGradAccumulationAndAsyncCommunication(nn.Cell):
             grad_input.reshape(x.shape)
         else:
             x = self.input_parallel.pop(0)
-            grad_input = self.matmul_g_in(dout, weight).reshape(x.shape)
+            if self.sequence_parallel:
+                if self.data_layout == "BSH":
+                    x = x.swapaxes(0, 1)
+                x, x_handler = comm_func.all_gather_into_tensor(x, group=self.tp_group, async_op=True)
+            grad_input = self.matmul_g_in(dout, weight)
+            if self.sequence_parallel:
+                x_handler.wait()
+                if self.data_layout == "BSH":
+                    x = x.swapaxes(0, 1)
+            grad_input = grad_input.reshape(x.shape)
         wgrad_compute = True
 
         if wgrad_compute:
