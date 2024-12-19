@@ -72,6 +72,7 @@ def parse_args(extra_args_provider=None, ignore_unknown_args=False):
     parser = _add_network_args(parser)
     parser = _add_yarn_args(parser)
     parser = _add_algorithm_args(parser)
+    parser = _add_cp_args(parser)
 
     # Custom arguments.
     if extra_args_provider is not None:
@@ -2174,4 +2175,17 @@ def _add_yarn_args(parser):
     group.add_argument('--rope-scaling-mscale-all-dim', type=float, default=0.0, help='Yarn rope: rope mscale all dim')
     group.add_argument('--rope-scaling-original-max-position-embeddings', type=int, default=None,
                        help='Yarn rope: rope original max position embeddings')
+    return parser
+
+def _add_cp_args(parser):
+    '''Context parallelism args'''
+    group = parser.add_argument_group(title='cp parallel')
+
+    group.add_argument('--cp-window-size', type=int, default=1)
+    group.add_argument('--cp-attention-mask-type', type=str, default='causal',
+                       choices=['causal', 'general'], help='context parallel attention mask type')
+    group.add_argument('--use-cp-send-recv-overlap', action='store_true',
+                       help='use this flag to enable cp send-recv-overlap.')
+    group.add_argument("--use-fused-ring-attention-update", action='store_true',
+                       help="Use fused ring attention update.")
     return parser

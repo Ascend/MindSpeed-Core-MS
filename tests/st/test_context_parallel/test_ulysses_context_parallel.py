@@ -49,7 +49,8 @@ class TestUlyssesCP:
               f"--local_worker_num={device_num} " + \
               f"--master_port=8167 " + \
               f"--log_dir={log_dir} " + \
-              f"{scripts_cmd} "
+              f"{scripts_cmd} --micro-batch-size 1 --num-layers 12 --hidden-size 2048 " + \
+              f"--num-attention-heads 1 --max-position-embeddings 8192 --seq-length 8192"
         ret = os.system(cmd)
         time.sleep(60)
         # Check the success message in the logs

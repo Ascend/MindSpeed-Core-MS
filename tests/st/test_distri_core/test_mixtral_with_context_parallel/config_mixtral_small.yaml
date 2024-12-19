@@ -6,7 +6,6 @@ model_parallel:
   expert_model_parallel_size: 1
   virtual_pipeline_model_parallel_size: null
   context_parallel_algo: "megatron_cp_algo"
-  cp_attention_mask_type: "causal"
   # training
   params_dtype: "float32"
   compute_dtype: "float32"
@@ -103,3 +102,5 @@ log_interval: 1
 
 # custom arguments
 checkpoint_dir: "./data/golden_mixtral.pt"
+
+cp_attention_mask_type: "causal"

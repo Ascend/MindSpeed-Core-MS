@@ -28,6 +28,7 @@ from mindspore.ops.operations.nn_ops import FlashAttentionScore
 from mindspeed_ms.training.global_vars import set_args
 
 from mindspeed_ms.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
+from mindspeed_ms.training.arguments import parse_args
 from tests.st.test_context_parallel.utils import set_parallel_context
 
 logging.basicConfig(level=logging.INFO)
@@ -143,6 +144,10 @@ def run_ulysses_cp(cp_size, bs, seq_len, dtype):
     logging.info("Step 1: Setting random seed.")
     set_random_seed(1234)
 
+    # 参数初始化
+    args = parse_args(None)[0]
+    set_args(args)
+
     # 获取当前进程的 rank 和总进程数
     rank_id = get_rank()
     group_size = get_group_size()
@@ -209,7 +214,8 @@ class TestUlyssesCP:
     world_size = 8
 
     def test_ulysses_context_parallel_seq8192_bs2_bf16(self):
-        set_args("")
+        args = parse_args(None)[0]
+        set_args(args)
         set_parallel_context()
         logging.info("Testing Ulysses Context Parallel with sequence length 8192, batch size 2, and dtype bfloat16.")
         run_ulysses_cp(self.world_size, 2, 8192, mstype.bfloat16)

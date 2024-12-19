@@ -341,6 +341,9 @@ def validate_yaml(args, args_default, defaults={}):
     if args.decoder_seq_length is not None:
         assert args.max_position_embeddings >= args.decoder_seq_length
 
+    if args.model_parallel.context_parallel_size > 1:
+        assert args.model_parallel.context_parallel_algo in ["ulysses-cp-algo", "megatron_cp_algo", "hybrid_cp_algo"], "--context-parallel-alog only support ulysses-cp-algo, megatron_cp_algo and hybrid_cp_algo"
+
     if args.model_parallel.context_parallel_size > 1 and args.model_parallel.context_parallel_algo == 'hybrid_cp_algo':
         assert args.model_parallel.ulysses_degree_in_cp is not None, "--ulysses-degree-in-cp must be specified in hybrid_cp_algo"
         ring_degree, remainder = divmod(args.model_parallel.context_parallel_size, args.model_parallel.ulysses_degree_in_cp)
