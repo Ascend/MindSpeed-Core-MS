@@ -18,8 +18,7 @@ from multiprocessing import Pool
 import numpy as np
 from scipy import stats
 
-from mindspore import jit, JitConfig
-from mindspore import Tensor, ops
+from mindspore import Tensor, ops, mint
 import mindspore.common.dtype as mstype
 from mindspore.ops.auto_generate.gen_ops_prim import FlashAttentionScore
 from mindspore.ops.auto_generate import FlashAttentionScoreGrad
@@ -71,7 +70,7 @@ class CompileUtil():
         coarse_mask = self.generate_coarse_mask(mask, q_blocksize=q_blocksize, kv_blocksize=kv_blocksize)
         data_2d = self.coarse_mask_to_decompose_data(coarse_mask)
         if self.skip_calc_flag:
-            return None
+            return []
 
         blocks = []
         searches = search_num
@@ -100,7 +99,7 @@ class CompileUtil():
             y2 = (y2.item() + 1) * kv_blocksize
             new_blockpos_list.append([x1, y1, x2, y2])
 
-        return Tensor(new_blockpos_list)
+        return new_blockpos_list
 
     def coarse_mask_to_decompose_data(self, coarse_mask):
         '''get coarse mask'''
@@ -541,14 +540,13 @@ class SparseAttentionScore():
         if self.attn_mask is not None:
             self.compile_mask(self.attn_mask)
 
-    @jit(mode="PSJit", jit_config=JitConfig(jit_level="O1"))
     def forward_update(self, prev_attn_out, prev_softmax_max, prev_softmax_sum,
                        cur_attn_out, cur_softmax_max, cur_softmax_sum):
         '''Update ring attention output'''
 
-        softmax_max = ops.maximum(prev_softmax_max, cur_softmax_max)
-        prev_scale = ops.exp(prev_softmax_max - softmax_max)
-        cur_scale = ops.exp(cur_softmax_max - softmax_max)
+        softmax_max = mint.maximum(prev_softmax_max, cur_softmax_max)
+        prev_scale = mint.exp(prev_softmax_max - softmax_max)
+        cur_scale = mint.exp(cur_softmax_max - softmax_max)
 
         prev_softmax_sum_scaled = prev_softmax_sum * prev_scale
         cur_softmax_sum_scaled = cur_softmax_sum * cur_scale
@@ -598,25 +596,26 @@ class SparseAttentionScore():
             self.compile_mask(self.attn_mask)
 
         if self.input_layout == 'SBH':
-            out = Tensor(np.zeros((q.shape[1], self.head_num, q.shape[0], q.shape[2]//self.head_num)),
-                         dtype=q.dtype)
-            softmax_sum = Tensor(np.zeros((q.shape[1], self.head_num, q.shape[0], 8)),
-                                 dtype=mstype.float32)
-            softmax_max = Tensor(np.full((q.shape[1], self.head_num, q.shape[0], 8), float('-inf')),
-                                 dtype=mstype.float32)
+            out = mint.zeros((q.shape[1], self.head_num, q.shape[0], q.shape[2]//self.head_num),
+                             dtype=q.dtype)
+            softmax_sum = mint.zeros((q.shape[1], self.head_num, q.shape[0], 8),
+                                     dtype=mstype.float32)
+            softmax_max = mint.full((q.shape[1], self.head_num, q.shape[0], 8), float('-inf'),
+                                    dtype=mstype.float32)
         elif self.input_layout == 'BSH':
-            out = Tensor(np.zeros((q.shape[0], self.head_num, q.shape[1], q.shape[2]//self.head_num)),
-                         dtype=q.dtype)
-            softmax_sum = Tensor(np.zeros((q.shape[0], self.head_num, q.shape[1], 8)),
-                                 dtype=mstype.float32)
-            softmax_max = Tensor(np.full((q.shape[0], self.head_num, q.shape[1], 8), float('-inf')),
-                                 dtype=mstype.float32)
+            out = mint.zeros((q.shape[0], self.head_num, q.shape[1], q.shape[2]//self.head_num),
+                             dtype=q.dtype)
+            softmax_sum = mint.zeros((q.shape[0], self.head_num, q.shape[1], 8),
+                                     dtype=mstype.float32)
+            softmax_max = mint.full((q.shape[0], self.head_num, q.shape[1], 8), float('-inf'),
+                                    dtype=mstype.float32)
         elif self.input_layout == 'BNSD':
-            out = Tensor(np.zeros(q.shape), dtype=q.dtype)
-            softmax_sum = Tensor(np.zeros((q.shape[0], self.head_num, q.shape[2], 8)),
-                                 dtype=mstype.float32)
-            softmax_max = Tensor(np.full((q.shape[0], self.head_num, q.shape[2], 8), float('-inf')),
-                                 dtype=mstype.float32)
+            out = mint.zeros((q.shape), dtype=q.dtype)
+            softmax_sum = mint.zeros((q.shape[0], self.head_num, q.shape[2], 8),
+                                     dtype=mstype.float32)
+            softmax_max = mint.full((q.shape[0], self.head_num, q.shape[2], 8), float('-inf'),
+                                    dtype=mstype.float32)
+
         else:
             raise ValueError(f"Only value SBH, BSH or BNSD is supported for input_layout. "
                              f"But found {self.input_layout}")
@@ -653,10 +652,14 @@ class SparseAttentionScore():
         block_num = len(self.blockpos_list)
         for i in range(block_num):
             x1, y1, x2, y2 = self.blockpos_list[i]
-            block_mask = self.attn_mask[x1:x2, y1:y2]
+            block_mask = ops.strided_slice(self.attn_mask, (x1, y1), (x2, y2), (1, 1))
+
+            slice_q = ops.strided_slice(q, (0, 0, x1), (q.shape[0], q.shape[1], x2), (1, 1, 1))
+            slice_k = ops.strided_slice(k, (0, 0, y1), (k.shape[0], k.shape[1], y2), (1, 1, 1))
+            slice_v = ops.strided_slice(v, (0, 0, y1), (v.shape[0], v.shape[1], y2), (1, 1, 1))
 
             all_att_outs = self.flash_attention_forward(
-                q[:, :, x1:x2], k[:, :, y1:y2], v[:, :, y1:y2],
+                slice_q, slice_k, slice_v,
                 real_shift=real_shift, drop_mask=drop_mask, padding_mask=padding_mask,
                 attn_mask=block_mask,
                 prefix=prefix,
@@ -666,10 +669,17 @@ class SparseAttentionScore():
             cur_softmax_max = all_att_outs[0] # (b n s 8)
             cur_softmax_sum = all_att_outs[1] # (b n s 8)
 
+            slice_out_t = ops.strided_slice(out, (0, 0, x1), (out.shape[0], out.shape[1], x2),
+                                            (1, 1, 1))
+            slice_softmax_max_t = ops.strided_slice(softmax_max, (0, 0, x1),
+                                                    (softmax_max.shape[0], softmax_max.shape[1], x2), (1, 1, 1))
+            slice_softmax_sum_t = ops.strided_slice(softmax_sum, (0, 0, x1),
+                                                    (softmax_sum.shape[0], softmax_sum.shape[1], x2), (1, 1, 1))
+
             slice_out, slice_softmax_max, slice_softmax_sum = self.forward_update(
-                out[:, :, x1:x2],
-                softmax_max[:, :, x1:x2],
-                softmax_sum[:, :, x1:x2],
+                slice_out_t,
+                slice_softmax_max_t,
+                slice_softmax_sum_t,
                 cur_attn_out,
                 cur_softmax_max,
                 cur_softmax_sum,
@@ -771,23 +781,23 @@ class SparseAttentionScoreGrad():
             self.compile_mask(self.attn_mask)
 
         if self.compile_util.skip_calc_flag:
-            dq = Tensor(np.zeros(q.shape), dtype=q.dtype)
-            dk = Tensor(np.zeros(k.shape), dtype=k.dtype)
-            dv = Tensor(np.zeros(v.shape), dtype=v.dtype)
+            dq = mint.zeros(q.shape, q.dtype)
+            dk = mint.zeros(k.shape, k.dtype)
+            dv = mint.zeros(v.shape, v.dtype)
             return dq, dk, dv, None
 
         if self.input_layout == 'SBH':
-            dq = Tensor(np.zeros((q.shape[1], self.head_num, q.shape[0], q.shape[2]//self.head_num)), dtype=q.dtype)
-            dk = Tensor(np.zeros((k.shape[1], self.head_num, k.shape[0], k.shape[2]//self.head_num)), dtype=k.dtype)
-            dv = Tensor(np.zeros((v.shape[1], self.head_num, v.shape[0], v.shape[2]//self.head_num)), dtype=v.dtype)
+            dq = mint.zeros((q.shape[1], self.head_num, q.shape[0], q.shape[2]//self.head_num), dtype=q.dtype)
+            dk = mint.zeros((k.shape[1], self.head_num, k.shape[0], k.shape[2]//self.head_num), dtype=k.dtype)
+            dv = mint.zeros((v.shape[1], self.head_num, v.shape[0], v.shape[2]//self.head_num), dtype=v.dtype)
         elif self.input_layout == 'BSH':
-            dq = Tensor(np.zeros((q.shape[0], self.head_num, q.shape[1], q.shape[2]//self.head_num)), dtype=q.dtype)
-            dk = Tensor(np.zeros((k.shape[0], self.head_num, k.shape[1], k.shape[2]//self.head_num)), dtype=k.dtype)
-            dv = Tensor(np.zeros((v.shape[0], self.head_num, v.shape[1], v.shape[2]//self.head_num)), dtype=v.dtype)
+            dq = mint.zeros((q.shape[0], self.head_num, q.shape[1], q.shape[2]//self.head_num), dtype=q.dtype)
+            dk = mint.zeros((k.shape[0], self.head_num, k.shape[1], k.shape[2]//self.head_num), dtype=k.dtype)
+            dv = mint.zeros((v.shape[0], self.head_num, v.shape[1], v.shape[2]//self.head_num), dtype=v.dtype)
         elif self.input_layout == 'BNSD':
-            dq = Tensor(np.zeros(q.shape), dtype=q.dtype)
-            dk = Tensor(np.zeros(k.shape), dtype=k.dtype)
-            dv = Tensor(np.zeros(v.shape), dtype=v.dtype)
+            dq = mint.zeros(q.shape, dtype=q.dtype)
+            dk = mint.zeros(k.shape, dtype=k.dtype)
+            dv = mint.zeros(v.shape, dtype=v.dtype)
         else:
             raise ValueError(f"Only value SBH or BNSD is supported for input_layout."
                              f"But found {self.input_layout}")
@@ -823,15 +833,19 @@ class SparseAttentionScoreGrad():
         block_num = len(self.blockpos_list)
         for i in range(block_num):
             x1, y1, x2, y2 = self.blockpos_list[i]
-            block_mask = self.attn_mask[x1:x2, y1:y2]
+            block_mask = ops.strided_slice(self.attn_mask, (x1, y1), (x2, y2), (1, 1))
 
-            slice_q = q[:, :, x1:x2]
-            slice_k = k[:, :, y1:y2]
-            slice_v = v[:, :, y1:y2]
-            slice_dout = dout[:, :, x1:x2]
-            slice_softmax_max = softmax_max[:, :, x1:x2]
-            slice_softmax_sum = softmax_sum[:, :, x1:x2]
-            slice_attention_in = attention_in[:, :, x1:x2]
+            slice_q = ops.strided_slice(q, (0, 0, x1), (q.shape[0], q.shape[1], x2), (1, 1, 1))
+            slice_k = ops.strided_slice(k, (0, 0, y1), (k.shape[0], k.shape[1], y2), (1, 1, 1))
+            slice_v = ops.strided_slice(v, (0, 0, y1), (v.shape[0], v.shape[1], y2), (1, 1, 1))
+            slice_dout = ops.strided_slice(dout, (0, 0, x1), (dout.shape[0], dout.shape[1], x2),
+                                           (1, 1, 1))
+            slice_softmax_max = ops.strided_slice(softmax_max, (0, 0, x1),
+                                                  (softmax_max.shape[0], softmax_max.shape[1], x2), (1, 1, 1))
+            slice_softmax_sum = ops.strided_slice(softmax_sum, (0, 0, x1),
+                                                  (softmax_sum.shape[0], softmax_sum.shape[1], x2), (1, 1, 1))
+            slice_attention_in = ops.strided_slice(attention_in, (0, 0, x1),
+                                                   (attention_in.shape[0], attention_in.shape[1], x2), (1, 1, 1))
 
             attn_grad_outs = self.flash_attention_grad(
                 slice_q, slice_k, slice_v, slice_dout,
@@ -845,9 +859,9 @@ class SparseAttentionScoreGrad():
                 actual_seq_kvlen=actual_seq_kvlen
                 )
             cur_dq, cur_dk, cur_dv = attn_grad_outs[0], attn_grad_outs[1], attn_grad_outs[2]
-            slice_dq = dq[:, :, x1:x2]
-            slice_dk = dk[:, :, y1:y2]
-            slice_dv = dv[:, :, y1:y2]
+            slice_dq = ops.strided_slice(dq, (0, 0, x1), (dq.shape[0], dq.shape[1], x2), (1, 1, 1))
+            slice_dk = ops.strided_slice(dk, (0, 0, y1), (dk.shape[0], dk.shape[1], y2), (1, 1, 1))
+            slice_dv = ops.strided_slice(dv, (0, 0, y1), (dv.shape[0], dv.shape[1], y2), (1, 1, 1))
 
             dq[:, :, x1:x2] = slice_dq.add(cur_dq)
             dk[:, :, y1:y2] = slice_dk.add(cur_dk)
