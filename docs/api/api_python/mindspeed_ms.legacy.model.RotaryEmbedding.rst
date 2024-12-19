@@ -20,7 +20,7 @@ mindspeed_ms.legacy.model.RotaryEmbedding
         - **emb** (Tensor) - 应用旋转位置编码后的嵌入向量。
 
     异常：
-        - **NotImplementedError** – 当rotary_interleaved为 ``True`` 。
+        - **NotImplementedError** - 当 `rotary_interleaved` 为 ``True`` 。
 
     样例：
 

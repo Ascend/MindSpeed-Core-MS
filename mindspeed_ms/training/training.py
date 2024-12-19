@@ -740,7 +740,8 @@ def train(
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
+
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.
             Please see the `msrun start up
@@ -991,33 +992,21 @@ def pretrain(train_valid_test_datasets_provider,
              process_non_loss_data_func=None,
              **kwargs):
     """
-    Pre-training interface.
-
-    This function will run the followings in the order provided:
-
-    1. setup model, optimizer and lr schedule using the model_provider.
-    2. train the model using the forward_step_func.
+    Pre-training interface. You can use this interface to transfer data iterators,
+    model definitions, and configuration items to start model training.
 
     Args:
-        train_valid_test_datasets_provider (function): a function that takes the size of
+        train_valid_test_datasets_provider (function): A function that takes the size of
             train/valid/test dataset and returns `train, valid, test` datasets. Currently not in use.
-        model_provider_func (function): a function that returns a vanilla version of the
-            model. By vanilla we mean a simple model with no fp16 or ddp.
-        model_type (enum): an enum that specifies the type of model being trained. Currently not in use.
-        forward_step_func (function, optional): a function that takes a `data iterator` and `model`,
-            and returns a `loss` scalar with a dictionary with key:values being
-            the info we would like to monitor during training, for example
-            `lm_loss: value`. We also require that this function add
-            `batch generator` to the timers class. Currently not in use. Default: ``None``.
-        process_non_loss_data_func (function, optional): a function to post process outputs of the
-            network. It can be used for dumping output tensors (e.g images) to
-            tensorboard. It takes `collected data`(list of tensors),
-            `current iteration index` and `tensorboard writer` as arguments. Currently not in use.
-            Default: ``None``.
-        kwargs (dict): Other input.
+        model_provider_func (function): A function that returns the model.
+        model_type (enum): An enum that specifies the type of model being trained. Currently not in use.
+        forward_step_func (function, optional): Forward step function. Currently not in use. Default: ``None``.
+        process_non_loss_data_func (function, optional): A function to post process outputs of the
+            network. Currently not in use. Default: ``None``.
+        kwargs (dict): Other input. The data iterator and configuration `all_config` are transferred from here.
 
     Raises:
-        ValueError: If all_config is not passed in with kwargs.
+        ValueError: If `all_config` is not passed in with kwargs.
 
     Supported Platforms:
         ``Ascend``

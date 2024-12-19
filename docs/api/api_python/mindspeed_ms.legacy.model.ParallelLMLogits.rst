@@ -7,14 +7,14 @@ mindspeed_ms.legacy.model.ParallelLMLogits
 
     参数：
         - **config** (dict) - Transformer模型配置。详情请参考TransformerConfig类。
-        - **bias** (bool，可选) - 指定模型是否使用偏置向量。默认值: ``False`` 。
-        - **compute_dtype** (dtype.Number，可选) - 计算类型。默认值: ``None`` 。
+        - **bias** (bool，可选) - 指定模型是否使用偏置向量。默认值： ``False`` 。
+        - **compute_dtype** (dtype.Number，可选) - 计算类型。默认值： ``None`` 。
 
     输入：
         - **input_** (Tensor) - 隐藏状态的张量。
         - **word_embedding_table** (Parameter) - 从嵌入层通过的权重矩阵。
-        - **parallel_output** (bool，可选) - 指定是否返回各张量并行权重上的并行输出。默认值: ``True`` 。
-        - **bias** (Tensor，可选) - 可训练的偏置参数。默认值: ``None`` 。
+        - **parallel_output** (bool，可选) - 指定是否返回各张量并行权重上的并行输出。默认值： ``True`` 。
+        - **bias** (Tensor，可选) - 可训练的偏置参数。默认值： ``None`` 。
 
     输出：
         - **logits_parallel** (Tensor) - 如果在 ParallelLMLogits 中设置 parallel_output 为 ``True`` ，则每个张量并行等级上的输出将是一个并行的logits张量，否则，输出将是一个收集所有并行输出的logits张量。

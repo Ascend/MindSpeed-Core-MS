@@ -147,7 +147,8 @@ class CoreAttention(nn.Cell):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
+
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.
             Please see the `msrun start up
@@ -300,7 +301,7 @@ class ParallelAttention(Module):
     with various parameters.
 
     Args:
-        config (dict): Configuration dictionary for the parallel attention.
+        config (dict): Transformer configuration. For details, please refer to TransformerConfig.
         layer_number (int): Number which indicates the index of this transformer layer in the
             whole transformer block.
         attention_type (int, optional): Attention type. Support [AttnType::self_attn = 1, AttnType::cross_attn = 2].
@@ -335,7 +336,8 @@ class ParallelAttention(Module):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
+
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.
             Please see the `msrun start up
@@ -348,7 +350,9 @@ class ParallelAttention(Module):
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
         >>> from mindspeed_ms.legacy.model import ParallelAttention
-        >>> from mindspeed_ms.core.config import ModelParallelConfig, TrainingConfig, TransformerConfig
+        >>> from mindspeed_ms.core.config import (ModelParallelConfig,
+        ...                                       TrainingConfig,
+        ...                                       TransformerConfig)
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> class MyNet(nn.Cell):
         ...     def __init__(self, config):
@@ -357,7 +361,8 @@ class ParallelAttention(Module):
         ...     def construct(self, x, attention_mask):
         ...         output, _ = self.attention(x, attention_mask)
         ...         return output
-        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE, deterministic='ON')
+        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE,
+        ...     deterministic='ON')
         >>> init()
         >>> initialize_model_parallel(tensor_model_parallel_size=2)
         >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=2)
@@ -772,8 +777,8 @@ class ParallelAttention(Module):
 
 class ParallelTransformerLayer(Module):
     r"""
-    This class represents a parallel transformer layer. It combines normalization, attention,
-    cross attention (if applicable), and an MLP to process input hidden states.
+    A single transformer layer. It combines normalization, attention,
+    cross attention, and an MLP to process input hidden states.
 
     Args:
         config (dict): Configuration dictionary for the transformer layer.
@@ -815,7 +820,8 @@ class ParallelTransformerLayer(Module):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
+
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.
             Please see the `msrun start up
@@ -1150,7 +1156,7 @@ def _get_num_layers(config, model_type, is_decoder=False):
 
 class ParallelTransformer(Module):
     r"""
-    This class represents a parallel transformer. It consists of multiple transformer layers and can handle various
+    A transformer block. It consists of multiple transformer layers and can handle various
     configurations and processing steps.
 
     Args:
@@ -1187,13 +1193,13 @@ class ParallelTransformer(Module):
         - **hidden_states** (Tensor) - The shape of hidden_states tensor is :math:`(B, S, H)`.
 
     Raises:
-        NotImplementedError: If `drop_path_rate` greater than 0.
-        NotImplementedError: If 'distribute_saved_activations' in config is true and 'sequence_parallel' in config is
-            false.
-        NotImplementedError: If `transformer_impl` in config is 'transformer_engine'.
-        NotImplementedError: If `fp8` in config is not none.
-        NotImplementedError: If `retro_add_retriever` in config is true.
-        NotImplementedError: If `model_type` equal 3 or 4.
+        NotImplementedError: If `drop_path_rate` greater than ``0``.
+        NotImplementedError: If `distribute_saved_activations` in config is true and `sequence_parallel` in config is
+            ``False``.
+        NotImplementedError: If `transformer_impl` in config is ``transformer_engine``.
+        NotImplementedError: If `fp8` in config is not ``None``.
+        NotImplementedError: If `retro_add_retriever` in config is ``True``.
+        NotImplementedError: If `model_type` equal to ``3`` or ``4``.
         NotImplementedError: If `encoder_output`, `enc_dec_attn_mask`, `retriever_input`, `retriever_output`,
             `retriever_attn_mask` or `inference_params` is not none.
 
@@ -1202,7 +1208,8 @@ class ParallelTransformer(Module):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
+
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.
             Please see the `msrun start up
@@ -1216,7 +1223,9 @@ class ParallelTransformer(Module):
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
         >>> from mindspeed_ms.legacy.model import ParallelTransformer
-        >>> from mindspeed_ms.core.config import ModelParallelConfig, TrainingConfig, TransformerConfig
+        >>> from mindspeed_ms.core.config import (ModelParallelConfig,
+        ...                                       TrainingConfig,
+        ...                                       TransformerConfig)
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> class MyNet(nn.Cell):
         ...     def __init__(self, config):
@@ -1590,7 +1599,7 @@ class ParallelLMLogits(nn.Cell):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
 
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.

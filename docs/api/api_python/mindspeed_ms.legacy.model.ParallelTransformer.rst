@@ -1,9 +1,9 @@
 mindspeed_ms.legacy.model.ParallelTransformer
 =============================================
 
-.. py:class:: mindspeed_ms.legacy.model.ParallelTransformer(config, model_type, layer_type=1, self_attn_mask_type=1, post_norm=True, pre_process=False, post_process=False, drop_path_rate=0.0)
+.. py:class:: mindspeed_ms.legacy.model.ParallelTransformer(config, model_type, layer_type=LayerType.encoder, self_attn_mask_type=AttnMaskType.padding, post_norm=True, pre_process=False, post_process=False, drop_path_rate=0.0)
 
-    这个类代表一个并行的transformer。它由多个transformer层组成，可以处理各种配置和处理步骤。
+    Transformer模块。它由多个单独的transformer层组成，可以处理各种配置和处理步骤。
 
     参数：
         - **config** (dict) - 一个配置字典，提供了并行transformer层的各种参数配置。
@@ -13,11 +13,11 @@ mindspeed_ms.legacy.model.ParallelTransformer
         - **post_norm** (bool，可选) - 是否在转换器块的末尾插入归一化层。默认值： ``True`` 。
         - **pre_process** (bool，可选) - 使用流水线并行时，表明它是否是第一阶段。默认值： ``False`` 。
         - **post_process** (bool，可选) - 使用流水线并行时，表明它是否是最后一个阶段。默认值： ``False`` 。
-        - **drop_path_rate** (float，可选) - drop_path rate。当前不支持该参数大于0，默认值： ``0.0`` 。
+        - **drop_path_rate** (float，可选) - 丢弃率。当前不支持该参数大于0，默认值： ``0.0`` 。
 
     输入：
         - **hidden_states** (Tensor) - 隐藏层状态张量，形状为 :math:`(B, S, H)` 。
-        - **attention_mask** (Tensor) - attention掩码矩阵。
+        - **attention_mask** (Tensor) - 注意力掩码张量。
         - **encoder_output** (Tensor，可选) - 用于交叉注意力的编码器输出张量，当前不支持该参数。默认值： ``None`` 。
         - **enc_dec_attn_mask** (Tensor，可选) - 编码器-解码器注意力mask张量，当前不支持该参数。默认值： ``None`` 。
         - **retriever_input** (Tensor，可选) - 检索输入张量，当前不支持该参数。默认值： ``None`` 。
@@ -30,13 +30,13 @@ mindspeed_ms.legacy.model.ParallelTransformer
         - **hidden_states** (Tensor) - 输出张量形状为 :math:`(B, S, H)` 。
 
     异常：
-        - **NotImplementedError** - 如果 `drop_path_rate` 大于 0。
-        - **NotImplementedError** - 如果 `config` 中的 `distribute_saved_activations` 是 true 并且 `config` 中的 `sequence_parallel` 是 ``False`` 。
-        - **NotImplementedError** - 如果 `config` 中的 `transformer_impl` 是 'transformer_engine'。
+        - **NotImplementedError** - 如果 `drop_path_rate` 大于 ``0`` 。
+        - **NotImplementedError** - 如果 `config` 中的 `distribute_saved_activations` 是 ``True`` 并且 `config` 中的 `sequence_parallel` 是 ``False`` 。
+        - **NotImplementedError** - 如果 `config` 中的 `transformer_impl` 是 ``transformer_engine`` 。
         - **NotImplementedError** - 如果 `config` 中的 `fp8` 不是 ``None`` 。
         - **NotImplementedError** - 如果 `config` 中的 `retro_add_retriever` 是 ``True`` 。
-        - **NotImplementedError** - 如果 `model_type` 是 3 或 4。
-        - **NotImplementedError** - 如果 `encoder_output`、`enc_dec_attn_mask`、`retriever_input`、`retriever_output`、`retriever_attn_mask` 或 `inference_params` 不是 ``None`` 。
+        - **NotImplementedError** - 如果 `model_type` 是 ``3`` 或 ``4`` 。
+        - **NotImplementedError** - 如果 `encoder_output` 、`enc_dec_attn_mask` 、 `retriever_input` 、 `retriever_output` 、 `retriever_attn_mask` 或 `inference_params` 不是 ``None`` 。
 
     样例：
 

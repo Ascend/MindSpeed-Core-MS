@@ -30,6 +30,10 @@ class VocabParallelCrossEntropy(nn.Cell):
     """
     Calculate the paralleled cross entropy loss.
 
+    Args:
+        args (tuple): Positional arguments.
+        kwargs (dict): Other input.
+
     Inputs:
         - **vocab_parallel_logits** (Tensor) - Tensor of shape :math:`(N, C)`. Data type must be float16 or float32.
           The output logits of the backbone.
@@ -41,7 +45,7 @@ class VocabParallelCrossEntropy(nn.Cell):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
 
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.
@@ -52,7 +56,8 @@ class VocabParallelCrossEntropy(nn.Cell):
         >>> from mindspore import dtype as mstype
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindspeed_ms.core.tensor_parallel.cross_entropy import VocabParallelCrossEntropy
+        >>> from mindspeed_ms.core.tensor_parallel.cross_entropy import \
+        ...     VocabParallelCrossEntropy
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> init()
         >>> initialize_model_parallel()

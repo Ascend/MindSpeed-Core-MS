@@ -44,18 +44,27 @@ class MoELayer(Module):
     Outputs:
         Tuple of 2 Tensor.
 
-        - **output* (Tensor) - The output of the local experts.
+        - **output** (Tensor) - The output of the local experts.
         - **mlp_bias** (Tensor) - Not used now.
 
     Raises:
-        ValueError: if `ep_world_size` is less than or equal to ``0``.
-        ValueError: if `num_experts % ep_world_size` is not equal to ``0``.
-        ValueError: if the elements of `local_expert_indices` is larger than or equal to ``num_experts``.
-        ValueError: if `moe_config.moe_token_dispatcher_type` is not ``alltoall``.
-        ValueError: if `self.training` is ``True`` and `get_tensor_model_parallel_world_size()` is larger than ``1``,
+        ValueError: If `ep_world_size` is less than or equal to ``0``.
+        ValueError: If `num_experts` is not divisible by `ep_world_size`.
+        ValueError: If the elements of `local_expert_indices` is larger than or equal to ``num_experts``.
+        ValueError: If `moe_config.moe_token_dispatcher_type` is not ``alltoall``.
+        ValueError: If `self.training` is ``True`` and `get_tensor_model_parallel_world_size()` is larger than ``1``,
             and `self.sp` is not ``True``.
 
     Examples:
+        .. note::
+            Before running the following examples, you need to configure the environment variables.
+
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
         >>> import numpy as np
         >>> import mindspore as ms
         >>> from mindspore.communication import init

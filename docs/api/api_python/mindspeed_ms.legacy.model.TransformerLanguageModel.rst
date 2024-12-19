@@ -1,7 +1,7 @@
 mindspeed_ms.legacy.model.TransformerLanguageModel
 ==================================================
 
-.. py:class:: mindspeed_ms.legacy.model.TransformerLanguageModel(config, encoder_attn_mask_type, num_tokentypes=0, add_encoder=True, add_decoder=False, decoder_attn_mask_type=AttnMaskType.causal, add_pooler=False, pre_process=True, post_process=True, visual_encoder=None)
+.. py:class:: mindspeed_ms.legacy.model.TransformerLanguageModel(config, encoder_attn_mask_type, num_tokentypes=0, add_encoder=True, add_decoder=False, decoder_attn_mask_type=AttnMaskType.causal, add_pooler=False, pre_process=True, post_process=True, visual_encoder=None, **kwargs)
 
     Transformer语言模型。
 
@@ -10,7 +10,7 @@ mindspeed_ms.legacy.model.TransformerLanguageModel
         - **encoder_attn_mask_type** (int) - 编码器注意力掩码类型。
         - **num_tokentypes** (int，可选) - 如果大于0，则使用tokentype嵌入。默认值：``0`` 。
         - **add_encoder** (bool，可选) - 如果为 ``True`` ，使用编码器。默认值：``True`` 。
-        - **use_decoder** (bool，可选) - 如果为 ``True`` ，使用解码器。默认值：``False`` 。
+        - **add_decoder** (bool，可选) - 如果为 ``True`` ，使用解码器。默认值：``False`` 。
         - **decoder_attn_mask_type** (int，可选) - 解码器注意力掩码类型。默认值：``AttnMaskType.causal`` 。
         - **add_pooler** (bool，可选) - 如果为 ``True`` ，使用池化层。默认值：``False`` 。
         - **pre_process** (bool，可选) - 使用流水线并行时，标记它是否为第一阶段。默认值：``True`` 。
@@ -39,7 +39,7 @@ mindspeed_ms.legacy.model.TransformerLanguageModel
         - **image_embedding** (Tensor，可选) - 图像嵌入张量，维度依赖于图像嵌入的维数。默认值： ``None`` 。
 
     输出：
-        - **encoder_output** (Tensor) - 形状为 :math:`(B, S, H)` 或 :math:`(S, B, H)` 的Tensor。
+        - **encoder_output** (Tensor) - 形状为 :math:`(B, S, H)` 或 :math:`(S, B, H)` 的张量。
 
     异常：
         - **ValueError** - 如果 `config.untie_embeddings_and_output_weights` 且 `add_decoder` 为 ``True`` 。

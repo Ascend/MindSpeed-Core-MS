@@ -52,12 +52,22 @@ class SequentialMLP(Module):
         Tuple of 2 Tensor.
 
         - **output_local** (Tensor) - The output of the local experts.
-        - **output_bias_local** (Tensor) - The output of the local experts with bias. Default: ``None``.
+        - **output_bias_local** (Tensor) - The bias of the local experts. Currently not in use.
+          The return value is ``None``.
 
     Raises:
         NotImplementedError: If `submodules` is not None.
 
     Examples:
+        .. note::
+            Before running the following examples, you need to configure the environment variables.
+
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
         >>> import numpy as np
         >>> import mindspore as ms
         >>> from mindspore.communication import init
@@ -81,7 +91,7 @@ class SequentialMLP(Module):
         >>> shape = (32, 64)
         >>> tokens_per_expert = [20, 12]
         >>> permuted_local_hidden_states = ms.Tensor(np.random.standard_normal(shape).astype(np.float32))
-        >>> output_local, output_bias_local= expert(permuted_local_hidden_states, tokens_per_expert)
+        >>> output_local, output_bias_local = expert(permuted_local_hidden_states, tokens_per_expert)
         >>> print(output_local.shape)
         (32, 64)
     """

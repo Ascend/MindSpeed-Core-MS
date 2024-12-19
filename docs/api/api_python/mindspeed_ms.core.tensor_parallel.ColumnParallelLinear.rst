@@ -8,7 +8,7 @@ mindspeed_ms.core.tensor_parallel.ColumnParallelLinear
     .. math::
         \text{outputs} = \text{inputs} * \text{weight} + \text{bias}
 
-    其中， :math:`inputs` 代表输入张量， :math:`\text{weight}` 代表该线性层的权重矩阵， :math:`\text{bias}` 代表该线性层的偏置向量（当且仅当 `has_bias` 为 ``True`` 时会参与计算）。
+    其中， :math:`inputs` 代表输入张量， :math:`\text{weight}` 代表该线性层的权重矩阵， :math:`\text{bias}` 代表该线性层的偏置向量（当且仅当 `bias` 为 ``True`` 时会参与计算）。
 
     参数：
         - **input_size** (int) - 输入空间的通道数。

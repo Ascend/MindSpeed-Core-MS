@@ -9,10 +9,10 @@
 3. 检查转换正确性；
 4. 合并 MindSpore 分布式优化器状态。
 
-可以实现 Megatron Checkpoint ⇆ MindSpore Checkpoint 自由转换，并且转换时支持两种转换模式：
+可以实现 Megatron Checkpoint 与 MindSpore Checkpoint 自由相互转换，并且转换时支持两种转换模式：
 
 1. 仅转换模型权重；
-2. 转换模型和优化器状态。
+2. 转换模型权重和优化器状态。
 
 **本指南仅适用于 Megatron 生成的 Checkpoint 和 MindSpeed-Core-MS Checkpoint 互相转换。**
 
@@ -104,7 +104,7 @@ Megatron Checkpoint 转为 MindSpore Checkpoint 支持两种模式，对应转�
 - **仅转换模型权重**：对应 `model_optim_rng.pt` 文件，该文件中仅包含以 `bfloat16` 类型保存的模型权重，不含优化器状态。适用场景：
     - 权重用于推理
     - 预训练权重用于微调
-- **转换模型和优化器状态**：`distrib_optim.pt` 文件，该文件中包含以 `float32` 类型保存的模型权重和分布式优化器状态。适用场景：
+- **转换模型权重和优化器状态**：`distrib_optim.pt` 文件，该文件中包含以 `float32` 类型保存的模型权重和分布式优化器状态。适用场景：
     - Megatron Checkpoint 保存后，加载到 MindSpore 上继续训练。
 
 您可以按需取用。
@@ -117,7 +117,6 @@ Megatron Checkpoint 转为 MindSpore Checkpoint 支持两种模式，对应转�
 export PYTHONPATH=/path/to/Megatron-LM:$PYTHONPATH
 python mindspeed_ms/tools/converter/convert_pt2ckpt.py \
        --megatron-path /path/to/torch_baseline_ckpts/iter_0001000/ \
-       --param-map-path /path/to/torch_baseline_ckpts/param_map \
        --ms-path /path/to/ms_baseline_ckpts/ \
        --num-layers 64 \
        --pp-size 4 \
@@ -130,7 +129,7 @@ python mindspeed_ms/tools/converter/convert_pt2ckpt.py \
        > convert_ckpt.log 2>&1 &
 ```
 
-#### 2.2.2. 转换模型和优化器状态
+#### 2.2.2. 转换模型权重和优化器状态
 
 这种模式会读取 Megatron Checkpoint 目录底下的 `distrib_optim.pt` 文件，该文件中包含以 `float32` 类型保存的模型权重和分布式优化器状态。转换后的文件含模型权重和优化器状态。该转换模式需要传入 `param_map` 路径，用于读取 `param_map` 信息。Megatron 的部分训练配置 args 和 `param_map` 路径下 `param_map*.json` 文件将会被保存到 `--ms-path` 指定的目录下 `pt_meta` 文件夹中。args 在 MindSpore Checkpoint 转回 Megatron Checkpoint 时，需要回写入 Megatron Checkpoint 中。
 
@@ -291,7 +290,7 @@ MindSpore Checkpoint 转为 Megatron Checkpoint 支持两种模式，对应转�
 - **仅转换模型权重**：转换成 `model_optim_rng.pt` 文件，该文件中仅包含以 `bfloat16` 类型保存的模型权重，不含优化器状态。适用场景：
     - 权重用于推理
     - 预训练权重用于微调
-- **转换模型和优化器状态**：转换成 `distrib_optim.pt` 文件，该文件中包含以 `float32` 类型保存的模型权重和分布式优化器状态。适用场景：
+- **转换模型权重和优化器状态**：转换成 `distrib_optim.pt` 文件，该文件中包含以 `float32` 类型保存的模型权重和分布式优化器状态。适用场景：
     - MindSpore Checkpoint 保存后，加载到 Megatron 上继续训练
 
 您可以按需取用。

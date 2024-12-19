@@ -378,7 +378,7 @@ class ColumnParallelLinear(nn.Cell):
         \text{outputs} = \text{inputs} * \text{weight} + \text{bias},
 
     where :math:`inputs` is the input tensors, :math:`\text{weight}` is a weight matrix created by the layer,
-    and :math:`\text{bias}` is a bias vector created by the layer (only if has_bias is True).
+    and :math:`\text{bias}` is a bias vector created by the layer (only if `bias` is True).
 
     Args:
         input_size (int): The number of channels in the input space.
@@ -443,7 +443,7 @@ class ColumnParallelLinear(nn.Cell):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
 
             For Ascend devices, it is recommended to use the msrun startup method without any third-party
             or configuration file dependencies.
@@ -466,14 +466,16 @@ class ColumnParallelLinear(nn.Cell):
         ...     def __init__(self, config):
         ...         super(TestNet, self).__init__()
         ...         hidden_size = config.hidden_size
-        ...         self.columnlinear = ColumnParallelLinear(input_size=hidden_size,
-        ...                                                  output_size=hidden_size,
-        ...                                                  config=config,
-        ...                                                  init_method=config.init_method,
-        ...                                                  bias=config.mlp_has_bias,
-        ...                                                  gather_output=False,
-        ...                                                  skip_bias_add=False,
-        ...                                                  bias_init=config.bias_init)
+        ...         self.columnlinear = ColumnParallelLinear(
+        ...             input_size=hidden_size,
+        ...             output_size=hidden_size,
+        ...             config=config,
+        ...             init_method=config.init_method,
+        ...             bias=config.mlp_has_bias,
+        ...             gather_output=False,
+        ...             skip_bias_add=False,
+        ...             bias_init=config.bias_init
+        ...         )
         ...     def construct(self, input_):
         ...         output, _ = self.columnlinear(input_)
         ...         return output
@@ -485,7 +487,8 @@ class ColumnParallelLinear(nn.Cell):
         >>> ms.set_seed(2024)
         >>> init()
         >>> initialize_model_parallel(tensor_model_parallel_size=tensor_parallel)
-        >>> input_data = Tensor(np.random.random((dataset_size, seq_length, hidden_size)).astype(np.float32))
+        >>> input_shape = (dataset_size, seq_length, hidden_size)
+        >>> input_data = Tensor(np.random.random(input_shape).astype(np.float32))
         >>> parallel_config = ModelParallelConfig()
         >>> train_config = TrainingConfig(parallel_config=parallel_config)
         >>> model_config = TransformerConfig(vocab_size=40000,
@@ -505,7 +508,6 @@ class ColumnParallelLinear(nn.Cell):
         >>> print(output)
         >>> print(output.shape)
         [[[ 0.01780816  0.00895902 -0.00554341 -0.00185049]]
-
          [[ 0.02319741 -0.00320548 -0.0062025  -0.0050142 ]]]
         (2, 1, 4)
     """
@@ -783,20 +785,20 @@ class RowParallelLinear(nn.Cell):
         - **output_bias** (Tensor) - Tensor of shape :math:`(out\_channels,)`.
 
     Raises:
-        ValueError: `sequence_parallel` should be False when `input_is_parallel` is False , but got True.
-        ValueError: `skip_bias_add` should be True when `explicit_expert_comm` is True , but got False.
+        ValueError: `sequence_parallel` should be False when `input_is_parallel` is False , but got ``True``.
+        ValueError: `skip_bias_add` should be True when `explicit_expert_comm` is True , but got ``False``.
         NotImplementedError: `stride > 1` is not supported for now.
         NotImplementedError: `keep_master_weight_for_test=True` is not supported for now.
         NotImplementedError: `tp_comm_buffer_name` is not supported for now.
-        RuntimeError: use zero3 optimizer parallel without initializing data parallel communication.
-        RuntimeError: To enable `sequence_parallel`, `input_is_parallel` must be True but got False.
+        RuntimeError: Use zero3 optimizer parallel without initializing data parallel communication.
+        RuntimeError: To enable `sequence_parallel`, `input_is_parallel` must be True but got ``False``.
 
     Supported Platforms:
         ``Ascend``
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
 
             For Ascend devices, it is recommended to use the msrun startup method without any third-party
             or configuration file dependencies.
@@ -838,7 +840,8 @@ class RowParallelLinear(nn.Cell):
         >>> ms.set_seed(2024)
         >>> init()
         >>> initialize_model_parallel(tensor_model_parallel_size=tensor_parallel)
-        >>> input_data = Tensor(np.random.random((seq_length, dataset_size, hidden_size)).astype(np.float32))
+        >>> shape = (seq_length, dataset_size, hidden_size)
+        >>> input_data = Tensor(np.random.random(shape).astype(np.float32))
         >>> parallel_config = ModelParallelConfig()
         >>> training_config = TrainingConfig(parallel_config=parallel_config)
         >>> model_config = TransformerConfig(vocab_size=40000,
@@ -858,7 +861,6 @@ class RowParallelLinear(nn.Cell):
         >>> print(output)
         >>> print(output.shape)
         [[[ 0.01780816  0.00895902 -0.00554341 -0.00185049]]
-
          [[ 0.02319741 -0.00320548 -0.0062025  -0.0050142 ]]]
         (2, 1, 4)
     """
@@ -1086,7 +1088,7 @@ class VocabParallelEmbedding(nn.Cell):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
 
             For Ascend devices, it is recommended to use the msrun startup method without any third-party
             or configuration file dependencies.
