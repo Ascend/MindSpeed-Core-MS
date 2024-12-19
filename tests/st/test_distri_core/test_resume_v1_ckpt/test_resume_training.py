@@ -14,10 +14,11 @@
 # ============================================================================
 """ Test Resume_Training. """
 import os
-
 import pytest
 import numpy as np
 from tests.st.test_distri_core.utils import read_loss_from_log
+
+MASTER_PORT = 8413
 
 
 @pytest.mark.platform_arm_ascend910b_training
@@ -32,13 +33,31 @@ class TestResumeTraining:
         # 'ASCEND_GLOBAL_EVENT_ENABLE': '1',
         # 'GLOG_v': '0',
         # 'PYTHONPATH': f"/path/to/your/mindspore:{os.getenv('PYTHONPATH')}",
-        }
+    }
     for k, v in env_list.items():
         os.environ[k] = v
+    def extract_loss_from_log(self, pynative_log_path: str):
+        '''extract loss from log_path'''
+        assert os.path.exists(pynative_log_path), f"{pynative_log_path} did not exits"
+        # check loss with golden loss
+        pynative_loss = []
+        with open(pynative_log_path, "r") as fp:
+            for line in fp:
+                if ", Loss: " in line:
+                    line = line.strip().replace('[', '').replace(']', '').replace(',', '')
+                    line = line.split(' ')
+                    i = 0
+                    for i, s in enumerate(line):
+                        if "Loss:" in s:
+                            print(f"{i}: {s} {line[i+1]}")
+                            break
+                    loss = float(line[i+1])
+                    pynative_loss.append(loss)
+        pynative_loss = np.array(pynative_loss)
+        return pynative_loss
 
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.run(order=0)
-    @pytest.mark.skip(reason="skip 1 epoch st")
     def test_resume_training_pynative_ep1tp2pp2_step10(self):
         """
         Feature: test mixtral pynative
@@ -57,14 +76,14 @@ class TestResumeTraining:
         sh_path = os.path.split(os.path.realpath(__file__))[0]
         scripts_path = os.path.join(sh_path, scripts_name)
 
-        scripts_cmd = f"{scripts_path} --yaml-cfg=./config_resume_training.yaml " + \
+        scripts_cmd = f"{scripts_path} --yaml-cfg=config_resume_training.yaml " + \
                       f"--crc_check " + \
                       f"--output_dir=output{postfix} " + \
                       f"--training_iters=10 " + \
                       f"--save_interval=5"
         cmd = f"msrun --worker_num={device_num} "+\
                     f"--local_worker_num={device_num} "+\
-                    f"--master_port=8311 "+\
+                    f"--master_port={MASTER_PORT} "+\
                     f"--log_dir=msrun_log_pynative{postfix} "+\
                     f"--join=True "+\
                     f"--cluster_time_out=300 "+\
@@ -73,9 +92,47 @@ class TestResumeTraining:
         os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
 
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.run(order=1)
-    @pytest.mark.skip(reason="skip 1 epoch st")
+    def test_resume_training_pynative_ep1tp2pp2_step10_save_v1(self):
+        """
+        Feature: test mixtral pynative
+        Description: run pynative mode mixtral to generate pynative loss
+        Expectation: test success
+        """
+        scripts_name = "run_save_v1_ckpt.py"
+        device_num = 4
+        postfix = "_ep1tp2pp2_step10_v1"
+        rm_list = ["npy_pynative*", f"msrun_log_pynative{postfix}*", "kernel_meta*", f"output{postfix}"]
+        print("")
+        for rm_path in rm_list:
+            rm_path = os.path.join(os.getcwd(), rm_path)
+            print(f"removing {rm_path}")
+            os.system(f"rm -rf {rm_path}")
+        sh_path = os.path.split(os.path.realpath(__file__))[0]
+        scripts_path = os.path.join(sh_path, scripts_name)
+
+        scripts_cmd = f"{scripts_path} --yaml-cfg=config_resume_training.yaml " + \
+                      f"--crc_check " + \
+                      f"--output_dir=output{postfix} " + \
+                      f"--training_iters=10 " + \
+                      f"--resume_training " + \
+                      f"--ckpt_step=5 " + \
+                      f"--save_epoch_step=0_5 " + \
+                      f"--load_checkpoint=output_ep1tp2pp2_step10 "
+        cmd = f"msrun --worker_num={device_num} "+\
+                    f"--local_worker_num={device_num} "+\
+                    f"--master_port={MASTER_PORT+1} "+\
+                    f"--log_dir=msrun_log_pynative{postfix} "+\
+                    f"--join=True "+\
+                    f"--cluster_time_out=300 "+\
+                    f"{scripts_cmd}"
+        ret = os.system(cmd)
+        os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
+        assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
+
+    @pytest.mark.level1
+    @pytest.mark.run(order=2)
     def test_resume_training_pynative_ep1tp2pp2_resume_from_step5(self):
         """
         Feature: test mixtral pynative
@@ -96,17 +153,16 @@ class TestResumeTraining:
 
         sh_path = os.path.split(os.path.realpath(__file__))[0]
         scripts_path = os.path.join(sh_path, scripts_name)
-        scripts_cmd = f"{scripts_path} --yaml-cfg=./config_resume_training.yaml " + \
+        scripts_cmd = f"{scripts_path} --yaml-cfg=config_resume_training.yaml " + \
                       f"--crc_check " + \
                       f"--output_dir=output{postfix} " + \
                       f"--training_iters=10 " + \
                       f"--resume_training " + \
                       f"--ckpt_step=5 " + \
-                      f"--load_checkpoint=./output_ep1tp2pp2_step10 "
-
+                      f"--load_checkpoint=output_ep1tp2pp2_step10_v1 "
         cmd = f"msrun --worker_num={device_num} "+\
                     f"--local_worker_num={device_num} "+\
-                    f"--master_port=8312 "+\
+                    f"--master_port={MASTER_PORT+2} "+\
                     f"--log_dir=msrun_log_pynative{postfix} "+\
                     f"--join=True "+\
                     f"--cluster_time_out=300 "+\
@@ -133,8 +189,8 @@ class TestResumeTraining:
                f"and golden loss:\n{golden_loss},\n" + \
                "please check your code."
 
-    @pytest.mark.level0
-    @pytest.mark.run(order=0)
+    @pytest.mark.level1
+    @pytest.mark.run(order=3)
     def test_resume_training_pynative_dp2tp1pp2_step10(self):
         """
         Feature: test mixtral pynative
@@ -153,21 +209,19 @@ class TestResumeTraining:
         sh_path = os.path.split(os.path.realpath(__file__))[0]
         scripts_path = os.path.join(sh_path, scripts_name)
 
-        scripts_cmd = (
-            f"{scripts_path} "
-            "--yaml-cfg=./config_resume_training.yaml "
-            "--crc_check "
-            f"--output_dir=output{postfix} "
-            "--training_iters=10 "
-            "--save_interval=6 "
-            "--tp=1 "
-            "--pp=2 "
-            "--gbs=4 "
-            "--epochs=2"
-        )
+        scripts_cmd = f"{scripts_path} " +\
+                      f"--yaml-cfg=./config_resume_training.yaml " +\
+                      f"--crc_check " +\
+                      f"--output_dir=output{postfix} " +\
+                      f"--training_iters=10 " +\
+                      f"--save_interval=6 " +\
+                      f"--tp=1 " +\
+                      f"--pp=2 " +\
+                      f"--gbs=4 " +\
+                      f"--epochs=2"
         cmd = f"msrun --worker_num={device_num} "+\
                     f"--local_worker_num={device_num} "+\
-                    f"--master_port=8311 "+\
+                    f"--master_port={MASTER_PORT+3} "+\
                     f"--log_dir=msrun_log_pynative{postfix} "+\
                     f"--join=True "+\
                     f"--cluster_time_out=300 "+\
@@ -177,8 +231,53 @@ class TestResumeTraining:
         os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
 
-    @pytest.mark.level0
-    @pytest.mark.run(order=0)
+    @pytest.mark.level1
+    @pytest.mark.run(order=4)
+    def test_resume_training_pynative_dp2tp1pp2_step10_save_v1(self):
+        """
+        Feature: test mixtral pynative
+        Description: run pynative mode mixtral to generate pynative loss
+        Expectation: test success
+        """
+        scripts_name = "run_save_v1_ckpt.py"
+        device_num = 4
+        postfix = "_dp2tp1pp2_step10_v1"
+        rm_list = ["npy_pynative*", f"msrun_log_pynative{postfix}*", "kernel_meta*", f"output{postfix}"]
+        print("")
+        for rm_path in rm_list:
+            rm_path = os.path.join(os.getcwd(), rm_path)
+            print(f"removing {rm_path}")
+            os.system(f"rm -rf {rm_path}")
+        sh_path = os.path.split(os.path.realpath(__file__))[0]
+        scripts_path = os.path.join(sh_path, scripts_name)
+
+        scripts_cmd = f"{scripts_path} " +\
+                      f"--yaml-cfg=config_resume_training.yaml " +\
+                      f"--crc_check " +\
+                      f"--output_dir=output{postfix} " +\
+                      f"--training_iters=10 " +\
+                      f"--resume_training " +\
+                      f"--ckpt_step=6 " + \
+                      f"--save_epoch_step=1_1 " + \
+                      f"--load_checkpoint=output_dp2tp1pp2_step10 " +\
+                      f"--tp=1 " +\
+                      f"--pp=2 " +\
+                      f"--gbs=4 " +\
+                      f"--epochs=2"
+        cmd = f"msrun --worker_num={device_num} "+\
+                    f"--local_worker_num={device_num} "+\
+                    f"--master_port={MASTER_PORT+4} "+\
+                    f"--log_dir=msrun_log_pynative{postfix} "+\
+                    f"--join=True "+\
+                    f"--cluster_time_out=300 "+\
+                    f"{scripts_cmd}"
+        print(f"run cmd is:\n{cmd}\n")
+        ret = os.system(cmd)
+        os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
+        assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
+
+    @pytest.mark.level1
+    @pytest.mark.run(order=5)
     def test_resume_training_pynative_dp2tp1pp2_resume_from_step6(self):
         """
         Feature: test mixtral pynative
@@ -197,24 +296,22 @@ class TestResumeTraining:
         sh_path = os.path.split(os.path.realpath(__file__))[0]
         scripts_path = os.path.join(sh_path, scripts_name)
 
-        scripts_cmd = (
-            f"{scripts_path} "
-            "--yaml-cfg=./config_resume_training.yaml "
-            "--crc_check "
-            f"--output_dir=output{postfix} "
-            "--resume_training "
-            "--load_checkpoint=./output_dp2tp1pp2_step10 "
-            "--training_iters=10 "
-            "--save_interval=11 "
-            "--tp=1 "
-            "--pp=2 "
-            "--gbs=4 "
-            "--epochs=2 "
-            "--ckpt_step=6 "
-        )
+        scripts_cmd = f"{scripts_path} " +\
+                      f"--yaml-cfg=config_resume_training.yaml " +\
+                      f"--crc_check " +\
+                      f"--output_dir=output{postfix} " +\
+                      f"--resume_training " +\
+                      f"--load_checkpoint=output_dp2tp1pp2_step10_v1 " +\
+                      f"--training_iters=10 " +\
+                      f"--save_interval=11 " +\
+                      f"--tp=1 " +\
+                      f"--pp=2 " +\
+                      f"--gbs=4 " +\
+                      f"--epochs=2 " +\
+                      f"--ckpt_step=6 "
         cmd = f"msrun --worker_num={device_num} "+\
                     f"--local_worker_num={device_num} "+\
-                    f"--master_port=8311 "+\
+                    f"--master_port={MASTER_PORT+5} "+\
                     f"--log_dir=msrun_log_pynative{postfix} "+\
                     f"--join=True "+\
                     f"--cluster_time_out=300 "+\
@@ -241,182 +338,3 @@ class TestResumeTraining:
                f"but got resume loss:\n{resume_loss},\n" + \
                f"and golden loss:\n{golden_loss},\n" + \
                "please check your code."
-
-    @pytest.mark.level1
-    @pytest.mark.run(order=2)
-    @pytest.mark.skip(reason="skip no_load_optim st")
-    def test_resume_training_pynative_ep1tp2pp2_resume_from_step5_no_load_optim(self):
-        """
-        Feature: test mixtral pynative
-        Description: run pynative mode mixtral to generate pynative loss
-        Expectation: test success
-        """
-        scripts_name = "run_resume_training.py"
-        device_num = 4
-        postfix = "_ep1tp2pp2_resume_from_step5_no_load_optim"
-        rm_list = ["npy_pynative*", f"msrun_log_pynative{postfix}*", "kernel_meta*", f"output{postfix}"]
-        print("")
-        for rm_path in rm_list:
-            rm_path = os.path.join(os.getcwd(), rm_path)
-            print(f"removing {rm_path}")
-            os.system(f"rm -rf {rm_path}")
-        sh_path = os.path.split(os.path.realpath(__file__))[0]
-        scripts_path = os.path.join(sh_path, scripts_name)
-        scripts_cmd = f"{scripts_path} --yaml-cfg=./config_resume_training.yaml " + \
-                      f"--crc_check " + \
-                      f"--output_dir=output{postfix} " + \
-                      f"--training_iters=10 " + \
-                      f"--resume_training " + \
-                      f"--ckpt_step=5 " + \
-                      f"--no_load_optim " + \
-                      f"--load_checkpoint=./output_ep1tp2pp2_step10 "
-
-        cmd = f"msrun --worker_num={device_num} "+\
-                    f"--local_worker_num={device_num} "+\
-                    f"--master_port=8313 "+\
-                    f"--log_dir=msrun_log_pynative{postfix} "+\
-                    f"--join=True "+\
-                    f"--cluster_time_out=300 "+\
-                    f"{scripts_cmd}"
-        ret = os.system(cmd)
-        os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
-        assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
-
-        # check loss with golden loss
-        resume_log_path = f'msrun_log_pynative{postfix}/worker_2.log'
-        resume_loss = read_loss_from_log(resume_log_path)
-        golden_log_path = f'msrun_log_pynative_ep1tp2pp2_step10/worker_2.log'
-        golden_loss = read_loss_from_log(golden_log_path)
-        resume_loss = np.array(resume_loss)
-        print(f"resume_loss are:\n{resume_loss}")
-        golden_loss = np.array(golden_loss)[len(golden_loss)-len(resume_loss):]
-        print(f"golden_loss are:\n{golden_loss}")
-        # no_load_optim situation, first step should euqal, other should not equal.
-        assert np.allclose(golden_loss[0], resume_loss[0], atol=1.e-4, rtol=1e-4) and \
-            not np.allclose(golden_loss[1:], resume_loss[1:], atol=0, rtol=0), \
-            f"Expect relative error between resume and golden loss below 1e-4,\n" + \
-            f"but got resume loss:\n{resume_loss},\n" + \
-            f"and golden loss:\n{golden_loss},\n" + \
-            "please check your code."
-
-    @pytest.mark.level1
-    @pytest.mark.run(order=3)
-    @pytest.mark.skip(reason="skip override_scheduler st")
-    def test_resume_training_pynative_ep1tp2pp2_resume_from_step5_override_scheduler(self):
-        """
-        Feature: test mixtral pynative
-        Description: run pynative mode mixtral to generate pynative loss
-        Expectation: test success
-        """
-        # os.environ['HCCL_BUFFSIZE'] = "200"
-        scripts_name = "run_resume_training.py"
-        device_num = 4
-        postfix = "_ep1tp2pp2_resume_from_step5_override_scheduler"
-
-        rm_list = ["npy_pynative*", f"msrun_log_pynative{postfix}*", "kernel_meta*", f"output{postfix}"]
-        print("")
-        for rm_path in rm_list:
-            rm_path = os.path.join(os.getcwd(), rm_path)
-            print(f"removing {rm_path}")
-            os.system(f"rm -rf {rm_path}")
-
-        sh_path = os.path.split(os.path.realpath(__file__))[0]
-        scripts_path = os.path.join(sh_path, scripts_name)
-        scripts_cmd = f"{scripts_path} --yaml-cfg=./config_resume_training.yaml " + \
-                      f"--crc_check " + \
-                      f"--output_dir=output{postfix} " + \
-                      f"--training_iters=10 " + \
-                      f"--resume_training " + \
-                      f"--ckpt_step=5 " + \
-                      f"--override_opt_param_scheduler " + \
-                      f"--learning_rate 0.009 " + \
-                      f"--load_checkpoint=./output_ep1tp2pp2_step10 "
-
-        cmd = f"msrun --worker_num={device_num} "+\
-                    f"--local_worker_num={device_num} "+\
-                    f"--master_port=8314 "+\
-                    f"--log_dir=msrun_log_pynative{postfix} "+\
-                    f"--join=True "+\
-                    f"--cluster_time_out=300 "+\
-                    f"{scripts_cmd}"
-        ret = os.system(cmd)
-        os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
-        assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
-
-        # check loss with golden loss
-        resume_log_path = f'msrun_log_pynative{postfix}/worker_2.log'
-        resume_loss = read_loss_from_log(resume_log_path)
-        golden_log_path = f'msrun_log_pynative_ep1tp2pp2_step10/worker_2.log'
-        golden_loss = read_loss_from_log(golden_log_path)
-        resume_loss = np.array(resume_loss)
-        print(f"resume_loss are:\n{resume_loss}")
-        golden_loss = np.array(golden_loss)[len(golden_loss)-len(resume_loss):]
-        print(f"golden_loss are:\n{golden_loss}")
-
-        # no_load_scheduler situation, first step should euqal, other should not equal.
-        assert np.allclose(golden_loss[0], resume_loss[0], atol=1.e-4, rtol=1e-4) and \
-            not np.allclose(golden_loss[1:], resume_loss[1:], atol=0, rtol=0), \
-            f"Expect relative error between resume and golden loss below 1e-4,\n" + \
-            f"but got resume loss:\n{resume_loss},\n" + \
-            f"and golden loss:\n{golden_loss},\n" + \
-            "please check your code."
-
-    @pytest.mark.level1
-    @pytest.mark.run(order=4)
-    @pytest.mark.skip(reason="skip new_dataset st")
-    def test_resume_training_pynative_ep1tp2pp2_resume_from_step5_new_dataset(self):
-        """
-        Feature: test mixtral pynative
-        Description: run pynative mode mixtral to generate pynative loss
-        Expectation: test success
-        """
-        # os.environ['HCCL_BUFFSIZE'] = "200"
-        scripts_name = "run_resume_training.py"
-        device_num = 4
-        postfix = "_ep1tp2pp2_resume_from_step5_new_dataset"
-
-        rm_list = ["npy_pynative*", f"msrun_log_pynative{postfix}*", "kernel_meta*", f"output{postfix}"]
-        print("")
-        for rm_path in rm_list:
-            rm_path = os.path.join(os.getcwd(), rm_path)
-            print(f"removing {rm_path}")
-            os.system(f"rm -rf {rm_path}")
-
-        sh_path = os.path.split(os.path.realpath(__file__))[0]
-        scripts_path = os.path.join(sh_path, scripts_name)
-        scripts_cmd = f"{scripts_path} --yaml-cfg=./config_resume_training.yaml " + \
-                      f"--crc_check " + \
-                      f"--output_dir=output{postfix} " + \
-                      f"--training_iters=10 " + \
-                      f"--resume_training " + \
-                      f"--ckpt_step=5 " + \
-                      f"--new_dataset " + \
-                      f"--load_checkpoint=./output_ep1tp2pp2_step10 "
-
-        cmd = f"msrun --worker_num={device_num} "+\
-                    f"--local_worker_num={device_num} "+\
-                    f"--master_port=8315 "+\
-                    f"--log_dir=msrun_log_pynative{postfix} "+\
-                    f"--join=True "+\
-                    f"--cluster_time_out=300 "+\
-                    f"{scripts_cmd}"
-        ret = os.system(cmd)
-        os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
-        assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
-
-        # check loss with golden loss
-        resume_log_path = f'msrun_log_pynative{postfix}/worker_2.log'
-        resume_loss = read_loss_from_log(resume_log_path)
-        golden_log_path = f'msrun_log_pynative_ep1tp2pp2_step10/worker_2.log'
-        golden_loss = read_loss_from_log(golden_log_path)
-        resume_loss = np.array(resume_loss)
-        print(f"resume_loss are:\n{resume_loss}")
-        golden_loss = np.array(golden_loss)[len(golden_loss)-len(resume_loss):]
-        print(f"golden_loss are:\n{golden_loss}")
-
-        # no_load_scheduler situation, first step should euqal, other should not equal.
-        assert not np.allclose(golden_loss, resume_loss, atol=1.e-4, rtol=1e-4), \
-            f"Expect relative error between resume and golden loss below 1e-4,\n" + \
-            f"but got resume loss:\n{resume_loss},\n" + \
-            f"and golden loss:\n{golden_loss},\n" + \
-            "please check your code."

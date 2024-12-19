@@ -25,7 +25,11 @@ from mindspore.communication.management import init
 from mindspore.mint.optim import AdamW
 from mindspore import mint
 
-from mindspeed_ms.training import parse_args, core_transformer_config_from_yaml
+from mindspeed_ms.training import (
+    parse_args, get_args,
+    get_model, get_loss_func,
+    train, core_transformer_config_from_yaml
+)
 from mindspeed_ms.training.arguments import _print_args
 from mindspeed_ms.training.yaml_arguments import validate_yaml
 from mindspeed_ms.training.global_vars import set_global_variables
@@ -33,7 +37,6 @@ from mindspeed_ms.training.utils import average_losses_across_data_parallel_grou
 from mindspeed_ms.training.training import get_resume_ckpt_path
 from mindspeed_ms.core.tensor_parallel import ReduceFromContextParallelRegion
 from mindspeed_ms.core import parallel_state
-from mindspeed_ms.training import get_model, train, get_loss_func, get_args
 from mindspeed_ms.core.optimizer import get_optimizer_param_scheduler, optimizer_config_from_args
 from mindspeed_ms.core.dist_checkpointing import load_checkpoint
 from tests.st.test_distri_core.utils import MixtralModel

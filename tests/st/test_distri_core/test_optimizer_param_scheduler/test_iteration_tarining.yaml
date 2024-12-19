@@ -44,8 +44,7 @@ use_checkpoint_opt_param_scheduler: True
 override_opt_param_scheduler: False
 
 # loss arguments
-epochs: 10
-train_iters: 100
+train_iters: 20
 log_interval: 1
 initial_loss_scale: 1
 hysteresis: 2
