@@ -716,14 +716,14 @@ class DistributedOptimizer(MixedPrecisionOptimizer):
         self.all_gather_handles[all_gather_handle_index] = param_all_gather_handle
 
     # pylint: disable=W0622
-    @_no_grad()
     def _pre_forward_cell_hook(self, cell, input):
         for cell_param in cell.get_parameters(False):
             if not cell_param.requires_grad:
                 continue
             if cell_param in self.param_to_all_gather_handle_index_map:
-                all_gather_handle_index = self.param_to_all_gather_handle_index_map[cell_param]
-                self._finish_param_sync_helper(all_gather_handle_index)
+                with _no_grad():
+                    all_gather_handle_index = self.param_to_all_gather_handle_index_map[cell_param]
+                    self._finish_param_sync_helper(all_gather_handle_index)
         return input
 
     def enable_pre_hook(self, module):

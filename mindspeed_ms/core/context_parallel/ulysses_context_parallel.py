@@ -21,6 +21,8 @@ from mindspore.nn import Cell
 from mindspore.mint.distributed import get_world_size
 from mindspore.communication.comm_func import all_to_all_single_with_output_shape
 
+_GROUP_SIZE_CACHE = {}
+
 
 def single_all_to_all(input_, scatter_idx, gather_idx, group):
     """
@@ -43,7 +45,10 @@ def single_all_to_all(input_, scatter_idx, gather_idx, group):
         - Otherwise, tensor heads are transposed for parallel computation.
         - The output is then gathered and reshaped to match the original dimensions.
     """
-    seq_world_size = get_world_size(group)
+    global _GROUP_SIZE_CACHE
+    if group not in _GROUP_SIZE_CACHE:
+        _GROUP_SIZE_CACHE[group] = get_world_size(group)
+    seq_world_size = _GROUP_SIZE_CACHE[group]
     inp_shape = list(input_.shape)
     inp_shape[scatter_idx] = inp_shape[scatter_idx] // seq_world_size
     if scatter_idx < 2:
