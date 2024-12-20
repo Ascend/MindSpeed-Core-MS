@@ -1158,7 +1158,7 @@ def _get_resume_ckpt_path_v1(load_dir):
         rank_path = os.path.join(load_dir, f"rank_{local_rank_to_dp0_rank}")
         if not os.path.exists(rank_path):
             raise FileNotFoundError(f"Path {rank_path} not exists, please check your ckpt path.")
-        ckpt_path = get_last_checkpoint(rank_path, ckpt_versions=[CkptVersion.V1])
+        _, ckpt_path, _ = get_last_checkpoint(load_dir, rank=local_rank_to_dp0_rank, ckpt_versions=[CkptVersion.V1])
         if not ckpt_path or not os.path.exists(ckpt_path):
             raise FileNotFoundError(f"File {ckpt_path} not exists, please check your ckpt path.")
     return ckpt_path
