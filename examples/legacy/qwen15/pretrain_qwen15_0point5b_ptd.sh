@@ -21,6 +21,8 @@ PP=1
 DISTRIBUTED_ARGS="
     --worker_num $WORLD_SIZE \
     --local_worker_num $NPUS_PER_NODE \
+    --node_rank $NODE_RANK \
+    --master_addr $MASTER_ADDR
     --master_port $MASTER_PORT \
     --log_dir=msrun_log \
     --join=False \
@@ -95,6 +97,6 @@ msrun $DISTRIBUTED_ARGS pretrain_gpt.py \
     $GPT_ARGS \
     $DATA_ARGS \
     $OUTPUT_ARGS \
-    --distributed-backend nccl \
+    --distributed-backend hccl \
     --save ${CKPT_SAVE_DIR} \
     | tee logs/train_qwen15_0point5b.log
