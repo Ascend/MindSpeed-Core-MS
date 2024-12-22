@@ -16,14 +16,12 @@
 import os
 import pytest
 
-@pytest.mark.level0
-@pytest.mark.platform_arm_ascend910b_training
-@pytest.mark.env_single
+
 class TestHybridAttnCP:
     """A test class for hybrid context parallel."""
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.platform_arm_ascend910b_training
-    @pytest.mark.env_onecard
+    @pytest.mark.env_single
     def test_hybrid_cp(self):
         """
         Feature: test hybrid context parallel
