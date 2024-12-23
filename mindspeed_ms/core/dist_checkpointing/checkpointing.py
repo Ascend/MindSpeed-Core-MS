@@ -605,7 +605,7 @@ def detect_checkpoint_version_by_dir(ckpt_path):
     return ckpt_versions
 
 
-def get_last_checkpoint(ckpt_path: str, format: str = _FORMAT, ckpt_versions: list = None):
+def get_last_checkpoint(ckpt_path: str, format: str = _FORMAT, rank: int = None, ckpt_versions: list = None):
     """Get latest checkpoint under ckpt_path."""
     if not ckpt_versions:
         ckpt_versions = detect_checkpoint_version_by_dir(ckpt_path)
@@ -615,7 +615,8 @@ def get_last_checkpoint(ckpt_path: str, format: str = _FORMAT, ckpt_versions: li
         ckpt_file, release = _get_last_checkpoint_v2(ckpt_path, format)
     elif CkptVersion.V1 in ckpt_versions:
         ckpt_version = CkptVersion.V1
-        ckpt_path = os.path.join(ckpt_path, f"rank_{get_rank()}")
+        rank = get_rank() if rank is None else rank
+        ckpt_path = os.path.join(ckpt_path, f"rank_{rank}")
         ckpt_file = _get_last_checkpoint_v1(ckpt_path, format)
         release = False
     else:
