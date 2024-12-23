@@ -1,0 +1,81 @@
+mindspeed_ms.core.config.TransformerConfig
+==========================================
+
+.. py:class:: mindspeed_ms.core.config.TransformerConfig(vocab_size: int, num_layers: int, num_attention_heads: int, hidden_size: int, ffn_hidden_size: int, parallel_config: ModelParallelConfig, training_config: TrainingConfig, lora_config: LoraConfig = LoraConfig(), dataset_config: DatasetConfig = DatasetConfig(), moe_config: MoEConfig = MoEConfig(), attention_type: str = "self_attn", position_embedding_type: str = 'absolute', parallel_position_embedding: bool = False, rotary_config: dict = None, use_query_layer: bool = False, use_visual_encoder: bool = False, use_retriever: bool = False, group_query_attention: bool = False, num_query_groups: int = 32, qkv_has_bias: bool = True, out_proj_has_bias: bool = True, head_skip_weight_param_allocation: bool = True, apply_query_key_layer_scaling: bool = False, use_flash_attention: bool = False, fa_config=None, enable_flash_sp: bool = False, mask_func_type: str = "attn_mask_add", mlp_has_bias: bool = True, hidden_act: str = "gelu", normalization: str = "LayerNorm", norm_epsilon: float = 1.0e-5, apply_residual_connection_post_norm: bool = False, use_final_norm: bool = True, residual_connection_dtype: str = "float32", init_method_std: float = 0.01, params_dtype: str = "float32", embedding_init_dtype: str = "float32", compute_dtype: str = "float32", softmax_compute_dtype: str = "float32", init_method: str = 'normal', bias_init: str = 'zeros', fp16_lm_cross_entropy: bool = False, attention_dropout: float = 0.0, out_hidden_size: int = None, num_experts: int = None, untie_embeddings_and_output_weights: bool = False, flatten_labels_and_input_mask: bool = True, recompute_method: str = None, recompute_num_layers: int = None, recompute_granularity: str = None, fp32_residual_connection: bool = False, kv_channels: int = None, hidden_dropout: float = 0.0, bias_dropout_fusion: bool = False, fp8_format: str = None, clone_scatter_output_in_embedding: bool = False, add_bias_linear: bool = False, attention_softmax_in_fp32: bool = True, masked_softmax_fusion: bool = False, distribute_saved_activations: bool = False, retro_add_retriever: bool = False, transformer_impl: str = 'local', encoder_num_layers: int = None, decoder_num_layers: int = None, model_type: str = "encoder_or_decoder", select_comm_recompute: bool = False, select_recompute: bool = False, apply_rope_fusion: bool = False, use_sandwich_norm: bool = False, attn_post_norm_scale: float = 1.0, ffn_post_norm_scale: float = 1.0, apply_swiglu_fusion: bool = False, **kwargs,)
+
+    Transformer配置类。
+
+    参数：
+        - **vocab_size** (int) - 词汇表大小。
+        - **num_layers** (int) - 模型层数。
+        - **num_attention_heads** (int) - 多头注意力机制中的头的数量。
+        - **hidden_size** (int) - 编码器层的维度。
+        - **ffn_hidden_size** (int) - 前馈模块投影的维度。
+        - **parallel_config** (ModelParallelConfig) - 并行配置。
+        - **training_config** (TrainingConfig) - 训练配置。
+        - **lora_config** (LoraConfig，可选) - LoRA配置。默认值： ``LoraConfig()`` 。
+        - **dataset_config** (DatasetConfig，可选) - 数据集配置。默认值： ``DatasetConfig()`` 。
+        - **moe_config** (MoEConfig，可选) - 混合专家（MoE）配置。默认值： ``MoEConfig()`` 。
+        - **attention_type** (str，可选) - 注意力类型。默认值： ``"self_attn"`` 。
+        - **position_embedding_type** (str，可选) - 位置嵌入类型。默认值： ``'absolute'`` 。
+        - **parallel_position_embedding** (bool，可选) - 在使用绝对位置嵌入时使用并行词汇嵌入层。默认值： ``False`` 。
+        - **rotary_config** (dict，可选) - 旋转（Rotary）配置。默认值： ``None`` 。
+        - **use_query_layer** (bool，可选) - 在Transformer后使用查询层。默认值： ``False`` 。
+        - **use_visual_encoder** (bool，可选) - 使用视觉编码器。默认值： ``False`` 。
+        - **use_retriever** (bool，可选) - 使用检索器。默认值： ``False`` 。
+        - **group_query_attention** (bool，可选) - 启用组查询注意力（GQA）。默认值： ``False`` 。
+        - **num_query_groups** (int，可选) - 使用组查询注意力时键和值的头的数量。默认值： ``32`` 。
+        - **qkv_has_bias** (bool，可选) - 注意力模块中应用于查询、键和值的线性变换是否有偏置参数。默认值： ``True`` 。
+        - **out_proj_has_bias** (bool，可选) - 应用于核心注意力模块输出的线性变换是否有偏置参数。默认值： ``True`` 。
+        - **head_skip_weight_param_allocation** (bool，可选) - 如果为True，头部将跳过权重分配并将词用作权重。默认值： ``True`` 。
+        - **apply_query_key_layer_scaling** (bool，可选) - 在核心注意力模块中使用查询键缩放。默认值： ``False`` 。
+        - **use_flash_attention** (bool，可选) - 启用FlashAttention。默认值： ``False`` 。
+        - **fa_config** (dict，可选) - FlashAttention配置。默认值： ``None`` 。
+        - **enable_flash_sp** (bool，可选) - 启用FlashSP操作。默认值： ``False`` 。
+        - **mask_func_type** (str，可选) - 注意力掩码计算方法。默认值： ``"attn_mask_add"`` 。
+        - **mlp_has_bias** (bool，可选) - 多层感知机（MLP）模块中的线性变换有偏置参数。默认值： ``True`` 。
+        - **hidden_act** (str，可选) - 多层感知机（MLP）模块中使用的激活函数。默认值： ``"gelu"`` 。
+        - **normalization** (str，可选) - Transformer层模块中使用的归一化方法。默认值： ``"LayerNorm"`` 。
+        - **norm_epsilon** (float，可选) - 归一化的epsilon值。默认值： ``1.e-5`` 。
+        - **apply_residual_connection_post_norm** (bool，可选) - 在归一化之后使用残差连接。默认值： ``False`` 。
+        - **use_final_norm** (bool，可选) - 在Transformer后使用最终归一化。默认值： ``True`` 。
+        - **residual_connection_dtype** (str，可选) - 残差连接的计算数据类型。默认值： ``"float32"`` 。
+        - **init_method_std** (float，可选) - 初始化方法的标准差数值。默认值： ``0.01`` 。
+        - **params_dtype** (str，可选) - 参数初始化的数据类型。默认值： ``"float32"`` 。
+        - **embedding_init_dtype** (str，可选) - 嵌入参数初始化的数据类型。默认值： ``"float32"`` 。
+        - **compute_dtype** (str，可选) - 线性模块的计算数据类型。默认值： ``"float32"`` 。
+        - **softmax_compute_dtype** (str，可选) - Softmax层的计算数据类型。默认值： ``"float32"`` 。
+        - **init_method** (str，可选) - 初始化方法。默认值： ``'normal'`` 。
+        - **bias_init** (str，可选) - 偏置初始化方法。默认值： ``'zeros'`` 。
+        - **fp16_lm_cross_entropy** (bool，可选) - 在计算交叉熵时使用半精度（FP16）。默认值： ``False`` 。
+        - **attention_dropout** (float，可选) - 注意力模块的丢弃率。默认值： ``0.0`` 。
+        - **out_hidden_size** (int，可选) - 输出隐藏层大小。默认值： ``None`` 。
+        - **num_experts** (int，可选) - 专家数量。默认值： ``None`` 。
+        - **untie_embeddings_and_output_weights** (bool，可选) - 如果为False，则与头部层共享嵌入。默认值： ``False`` 。
+        - **flatten_labels_and_input_mask** (bool，可选) - 扁平化标签（label）和输入掩码。默认值： ``True`` 。
+        - **recompute_method** (str，可选) - 重计算方法。默认值： ``None`` 。
+        - **recompute_num_layers** (int，可选) - 指定重计算的层数。默认值： ``None`` 。
+        - **recompute_granularity** (str，可选) - 重计算粒度。默认值： ``None`` 。
+        - **fp32_residual_connection** (bool，可选) - 启用全精度（FP32）残差连接。默认值： ``False`` 。
+        - **kv_channels** (int，可选) - 键和值通道数。默认值： ``None`` 。
+        - **hidden_dropout** (float，可选) - 注意力模块输出的丢弃率和多层感知机（MLP）输出的丢弃率。默认值： ``0.0`` 。
+        - **bias_dropout_fusion** (bool，可选) - 启用偏置丢弃融合。默认值： ``False`` 。
+        - **fp8_format** (str，可选) - 使用FP8格式。默认值： ``None`` 。
+        - **clone_scatter_output_in_embedding** (bool，可选) - 在嵌入中启用克隆散射输出。默认值： ``False`` 。
+        - **add_bias_linear** (bool，可选) - 启用带偏置的线性变换。默认值： ``False`` 。
+        - **attention_softmax_in_fp32** (bool，可选) - 启用在全精度（FP32）下进行注意力Softmax操作。默认值： ``True`` 。
+        - **masked_softmax_fusion** (bool，可选) - 启用掩码Softmax融合。默认值： ``False`` 。
+        - **distribute_saved_activations** (bool，可选) - 启用分布式保存激活值。默认值： ``False`` 。
+        - **retro_add_retriever** (bool，可选) - 启用回溯添加检索器。默认值： ``False`` 。
+        - **transformer_impl** (str，可选) - Transformer实现方式。默认值： ``'local'`` 。
+        - **encoder_num_layers** (int，可选) - 编码器层数。默认值： ``None`` 。
+        - **decoder_num_layers** (int，可选) - 解码器层数。默认值： ``None`` 。
+        - **model_type** (str，可选) - 模型类型。默认值： ``"encoder_or_decoder"`` 。
+        - **select_comm_recompute** (bool，可选) - 启用选择通信重计算。默认值： ``False`` 。
+        - **select_recompute** (bool，可选) - 启用选择重计算。默认值： ``False`` 。
+        - **apply_rope_fusion** (bool，可选) - 启用旋转位置编码（RoPE）融合。默认值： ``False`` 。
+        - **use_sandwich_norm** (bool，可选) - 启用Sandwich归一化。默认值： ``False`` 。
+        - **attn_post_norm_scale** (float，可选) - 注意力后归一化缩放比例。默认值： ``1.0`` 。
+        - **ffn_post_norm_scale** (float，可选) - 前馈网络（FFN）后归一化缩放比例。默认值： ``1.0`` 。
+        - **apply_swiglu_fusion** (bool，可选) - 启用SwiGLU融合。默认值： ``False`` 。
+        - **kwargs** (dict，可选) - 额外的关键字配置参数。

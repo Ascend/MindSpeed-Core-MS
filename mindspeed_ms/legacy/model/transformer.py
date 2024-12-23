@@ -322,14 +322,15 @@ class ParallelAttention(Module):
         - **bias** (Tensor) - The trainable bias parameter.
 
     Raises:
-        NotImplementedError: If use flash attention but attention_type is not 'AttnType.self_attn'.
-        ValueError: If group_query_attention is `True` but the num_query_groups is not divisible by tp_group_size.
-        ValueError: If 'attention_type' is neither 'AttnType::self_attn' nor 'AttnType::cross_attn'.
-        NotImplementedError: If 'attention_type' is 2 and 'group_query_attention' in config is true.
-        ValueError: If 'hidden_size' is not equal to 'kv_hidden_size' and 'attention_type' is 2.
-        NotImplementedError: If 'get_context_parallel_world_size()' > 1 and args.context_parallel_algo ==
-            'ulysses_cp_algo' and not use flash attention.
-        NotImplementedError: If 'inference_params' is not none.
+        NotImplementedError: If use flash attention but `attention_type` is not ``AttnType.self_attn``.
+        ValueError: If `group_query_attention` is ``True`` but the `num_query_groups` is not divisible by
+            `tp_group_size`.
+        ValueError: If `attention_type` is neither ``AttnType::self_attn`` nor ``AttnType::cross_attn``.
+        NotImplementedError: If `attention_type` is 2 and `group_query_attention` in config is ``True``.
+        ValueError: If `hidden_size` is not equal to `kv_hidden_size` and `attention_type` is 2.
+        NotImplementedError: If `get_context_parallel_world_size()` > 1 and `args.context_parallel_algo` is equal to
+            ``ulysses_cp_algo`` and not use flash attention.
+        NotImplementedError: If `inference_params` is not ``None``.
 
     Supported Platforms:
         ``Ascend``

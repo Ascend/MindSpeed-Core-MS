@@ -88,7 +88,7 @@ class Embedding(Module):
           and sentence B in BERT), with datatype int32, shape :math:`(B, S)`.
 
     Outputs:
-        - **embeddings** (Tensor)- The embedding output, shape :math:`(B, S, H)`.
+        - **embeddings** (Tensor) - The embedding output, shape :math:`(B, S, H)`.
 
     Raises:
         NotImplementedError: If `config.clone_scatter_output_in_embedding` is True.
@@ -626,21 +626,23 @@ def get_language_model(config, num_tokentypes, add_pooler,
                        decoder_attn_mask_type=None,
                        pre_process=True, post_process=True):
     """
-    Get language model.
+    Use this function to get language model.
 
     Args:
-        config (TransformerConfig): The transformer configuration includes init_method, parallel_config, etc.
+        config (TransformerConfig): The config of the transformer model. For details, please refer to TransformerConfig.
+        num_tokentypes (int): If greater than ``0``, using tokentypes embedding.
+        add_pooler (bool): If ``True``, use pooler.
         encoder_attn_mask_type (int): Encoder attention mask type.
-        num_tokentypes (int): If > 0, using tokentypes embedding.
-        add_encoder (bool): If True, use encoder.
-        use_decoder (bool): If True, use decoder.
-        decoder_attn_mask_type (int): Decoder attention mask type.
-        add_pooler (bool): If True, use pooler.
-        pre_process (bool): When using pipeline parallel, indicate whether it's the first stage.
-        post_process (bool): When using pipeline parallel, indicate whether it's the last stage.
+        add_encoder (bool, optional): If ``True``, use encoder. Default: ``True``.
+        add_decoder (bool, optional): If ``True``, use decoder. Default: ``False``.
+        decoder_attn_mask_type (int, optional): Decoder attention mask type. Default: ``None``.
+        pre_process (bool, optional): When using pipeline parallel, indicate whether it's the first stage. Default:
+            ``True``.
+        post_process (bool, optional): When using pipeline parallel, indicate whether it's the last stage. Default:
+            ``True``.
 
     Returns:
-        - **language_model** (TransformerLanguageModel) - Transformer Model.
+        - **language_model** (TransformerLanguageModel) - Transformer model.
         - **language_model_key** (str) - Model key.
 
     Supported Platforms:
@@ -648,7 +650,7 @@ def get_language_model(config, num_tokentypes, add_pooler,
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.
             Please see the `msrun start up
@@ -656,21 +658,37 @@ def get_language_model(config, num_tokentypes, add_pooler,
             for more details.
 
         >>> import os
-        >>> from mindspeed_ms.core.config import ModelParallelConfig, TransformerConfig
+        >>> import numpy as np
+        >>> import mindspore as ms
+        >>> from mindspore import Tensor
+        >>> from mindspore.communication import init
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.core.config import (
+        ...     init_configs_from_yaml,
+        ...     TrainingConfig,
+        ...     ModelParallelConfig,
+        ...     TransformerConfig,
+        ...     DatasetConfig,
+        ... )
         >>> from mindspeed_ms.legacy.model.language_model import get_language_model
+        >>> os.environ['HCCL_BUFFSIZE'] = "1"
+        >>> config_path = "test_language_model.yaml"
+        >>> training_config, parallel_config, dataset_config, model_config = init_configs_from_yaml(
+        ...     config_path, [TrainingConfig, ModelParallelConfig, DatasetConfig, TransformerConfig]
+        ... )
+        >>> ms.set_context(device_target="Ascend", mode=ms.PYNATIVE_MODE,
+        ...     deterministic="ON")
         >>> init()
         >>> initialize_model_parallel()
-        >>> parallel_config = ModelParallelConfig(tensor_model_parallel_size=tensor_parallel)
-        >>> config = TransformerConfig(seq_length=16,
-        >>>                            vocab_size=1,
-        >>>                            num_layers=1,
-        >>>                            num_attention_heads=8,
-        >>>                            num_query_groups=4,
-        >>>                            hidden_size=256,
-        >>>                            ffn_hidden_size=256,
-        >>>                            parallel_config=parallel_config)
-        >>> language_model, _ = get_language_model(config, encoder_attn_mask_type=None)
+        >>> batch_size = dataset_config.batch_size
+        >>> sq = model_config.seq_length
+        >>> language_model, _ = get_language_model(model_config,
+        ...                                        num_tokentypes=0,
+        ...                                        add_pooler=False,
+        ...                                        encoder_attn_mask_type=None)
+        >>> input_data = Tensor(np.random.random((batch_size, sq)).astype(np.int32))
+        >>> attention_mask = Tensor(np.zeros((batch_size, 1, sq, sq)).astype(np.int32))
+        >>> hidden_states = language_model(input_data, None, attention_mask)
     """
     language_model = TransformerLanguageModel(
         config=config,

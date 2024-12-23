@@ -623,10 +623,18 @@ class BaseConfig(metaclass=ABCMeta):
 
 
 class AllConfig(BaseConfig):
-    """A Config that contains all other configs, which will be used in init_configs methods as the default config.
+    """
+    A Config that contains all other configs, which will be used in init_configs methods as the default config.
 
     Args:
-        **kwargs: Other arguments.
+        kwargs (dict, optional): Extra keyword configuration arguments.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        >>> from mindspeed_ms.core.config import AllConfig
+        >>> all_config = [AllConfig]
     """
 
     # set config name for identifying while using init_configs methods
@@ -842,20 +850,23 @@ def init_configs_from_yaml(file_path: str, config_classes=None, **kwargs):
     Initialize config class from configuration yaml file.
 
     Args:
-        file_path (str): configuration yaml file.
-        config_classes (Union[list[BaseConfig], None]): Config classes to be initialized. Support [TrainingConfig,
-            ModelParallelConfig, OptimizerConfig, DatasetConfig, LoraConfig, TransformerConfig, MoEConfig]. When no
-            config class is passed in, all known configs will be initialized as optional config of
-            :class:`mindformers.experimental.parallel_core.pynative.config.AllConfig`. Default: ``None``.
-        kwargs (dict): extra configuration arguments.
+        file_path (str): Configuration yaml file.
+        config_classes (Union[list[BaseConfig], None], optional): Config classes to be initialized. Support
+            [TrainingConfig, ModelParallelConfig, OptimizerConfig, DatasetConfig, LoraConfig, TransformerConfig,
+            MoEConfig]. When no config class is passed in, all known configs will be initialized as optional
+            config of :class:`mindspeed_ms.core.config.AllConfig`. Default: ``None``.
+        kwargs (dict): Extra keyword configuration arguments.
 
     Returns:
         Union[list[BaseConfig], AllConfig], return initialized config instances, when no config class is passed in,
-            :class:`mindformers.experimental.parallel_core.pynative.config.AllConfig` will be returned.
+            :class:`mindspeed_ms.core.config.AllConfig` will be returned.
 
     Raises:
         ValueError: If `file_path` is not a string.
         ValueError: If the suffix of `file_path` does not end with yaml or yml.
+
+    Supported Platforms:
+        ``Ascend``
 
     Examples:
         >>> from mindspeed_ms.core.config import init_configs_from_yaml
@@ -894,27 +905,43 @@ class ModelParallelConfig(BaseConfig):
     """Parallel config class.
 
     Args:
-        tensor_model_parallel_size (int): Dimensionality of tensor parallel. Default: 1.
-        pipeline_model_parallel_size (int): Number of stages when using pipeline parallel. Default: 1.
-        context_parallel_size (int): Dimensionality of context parallel. Default: 1.
-        context_parallel_algo (str): Context parallelism algorithm. Default: 'ulysses_cp_algo'.
-                                     Choices: ['ulysses_cp_algo', 'megatron_cp_algo', 'hybrid_cp_algo'].
-        ulysses_degree_in_cp (int): Define the degree of ulysses parallelism' when the `--context-parallel-algo`
-                                    is set to `hybrid_cp_algo`, and the ring-attention parallelism
-                                    is set wo `cp//ulysses`.
-        expert_model_parallel_size (int): Dimensionality of expert parallel. Default: 1.
-        virtual_pipeline_model_parallel_size (int): Number of virtual stages when using pipeline parallel.
-            Default: None.
-        sequence_parallel (bool): Enable sequence parallel. Default: False.
+        tensor_model_parallel_size (int, optional): Dimensionality of tensor parallel. Default: ``1``.
+        pipeline_model_parallel_size (int, optional): Number of stages when using pipeline parallel. Default: ``1``.
+        context_parallel_size (int, optional): Dimensionality of context parallel. Default: ``1``.
+        context_parallel_algo (str, optional): Context parallelism algorithm. Default: ``"ulysses_cp_algo"``.
+            Choices: [``"ulysses_cp_algo"``, ``"megatron_cp_algo"``, ``"hybrid_cp_algo"``].
+        ulysses_degree_in_cp (int, optional): Define the degree of ulysses parallelism when the
+            `--context-parallel-algo` is set to ``hybrid_cp_algo``, and the ring-attention parallelism
+            is set to ``cp//ulysses``.
+        expert_model_parallel_size (int, optional): Dimensionality of expert parallel. Default: ``1``.
+        virtual_pipeline_model_parallel_size (int, optional): Number of virtual stages when using pipeline parallel.
+            Default: ``None``.
+        sequence_parallel (bool, optional): Enable sequence parallel. Default: ``False``.
         recv_dtype (str, optional): Communication data type of p2p communication when using pipeline
-            parallel. Default: 'float32'.
+            parallel. Default: ``"float32"``.
         zero_level (str, optional): Zero level for ZeRO optimizer,
-            if None, will not use ZeRO optimizer. Default: None.
-        gradient_accumulation_fusion (bool): Enable gradient accumulation
-            during linear backward execution. Default: False.
-        overlap_p2p_comm (bool): Enable overlap p2p commucation in pipeline interleaved. Default: False.
-        num_layer_list (list): User-defined pipeline parallel model layer division. Default: None.
-        recompute_config (dict): Recompute strateges. Default: None.
+            if ``None``, will not use ZeRO optimizer. Default: ``None``.
+        standalone_embedding_stage (bool, optional): Enable standalone embedding stage. Default: ``False``.
+        overlap_grad_reduce (bool, optional): Enable overlap grad reduce. Default: ``False``.
+        gradient_accumulation_fusion (bool, optional): Enable gradient accumulation
+            during linear backward execution. Default: ``False``.
+        overlap_p2p_comm (bool, optional): Enable overlap p2p commucation in pipeline interleaved. Default: ``True``.
+        use_cpu_initialization (bool, optional): Use cpu initialization. Default: ``False``.
+        deterministic_mode (bool, optional): Deterministic mode. Default: ``False``.
+        num_layer_list (list, optional): User-defined pipeline parallel model layer division. Default: ``None``.
+        recompute_config (dict, optional): Recompute config. Default: ``None``.
+        recompute (str, optional): Enable recompute. Default: ``None``
+        select_recompute (str, optional): Enable select recompute. Default: ``None``
+        select_comm_recompute (str, optional): Enable select commucation recompute. Default: ``None``
+        variable_seq_lengths (bool, optional): Enable variable sequence lengths. Default: ``False``.
+        kwargs (dict): Extra keyword configuration arguments.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        >>> from mindspeed_ms.core.config import ModelParallelConfig
+        >>> parallel_config = ModelParallelConfig()
     """
 
     # set config name for identifying while using init_configs methods
@@ -1127,15 +1154,22 @@ class DatasetConfig(BaseConfig):
     r"""Dataset config class.
 
     Args:
-        dataset_dir (str, optional): Dataset file directory. Default: './dataset'.
-        shuffle (bool, optional): Shuffle dataset. Default: None.
-        kwargs (dict, optional): Other dataset config arguments.
-        batch_size (int, optional): batch size / micro_batch_size for training and evaluation. Default: 1.
+        dataset_dir (str, optional): Dataset file directory. Default: ``"./dataset"``.
+        shuffle (bool, optional): Shuffle dataset. Default: ``False``.
+        batch_size (int, optional): The `batch_size` or `micro_batch_size` for training and evaluation. Default: ``1``.
         micro_batch_num (int, optional): Number of micro batch when using pipeline parallel or
-            gradient accumulation. Defaults: 1.
-        data_layout (str, optional): Input layout. Default: "BSH".
-        train_samples (int, optional): Number of train samples for sample-based training. Default: 0.
-        eos_token_id  (int, optional): Eod token id. Default: 0.
+            gradient accumulation. Default: ``1``.
+        train_samples (int, optional): Number of train samples. Default: ``0``.
+        data_layout (str, optional): Input layout. Default: ``"BSH"``.
+        eos_token_id  (int, optional): EoS token id. Default: ``0``.
+        kwargs (dict): Extra keyword configuration arguments.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        >>> from mindspeed_ms.core.config import DatasetConfig
+        >>> dataset_config = DatasetConfig()
     """
 
     # set config name for identifying while using init_configs methods
@@ -1348,25 +1382,34 @@ def validate_target_cells(config_instance, target_cells):
 
 
 class MoEConfig(BaseConfig):
-    r"""MoE config class.
+    r"""
+    MoE config class.
 
     Args:
-        num_experts (int): The number of experts. Default: 1.
-        moe_grouped_gemm (bool): Use grouped gemm or not.
-        moe_router_topk (int): Router TopK number. Default: 2.
-        moe_router_load_balancing_type (str): type of moe router load balancing algorithm. Choose from:
-                                              ["aux_loss", "none"]. Default: "none".
-        moe_token_dispatcher_type (str): type of moe token dispatcher algorithm. Choose from:
-                                              ["alltoall"]. Default: "alltoall".
-        use_self_defined_alltoall (bool): Use self-defined `alltoall` operators. Default: False.
-        moe_expert_capacity_factor (float): The capacity factor for each expert. Default: None.
-        moe_pad_expert_input_to_capacity (bool): Whether pads the input for each expert
-                                                 to match the expert capacity length. Default: False.
-        moe_token_drop_policy (str): The policy to drop tokens. Default: "probs".
-        moe_aux_loss_coeff (float): Scaling coefficient for the aux loss. Default: 0.0.
-        moe_z_loss_coeff (float): Scaling coefficient for the z-loss. Default: None.
-        moe_input_jitter_eps (float): Add noise to the input tensor by
-                                      applying jitter with a specified epsilon value. Default: None.
+        num_experts (int, optional): The number of experts. Default: ``1``.
+        moe_grouped_gemm (bool, optional): Use grouped gemm or not. Default: ``False``.
+        moe_router_topk (int, optional): Router TopK number. Default: ``2``.
+        moe_router_load_balancing_type (str, optional): Type of moe router load balancing algorithm. Choose from:
+            [``"aux_loss"``, ``"none"``]. Default: ``"none"``.
+        moe_token_dispatcher_type (str, optional): Type of moe token dispatcher algorithm. Choose from:
+                                              [``'alltoall'``]. Default: ``'alltoall'``.
+        use_self_defined_alltoall (bool, optional): Use self-defined `alltoall` operators. Default: ``False``.
+        moe_expert_capacity_factor (float, optional): The capacity factor for each expert. Default: ``None``.
+        moe_pad_expert_input_to_capacity (bool, optional): Whether pads the input for each expert
+                                                 to match the expert capacity length. Default: ``False``.
+        moe_token_drop_policy (str, optional): The policy to drop tokens. Default: ``"probs"``.
+        moe_aux_loss_coeff (float, optional): Scaling coefficient for the aux loss. Default: ``0.0``.
+        moe_z_loss_coeff (float, optional): Scaling coefficient for the z-loss. Default: ``None``.
+        moe_input_jitter_eps (float, optional): Add noise to the input tensor by
+                                      applying jitter with a specified epsilon value. Default: ``None``.
+        kwargs (dict, optional): Extra keyword configuration arguments.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        >>> from mindspeed_ms.core.config import MoEConfig
+        >>> moe_config = MoEConfig(num_experts=4, moe_router_topk=2)
     """
     config_name = "moe_config"
 
@@ -1472,68 +1515,86 @@ class TrainingConfig(BaseConfig):
 
     Args:
         parallel_config (ModelParallelConfig): Parallel config.
-        dataset_config (DatasetConfig): Dataset config.
-        seed (Union[int, None], optional): Random seed for initialization. Default: None.
-        output_dir (str, optional): Output directory for saving checkpoints, logs and so on. Default: './output'.
-        training_iters (int, optional) : Training iterations for training. Default: 0.
-        epochs (Union[int, None], optional) : Epochs for training. Default: None.
-        log_interval (Union[int, None], optional): Log interval for training. Default: None.
-        eval_interval (Union[int, None], optional): Evaluation interval for training. Default: None.
-        save_interval (Union[int, None], optional): Save interval for training. Default: None.
-        best_metric_comparison (Union[str, None], optional): the method to compare best metric. Default: None.
-        eval_metric(Union[str, None], optional): the name of evaluation metrics. Default: None
-        grad_clip_kwargs (dict, optional): Gradient clip arguments. Default: None.
-        loss_scale (Union[float, int, None], optional): Initial value of loss scale. If set,
-            will use static loss scaler. Default: None.
-        loss_scale_value (Union[float, int, None], optional): Initial value of dynamic loss scale. Default: None.
-        loss_scale_factor (Union[int, None], optional): Factor of dynamic loss scale. Default: None.
-        loss_scale_window (Union[int, None], optional): Window size of dynamic loss scale. Default: None.
-        loss_reduction (str, optional): Loss reduction method. Default: 'mean'.
-        calculate_per_token_loss (bool): Apply grad and loss calculation base on num of tokens. Default: False.
-        wrap_with_ddp (bool): Using DistributedDataParallel to wrap model. Default: False.
-        overlap_grad_reduce (bool): Enable gradient computing and synchronization communication overlap when using
-            DistributedDataParallel. Default: False.
-        delay_grad_reduce (bool): If set, delay grad reductions in all but first PP stage. Default: False.
-        overlap_param_gather (bool): Enable forward computing and param gather communication overlap when using
-            DistributedDataParallel. Default: False.
-        use_distributed_optimizer (bool): Enable DistributedOptimizer when using DistributedDataParallel.
-            Default: False.
-        bucket_size (Optional[int]): Bucket size which is used to partition buffer into buckets when
-            overlap_grad_reduce=True. Default: None.
-        check_for_nan_in_grad (bool): If True, check gradients in buffer are finite after synchronization.
-            Default: False.
-        resume_training (bool): Resume training. Default: False.
-        crc_check (bool): CRC check when save/load checkpoint. Enable this may cause low train performance.
-            Default: False.
-        load_checkpoint (str, optional): Where to load checkpoint. Default: ''.
-        enable_compile_cache (bool): Save compile cache. Enable this may cause low train performance. Default: False.
-        compile_cache_path (str, optional): Where to save compile cache. Default: './{output_dir}/compile_cache'.
-        ckpt_format (str, optional): checkpoint save format. Default: 'ckpt'.
-        prefix (str, optional): checkpoint save prefix. Default: 'network'.
-        keep_checkpoint_max (str, optional): max saved checkpoint number. Default: 5.
-        no_load_optim (bool): When resume traing, whether load optimizer state or not. Default: False.
-        no_load_rng (bool): When resume traing, whether load RNG state or not. Default: True.
-        new_dataset (bool): When resume traing, whether use new dataset or not. Default: False.
-        profile (bool, optional): open profiling or not. Default: False.
-        profile_save_path (str, optional): path to save profiling files. Default: './{output_dir}/profile'.
-        profile_step_start (int, optional): profiling start step. Default: 1.
-        profile_step_end (int, optional): profiling end step. Default: 5.
-        profile_level (str, optional): profiling "level0", "level1", "level2". Default: "level0".
-        profile_with_stack (bool, optional): profiling with stack info. Default: False.
-        profile_memory (bool, optional): profiling with memory info. Default: False.
-        profile_framework (str, optional): profiling with framework info. Default: False.
-        profile_communication (bool, optional): profiling with communication info. Default: False.
-        profile_parallel_strategy (bool, optional): profiling with parallel strategy info. Default: False.
-        profile_aicore_metrics (int, optional): profiling with aicore metrics info. Default: 0.
-        profile_l2_cache (bool, optional): profiling with l2 cache info. Default: False.
-        profile_hbm_ddr (bool, optional): profiling with hbm ddr info. Default: False.
-        profile_pcie (bool, optional): profiling with pcie info. Default: False.
-        profile_data_process (bool, optional): profiling with data process info. Default: False.
-        profile_data_simplification (bool, optional): profiling with data simplification. Default: False.
-        profile_op_time (bool, optional): profiling with op time info. Default: True.
-        profile_offline_analyse (bool, optional): profiling with offline analyse. Default: False.
-        profile_dynamic_profiler_config_path (str, optional): profiling with dynamic. Default: "".
-        kwargs (dict, optional): Other dataset config arguments.
+        dataset_config (DatasetConfig): Dataset config. Default: ``DatasetConfig()``.
+        lora_config (LoraConfig): Lora config. Default: ``LoraConfig()``.
+        seed (int, optional): Random seed for initialization. Default: ``None``.
+        output_dir (str, optional): Output directory for saving checkpoints, logs and so on. Default: ``"./output"``.
+        training_iters (int, optional): Training iterations for training. Default: ``0``.
+        epochs (int, optional): Epochs for training. Default: ``None``.
+        log_interval (int, optional): Log interval for training. Default: ``None``.
+        eval_interval (int, optional): Evaluation interval for training. Default: ``None``.
+        save_interval (int, optional): Save interval for training. Default: ``None``.
+        best_metric_comparison (str, optional): The method to compare best metric. Default: ``None``.
+        eval_metric (str, optional): The name of evaluation metrics. Default: ``None``.
+        grad_clip_kwargs (dict, optional): Gradient clip arguments. Default: ``None``.
+        loss_scale (Union[float, int], optional): Initial value of loss scale. If set,
+            will use static loss scaler. Default: ``None``.
+        loss_scale_value (Union[float, int], optional): Initial value of dynamic loss scale. Default: ``None``.
+        loss_scale_factor (int, optional): Factor of dynamic loss scale. Default: ``None``.
+        loss_scale_window (int, optional): Window size of dynamic loss scale. Default: ``None``.
+        loss_reduction (str, optional): Loss reduction method. Default: ``"mean"``.
+        calculate_per_token_loss (bool, optional): Apply grad and loss calculation base on num of tokens.
+            Default: ``False``.
+        wrap_with_ddp (bool, optional): Using DistributedDataParallel to wrap model. Default: ``False``.
+        accumulate_allreduce_grads_in_fp32 (bool, optional): When fp32 is set ``True``, whether to accumulate
+            allreduce grads. Default: ``False``.
+        overlap_grad_reduce (bool, optional): Enable gradient computing and synchronization communication overlap when
+            using DistributedDataParallel. Default: ``False``.
+        delay_grad_reduce (bool, optional): If set ``True``, delay grad reductions in all but first PP stage.
+            Default: ``False``.
+        use_distributed_optimizer (bool, optional): Enable DistributedOptimizer when using DistributedDataParallel.
+            Default: ``False``.
+        bucket_size (Optional[int], optional): Bucket size which is used to partition buffer into buckets when
+            `overlap_grad_reduce` is ``True``. Default: ``None``.
+        check_for_nan_in_grad (bool, optional): If set ``True``, check gradients in buffer are finite after
+            synchronization. Default: ``False``.
+        fp16 (bool, optional): Whether to use fp16 type. Default: ``False``.
+        bf16 (bool, optional): Whether to use bf16 type. Default: ``False``.
+        resume_training (bool, optional): Resume training. Default: ``False``.
+        crc_check (bool, optional): CRC check when save/load checkpoint. Enable this may cause low train performance.
+            Default: ``False``.
+        load_checkpoint (str, optional): Where to load checkpoint. Default: ``""``.
+        enable_compile_cache (bool, optional): Save compile cache. Enable this may cause low train performance.
+            Default: ``False``.
+        compile_cache_path (str, optional): Where to save compile cache. Default: ``None``.
+        ckpt_format (str, optional): Checkpoint save format. Default: ``"ckpt"``.
+        prefix (str, optional): Checkpoint save prefix. Default: ``"network"``.
+        keep_checkpoint_max (int, optional): Max saved checkpoint number. Default: ``5``.
+        no_load_optim (bool, optional): When resume training, whether to load optimizer state. Default: ``False``.
+        no_load_rng (bool, optional): When resume training, whether to load RNG state. Default: ``True``.
+        new_dataset (bool, optional): When resume training, whether to use new dataset. Default: ``False``.
+        enable_mem_align (bool, optional): Whether to enable memory align. Default: ``False``.
+        profile (bool, optional): Whether to open profiling. Default: ``False``.
+        profile_save_path (str, optional): Path to save profiling files. Default: ``None``.
+        profile_step_start (int, optional): Profiling start step. Default: ``1``.
+        profile_step_end (int, optional): Profiling end step. Default: ``5``.
+        profile_level (str, optional): Profiling level. Default: ``"level0"``.
+        profile_with_stack (bool, optional): Profiling with stack info. Default: ``False``.
+        profile_memory (bool, optional): Profiling with memory info. Default: ``False``.
+        profile_framework (str, optional): Profiling with framework info. Default: ``"all"``.
+        profile_communication (bool, optional): Profiling with communication info. Default: ``False``.
+        profile_parallel_strategy (bool, optional): Profiling with parallel strategy info. Default: ``False``.
+        profile_aicore_metrics (int, optional): Profiling with aicore metrics info. Default: ``0``.
+        profile_l2_cache (bool, optional): Profiling with l2 cache info. Default: ``False``.
+        profile_hbm_ddr (bool, optional): Profiling with hbm ddr info. Default: ``False``.
+        profile_pcie (bool, optional): Profiling with pcie info. Default: ``False``.
+        profile_data_process (bool, optional): Profiling with data process info. Default: ``False``.
+        profile_data_simplification (bool, optional): Profiling with data simplification. Default: ``False``.
+        profile_op_time (bool, optional): Profiling with op time info. Default: ``True``.
+        profile_offline_analyse (bool, optional): Profiling with offline analyse. Default: ``False``.
+        profile_dynamic_profiler_config_path (str, optional): Path of dynamic profiler. Default: ``""``.
+        kwargs (dict): Extra keyword configuration arguments.
+
+    Raises:
+        ValueError: `fp16` is ``True`` and `bf16` is ``True``.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        >>> from mindspeed_ms.core.config import TrainingConfig, ModelParallelConfig
+        >>> parallel_config = ModelParallelConfig()
+        >>> training_config = TrainingConfig(parallel_config=parallel_config)
     """
 
     # set config name for identifying while using init_configs methods
@@ -2153,53 +2214,81 @@ class TransformerConfig(BaseConfig):
         hidden_size (int): Dimensionality of the encoder layers.
         ffn_hidden_size (int): Dimensionality the FeedForward block project to.
         parallel_config (ModelParallelConfig): Parallel config.
-        lora_config (LoraConfig): Lora config.
-        attention_type (str): Attention type. Default: 'self_attn'.
-        position_embedding_type (str): Position embedding type. Default: 'absolute'
-        parallel_position_embedding (bool): Apply parallel vocab embedding layer when using
-            absolute position embedding. Default: False
-        rotary_config (dict): Rotary config. Default: None
-        use_query_layer (bool): Using query layer after transformer. Default: False.
-        use_visual_encoder (bool): Using visual encoder. Default: False.
-        use_retriever (bool): Using retriever. Default: False
-        group_query_attention (bool): Enable group query attention. Default: False.
-        num_query_groups (int): Number of heads for key and value when using group query attention.
-            Default: 32.
-        qkv_has_bias (bool): Linears apply on query, key and value in Attention block has bias
-            parameter. Default: True.
-        out_proj_has_bias (bool): Linear applies on output of core attention block has bias
-            parameter. Default: True.
-        head_skip_weight_param_allocation (bool): If Head will skip weight allocation and use word
-            as weights. Default: False.
-        apply_query_key_layer_scaling (bool): Apply query key scaling in core attention block.
-            Default: False.
-        use_flash_attention (bool): Enable flash attention. Default: False.
-        mask_func_type (str): Attention mask compute method. Default: 'attn_mask_add'.
-        mlp_has_bis (bool): Linears in MLP block have bias parameters. Default: True.
-        hidden_act (str): Activation used in MLP block. Default: 'gelu'.
-        normalization (str): Normalization used in transformerlayer block. Default: 'LayerNorm'.
-        norm_epsilon (float): Epsilon of normalization. Default: 1.e-5.
-        apply_residual_connection_post_norm (bool): Apply residual connection after normalization.
-            Default: False.
-        use_final_norm (bool): Apply final norm after transformer. Default: True.
-        residual_connection_dtype (str): Compute data type of residual connection. Default: 'float32'.
-        init_method_std (float): Init method std value. Default: 0.01
-        params_dtype (str): Parameter initialize data type. Default: 'float32'.
-        embedding_init_dtype (str): Embedding parameter initialize data type. Default: 'float32'.
-        compute_dtype (str): Compute data type of linear module. Default: 'float16'.
-        softmax_compute_dtype (str): Compute data type of softmax layer. Default: 'float32'.
-        fp16_lm_cross_entropy (bool): Apply float16 when calculating cross entropy. Default: False.
-        hidden_dropout (float): Dropout rate for output of attention block and mlp block in transformerlayer.
-            Default: 0.0.
-        attention_dropout (float): Dropout rate for attention socre. Default: 0.0.
-        num_experts (int, optional): Number of experts. Default: None.
-        untie_embeddings_and_output_weights (bool): If false, share embedding with head layer. Default: False.
-        flatten_labels_and_input_mask (bool): flatten labels and input mask in public layer. Default: True.
-        recompute_method (str, optional): Recompute method. Default: None.
-        recompute_num_layers (int, optional): Number of layers to recompute. Default: None.
-        recompute_granularity (str, optional): Recompute granularity. Default: None.
-        moe_config (MoEConfig, optional): MoE config. Default: None.
-        dataset_config (dict): dataset config. Default: None.
+        training_config (TrainingConfig): Training config.
+        lora_config (LoraConfig, options): Lora config. Default: ``LoraConfig()``.
+        dataset_config (DatasetConfig, options): Dataset config. Default: ``DatasetConfig()``.
+        moe_config (MoEConfig, options): MoE config. Default: ``MoEConfig()``.
+        attention_type (str, options): Attention type. Default: ``"self_attn"``.
+        position_embedding_type (str, options): Position embedding type. Default: ``'absolute'``.
+        parallel_position_embedding (bool, options): Apply parallel vocab embedding layer when using
+            absolute position embedding. Default: ``False``.
+        rotary_config (dict, options): Rotary config. Default: ``None``.
+        use_query_layer (bool, options): Using query layer after transformer. Default: ``False``.
+        use_visual_encoder (bool, options): Using visual encoder. Default: ``False``.
+        use_retriever (bool, options): Using retriever. Default: ``False``.
+        group_query_attention (bool, options): Enable group query attention. Default: ``False``.
+        num_query_groups (int, options): Number of heads for key and value when using group query attention.
+            Default: ``32``.
+        qkv_has_bias (bool, options): Linears apply on query, key and value in Attention block has bias
+            parameter. Default: ``True``.
+        out_proj_has_bias (bool, options): Linear applies on output of core attention block has bias
+            parameter. Default: ``True``.
+        head_skip_weight_param_allocation (bool, options): If ``True``, the Head will skip weight allocation and
+            use word as weights. Default: ``True``.
+        apply_query_key_layer_scaling (bool, options): Apply query key scaling in core attention block.
+            Default: ``False``.
+        use_flash_attention (bool, options): Enable flash attention. Default: ``False``.
+        fa_config (dict, options): Flash attention config. Default: ``None``.
+        enable_flash_sp (bool, options): Enable flash sp. Default: ``False``.
+        mask_func_type (str, options): Attention mask compute method. Default: ``"attn_mask_add"``.
+        mlp_has_bias (bool, options): Linears in MLP block have bias parameters. Default: ``True``.
+        hidden_act (str, options): Activation used in MLP block. Default: ``"gelu"``.
+        normalization (str, options): Normalization used in transformer layer block. Default: ``"LayerNorm"``.
+        norm_epsilon (float, options): Epsilon of normalization. Default: ``1.e-5``.
+        apply_residual_connection_post_norm (bool, options): Apply residual connection after normalization.
+            Default: ``False``.
+        use_final_norm (bool, options): Apply final norm after transformer. Default: ``True``.
+        residual_connection_dtype (str, options): Compute data type of residual connection. Default: ``"float32"``.
+        init_method_std (float, options): Init method std value. Default: ``0.01``.
+        params_dtype (str, options): Parameter initialize data type. Default: ``"float32"``.
+        embedding_init_dtype (str, options): Embedding parameter initialize data type. Default: ``"float32"``.
+        compute_dtype (str, options): Compute data type of linear module. Default: ``"float32"``.
+        softmax_compute_dtype (str, options): Compute data type of softmax layer. Default: ``"float32"``.
+        init_method (str, options): Init method. Default: ``'normal'``.
+        bias_init (str, options): Bias init method. Default: ``'zeros'``.
+        fp16_lm_cross_entropy (bool, options): Apply float16 when calculating cross entropy. Default: ``False``.
+        attention_dropout (float, options): Dropout rate for attention module. Default: ``0.0``.
+        out_hidden_size (int, options): Out hidden size. Default: ``None``.
+        num_experts (int, options): Number of experts. Default: ``None``.
+        untie_embeddings_and_output_weights (bool, options): If ``False``, share embedding with head layer.
+            Default: ``False``.
+        flatten_labels_and_input_mask (bool, options): flatten labels and input mask. Default: ``True``.
+        recompute_method (str, options): Recompute method. Default: ``None``.
+        recompute_num_layers (int, options): Number of layers to recompute. Default: ``None``.
+        recompute_granularity (str, options): Recompute granularity. Default: ``None``.
+        fp32_residual_connection (bool, options): Enable fp32 residual connection. Default: ``False``.
+        kv_channels (int, options): Key and value channels. Default: ``None``.
+        hidden_dropout (float, options): Dropout rate for output of attention block and mlp block. Default: ``0.0``.
+        bias_dropout_fusion (bool, options): Enable bias dropout fusion. Default: ``False``.
+        fp8_format (str, options): Use fp8 format. Default: ``None``.
+        clone_scatter_output_in_embedding (bool, options): Enable clone scatter output in embedding. Default: ``False``.
+        add_bias_linear (bool, options): Enable bias linear. Default: ``False``.
+        attention_softmax_in_fp32 (bool, options): Enable attention softmax in fp32. Default: ``True``.
+        masked_softmax_fusion (bool, options): Enable masked softmax fusion. Default: : ``False``,
+        distribute_saved_activations (bool, options): Enable distribute saved activations. Default: ``False``.
+        retro_add_retriever (bool, options): Enable retro add retriever. Default: ``False``.
+        transformer_impl (str, options): Transformer implementation. Default: ``'local'``.
+        encoder_num_layers (int, options): Encoder num layers. Default: ``None``.
+        decoder_num_layers (int, options): Decoder num layers. Default: ``None``.
+        model_type (str, options): Model type. Default: ``"encoder_or_decoder"``.
+        select_comm_recompute (bool, options): Enable select comm recompute. Default: ``False``.
+        select_recompute (bool, options): Enable select recompute. Default: ``False``.
+        apply_rope_fusion (bool, options): Enable rope fusion. Default: ``False``.
+        use_sandwich_norm (bool, options): Enable sandwich norm. Default: ``False``.
+        attn_post_norm_scale (float, options): Attention post norm scale. Default: ``1.0``.
+        ffn_post_norm_scale (float, options): Ffn post norm scale. Default: ``1.0``.
+        apply_swiglu_fusion (bool, options): Enable swiglu fusion. Default: ``False``.
+        kwargs (dict): Extra keyword configuration arguments.
     """
 
     # set config name for identifying while using init_configs methods

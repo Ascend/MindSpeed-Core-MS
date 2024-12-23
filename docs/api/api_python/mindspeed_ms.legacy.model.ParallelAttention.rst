@@ -25,7 +25,7 @@ mindspeed_ms.legacy.model.ParallelAttention
     异常：
         - **NotImplementedError** - 如果使用了flash attention，但是 `attention_type` 是 `AttnType.self_attn` 。
         - **ValueError** - 如果 `group_query_attention` 是 `True` 但是 `num_query_groups` 不能被 `tp_group_size` 整除。
-        - **ValueError** - 如果 `attention_type` 既不是 1 也不是 2。
+        - **ValueError** - 如果 `attention_type` 既不是 ``AttnType::self_attn`` 也不是 ``AttnType::cross_attn`` 。
         - **NotImplementedError** - 如果 `attention_type` 是 2 并且 `config` 中的 `group_query_attention` 是 ``True`` 。
         - **ValueError** - 如果 `config` 中的 `hidden_size` 不等于 `config` 中的 `kv_hidden_size` 并且 `attention_type` 是 2。
         - **NotImplementedError** - 如果 `get_context_parallel_world_size() > 1` 并且 `args.context_parallel_algo` 为 `ulysses_cp_algo` 并且没有使用flash attention。

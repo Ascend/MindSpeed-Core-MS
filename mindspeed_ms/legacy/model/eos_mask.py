@@ -24,10 +24,49 @@ class EosMask(nn.Cell):
     Generate attention mask corresponding to a specific token.
 
     Args:
-        batch_size (int): batch_size from config
-        seq_len (int): seq_len from config
-        eod_token_id (int): eod_token_id from config
-        reset_position_ids (bool): reset_position_ids from config
+        batch_size (int): Batch size.
+        seq_len (int): Sequence length.
+        eod_token_id (int): End-of-Document token id.
+        reset_position_ids (bool): If ``True``, the position ids are reset.
+
+    Inputs:
+        - **input_ids** (Tensor) - Input indexes. Tensor of shape :math:`(B, S)`.
+
+    Outputs:
+        - **position_ids** (Tensor) - Position id. Tensor of shape :math:`(B, S)`.
+        - **mint.sub(1, mask)** (Tensor) - Mask. Tensor of shape :math:`(B, S, S)`.
+
+    Examples:
+        .. note::
+            Before running the following examples, you need to configure the environment variables.
+
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more detailgit stats.
+
+        >>> from mindspore.communication.management import init
+        >>> import numpy as np
+        >>> import mindspore as ms
+        >>> from mindspore import dtype as mstype
+        >>> from mindspore import Tensor, nn
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.legacy.model.eos_mask import EosMask
+        >>> ms.set_context(device_target='Ascend', mode=ms.PYNATIVE_MODE)
+        >>> ms.set_seed(2024)
+        >>> init()
+        >>> initialize_model_parallel()
+        >>> b = 2
+        >>> s = 4
+        >>> eod_token_id = 4
+        >>> loss = EosMask(b, s, eod_token_id, reset_position_ids=False)
+        >>> input_ids = ms.Tensor(np.random.random((b, s)).astype(np.float32))
+        >>> output, mask = loss(input_ids)
+        >>> print(output.shape)
+        >>> print(mask.shape)
+        (2, 4)
+        (2, 4, 4)
     """
     def __init__(self, batch_size, seq_len, eod_token_id, reset_position_ids):
         """Cal attention mask in device."""

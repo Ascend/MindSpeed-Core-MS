@@ -12,7 +12,7 @@ mindspeed_ms.legacy.model.moe.router.TopKRouter
         - **input** (Tensor) - 输入张量。
 
     输出：
-        2个张量组成的Tuple
+        两个张量组成的元组。
 
         - **scores** (Tensor) - 负载均衡后的概率张量。
         - **indices** (Tensor) - 经过 top-k 选择后的索引张量。

@@ -27,32 +27,50 @@ class LossWithMask(nn.Cell):
     Calculate the loss with mask and mean reduction.
 
     Args:
-        - **loss_func** (Function) - Loss function.
+        loss_func (Function): Loss function.
+        args (tuple): Input arguments.
+        kwargs (dict): Keyword arguments.
 
     Inputs:
-        - **logits** (Tensor) - Tensor of shape (N, C). Data type must be float16 or float32. The output logits of
-          the backbone.
+        - **logits** (Tensor) - The output logits of the backbone. Tensor of shape :math:`(N, C)`.
+          Data type must be float16 or float32.
+        - **label** (Tensor) - The ground truth label of the sample. Tensor of shape :math:`(N, )`
+          or the same shape as `logits`.
+        - **input_mask** (Tensor) - The `input_mask` indicates whether there are padded inputs
+          and for padded inputs it will not be counted into loss. Tensor of shape :math:`(N, )`.
 
-        - **label** (Tensor) - Tensor of shape (N, ). The ground truth label of the sample.
-
-        - **input_mask** (Tensor) - Tensor of shape (N, ). input_mask indicates whether there are padded inputs and for
-          padded inputs it will not be counted into loss.
-
-    Returns:
+    Outputs:
         The corresponding cross entropy loss.
 
     Examples:
+        .. note::
+            Before running the following examples, you need to configure the environment variables.
+
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
         >>> import numpy as np
+        >>> import mindspore as ms
+        >>> from mindspore.communication.management import init
         >>> from mindspore import dtype as mstype
         >>> from mindspore import Tensor, nn
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.training.loss_func import LossWithMask
+        >>> ms.set_context(device_target='Ascend', mode=ms.PYNATIVE_MODE)
+        >>> ms.set_seed(2024)
+        >>> init()
+        >>> initialize_model_parallel()
         >>> loss = LossWithMask(nn.CrossEntropyLoss())
-        >>> logits = Tensor(np.array([[3, 5, 6, 9, 12, 33, 42, 12, 32, 72]]), mstype.float32)
-        >>> labels_np = np.array([1]).astype(np.int32)
+        >>> logits = Tensor(np.array([[3, 5, 6, 9, 12, 33, 42, 12, 32, 72]]),
+        ...                 mstype.float32)
+        >>> labels = Tensor(np.array([1]).astype(np.int32))
         >>> input_mask = Tensor(np.ones(1).astype(np.float32))
-        >>> labels = Tensor(labels_np)
         >>> output = loss(logits, labels, input_mask)
-        >>> output.shape
-        (1,)
+        >>> print(output)
+        67.0
     """
     # pylint: disable=W0613
     def __init__(self, loss_func, *args, **kwargs):
