@@ -73,7 +73,7 @@ class GPTModel(Module):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
 
             For Ascend devices, it is recommended to use the msrun startup method without any third-party
             or configuration file dependencies.

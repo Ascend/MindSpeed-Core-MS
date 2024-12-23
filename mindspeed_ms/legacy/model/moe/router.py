@@ -31,10 +31,11 @@ class TopKRouter(nn.Cell):
     TopK router. Calculates scores based on input data and selects top-K experts to process input data.
 
     Args:
-        config (TransformerConfig): Configuration object for the transformer model.
+        config (TransformerConfig): Configuration object for the transformer model. For details, refer to
+            TransformerConfig class.
 
     Inputs:
-        - **input** (Tensor) - input tensor.
+        - **input** (Tensor) - Input tensor.
 
     Outputs:
         Tuple of 2 Tensors.
@@ -48,7 +49,8 @@ class TopKRouter(nn.Cell):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
+
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.
             Please see the `msrun start up

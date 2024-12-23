@@ -1,9 +1,13 @@
 mindspeed_ms.core.tensor_parallel.VocabParallelCrossEntropy
 ===========================================================
 
-.. py:class:: mindspeed_ms.core.tensor_parallel.VocabParallelCrossEntropy()
+.. py:class:: mindspeed_ms.core.tensor_parallel.VocabParallelCrossEntropy(*args, **kwargs)
 
     交叉熵损失函数的并行接口。
+
+    参数：
+        - **args** (tuple) - 位置参数。
+        - **kwargs** (dict) - 其他输入。
 
     输入：
         - **vocab_parallel_logits** (Tensor) - 主干网络的输出。形状为 :math:`(N, C)` 的张量。数据类型必须为float16或float32。

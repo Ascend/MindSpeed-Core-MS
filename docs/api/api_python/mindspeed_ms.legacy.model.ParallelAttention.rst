@@ -6,7 +6,7 @@ mindspeed_ms.legacy.model.ParallelAttention
     该类表示并行注意力机制。它可以处理不同的注意力类型，并且可以使用各种参数进行配置。
 
     参数：
-        - **config** (dict) - 一个配置字典，提供了并行注意力机制的各种设置。
+        - **config** (dict) - Transformer模型配置。详情请参考TransformerConfig类。
         - **layer_number** (int) - 该transformer层在整个transformer块中的索引。
         - **attention_type** (int，可选) - 注意力类型。支持1为self_attn，2为cross_attn，默认值： ``AttnType.self_attn`` 。
         - **attn_mask_type** (int，可选) - 注意力掩码类型。支持1为padding，2为causal，默认值： ``AttnMaskType.padding`` 。

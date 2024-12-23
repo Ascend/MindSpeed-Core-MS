@@ -3,7 +3,7 @@ mindspeed_ms.legacy.model.moe.router.TopKRouter
 
 .. py:class:: mindspeed_ms.legacy.model.moe.router.TopKRouter(config: TransformerConfig)
 
-    Top-K路由。负责根据输入数据计算分数，并选择Top-K个专家来处理输入数据。
+    Top-K路由，负责根据输入数据计算分数，并选择Top-K个专家来处理输入数据。
 
     参数：
         - **config** (TransformerConfig) - Transformer模型的配置，详情请参考TransformerConfig类。

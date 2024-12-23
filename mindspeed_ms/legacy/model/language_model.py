@@ -100,7 +100,7 @@ class Embedding(Module):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
 
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.
@@ -271,7 +271,7 @@ class TransformerLanguageModel(Module):
         encoder_attn_mask_type (int): Encoder attention mask type.
         num_tokentypes (int, optional): If > 0, using tokentypes embedding. Default: ``0``.
         add_encoder (bool, optional): If True, use encoder. Default: ``True``.
-        use_decoder (bool, optional): If True, use decoder. Default: ``False``.
+        add_decoder (bool, optional): If True, use decoder. Default: ``False``.
         decoder_attn_mask_type (int, optional): Decoder attention mask type. Default: ``AttnMaskType.causal``.
         add_pooler (bool, optional): If True, use pooler. Default: ``False``.
         pre_process (bool, optional): When using pipeline parallel, indicate whether it's the first stage. Default:
@@ -331,7 +331,7 @@ class TransformerLanguageModel(Module):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
 
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.

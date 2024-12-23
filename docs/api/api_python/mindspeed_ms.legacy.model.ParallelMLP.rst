@@ -7,7 +7,7 @@ mindspeed_ms.legacy.model.ParallelMLP
 
     参数：
         - **config** (TransformerConfig) - transformer模型的config。
-        - **is_expert** (bool，可选) - 指定这个block是否是专家. 默认值: ``False`` 。
+        - **is_expert** (bool，可选) - 指定这个block是否是专家. 默认值： ``False`` 。
 
     输入：
         - **hidden_states** (Tensor) - 一个形状为 :math:`(B, S, H)` 或 :math:`(S, B, H)` 的张量。

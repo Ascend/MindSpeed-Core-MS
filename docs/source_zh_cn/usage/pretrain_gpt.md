@@ -23,7 +23,7 @@
             └─ model_38BV3_seq_4K_train.yaml
 ```
 
-其中，`pretrain_gpt.py`是环境配置、模型对象创建及训练的脚本。`pretrain_gpt.sh`是启动执行脚本。`config/38Bv3`文件夹里是配置项。
+其中，`pretrain_gpt.py`是环境配置、模型对象创建及训练的脚本。`pretrain_gpt.sh`是启动执行脚本（可以参考样例代码里的[README.md](https://codehub-y.huawei.com/MindSpore-enterprise/Production/38Bv3/files?ref=refactor&filePath=pangu_sophon_pytorch-master%2FPanGu_ms%2FREADME.md&isFile=true)创建）。`config/38Bv3`文件夹里是配置项。
 
 ### 模型结构
 
@@ -455,11 +455,11 @@ def model_provider_func(pre_process=True, post_process=True):
 
 ### 权重加载
 
-动态图并行中训练包括两种模式，第一种是从头训练，参数可以选择初始化参数或者加载权重；第二种是断点续训，参数通过加载已训练参数来初始化，已训练参数包括两种：第一种是自身模型训练后的参数，可以直接加载；第二种是将Megatron模型训练后的参数，进行转换后加载，可参考[权重转换指南](https://gitee.com/ascend/MindSpeed-Core-MS/blob/r0.1.0/docs/source_zh_cn/docs/source_zh_cn/usage/convert_tool_guide.md)。
+动态图并行中训练包括两种模式，第一种是从头训练，参数可以选择初始化参数或者加载权重；第二种是断点续训，参数通过加载已训练参数来初始化，已训练参数包括两种：第一种是自身模型训练后的参数，可以直接加载；第二种是将Megatron模型训练后的参数，进行转换后加载，可参考[权重转换指南](https://gitee.com/ascend/MindSpeed-Core-MS/blob/r0.1.0/docs/source_zh_cn/usage/convert_tool_guide.md)。
 
 ### 执行训练
 
-构建完网络，并加载好权重后，可以开始执行训练。`pretrain`接口相关说明可以参考[接口说明文档](https://gitee.com/ascend/MindSpeed-Core-MS/blob/r0.1.0/docs/api/api_python/mindspeed_ms.training.training.pretrain.rst)。
+构建完网络，并加载好权重后，可以开始执行训练。`pretrain`接口相关说明可以参考[接口说明文档](http://mindspore-repo.csi.rnd.huawei.com/mindspore/enterprise/docs/mindspeed/docs/zh-CN/r0.1.0/MindSpeed_Core_MS_API.pdf)。
 
 ```python
 from mindspeed_ms.training.training import pretrain
@@ -484,7 +484,7 @@ pretrain(
 bash pretrain_gpt.sh
 ```
 
-训练脚本`pretrain_gpt.sh`解析如下：
+训练脚本`pretrain_gpt.sh`解析如下（注：仅解析MindSpeed-Core-MS相关的重要信息，其余配置参考样例代码的README.md及pretrain_gpt.py）：
 
 #### 设置环境变量
 
@@ -499,16 +499,18 @@ export ASCEND_RT_VISIBLE_DEVICES='0,1,2,3,4,5,6,7'
 #### 以msrun模式执行训练脚本
 
 ```bash
-msrun --worker_num 8 --local_worker_num=8 --master_port=8848 --log_dir=msrun_log --join=True --cluster_time_out=300 pretrain_gpt.py
+msrun --worker_num 8 --local_worker_num=8 --master_port=8848 --log_dir=msrun_log --join=True --cluster_time_out=300 pretrain_gpt.py --xx-params
 ```
-
-#### 运行结果
 
 接下来通过命令调用对应的脚本。
 
 ```bash
 bash pretrain_gpt.sh
 ```
+
+注：以上为示例命令。具体调用命令参考[README.md](https://codehub-y.huawei.com/MindSpore-enterprise/Production/38Bv3/files?ref=refactor&filePath=pangu_sophon_pytorch-master%2FPanGu_ms%2FREADME.md&isFile=true)。
+
+#### 运行结果
 
 关于Loss部分结果保存在`msrun_log/worker_*.log`中，示例如下：
 

@@ -45,7 +45,7 @@ class MoEAlltoAllTokenDispatcher():
     various experts for processing, and reassembling the processed results back to the original token order.
 
     Args:
-        num_local_experts (int): how many local experts on this rank.
+        num_local_experts (int): How many local experts on this rank.
         local_expert_indices (List[int]): Indices of local experts on this rank.
         config (TransformerConfig): Configuration object for the transformer model.
 
@@ -54,6 +54,15 @@ class MoEAlltoAllTokenDispatcher():
         ValueError: If the length of `local_expert_indices` is not equal to ``num_local_experts``.
 
     Examples:
+        .. note::
+            Before running the following examples, you need to configure the environment variables.
+
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
         >>> import numpy as np
         >>> import mindspore as ms
         >>> from mindspore.communication import init
@@ -138,10 +147,10 @@ class MoEAlltoAllTokenDispatcher():
 
     def preprocess(self, indices):
         """
-        this function will calculate the input and output splits for alltoall communitcation.
+        This function will calculate the input and output splits for alltoall communitcation.
 
         Args:
-            indices (ms.Tensor): indicates every token was dispatched to which expert.
+            indices (ms.Tensor): Indicates every token was dispatched to which expert.
 
         Outputs:
             count_tokens_per_local_expert (ms.Tensor): Tensor containing the number of tokens assigned to local expert.

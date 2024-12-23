@@ -1,14 +1,14 @@
 mindspeed_ms.legacy.model.ParallelTransformerLayer
 ==================================================
 
-.. py:class:: mindspeed_ms.legacy.model.ParallelTransformerLayer(config, layer_number, layer_type=1, self_attn_mask_type=1, drop_path_rate=0.0)
+.. py:class:: mindspeed_ms.legacy.model.ParallelTransformerLayer(config, layer_number, layer_type=LayerType.encoder, self_attn_mask_type=AttnMaskType.padding, drop_path_rate=0.0)
 
-    这个类代表一个并行的transformer层。它结合了归一化、注意力、交叉注意力（如果适用）和MLP来处理输入隐藏状态。
+    单独的一层transformer。它结合了归一化、注意力、交叉注意力和MLP来处理输入隐藏状态。
 
     参数：
         - **config** (dict) - 一个配置字典，提供了transformer层的各种参数配置。
         - **layer_number** (int) - 该transformer层在整个transformer块中的索引。
-        - **layer_type** (int) - layer类型。支持1为encoder，2为decoder，3为retro_encoder，4为retro_decoder，5为retro_decoder_with_retriever, 默认值： ``LayerType.encoder`` 。
+        - **layer_type** (int，可选) - layer类型。支持1为encoder，2为decoder，3为retro_encoder，4为retro_decoder，5为retro_decoder_with_retriever, 默认值： ``LayerType.encoder`` 。
         - **self_attn_mask_type** (int，可选) - 注意力mask类型。支持1为padding，2为causal，默认值： ``AttnMaskType.padding`` 。
         - **drop_path_rate** (float，可选) - drop_path rate。当前不支持该参数大于0，默认值： ``0.0`` 。
 

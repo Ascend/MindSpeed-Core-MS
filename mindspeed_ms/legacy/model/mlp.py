@@ -51,7 +51,7 @@ class ParallelMLP(Module):
 
     Examples:
         .. note::
-            Before running the following examples, you need to configure the communication environment variables.
+            Before running the following examples, you need to configure the environment variables.
 
             For Ascend devices, it is recommended to use the msrun startup method
             without any third-party or configuration file dependencies.
@@ -63,7 +63,9 @@ class ParallelMLP(Module):
         >>> import mindspore as ms
         >>> from mindspore import Tensor
         >>> from mindspore.communication.management import init
-        >>> from mindspeed_ms.core.config import ModelParallelConfig, TrainingConfig, TransformerConfig
+        >>> from mindspeed_ms.core.config import (ModelParallelConfig,
+        ...                                       TrainingConfig,
+        ...                                       TransformerConfig)
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> from mindspeed_ms.legacy.model.transformer import ParallelMLP
         >>> ms.set_seed(2024)
@@ -82,7 +84,8 @@ class ParallelMLP(Module):
         ...                                  parallel_config=parallel_config,
         ...                                  training_config=training_config)
         >>> mlp = ParallelMLP(config=model_config)
-        >>> input_data = Tensor(np.random.random((seq_length, dataset_size, hidden_size)).astype(np.float32))
+        >>> shape = (seq_length, dataset_size, hidden_size)
+        >>> input_data = Tensor(np.random.random(shape).astype(np.float32))
         >>> output, _ = mlp(input_data)
         >>> print(output.shape)
         (4, 1, 8)
