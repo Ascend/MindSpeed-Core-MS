@@ -36,7 +36,7 @@ class TestResumeTraining:
     for k, v in env_list.items():
         os.environ[k] = v
 
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.run(order=0)
     @pytest.mark.skip(reason="skip 1 epoch st")
     def test_resume_training_pynative_ep1tp2pp2_step10(self):
@@ -73,7 +73,7 @@ class TestResumeTraining:
         os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
 
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.run(order=1)
     @pytest.mark.skip(reason="skip 1 epoch st")
     def test_resume_training_pynative_ep1tp2pp2_resume_from_step5(self):
@@ -133,7 +133,7 @@ class TestResumeTraining:
                f"and golden loss:\n{golden_loss},\n" + \
                "please check your code."
 
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.run(order=0)
     def test_resume_training_pynative_dp2tp1pp2_step10(self):
         """
@@ -177,7 +177,7 @@ class TestResumeTraining:
         os.system(f"grep -E 'ERROR|error' {sh_path}/msrun_log_pynative{postfix}/worker_0.log -C 3")
         assert ret == 0, f"msrun failed, please check msrun_log_pynative{postfix}/worker_*.log"
 
-    @pytest.mark.level0
+    @pytest.mark.level1
     @pytest.mark.run(order=0)
     def test_resume_training_pynative_dp2tp1pp2_resume_from_step6(self):
         """
