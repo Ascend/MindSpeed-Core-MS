@@ -377,9 +377,8 @@ class DistributedDataParallel(Module):
 
     def zero_grad_buffer(self):
         """ reset buffers for the next train iteration. """
-        for param in self.module.get_parameters():
-            if param.requires_grad:
-                param.grad_accumulated = False
+        for param in self.trainable_params():
+            param.grad_accumulated = False
         for buffer in self.buffers + self.expert_parallel_buffers:
             buffer.reset()
         for param in self.zero3_param:

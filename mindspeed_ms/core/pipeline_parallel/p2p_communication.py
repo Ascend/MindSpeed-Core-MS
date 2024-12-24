@@ -15,42 +15,12 @@
 """p2p primitives."""
 
 import mindspore as ms
-from mindspore import nn, Tensor
+from mindspore import Tensor
 from mindspore.ops.auto_generate.gen_ops_prim import inner_comm_irecv_op, inner_comm_isend_op
 
 from mindspeed_ms.core.parallel_state import get_pipeline_model_parallel_group, \
     get_pipeline_model_parallel_rank, is_pipeline_last_stage, is_pipeline_first_stage, \
     get_pipeline_model_parallel_world_size
-
-
-class ISend(nn.Cell):
-    """ Send a tensor asynchronously """
-    def __init__(self, src_tag, dst_rank, group):
-        super(ISend, self).__init__()
-        self.src_tag = src_tag
-        self.dst_rank = dst_rank
-        self.group = group
-
-    def construct(self, send_data):
-        """ ISend forward """
-        _, handle = inner_comm_isend_op(send_data, self.dst_rank, self.group, self.src_tag)
-        return handle
-
-
-class IRecv(nn.Cell):
-    """ receive a tensor asynchronously """
-    def __init__(self, src_tag, src_rank, shape, dtype, group):
-        super(IRecv, self).__init__()
-        self.src_tag = src_tag
-        self.src_rank = src_rank
-        self.shape = shape
-        self.dtype = dtype
-        self.groud = group
-
-    def construct(self):
-        """ IRecv forward """
-        recv_tensor, handle = inner_comm_irecv_op(self.src_tag, self.src_rank, self.shape, self.groud, self.dtype)
-        return handle, recv_tensor
 
 
 # pylint: disable=C0103
@@ -283,7 +253,7 @@ class P2PPrimitive():
                          tensor_send_next,
                          tensor_info_recv_next,
                          group):
-        """ Use 'ISend' or 'IRecv' for p2p communication."""
+        """ Use 'isend' or 'irecv' for p2p communication."""
         reqs = []
         tensor_recv_prev = None
         tensor_recv_next = None
@@ -291,47 +261,63 @@ class P2PPrimitive():
         world_size = get_pipeline_model_parallel_world_size()
         if rank_in_pipeline % 2 == 0:
             if tensor_send_next is not None:
-                send_next_req = ISend(0, (rank_in_pipeline + 1) % world_size, group=group)
-                send_next_handle = send_next_req(tensor_send_next)
+                _, send_next_handle = inner_comm_isend_op(tensor_send_next,
+                                                          (rank_in_pipeline + 1) % world_size,
+                                                          group,
+                                                          0)
                 reqs.append(send_next_handle)
 
             if tensor_info_recv_prev is not None:
-                recv_prev_req = IRecv(0, (rank_in_pipeline - 1) % world_size,
-                                      tensor_info_recv_prev[0], tensor_info_recv_prev[1], group=group)
-                recv_prev_handle, tensor_recv_prev = recv_prev_req()
+                tensor_recv_prev, recv_prev_handle = inner_comm_irecv_op(0,
+                                                                         (rank_in_pipeline - 1) % world_size,
+                                                                         tensor_info_recv_prev[0],
+                                                                         group,
+                                                                         tensor_info_recv_prev[1])
                 reqs.append(recv_prev_handle)
 
             if tensor_send_prev is not None:
-                send_prev_req = ISend(0, (rank_in_pipeline - 1) % world_size, group=group)
-                send_prev_handle = send_prev_req(tensor_send_prev)
+                _, send_prev_handle = inner_comm_isend_op(tensor_send_prev,
+                                                          (rank_in_pipeline - 1) % world_size,
+                                                          group,
+                                                          0)
                 reqs.append(send_prev_handle)
 
             if tensor_info_recv_next is not None:
-                recv_next_req = IRecv(0, (rank_in_pipeline + 1) % world_size,
-                                      tensor_info_recv_next[0], tensor_info_recv_next[1], group=group)
-                recv_next_handle, tensor_recv_next = recv_next_req()
+                tensor_recv_next, recv_next_handle = inner_comm_irecv_op(0,
+                                                                         (rank_in_pipeline + 1) % world_size,
+                                                                         tensor_info_recv_next[0],
+                                                                         group,
+                                                                         tensor_info_recv_next[1])
                 reqs.append(recv_next_handle)
         else:
             if tensor_info_recv_prev is not None:
-                recv_prev_req = IRecv(1, (rank_in_pipeline - 1) % world_size,
-                                      tensor_info_recv_prev[0], tensor_info_recv_prev[1], group=group)
-                recv_prev_handle, tensor_recv_prev = recv_prev_req()
+                tensor_recv_prev, recv_prev_handle = inner_comm_irecv_op(1,
+                                                                         (rank_in_pipeline - 1) % world_size,
+                                                                         tensor_info_recv_prev[0],
+                                                                         group,
+                                                                         tensor_info_recv_prev[1])
                 reqs.append(recv_prev_handle)
 
             if tensor_send_next is not None:
-                send_next_req = ISend(1, (rank_in_pipeline + 1) % world_size, group=group)
-                send_next_handle = send_next_req(tensor_send_next)
+                _, send_next_handle = inner_comm_isend_op(tensor_send_next,
+                                                          (rank_in_pipeline + 1) % world_size,
+                                                          group,
+                                                          1)
                 reqs.append(send_next_handle)
 
             if tensor_info_recv_next is not None:
-                recv_next_req = IRecv(1, (rank_in_pipeline + 1) % world_size,
-                                      tensor_info_recv_next[0], tensor_info_recv_next[1], group=group)
-                recv_next_handle, tensor_recv_next = recv_next_req()
+                tensor_recv_next, recv_next_handle = inner_comm_irecv_op(1,
+                                                                         (rank_in_pipeline + 1) % world_size,
+                                                                         tensor_info_recv_next[0],
+                                                                         group,
+                                                                         tensor_info_recv_next[1])
                 reqs.append(recv_next_handle)
 
             if tensor_send_prev is not None:
-                send_prev_req = ISend(1, (rank_in_pipeline - 1) % world_size, group=group)
-                send_prev_handle = send_prev_req(tensor_send_prev)
+                _, send_prev_handle = inner_comm_isend_op(tensor_send_prev,
+                                                          (rank_in_pipeline - 1) % world_size,
+                                                          group,
+                                                          1)
                 reqs.append(send_prev_handle)
         return reqs, tensor_recv_prev, tensor_recv_next
 
