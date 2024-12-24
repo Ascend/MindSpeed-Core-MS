@@ -265,7 +265,49 @@ def initialize_model_parallel(tensor_model_parallel_size=1,
                               order="tp-cp-ep-dp-pp",
                               communicator_config_path=None,
                               **kwargs):
-    """Initialize model data parallel groups.
+    """
+    Initialize model data parallel groups.
+
+    Args:
+        tensor_model_parallel_size (int, optional): The number of devices to split individual tensors across.
+            Default: ``1``.
+        pipeline_model_parallel_size (int, optional): The number of tensor parallel device groups to split the
+            Transformer layers across. Default: ``1``.
+        virtual_pipeline_model_parallel_size (int, optional): The number of stages that each pipeline group will have,
+            interleaving as necessary. If ``None``, no interleaving is performed. Default: ``None``.
+        pipeline_model_parallel_split_rank (int, optional): For models with both an encoder and decoder, the rank in
+            pipeline to switch between encoder and decoder (i.e. the first rank of the decoder). This allows the user
+            to set the pipeline parallel size of the encoder and decoder independently. Default: ``None``.
+        context_parallel_size (int, optional): The number of tensor parallel device groups to split the network input
+            sequence length across. Compute of attention module requires tokens of full sequence length, so devices
+            in a context parallel group need to communicate with each other to exchange information of other
+            sequence chunks. Each device and its counterparts in other tensor parallel groups compose a context parallel
+            group. Default: ``1``.
+        expert_model_parallel_size (int, optional): The number of devices to split experts across in MoE model.
+            Default: ``1``.
+        order (str, optional): The order each parallel strategy follows. Default: ``"tp-cp-ep-dp-pp"``.
+        communicator_config_path (str, optional): Path to the yaml file of HCCL communicator configurations. Currently
+            not in use. Default: ``None``.
+        kwargs (dict): Extra keyword configuration arguments.
+
+    Raises:
+        RuntimeError: If `mindspore.communication._comm_helper` is not initialized.
+        RuntimeError: If `world_size` is not divisible by (`tensor_model_parallel_size * pipeline_model_parallel_size *
+            context_parallel_size`).
+        RuntimeError: If `data_parallel_size` is not divisible by `expert_model_parallel_size` .
+        RuntimeError: If `expert_model_parallel_size > 1` and `context_parallel_size > 1`.
+        RuntimeError: If `virtual_pipeline_model_parallel_size` is not ``None`` and `pipeline_model_parallel_size < 2`.
+        RuntimeError: If `order` is ``None``.
+        RuntimeError: If `order` has duplicate elements.
+        RuntimeError: If `ep` in `order` then if `ep-dp` not in `order` and `dp-ep` not in `order`.
+        RuntimeError: If `_GLOBAL_STREAM` is not ``None``.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> initialize_model_parallel(tensor_model_parallel_size=2, pipeline_model_parallel_size=2)
     """
 
     # pylint: disable=W0212
@@ -494,7 +536,31 @@ def get_tensor_model_parallel_world_size():
 
 
 def get_context_parallel_world_size():
-    """Return world size for the context parallel group."""
+    """
+    Return world size for the context parallel group.
+
+    Returns:
+        - World size.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        .. note::
+            Before running the following examples, you need to configure the communication environment variables.
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
+        >>> from mindspore.communication.management import init
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.core.parallel_state import get_context_parallel_world_size
+        >>> init()
+        >>> initialize_model_parallel()
+        >>> world_size = get_context_parallel_world_size()
+    """
     return _get_world_size_helper('cp')
 
 
@@ -557,7 +623,30 @@ def get_tensor_model_parallel_rank():
 
 
 def get_context_parallel_rank():
-    """Return my rank for the context parallel group."""
+    """
+    Return rank for the context parallel group.
+
+    Returns:
+        - The rank id.
+
+    Supported Platforms:
+        ``Ascend``
+
+    Examples:
+        .. note::
+            Before running the following examples, you need to configure the communication environment variables.
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
+        >>> from mindspore.communication.management import init
+        >>> from mindspeed_ms.core.parallel_state import get_context_parallel_rank, initialize_model_parallel
+        >>> init()
+        >>> initialize_model_parallel()
+        >>> cp_rank = get_context_parallel_rank()
+    """
     return _get_rank_helper('cp')
 
 

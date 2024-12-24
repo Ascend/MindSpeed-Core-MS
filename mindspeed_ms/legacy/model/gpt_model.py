@@ -66,7 +66,7 @@ class GPTModel(Module):
           inference, such as maximum generation length, max batch size, etc. Default: ``None``.
 
     Outputs:
-        Returns gpt loss or hidden states.
+        - Returns gpt loss or hidden states.
 
     Supported Platforms:
         ``Ascend``

@@ -45,24 +45,36 @@ class Module(nn.Cell):
     Specific extensions of cell with support for pipelining.
 
     Args:
-        config (dict): the configuration of model. Default: ``None``. If it is not None, the `self.pre_process`,
-            `self.post_process` will be set according to the pipeline stage.
-        share_embeddings_and_output_weights (bool): decide whether to share the embeddings and output weights.
-            Default: ``True``. If it is not True, `shared_embedding_or_output_weight()` and
-            `initialize_word_embeddings()` could not be called.
+        config (dict, optional): The configuration of model. If it is not ``None``, the
+            `self.pre_process`, `self.post_process` will be set according to the pipeline stage. Default: ``None``.
+        share_embeddings_and_output_weights (bool, optional): Decide whether to share the embeddings and output weights.
+            If it is not ``True``, `shared_embedding_or_output_weight()` and
+            `initialize_word_embeddings()` could not be called. Default: ``True``.
+        kwargs (dict): Extra keyword configuration arguments.
 
     Raises:
-        RuntimeError: If more than one weight were set 'share' attribute in a pipeline stage.
-        RuntimeError: If there is one weight with 'share' attribute in the model, but parameter sharing requires
-            two weights with 'share' attribute in first stage and last stage respectively.
-        RuntimeError: If `share_embeddings_and_output_weights` is not true when
+        RuntimeError: If more than one weight were set `'share'` attribute in a pipeline stage.
+        RuntimeError: If there is one weight with `'share'` attribute in the model, but parameter sharing requires
+            two weights with `'share'` attribute in first stage and last stage respectively.
+        RuntimeError: If `share_embeddings_and_output_weights` is not ``True`` when
             `shared_embedding_or_output_weight()` is called.
-        RuntimeError: If `share_embeddings_and_output_weights` is not true when
+        RuntimeError: If `share_embeddings_and_output_weights` is not ``True`` when
             `initialize_word_embeddings()` is called.
-        ValueError: If the model is in the last stage and the sum of weights is not 0.
+        ValueError: If it is the last stage (post process) but the sum of `shared_weight` is not ``0.0`` .
 
     Supported Platforms:
         ``Ascend``
+
+    Examples:
+        >>> from mindspeed_ms.legacy.model.module import Module
+        >>> class CellExample(Module):
+        ...     def __init__(self, layers):
+        ...         super(CellExample, self).__init__()
+        ...         self.layers = layers
+        ...     def construct(self, hidden_states, *args, **kwargs):
+        ...         for layer in self.layers:
+        ...             hidden_states = layer(hidden_states, *args, **kwargs)
+        ...         return hidden_states
     """
     def __init__(self, config=None, share_embeddings_and_output_weights=True, **kwargs):
         super(Module, self).__init__(**kwargs)

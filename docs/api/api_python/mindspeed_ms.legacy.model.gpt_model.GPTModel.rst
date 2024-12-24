@@ -25,7 +25,7 @@ mindspeed_ms.legacy.model.gpt_model.GPTModel
         - **inference_params** (tuple[Tensor]，可选) - 推理参数，用于在推理过程中指定特定设置，如最大生成长度、最大批处理大小等。默认值： ``None`` 。
 
     输出：
-        返回GPT模型的loss或hidden states。
+        - 返回GPT模型的loss或hidden states。
 
     样例：
 
