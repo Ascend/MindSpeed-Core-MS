@@ -1,7 +1,7 @@
 mindspeed_ms.legacy.model.language_model.get_language_model
 ===========================================================
 
-.. py:class:: mindspeed_ms.legacy.model.language_model.get_language_model(config, num_tokentypes, add_pooler, encoder_attn_mask_type, add_encoder=True, add_decoder=False, decoder_attn_mask_type=None, pre_process=True, post_process=True)
+.. py:function:: mindspeed_ms.legacy.model.language_model.get_language_model(config, num_tokentypes, add_pooler, encoder_attn_mask_type, add_encoder=True, add_decoder=False, decoder_attn_mask_type=None, pre_process=True, post_process=True)
 
     使用此函数来获取语言模型。
 
@@ -23,5 +23,5 @@ mindspeed_ms.legacy.model.language_model.get_language_model
     样例：
 
     .. note::
-        - 运行样例之前，需要配置好通信环境变量。
+        - 运行样例之前，需要配置好环境变量。
         - 针对Ascend设备，推荐使用msrun启动方式，无第三方以及配置文件依赖。详见 `msrun启动 <https://www.mindspore.cn/docs/zh-CN/master/model_train/parallel/msrun_launcher.html>`_ 。

@@ -9,8 +9,8 @@ mindspeed_ms.core.config.TransformerConfig
         - **vocab_size** (int) - 词汇表大小。
         - **num_layers** (int) - 模型层数。
         - **num_attention_heads** (int) - 多头注意力机制中的头的数量。
-        - **hidden_size** (int) - 编码器层的维度。
-        - **ffn_hidden_size** (int) - 前馈模块投影的维度。
+        - **hidden_size** (int) - 隐藏层大小。
+        - **ffn_hidden_size** (int) - 前馈网络的隐藏层大小。
         - **parallel_config** (ModelParallelConfig) - 并行配置。
         - **training_config** (TrainingConfig) - 训练配置。
         - **lora_config** (LoraConfig，可选) - LoRA配置。默认值： ``LoraConfig()`` 。
@@ -19,8 +19,8 @@ mindspeed_ms.core.config.TransformerConfig
         - **attention_type** (str，可选) - 注意力类型。默认值： ``"self_attn"`` 。
         - **position_embedding_type** (str，可选) - 位置嵌入类型。默认值： ``'absolute'`` 。
         - **parallel_position_embedding** (bool，可选) - 在使用绝对位置嵌入时使用并行词汇嵌入层。默认值： ``False`` 。
-        - **rotary_config** (dict，可选) - 旋转（Rotary）配置。默认值： ``None`` 。
-        - **use_query_layer** (bool，可选) - 在Transformer后使用查询层。默认值： ``False`` 。
+        - **rotary_config** (dict，可选) - 旋转位置编码配置。默认值： ``None`` 。
+        - **use_query_layer** (bool，可选) - 是否使用一个单独的查询层。默认值： ``False`` 。
         - **use_visual_encoder** (bool，可选) - 使用视觉编码器。默认值： ``False`` 。
         - **use_retriever** (bool，可选) - 使用检索器。默认值： ``False`` 。
         - **group_query_attention** (bool，可选) - 启用组查询注意力（GQA）。默认值： ``False`` 。

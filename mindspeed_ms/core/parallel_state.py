@@ -642,7 +642,8 @@ def get_context_parallel_rank():
             for more details.
 
         >>> from mindspore.communication.management import init
-        >>> from mindspeed_ms.core.parallel_state import get_context_parallel_rank, initialize_model_parallel
+        >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
+        >>> from mindspeed_ms.core.parallel_state import get_context_parallel_rank
         >>> init()
         >>> initialize_model_parallel()
         >>> cp_rank = get_context_parallel_rank()

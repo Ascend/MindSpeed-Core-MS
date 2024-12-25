@@ -38,7 +38,7 @@ class TopKRouter(nn.Cell):
         - **input** (Tensor) - Input tensor.
 
     Outputs:
-        Tuple of 2 Tensors.
+        Tuple of 2 Tensor.
 
         - **scores** (Tensor) - The probabilities tensor after load balancing.
         - **indices** (Tensor) - The indices tensor after top-k selection.
