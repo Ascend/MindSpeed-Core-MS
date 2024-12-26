@@ -104,11 +104,11 @@ class EosMask(nn.Cell):
                 eod_index_offset = eod_idx_ + 1
                 eod_index_offset[1:] = eod_index_offset[1:] - eod_index_offset[:-1]
                 if eod_idx_[-1]+1 < self.seq_len:
-                    p_id_offset[eod_idx_+1] = eod_index_offset
+                    p_id_offset[eod_idx_+1] = eod_index_offset.astype(p_id_offset.dtype)
                 else:
                     if len(eod_index_offset) == 1:
                         continue
-                    p_id_offset[eod_idx_[:-1]+1] = eod_index_offset[:-1]
+                    p_id_offset[eod_idx_[:-1]+1] = eod_index_offset[:-1].astype(p_id_offset.dtype)
                 p_id_offset = mint.cumsum(p_id_offset, 0)
                 reset_position_ids[i] -= p_id_offset
             return reset_position_ids, mint.sub(1, mask)

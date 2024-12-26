@@ -93,7 +93,7 @@ class VocabParallelCrossEntropy(nn.Cell):
     def _calculate_predicted_logits(self, vocab_parallel_logits, target, logits_max, vocab_start_index, vocab_end_index,
                                     partition_vocab_size):
         """ calculate predicted logits """
-        vocab_parallel_logits = vocab_parallel_logits - logits_max.unsqueeze(dim=-1)
+        vocab_parallel_logits = vocab_parallel_logits - logits_max.unsqueeze(axis=-1)
         left = target < vocab_start_index
         right = target >= vocab_end_index
         target_mask = left.astype(ms.int32) | right.astype(ms.int32)
@@ -115,7 +115,7 @@ class VocabParallelCrossEntropy(nn.Cell):
 
     def _calculate_cross_entropy_loss(self, exp_logits, predicted_logits, sum_exp_logits):
         loss = mint.log(sum_exp_logits) - predicted_logits
-        exp_logits = exp_logits.div(sum_exp_logits.unsqueeze(dim=-1))
+        exp_logits = exp_logits.div(sum_exp_logits.unsqueeze(axis=-1))
         return exp_logits, loss
 
     def _prepare_gradient_calculation_operands(self, softmax, target_mask):
@@ -133,7 +133,7 @@ class VocabParallelCrossEntropy(nn.Cell):
         grad_2d[arange_1d, masked_target_1d] -= softmax_update
 
         grad_2d = grad_2d.reshape(softmax.shape)
-        grad_input = grad_2d.mul(grad_output.unsqueeze(dim=-1))
+        grad_input = grad_2d.mul(grad_output.unsqueeze(axis=-1))
         return grad_input
 
     def construct(self, vocab_parallel_logits, target, label_smoothing=0.0):
@@ -198,7 +198,7 @@ class VocabParallelCrossEntropy(nn.Cell):
             average_grad = 1 / self.vocab_size
             grad_2d[arange_1d, :] -= smoothing * average_grad
             grad_2d = grad_2d.reshape(softmax.shape)
-            grad_input = grad_2d.mul(grad_output.unsqueeze(dim=-1))
+            grad_input = grad_2d.mul(grad_output.unsqueeze(axis=-1))
         else:
             grad_input = self._calculate_gradients(grad_2d, arange_1d, masked_target_1d, softmax_update, grad_input,
                                                    grad_output, softmax)
