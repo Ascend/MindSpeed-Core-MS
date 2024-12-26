@@ -627,7 +627,7 @@ class AllConfig(BaseConfig):
     A Config that contains all other configs, which will be used in init_configs methods as the default config.
 
     Args:
-        kwargs (dict, optional): Extra keyword configuration arguments.
+        kwargs (dict): Extra keyword configuration arguments.
 
     Supported Platforms:
         ``Ascend``
@@ -858,8 +858,7 @@ def init_configs_from_yaml(file_path: str, config_classes=None, **kwargs):
         kwargs (dict): Extra keyword configuration arguments.
 
     Returns:
-        Union[list[BaseConfig], AllConfig], return initialized config instances, when no config class is passed in,
-            :class:`mindspeed_ms.core.config.AllConfig` will be returned.
+        Return initialized config instances, when no config class is passed in, `AllConfig` will be returned.
 
     Raises:
         ValueError: If `file_path` is not a string.
@@ -1156,7 +1155,7 @@ class DatasetConfig(BaseConfig):
     Args:
         dataset_dir (str, optional): Dataset file directory. Default: ``"./dataset"``.
         shuffle (bool, optional): Shuffle dataset. Default: ``False``.
-        batch_size (int, optional): The `batch_size` or `micro_batch_size` for training and evaluation. Default: ``1``.
+        batch_size (int, optional): The number of data samples processed in one iteration. Default: ``1``.
         micro_batch_num (int, optional): Number of micro batch when using pipeline parallel or
             gradient accumulation. Default: ``1``.
         train_samples (int, optional): Number of train samples. Default: ``0``.
@@ -1402,7 +1401,7 @@ class MoEConfig(BaseConfig):
         moe_z_loss_coeff (float, optional): Scaling coefficient for the z-loss. Default: ``None``.
         moe_input_jitter_eps (float, optional): Add noise to the input tensor by
                                       applying jitter with a specified epsilon value. Default: ``None``.
-        kwargs (dict, optional): Extra keyword configuration arguments.
+        kwargs (dict): Extra keyword configuration arguments.
 
     Supported Platforms:
         ``Ascend``
@@ -2211,83 +2210,84 @@ class TransformerConfig(BaseConfig):
         vocab_size (int): Vocabulary size.
         num_layers (int): Number of model layers.
         num_attention_heads (int): Number of heads for MultiHeadAttention.
-        hidden_size (int): Dimensionality of the encoder layers.
-        ffn_hidden_size (int): Dimensionality the FeedForward block project to.
+        hidden_size (int): Hidden size.
+        ffn_hidden_size (int): Hidden size of Feed-Forward Network.
         parallel_config (ModelParallelConfig): Parallel config.
         training_config (TrainingConfig): Training config.
-        lora_config (LoraConfig, options): Lora config. Default: ``LoraConfig()``.
-        dataset_config (DatasetConfig, options): Dataset config. Default: ``DatasetConfig()``.
-        moe_config (MoEConfig, options): MoE config. Default: ``MoEConfig()``.
-        attention_type (str, options): Attention type. Default: ``"self_attn"``.
-        position_embedding_type (str, options): Position embedding type. Default: ``'absolute'``.
-        parallel_position_embedding (bool, options): Apply parallel vocab embedding layer when using
+        lora_config (LoraConfig, optional): Lora config. Default: ``LoraConfig()``.
+        dataset_config (DatasetConfig, optional): Dataset config. Default: ``DatasetConfig()``.
+        moe_config (MoEConfig, optional): MoE config. Default: ``MoEConfig()``.
+        attention_type (str, optional): Attention type. Default: ``"self_attn"``.
+        position_embedding_type (str, optional): Position embedding type. Default: ``'absolute'``.
+        parallel_position_embedding (bool, optional): Apply parallel vocab embedding layer when using
             absolute position embedding. Default: ``False``.
-        rotary_config (dict, options): Rotary config. Default: ``None``.
-        use_query_layer (bool, options): Using query layer after transformer. Default: ``False``.
-        use_visual_encoder (bool, options): Using visual encoder. Default: ``False``.
-        use_retriever (bool, options): Using retriever. Default: ``False``.
-        group_query_attention (bool, options): Enable group query attention. Default: ``False``.
-        num_query_groups (int, options): Number of heads for key and value when using group query attention.
+        rotary_config (dict, optional): Rotary position embedding config. Default: ``None``.
+        use_query_layer (bool, optional): Whether to use a separate query layer. Default: ``False``.
+        use_visual_encoder (bool, optional): Using visual encoder. Default: ``False``.
+        use_retriever (bool, optional): Using retriever. Default: ``False``.
+        group_query_attention (bool, optional): Enable group query attention. Default: ``False``.
+        num_query_groups (int, optional): Number of heads for key and value when using group query attention.
             Default: ``32``.
-        qkv_has_bias (bool, options): Linears apply on query, key and value in Attention block has bias
+        qkv_has_bias (bool, optional): Linears apply on query, key and value in Attention block has bias
             parameter. Default: ``True``.
-        out_proj_has_bias (bool, options): Linear applies on output of core attention block has bias
+        out_proj_has_bias (bool, optional): Linear applies on output of core attention block has bias
             parameter. Default: ``True``.
-        head_skip_weight_param_allocation (bool, options): If ``True``, the Head will skip weight allocation and
+        head_skip_weight_param_allocation (bool, optional): If ``True``, the Head will skip weight allocation and
             use word as weights. Default: ``True``.
-        apply_query_key_layer_scaling (bool, options): Apply query key scaling in core attention block.
+        apply_query_key_layer_scaling (bool, optional): Apply query key scaling in core attention block.
             Default: ``False``.
-        use_flash_attention (bool, options): Enable flash attention. Default: ``False``.
-        fa_config (dict, options): Flash attention config. Default: ``None``.
-        enable_flash_sp (bool, options): Enable flash sp. Default: ``False``.
-        mask_func_type (str, options): Attention mask compute method. Default: ``"attn_mask_add"``.
-        mlp_has_bias (bool, options): Linears in MLP block have bias parameters. Default: ``True``.
-        hidden_act (str, options): Activation used in MLP block. Default: ``"gelu"``.
-        normalization (str, options): Normalization used in transformer layer block. Default: ``"LayerNorm"``.
-        norm_epsilon (float, options): Epsilon of normalization. Default: ``1.e-5``.
-        apply_residual_connection_post_norm (bool, options): Apply residual connection after normalization.
+        use_flash_attention (bool, optional): Enable flash attention. Default: ``False``.
+        fa_config (dict, optional): Flash attention config. Default: ``None``.
+        enable_flash_sp (bool, optional): Enable flash sp. Default: ``False``.
+        mask_func_type (str, optional): Attention mask compute method. Default: ``"attn_mask_add"``.
+        mlp_has_bias (bool, optional): Linears in MLP block have bias parameters. Default: ``True``.
+        hidden_act (str, optional): Activation used in MLP block. Default: ``"gelu"``.
+        normalization (str, optional): Normalization used in transformer layer block. Default: ``"LayerNorm"``.
+        norm_epsilon (float, optional): Epsilon of normalization. Default: ``1.e-5``.
+        apply_residual_connection_post_norm (bool, optional): Apply residual connection after normalization.
             Default: ``False``.
-        use_final_norm (bool, options): Apply final norm after transformer. Default: ``True``.
-        residual_connection_dtype (str, options): Compute data type of residual connection. Default: ``"float32"``.
-        init_method_std (float, options): Init method std value. Default: ``0.01``.
-        params_dtype (str, options): Parameter initialize data type. Default: ``"float32"``.
-        embedding_init_dtype (str, options): Embedding parameter initialize data type. Default: ``"float32"``.
-        compute_dtype (str, options): Compute data type of linear module. Default: ``"float32"``.
-        softmax_compute_dtype (str, options): Compute data type of softmax layer. Default: ``"float32"``.
-        init_method (str, options): Init method. Default: ``'normal'``.
-        bias_init (str, options): Bias init method. Default: ``'zeros'``.
-        fp16_lm_cross_entropy (bool, options): Apply float16 when calculating cross entropy. Default: ``False``.
-        attention_dropout (float, options): Dropout rate for attention module. Default: ``0.0``.
-        out_hidden_size (int, options): Out hidden size. Default: ``None``.
-        num_experts (int, options): Number of experts. Default: ``None``.
-        untie_embeddings_and_output_weights (bool, options): If ``False``, share embedding with head layer.
+        use_final_norm (bool, optional): Apply final norm after transformer. Default: ``True``.
+        residual_connection_dtype (str, optional): Compute data type of residual connection. Default: ``"float32"``.
+        init_method_std (float, optional): Init method std value. Default: ``0.01``.
+        params_dtype (str, optional): Parameter initialize data type. Default: ``"float32"``.
+        embedding_init_dtype (str, optional): Embedding parameter initialize data type. Default: ``"float32"``.
+        compute_dtype (str, optional): Compute data type of linear module. Default: ``"float32"``.
+        softmax_compute_dtype (str, optional): Compute data type of softmax layer. Default: ``"float32"``.
+        init_method (str, optional): Init method. Default: ``'normal'``.
+        bias_init (str, optional): Bias init method. Default: ``'zeros'``.
+        fp16_lm_cross_entropy (bool, optional): Apply float16 when calculating cross entropy. Default: ``False``.
+        attention_dropout (float, optional): Dropout rate for attention module. Default: ``0.0``.
+        out_hidden_size (int, optional): Out hidden size. Default: ``None``.
+        num_experts (int, optional): Number of experts. Default: ``None``.
+        untie_embeddings_and_output_weights (bool, optional): If ``False``, share embedding with head layer.
             Default: ``False``.
-        flatten_labels_and_input_mask (bool, options): flatten labels and input mask. Default: ``True``.
-        recompute_method (str, options): Recompute method. Default: ``None``.
-        recompute_num_layers (int, options): Number of layers to recompute. Default: ``None``.
-        recompute_granularity (str, options): Recompute granularity. Default: ``None``.
-        fp32_residual_connection (bool, options): Enable fp32 residual connection. Default: ``False``.
-        kv_channels (int, options): Key and value channels. Default: ``None``.
-        hidden_dropout (float, options): Dropout rate for output of attention block and mlp block. Default: ``0.0``.
-        bias_dropout_fusion (bool, options): Enable bias dropout fusion. Default: ``False``.
-        fp8_format (str, options): Use fp8 format. Default: ``None``.
-        clone_scatter_output_in_embedding (bool, options): Enable clone scatter output in embedding. Default: ``False``.
-        add_bias_linear (bool, options): Enable bias linear. Default: ``False``.
-        attention_softmax_in_fp32 (bool, options): Enable attention softmax in fp32. Default: ``True``.
-        masked_softmax_fusion (bool, options): Enable masked softmax fusion. Default: : ``False``,
-        distribute_saved_activations (bool, options): Enable distribute saved activations. Default: ``False``.
-        retro_add_retriever (bool, options): Enable retro add retriever. Default: ``False``.
-        transformer_impl (str, options): Transformer implementation. Default: ``'local'``.
-        encoder_num_layers (int, options): Encoder num layers. Default: ``None``.
-        decoder_num_layers (int, options): Decoder num layers. Default: ``None``.
-        model_type (str, options): Model type. Default: ``"encoder_or_decoder"``.
-        select_comm_recompute (bool, options): Enable select comm recompute. Default: ``False``.
-        select_recompute (bool, options): Enable select recompute. Default: ``False``.
-        apply_rope_fusion (bool, options): Enable rope fusion. Default: ``False``.
-        use_sandwich_norm (bool, options): Enable sandwich norm. Default: ``False``.
-        attn_post_norm_scale (float, options): Attention post norm scale. Default: ``1.0``.
-        ffn_post_norm_scale (float, options): Ffn post norm scale. Default: ``1.0``.
-        apply_swiglu_fusion (bool, options): Enable swiglu fusion. Default: ``False``.
+        flatten_labels_and_input_mask (bool, optional): flatten labels and input mask. Default: ``True``.
+        recompute_method (str, optional): Recompute method. Default: ``None``.
+        recompute_num_layers (int, optional): Number of layers to recompute. Default: ``None``.
+        recompute_granularity (str, optional): Recompute granularity. Default: ``None``.
+        fp32_residual_connection (bool, optional): Enable fp32 residual connection. Default: ``False``.
+        kv_channels (int, optional): Key and value channels. Default: ``None``.
+        hidden_dropout (float, optional): Dropout rate for output of attention block and mlp block. Default: ``0.0``.
+        bias_dropout_fusion (bool, optional): Enable bias dropout fusion. Default: ``False``.
+        fp8_format (str, optional): Use fp8 format. Default: ``None``.
+        clone_scatter_output_in_embedding (bool, optional): Enable clone scatter output in embedding. Default:
+            ``False``.
+        add_bias_linear (bool, optional): Enable bias linear. Default: ``False``.
+        attention_softmax_in_fp32 (bool, optional): Enable attention softmax in fp32. Default: ``True``.
+        masked_softmax_fusion (bool, optional): Enable masked softmax fusion. Default: : ``False``,
+        distribute_saved_activations (bool, optional): Enable distribute saved activations. Default: ``False``.
+        retro_add_retriever (bool, optional): Enable retro add retriever. Default: ``False``.
+        transformer_impl (str, optional): Transformer implementation. Default: ``'local'``.
+        encoder_num_layers (int, optional): Encoder num layers. Default: ``None``.
+        decoder_num_layers (int, optional): Decoder num layers. Default: ``None``.
+        model_type (str, optional): Model type. Default: ``"encoder_or_decoder"``.
+        select_comm_recompute (bool, optional): Enable select comm recompute. Default: ``False``.
+        select_recompute (bool, optional): Enable select recompute. Default: ``False``.
+        apply_rope_fusion (bool, optional): Enable rope fusion. Default: ``False``.
+        use_sandwich_norm (bool, optional): Enable sandwich norm. Default: ``False``.
+        attn_post_norm_scale (float, optional): Attention post norm scale. Default: ``1.0``.
+        ffn_post_norm_scale (float, optional): Ffn post norm scale. Default: ``1.0``.
+        apply_swiglu_fusion (bool, optional): Enable swiglu fusion. Default: ``False``.
         kwargs (dict): Extra keyword configuration arguments.
     """
 

@@ -11,8 +11,8 @@ mindspeed_ms.core.config.init_configs_from_yaml
         - **kwargs** (dict) - 额外的关键字配置参数。
 
     返回：
-        (Union[list[BaseConfig], AllConfig]) - 返回初始化的Config类的实例，当没有Config类传入时，返回 :class:`mindspeed_ms.core.config.AllConfig` 类的实例。
+        - 返回初始化的Config类的实例。当没有Config类传入时，返回 `AllConfig` 类的实例。
 
     异常：
-        - **ValueError** - `file_path` 不是字符串。
-        - **ValueError** - `file_path` 的文件名不是以yaml或者yml结尾。
+        - **ValueError** - 入参 `file_path` 不是字符串。
+        - **ValueError** - 入参 `file_path` 不是以yaml或者yml结尾。

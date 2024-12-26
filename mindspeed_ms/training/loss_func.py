@@ -29,7 +29,7 @@ class LossWithMask(nn.Cell):
     Args:
         loss_func (Function): Loss function.
         args (tuple): Input arguments.
-        kwargs (dict): Keyword arguments.
+        kwargs (dict): Extra keyword configuration arguments.
 
     Inputs:
         - **logits** (Tensor) - The output logits of the backbone. Tensor of shape :math:`(N, C)`.
@@ -40,7 +40,7 @@ class LossWithMask(nn.Cell):
           and for padded inputs it will not be counted into loss. Tensor of shape :math:`(N, )`.
 
     Outputs:
-        The corresponding cross entropy loss.
+        - The corresponding cross entropy loss.
 
     Examples:
         .. note::

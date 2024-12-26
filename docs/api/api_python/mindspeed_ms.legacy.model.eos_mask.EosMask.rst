@@ -16,10 +16,10 @@ mindspeed_ms.legacy.model.eos_mask.EosMask
 
     输出：
         - **position_ids** (Tensor) - 位置索引。形状为 :math:`(B, S)` 的张量。
-        - **mask** (Tensor) - 掩码。形状为 :math:`(B, S, S)` 的张量。
+        - **mint.sub(1, mask)** (Tensor) - 掩码。形状为 :math:`(B, S, S)` 的张量。
 
     样例：
 
     .. note::
-        - 运行样例之前，需要配置好通信环境变量。
+        - 运行样例之前，需要配置好环境变量。
         - 针对Ascend设备，推荐使用msrun启动方式，无第三方以及配置文件依赖。详见 `msrun启动 <https://www.mindspore.cn/docs/zh-CN/master/model_train/parallel/msrun_launcher.html>`_ 。
