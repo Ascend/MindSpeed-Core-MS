@@ -186,7 +186,19 @@ def get_resume_ckpt_list(checkpoint_dir, last_ckpt_file, rank_id, device_num):
     last_epoch, last_step = get_epoch_and_step_from_ckpt_name(last_ckpt_file)
     original_rank = get_rank_id_from_ckpt_name(last_ckpt_file)
     valid_ckpts = {}
+
+    from mindspeed_ms.training import get_args
+    args = get_args()
+    dp0_ckpt_list = []
+    if not args.use_dist_ckpt:
+        from mindspeed_ms.core.parallel_state import get_model_parallel_group
+        dp0_group = get_model_parallel_group()
+        dp0_group_list = dp0_group.replace("tp-pp-", "").split("-")
+        dp0_ckpt_list = [int(x) for x in dp0_group_list]
+        logger.info(f"The args.use_dist_ckpt is False, only check ckpt of dp0: {dp0_ckpt_list}")
     for rank_id_tmp in range(device_num):
+        if not args.use_dist_ckpt and rank_id_tmp not in dp0_ckpt_list:
+            continue
         ckpt_prefix_tmp = ckpt_prefix.replace(f"rank_{original_rank}", f"rank_{rank_id_tmp}")
         checkpoint_rank_dir = os.path.join(checkpoint_dir, f"rank_{rank_id_tmp}")
         if not os.path.exists(checkpoint_rank_dir):
@@ -203,7 +215,7 @@ def get_resume_ckpt_list(checkpoint_dir, last_ckpt_file, rank_id, device_num):
     # epoch and step are consistent, and the path exists.
     resume_ckpt_list = []
     for key in valid_ckpts:
-        if check_checkpoints_by_rank(valid_ckpts[key], device_num):
+        if check_checkpoints_by_rank(valid_ckpts[key], device_num, len(dp0_ckpt_list)):
             ckpt_file = replace_rank_id_in_ckpt_name(valid_ckpts[key][0], rank_id)
             resume_ckpt = os.path.join(checkpoint_dir, f"rank_{rank_id}", ckpt_file)
             if not os.path.exists(resume_ckpt):
@@ -219,12 +231,14 @@ def get_resume_ckpt_list(checkpoint_dir, last_ckpt_file, rank_id, device_num):
     return resume_ckpt_list
 
 
-def check_checkpoints_by_rank(checkpoints, rank_size):
+def check_checkpoints_by_rank(checkpoints, rank_size, dp0_ckpt_num):
     """Check rank number of ckpt in checkpoints are intact."""
     if not checkpoints:
         return False
     checkpoints.sort(key=get_rank_id_from_ckpt_name)
     rank_id_set = set(map(get_rank_id_from_ckpt_name, checkpoints))
+    if dp0_ckpt_num != 0:
+        return len(rank_id_set) == dp0_ckpt_num
     if len(rank_id_set) == rank_size and max(rank_id_set) == rank_size - 1:
         return True
 
