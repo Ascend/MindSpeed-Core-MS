@@ -41,7 +41,7 @@ from .utils import token_sort, token_unsort
 
 class MoEAlltoAllTokenDispatcher():
     """
-    In the MoE architecture, the MoEAlltoAllTokenDispatcher scheduler is responsible for assigning token tokens to
+    In the MoE architecture, the MoEAlltoAllTokenDispatcher scheduler is responsible for assigning tokens to
     various experts for processing, and reassembling the processed results back to the original token order.
 
     Args:

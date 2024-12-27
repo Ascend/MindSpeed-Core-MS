@@ -26,3 +26,9 @@ mindspeed_ms.core.parallel_state.initialize_model_parallel
         - **RuntimeError** - `order` 中有重复元素。
         - **RuntimeError** - `ep` 在 `order` 中，`ep-dp` 不在 `order` 中 且 `dp-ep` 也不在 `order` 中。
         - **RuntimeError** - `_GLOBAL_STREAM` 已经被初始化。
+
+    样例：
+
+    .. note::
+        - 运行样例之前，需要配置好环境变量。
+        - 针对Ascend设备，推荐使用msrun启动方式，无第三方以及配置文件依赖。详见 `msrun启动 <https://www.mindspore.cn/docs/zh-CN/master/model_train/parallel/msrun_launcher.html>`_ 。

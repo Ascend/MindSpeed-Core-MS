@@ -306,8 +306,22 @@ def initialize_model_parallel(tensor_model_parallel_size=1,
         ``Ascend``
 
     Examples:
+        .. note::
+            Before running the following examples, you need to configure the communication environment variables.
+            For Ascend devices, it is recommended to use the msrun startup method
+            without any third-party or configuration file dependencies.
+            Please see the `msrun start up
+            <https://www.mindspore.cn/docs/en/master/model_train/parallel/msrun_launcher.html>`_
+            for more details.
+
+        >>> from mindspore.communication.management import init
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
-        >>> initialize_model_parallel(tensor_model_parallel_size=2, pipeline_model_parallel_size=2)
+        >>> from mindspeed_ms.core.parallel_state import get_context_parallel_world_size
+        >>> init()
+        >>> initialize_model_parallel(context_parallel_size=1)
+        >>> context_parallel_world_size = get_context_parallel_world_size()
+        >>> print(context_parallel_world_size)
+        1
     """
 
     # pylint: disable=W0212
@@ -558,8 +572,10 @@ def get_context_parallel_world_size():
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> from mindspeed_ms.core.parallel_state import get_context_parallel_world_size
         >>> init()
-        >>> initialize_model_parallel()
-        >>> world_size = get_context_parallel_world_size()
+        >>> initialize_model_parallel(context_parallel_size=1)
+        >>> cp_world_size = get_context_parallel_world_size()
+        >>> print(cp_world_size)
+        1
     """
     return _get_world_size_helper('cp')
 
@@ -645,8 +661,10 @@ def get_context_parallel_rank():
         >>> from mindspeed_ms.core.parallel_state import initialize_model_parallel
         >>> from mindspeed_ms.core.parallel_state import get_context_parallel_rank
         >>> init()
-        >>> initialize_model_parallel()
+        >>> initialize_model_parallel(context_parallel_size=1)
         >>> cp_rank = get_context_parallel_rank()
+        >>> print(cp_rank)
+        0
     """
     return _get_rank_helper('cp')
 
