@@ -488,8 +488,10 @@ def run(args, dist_path, model_path):
         extra_args=args2save
     )
     if generate_all_dp_cp:
-        for dp_rank in range(1, dp_size):
-            for cp_rank in range(1, cp_size):
+        for dp_rank in range(dp_size):
+            for cp_rank in range(cp_size):
+                if dp_rank == 0 and cp_rank == 0:
+                    continue
                 ms_dir_format = get_ms_dir_format(tp_rank, tp_size, cp_rank, cp_size,
                                                   dp_rank, dp_size, pp_rank, order=args.parallel_init_order)
                 copy_ckpt(ms_path, ms_dir_format)
