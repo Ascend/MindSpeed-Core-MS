@@ -907,11 +907,14 @@ class ModelParallelConfig(BaseConfig):
         tensor_model_parallel_size (int, optional): Dimensionality of tensor parallel. Default: ``1``.
         pipeline_model_parallel_size (int, optional): Number of stages when using pipeline parallel. Default: ``1``.
         context_parallel_size (int, optional): Dimensionality of context parallel. Default: ``1``.
-        context_parallel_algo (str, optional): Context parallelism algorithm. Default: ``"ulysses_cp_algo"``.
+        context_parallel_algo (str, optional): Context parallelism algorithm.
+
             Choices: [``"ulysses_cp_algo"``, ``"megatron_cp_algo"``, ``"hybrid_cp_algo"``].
+
+            Default: ``"ulysses_cp_algo"``.
         ulysses_degree_in_cp (int, optional): Define the degree of ulysses parallelism when the
-            `--context-parallel-algo` is set to ``hybrid_cp_algo``, and the ring-attention parallelism
-            is set to ``cp//ulysses``.
+            :code:`--context-parallel-algo` is set to ``hybrid_cp_algo``, and the ring-attention parallelism
+            is set to ``cp//ulysses``. Default: ``None``.
         expert_model_parallel_size (int, optional): Dimensionality of expert parallel. Default: ``1``.
         virtual_pipeline_model_parallel_size (int, optional): Number of virtual stages when using pipeline parallel.
             Default: ``None``.

@@ -36,7 +36,7 @@ mindspeed_ms.core.config.TransformerConfig
         - **mlp_has_bias** (bool，可选) - 多层感知机（MLP）模块中的线性变换有偏置参数。默认值： ``True`` 。
         - **hidden_act** (str，可选) - 多层感知机（MLP）模块中使用的激活函数。默认值： ``"gelu"`` 。
         - **normalization** (str，可选) - Transformer层模块中使用的归一化方法。默认值： ``"LayerNorm"`` 。
-        - **norm_epsilon** (float，可选) - 归一化的epsilon值。默认值： ``1.e-5`` 。
+        - **norm_epsilon** (float，可选) - 归一化的epsilon值。默认值： ``1.0e-5`` 。
         - **apply_residual_connection_post_norm** (bool，可选) - 在归一化之后使用残差连接。默认值： ``False`` 。
         - **use_final_norm** (bool，可选) - 在Transformer后使用最终归一化。默认值： ``True`` 。
         - **residual_connection_dtype** (str，可选) - 残差连接的计算数据类型。默认值： ``"float32"`` 。

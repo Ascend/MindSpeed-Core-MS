@@ -122,7 +122,7 @@ class GPTModel(Module):
         ...                       attention_mask=attention_mask,
         ...                       loss_mask=loss_mask)
         >>> print(lm_output.shape)
-        (8, 32, 64)
+        (32, 8, 128)
     """
     def __init__(self,
                  config,

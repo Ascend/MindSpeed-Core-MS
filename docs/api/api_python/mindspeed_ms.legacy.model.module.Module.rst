@@ -15,4 +15,4 @@ mindspeed_ms.legacy.model.module.Module
         - **RuntimeError** - 模型中有一个权重具有 `'share'` 属性，但参数共享要求在第一阶段和最后阶段分别有两个权重具有 `'share'` 属性。
         - **RuntimeError** - 在调用 `shared_embedding_or_output_weight()` 时 `share_embeddings_and_output_weights` 不为 ``True`` 。
         - **RuntimeError** - 在调用 `initialize_word_embeddings()` 时 `share_embeddings_and_output_weights` 不为 ``True`` 。
-        - **ValueError** - 如果是最后一阶段（后处理），但是权重之和不为 ``0`` 。
+        - **ValueError** - 如果是最后一阶段（后处理），但是权重之和不为 ``0.0`` 。

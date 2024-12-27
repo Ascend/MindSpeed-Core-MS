@@ -1,12 +1,12 @@
-# 动态图并行-GPT模型预训练开发指南
+# 动态图并行-大模型预训练开发指南
 
 ## 概述
 
-本教程演示如何使用MindSpeed-Core-MS动态图并行框架训练GPT模型，此框架支持张量并行、流水线并行、序列并行等并行场景，还支持使用分布式优化器、动态学习率等场景，帮助开发者快速、便捷地构建和训练基于动态图并行框架的GPT预训练模型。
+本教程演示如何使用MindSpeed-Core-MS动态图并行框架训练大模型，此框架支持张量并行、流水线并行、序列并行等并行场景，还支持使用分布式优化器、动态学习率等场景，帮助开发者快速、便捷地构建和训练基于动态图并行框架的Transformer类预训练模型。
 
 ## 操作实践
 
-下面基于Ascend平台，进行GPT模型训练。
+下面基于Ascend平台，以GPT模型为例进行训练。
 
 ### 样例代码参考
 
@@ -15,7 +15,7 @@
 ```text
 └─ gpt
     ├─ pretrain_gpt.py
-    ├─ pretrain_gpt.sh
+    ├─ run_ms_launch.sh
     └─ config
         └─ 38BV3
             ├─ model_38BV3_seq_4K.yaml
@@ -23,7 +23,7 @@
             └─ model_38BV3_seq_4K_train.yaml
 ```
 
-其中，`pretrain_gpt.py`是环境配置、模型对象创建及训练的脚本。`pretrain_gpt.sh`是启动执行脚本（可以参考样例代码里的[README.md](https://codehub-y.huawei.com/MindSpore-enterprise/Production/38Bv3/files?ref=refactor&filePath=pangu_sophon_pytorch-master%2FPanGu_ms%2FREADME.md&isFile=true)创建）。`config/38Bv3`文件夹里是配置项。
+其中，`pretrain_gpt.py`是环境配置、模型对象创建及训练的脚本。`run_ms_launch.sh`是启动执行脚本（可以参考样例代码里的[README.md](https://codehub-y.huawei.com/MindSpore-enterprise/Production/38Bv3/files?ref=refactor&filePath=pangu_sophon_pytorch-master%2FPanGu_ms%2FREADME.md&isFile=true)创建）。`config/38Bv3`文件夹里是配置项。
 
 ### 模型结构
 
@@ -480,11 +480,9 @@ pretrain(
 
 ### 运行训练脚本
 
-```bash
-bash pretrain_gpt.sh
-```
+> 注：以下为示例，供参考。如需运行盘古仓代码，具体调用命令参考[README.md](https://codehub-y.huawei.com/MindSpore-enterprise/Production/38Bv3/files?ref=refactor&filePath=pangu_sophon_pytorch-master%2FPanGu_ms%2FREADME.md&isFile=true)中pp训练/vpp单机八卡训练/SFT单机八卡等章节。
 
-训练脚本`pretrain_gpt.sh`解析如下（注：仅解析MindSpeed-Core-MS相关的重要信息，其余配置参考样例代码的README.md及pretrain_gpt.py）：
+需要新建名为`run_ms_launch.sh`的脚本，训练脚本`run_ms_launch.sh`解析如下（注：示例仅解析MindSpeed-Core-MS相关的重要信息，因自定义参数、环境变量等差异，如需运行盘古仓代码，请参考样例代码的README.md、launch.py及pretrain_gpt.py）：
 
 #### 设置环境变量
 
@@ -502,13 +500,13 @@ export ASCEND_RT_VISIBLE_DEVICES='0,1,2,3,4,5,6,7'
 msrun --worker_num 8 --local_worker_num=8 --master_port=8848 --log_dir=msrun_log --join=True --cluster_time_out=300 pretrain_gpt.py --xx-params
 ```
 
+注：盘古仓代码需要封装层launch.py来配置环境变量、解析盘古自定义的传入参数等操作，上述代码格式为launch.py最终调用命令的格式。
+
 接下来通过命令调用对应的脚本。
 
 ```bash
-bash pretrain_gpt.sh
+bash run_ms_launch.sh
 ```
-
-注：以上为示例命令。具体调用命令参考[README.md](https://codehub-y.huawei.com/MindSpore-enterprise/Production/38Bv3/files?ref=refactor&filePath=pangu_sophon_pytorch-master%2FPanGu_ms%2FREADME.md&isFile=true)。
 
 #### 运行结果
 

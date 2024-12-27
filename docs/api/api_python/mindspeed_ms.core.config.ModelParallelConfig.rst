@@ -10,7 +10,7 @@ mindspeed_ms.core.config.ModelParallelConfig
         - **pipeline_model_parallel_size** (int，可选) - 使用流水线并行时的阶段数。默认值： ``1`` 。
         - **context_parallel_size** (int，可选) - 上下文并行的维度。默认值： ``1`` 。
         - **context_parallel_algo** (str，可选) - 上下文并行算法。默认值： ``"ulysses_cp_algo"`` 。可选项：[ ``"ulysses_cp_algo"`` ， ``"megatron_cp_algo"`` ， ``"hybrid_cp_algo"`` ]。
-        - **ulysses_degree_in_cp** (int，可选) - 当 `--context-parallel-algo` 设置为 ``hybrid_cp_algo``  且环注意力并行度设置为 ``cp//ulyess`` 时，定义ulyess并行度的程度。
+        - **ulysses_degree_in_cp** (int，可选) - 当 :code:`--context-parallel-algo` 设置为 ``hybrid_cp_algo``  且ring-attention并行度设置为 ``cp//ulysses`` 时，定义ulysses并行度的程度。默认值： ``None`` 。
         - **expert_model_parallel_size** (int，可选) - 专家并行的维度。默认值： ``1`` 。
         - **virtual_pipeline_model_parallel_size** (int，可选) - 使用虚拟流水线并行（VPP）时的阶段数。默认值： ``None`` 。
         - **sequence_parallel** (bool，可选) - 启用序列并行。默认值： ``False`` 。

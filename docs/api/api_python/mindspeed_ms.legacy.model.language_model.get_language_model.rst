@@ -10,11 +10,11 @@ mindspeed_ms.legacy.model.language_model.get_language_model
         - **num_tokentypes** (int) - 如果大于0，则使用tokentypes嵌入。
         - **add_pooler** (bool) - 如果为 ``True`` ，使用池化层。
         - **encoder_attn_mask_type** (int) - 编码器注意力掩码类型。
-        - **add_encoder** (bool，可选) - 如果为 ``True`` ，使用编码器。默认值：``True`` 。
-        - **add_decoder** (bool，可选) - 如果为 ``True`` ，使用解码器。默认值：``False`` 。
-        - **decoder_attn_mask_type** (int，可选) - 解码器注意力掩码类型。默认值：``AttnMaskType.causal`` 。
-        - **pre_process** (bool，可选) - 使用流水线并行时，标记它是否为第一阶段。默认值：``True`` 。
-        - **post_process** (bool，可选) - 使用流水线并行时，标记它是否为最后的阶段。默认值：``True`` 。
+        - **add_encoder** (bool，可选) - 如果为 ``True`` ，使用编码器。默认值： ``True`` 。
+        - **add_decoder** (bool，可选) - 如果为 ``True`` ，使用解码器。默认值： ``False`` 。
+        - **decoder_attn_mask_type** (int，可选) - 解码器注意力掩码类型。默认值： ``None`` 。
+        - **pre_process** (bool，可选) - 使用流水线并行时，标记它是否为第一阶段。默认值： ``True`` 。
+        - **post_process** (bool，可选) - 使用流水线并行时，标记它是否为最后的阶段。默认值： ``True`` 。
 
     返回：
         - **language_model** (TransformerLanguageModel) - Transformer模型。

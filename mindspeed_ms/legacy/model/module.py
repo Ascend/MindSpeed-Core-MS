@@ -56,10 +56,12 @@ class Module(nn.Cell):
         RuntimeError: If more than one weight were set `'share'` attribute in a pipeline stage.
         RuntimeError: If there is one weight with `'share'` attribute in the model, but parameter sharing requires
             two weights with `'share'` attribute in first stage and last stage respectively.
-        RuntimeError: If `share_embeddings_and_output_weights` is not ``True`` when
-            `shared_embedding_or_output_weight()` is called.
-        RuntimeError: If `share_embeddings_and_output_weights` is not ``True`` when
-            `initialize_word_embeddings()` is called.
+        RuntimeError: If `share_embeddings_and_output_weights` is not ``True``
+
+            when `shared_embedding_or_output_weight()` is called.
+        RuntimeError: If `share_embeddings_and_output_weights` is not ``True``
+
+             when `initialize_word_embeddings()` is called.
         ValueError: If it is the last stage (post process) but the sum of `shared_weight` is not ``0.0`` .
 
     Supported Platforms:
