@@ -176,20 +176,20 @@ MindSpore PyNative动态图模式采用pybind算子直调方法，提升API性�
 
 ### 显存优化配置建议
 
-- 重计算：通过parallel_config中的recompute_config配置项使能，支持三种重计算的方式。单机或者pp场景为一维列表，vpp场景为二维列表，且只支持列表形式，列表中的元素代表vpp_rank/pp_rank下的ParallelTransformer实例需要重计算的层数。注：各类重计算加和的层数需要小于模型层数。
+- 重计算：通过parallel_config中的recompute_config配置项使能，支持三种重计算的方式。一般并行场景为一维列表，vpp场景为二维列表，且只支持列表形式，列表中的元素代表vpp_rank/pp_rank下的ParallelTransformer实例需要重计算的层数。注：各类重计算加和的层数需要小于模型层数（select_comm_recompute_layers + full_recompute_layers <= num_layers, select_recompute_layers + full_recompute_layers <= num_layers）。
     - 完全重计算：full_recompute_list，完全重计算列表指定的ParallelTransformerLayer
     - 选择重计算：select_recompute_list，使用SA时会重计算attention部分，使用FA时，由于FA会自带重计算，此时会重计算MLP的激活部分，注意此时的激活函数需要写成nn.Cell的形式，否则不生效。
     - 通信重计算：select_comm_recompute_list，重计算SP并行的Allgather部分。
 
     ```yaml
     parallel_config:
-      tensor_parallel: 2
-      pipeline_stage: 2
+      tensor_model_parallel_size: 2
+      pipeline_model_parallel_size: 2
       num_layer_list: [2, 2]
       recompute_config:
-      recompute: [1, 1]
-      select_recompute: [1, 1]
-      select_comm_recompute: [1, 1]
+        recompute: [1, 1]
+        select_recompute: [1, 1]
+        select_comm_recompute: [1, 1]
     ```
 
 - 分布式优化器：在DP场景下，引入分布式优化器策略，该策略将重复的内存分配和计算任务分解，并借助高效通信机制进行信息交换，从而在不牺牲最终结果的前提下，显著降低内存占用与计算时间。
@@ -228,5 +228,4 @@ MindSpore PyNative动态图模式采用pybind算子直调方法，提升API性�
 
 ## 参考资料
 
-1. [大模型计算性能指标](https://www.hiascend.com/document/detail/zh/canncommercial/70RC1/foundmodeldev/foundmodeltrain/PT_LMTMOG_0088.html)
-2. [模型FLOPs计算](https://jx.huawei.com/community/comgroup/postsDetails?postId=cc0e564acd794693bead67473145e94f)
+1. [模型FLOPs计算](https://jx.huawei.com/community/comgroup/postsDetails?postId=cc0e564acd794693bead67473145e94f)
