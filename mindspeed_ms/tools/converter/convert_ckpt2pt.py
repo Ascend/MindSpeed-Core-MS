@@ -247,6 +247,7 @@ def add_args(model_optim, tp, pp, curr_iter):
     model_optim_with_args = {}
 
     model_optim_with_args['args'] = pt_args['args']
+    model_optim_with_args['args'].consumed_train_samples = 0
 
     model_optim_with_args['checkpoint_version'] = pt_args['checkpoint_version']
     model_optim_with_args['iteration'] = curr_iter.value

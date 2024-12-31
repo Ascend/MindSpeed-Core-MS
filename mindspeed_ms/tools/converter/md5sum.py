@@ -33,6 +33,8 @@ def compare_md5s(file_paths):
 
 def calculate_md5(ckpt_file):
     state_dict = torch.load(ckpt_file, map_location='cpu')
+    if 'args' in state_dict and 'consumed_train_samples' in state_dict['args']:
+        state_dict['args'].consumed_train_samples = 0
     md5_value = hashlib.md5(str(state_dict).encode()).hexdigest()
     return md5_value
 
