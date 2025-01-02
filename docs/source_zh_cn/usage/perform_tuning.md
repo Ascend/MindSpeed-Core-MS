@@ -102,7 +102,7 @@ MindSpore PyNative动态图模式采用pybind算子直调方法，提升API性�
 
 ### 高阶优化特性
 
-- 负载均衡：MindSpore提供了SAPP（Symbolic Automatic Parallel Planner）自动负载均衡工具。输入模型的内存和时间信息，以及部分流水线并行性能相关的超参（如重计算对性能的影响），工具将自行构建线性规划问题，通过全局求解的方式，为大模型自动生成流水线并行中的stage-layer配比，调整各layer重计算策略，自动优化集群算力和内存利用率，降低空等时间，实现Pipeline并行分钟级策略寻优，大幅度降低性能调优成本，提升端到端训练性能。详见：[SAPP流水线负载均衡](https://gitee.com/mindspore/mindformers/blob/96ced0f5477825ec93de8e7e17b1f9980794b68c/toolkit/pipeline_balance/readme.md)。
+- 负载均衡：MindSpore提供了SAPP（Symbolic Automatic Parallel Planner）自动负载均衡工具。输入模型的内存和时间信息，以及部分流水线并行性能相关的超参（如重计算对性能的影响），工具将自行构建线性规划问题，通过全局求解的方式，为大模型自动生成流水线并行中的stage-layer配比，调整各layer重计算策略，自动优化集群算力和内存利用率，降低空等时间，实现Pipeline并行分钟级策略寻优，大幅度降低性能调优成本，提升端到端训练性能。详见：[SAPP流水线负载均衡](https://gitee.com/ascend/MindSpeed-Core-MS/blob/r0.1.0/docs/source_zh_cn/usage/pipeline_balance.md)。
 - 非饱和切分：用于减少跨机通信，提升多机场景线性度及性能。在initialize_model_parallel中配置zero_shard_size方式使能，其中zero_shard_size∈(1, dp_size]且DP必须可以被zero_shard_size整除。
 
     ```python
