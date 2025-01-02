@@ -459,7 +459,7 @@ def model_provider_func(pre_process=True, post_process=True):
 
 ### 执行训练
 
-构建完网络，并加载好权重后，可以开始执行训练。`pretrain`接口相关说明可以参考[接口说明文档](http://mindspore-repo.csi.rnd.huawei.com/mindspore/enterprise/docs/mindspeed/docs/zh-CN/r0.1.0/MindSpeed_Core_MS_API.pdf)。
+构建完网络，并加载好权重后，可以开始执行训练。`pretrain`接口相关说明可以参考[接口说明文档](https://gitee.com/ascend/MindSpeed-Core-MS/raw/r0.1.0/docs/api/MindSpeed_Core_MS_API.pdf)。
 
 ```python
 from mindspeed_ms.training.training import pretrain

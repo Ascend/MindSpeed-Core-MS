@@ -2246,7 +2246,7 @@ class TransformerConfig(BaseConfig):
         mlp_has_bias (bool, optional): Linears in MLP block have bias parameters. Default: ``True``.
         hidden_act (str, optional): Activation used in MLP block. Default: ``"gelu"``.
         normalization (str, optional): Normalization used in transformer layer block. Default: ``"LayerNorm"``.
-        norm_epsilon (float, optional): Epsilon of normalization. Default: ``1.e-5``.
+        norm_epsilon (float, optional): Epsilon of normalization. Default: ``1.0e-5``.
         apply_residual_connection_post_norm (bool, optional): Apply residual connection after normalization.
             Default: ``False``.
         use_final_norm (bool, optional): Apply final norm after transformer. Default: ``True``.

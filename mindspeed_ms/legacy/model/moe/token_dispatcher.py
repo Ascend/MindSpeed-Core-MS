@@ -90,17 +90,19 @@ class MoEAlltoAllTokenDispatcher():
         >>> dispatcher = MoEAlltoAllTokenDispatcher(num_local_experts=num_local_experts,
         ...                                         local_expert_indices=range(num_local_experts),
         ...                                         config=config)
-        >>> indices = ms.Tensor(np.random.randint(0, num_local_experts, (16, 2)), dtype=ms.int32)
+        >>> hidden_states = ms.Tensor(np.random.standard_normal((8, 2, 64)).astype(np.float32))
+        >>> hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
         >>> scores_first_column = np.random.rand(16, 1)
         >>> complementary_scores = 1 - scores_first_column
         >>> scores = ms.Tensor(np.hstack((scores_first_column, complementary_scores)))
-        >>> hidden_states = ms.Tensor(np.random.standard_normal((8, 2, 64)).astype(np.float32))
+        >>> indices_array = np.array([np.random.choice(num_local_experts, size=2, replace=False) for _ in range(16)])
+        >>> indices = ms.Tensor(indices_array, dtype=ms.int32)
         >>> dispatched_input, tokens_per_expert = dispatcher.token_permutation(hidden_states, scores, indices)
         >>> print(dispatched_input.shape)
         (32, 64)
         >>> print(tokens_per_expert)
-        [ 7 13  3  9]
-        >>> expert_output = ms.Tensor(np.random.standard_normal((16, 64)).astype(np.float32))
+        [7 9 7 9]
+        >>> expert_output = ms.Tensor(np.random.standard_normal((32, 64)).astype(np.float32))
         >>> output, _ = dispatcher.token_unpermutation(expert_output, bias=None)
         >>> print(output.shape)
         (16, 64)

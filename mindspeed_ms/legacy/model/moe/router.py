@@ -84,7 +84,7 @@ class TopKRouter(nn.Cell):
         ...     training_config=training_config,
         ... )
         >>> router = TopKRouter(model_cfg)
-        >>> data = ms.Tensor(np.random.random((4, 8, 16)).astype(np.float32))
+        >>> data = ms.Tensor(np.random.random((32, 16)).astype(np.float32))
         >>> scores, indices = router(data)
         >>> print(scores.shape)
         (32 ,2)
