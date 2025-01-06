@@ -63,12 +63,12 @@ MindSpore PyNative动态图模式采用pybind算子直调方法，提升API性�
     ```
 
 - 使用高性能API
-    - mint：MindSpore提供了对标PyTorch的mint系列接口，绝大多数情况下，其性能会持平或高于原ops系列接口。详情参考API列表：[mint接口列表](https://www.mindspore.cn/docs/zh-CN/r2.4.0/api_python/mindspore.mint.html)
+    - mint：MindSpore提供了对标PyTorch的mint系列接口，绝大多数情况下，其性能会持平或高于原ops系列接口。详情参考API列表：[mint接口列表](https://www.mindspore.cn/docs/zh-CN/master/api_python/mindspore.mint.html)
     - 大模型融合算子，如RotaryPositionEmbedding、Swiglu等。
 - 避免冗余的数据拷贝
     - 尽量采用原地更新接口，减少冗余Tensormove操作
     - 减少不必要的转连续操作：当前aclnn算子大多支持非连续输入，尽量减少在脚本中大量使用.contiguous()，或可以先is_contiguous()判断后再调用。
-    - 避免频繁数据拷贝：需要数据拷贝时，尽量采用.from_numpy接口，当数据连续时，会通过免拷贝方式将Numpy数组转换为张量。[mindspore.Tensor.from_numpy](https://www.mindspore.cn/docs/zh-CN/r2.4.0/api_python/mindspore/Tensor/mindspore.Tensor.from_numpy.html)
+    - 避免频繁数据拷贝：需要数据拷贝时，尽量采用.from_numpy接口，当数据连续时，会通过免拷贝方式将Numpy数组转换为张量。[mindspore.Tensor.from_numpy](https://www.mindspore.cn/docs/zh-CN/master/api_python/mindspore/Tensor/mindspore.Tensor.from_numpy.html)
 - 减少原生Python累加等函数使用，如.sum()（建议替换成mint.sum()）
 
 ### 性能配置建议
@@ -109,13 +109,13 @@ MindSpore PyNative动态图模式采用pybind算子直调方法，提升API性�
     initialize_model_parallel(tensor_model_parallel_size=parallel_config.tensor_model_parallel_size, zero_shard_size=zero_shard_size)
     ```
 
-- JIT：将Python函数编译为可调用的MindSpore静态图，MindSpore可以在运行时对图进行优化，提升该模块性能，一般选择在优化器构造函数处添加@jit标签。详见：[jit介绍](https://www.mindspore.cn/docs/zh-CN/r2.4.0/api_python/mindspore/mindspore.jit.html)
+- JIT：将Python函数编译为可调用的MindSpore静态图，MindSpore可以在运行时对图进行优化，提升该模块性能，一般选择在优化器构造函数处添加@jit标签。详见：[jit介绍](https://www.mindspore.cn/docs/zh-CN/master/api_python/mindspore/mindspore.jit.html)
 
 ### 性能分析案例
 
 [MindStudio Insight用户指南](https://www.hiascend.com/document/detail/zh/mindstudio/70RC3/msinsightug/msascendinsightug/Insight_userguide_0002.html)
 
-[MindStudio Insight性能调试样例 (Ascend)](https://www.mindspore.cn/docs/zh-CN/r2.4.0/model_train/optimize/profiler.html)
+[MindStudio Insight性能调试样例 (Ascend)](https://www.mindspore.cn/docs/zh-CN/master/model_train/optimize/profiler.html)
 
 ## 内存优化
 
