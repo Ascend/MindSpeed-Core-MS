@@ -1064,7 +1064,7 @@ def _get_custom_num_layers(num_layer_list, pp_stage, pp_rank, vpp_stage=None, vp
         pp_layout = (pp_stage,)
     num_layer_array = np.array(num_layer_list)
     if num_layer_array.shape != pp_layout:
-        raise ValueError("The shape of num_layer_list {} must equal to"
+        raise ValueError("The shape of num_layer_list {} must equal to "
                          "pp_layout {}".format(num_layer_array.shape, pp_layout))
     if vpp_stage is None:
         num_layers = num_layer_array[pp_rank]
