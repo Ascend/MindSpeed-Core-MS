@@ -4,7 +4,7 @@
 
 使用工具的总体流程如下： ![sequence](./figures/sequence.png "流程图")
 
-用户需要给工具提供一个yaml文件用以描述模型的内存和时间信息（下文将介绍如何填写yaml文件），工具基于这些信息自动构建线性规划问题，通过全局求解给出一个最优的重计算+offset策略。
+用户需要给工具提供一个yaml文件用以描述模型的内存和时间信息（下文将介绍如何填写yaml文件），工具基于这些信息自动构建线性规划问题，通过全局求解给出一个最优的重计算+layer分配策略。
 
 ## 使用指南
 
@@ -210,17 +210,17 @@ $$
 
 ### Profililng
 
-profiling生成的`ascend_timeline_display_*.json`可以在`chrome://tracing`中展示。可视化算子级的性能数据。如图：
+profiling生成的`trace_view.json`可以在`chrome://tracing`中展示。可视化算子级的性能数据。如图：
 
 ![timeline](./figures/timeline.png)
 
 为了知道head、body和tail之间的时间关系，需要拥有第一个rank和最后一个rank的profiling信息。有了这些信息的情况下，以pangu38B网络为例，可以通过以下几步获得head、body和tail的时间。
 
-1. body时间：在任意rank的profiling中，搜索flash attention。两个flash attention的前向算子之间的时间就是body的时间；
+1. body时间：在任意rank的profiling中，搜索`flashattention`。两个flash attention的前向算子之间的时间就是body的时间；
 2. head时间：在第一个rank的profiling中，在flash attention的正向之前，inplacecopy算子之前到第一个rmsNorm之前的时间为embedding的时间，即head时间；
 3. tail时间：在最后一个rank的profiling中，最后一个正向的flash attention算子后面的第2个rmsNorm加上add算子，到gatherNd之间的时间为lm_head的时间，即tail时间。
 
-详细文档也可见[mindspore的profiling指南](https://www.mindspore.cn/docs/zh-CN/r2.4.0/model_train/optimize/profiler.html)。
+详细文档也可见[mindspore的profiling指南](https://www.mindspore.cn/docs/zh-CN/master/model_train/optimize/profiler.html)。
 
 ### DryRun
 
