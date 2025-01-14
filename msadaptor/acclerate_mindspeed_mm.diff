@@ -1,0 +1,1094 @@
+diff --git a/mindspeed/core/context_parallel/utils.py b/mindspeed/core/context_parallel/utils.py
+index 194acd6..f126245 100644
+--- a/mindspeed/core/context_parallel/utils.py
++++ b/mindspeed/core/context_parallel/utils.py
+@@ -9,7 +9,7 @@ from scipy.sparse.linalg import eigsh
+ 
+ from megatron.training import get_args
+ from megatron.core.parallel_state import get_context_parallel_global_ranks
+-from mindspeed.ops.npu_ring_attention_update import npu_ring_attention_update
++#from mindspeed.ops.npu_ring_attention_update import npu_ring_attention_update
+ from mindspeed.core.parallel_state import get_context_parallel_for_hybrid_ring_global_ranks
+ from mindspeed.op_builder import AdaptiveCpOpBuilder
+ 
+@@ -135,9 +135,9 @@ def forward_update(prev_attn_out, prev_softmax_max, prev_softmax_sum,
+     - updated_softmax_sum (Tensor): The updated sum of the softmax distribution.
+     """
+     _args = get_args()
+-    if hasattr(_args, 'use_fused_ring_attention_update') and _args.use_fused_ring_attention_update:
+-        return npu_ring_attention_update(prev_attn_out, prev_softmax_max, prev_softmax_sum, cur_attn_out,
+-                                         cur_softmax_max, cur_softmax_sum, actual_seq_qlen, layout)
++    #if hasattr(_args, 'use_fused_ring_attention_update') and _args.use_fused_ring_attention_update:
++    #    return npu_ring_attention_update(prev_attn_out, prev_softmax_max, prev_softmax_sum, cur_attn_out,
++    #                                     cur_softmax_max, cur_softmax_sum, actual_seq_qlen, layout)
+     return forward_update_without_fused(prev_attn_out, prev_softmax_max, prev_softmax_sum, cur_attn_out,
+                                     cur_softmax_max, cur_softmax_sum, actual_seq_qlen, layout)
+ 
+diff --git a/mindspeed/core/models/common/embeddings/rotary_pos_embedding.py b/mindspeed/core/models/common/embeddings/rotary_pos_embedding.py
+index d8d873e..64f28ac 100644
+--- a/mindspeed/core/models/common/embeddings/rotary_pos_embedding.py
++++ b/mindspeed/core/models/common/embeddings/rotary_pos_embedding.py
+@@ -9,13 +9,13 @@ from megatron.core.models.common.embeddings.rotary_pos_embedding import _rotate_
+ from megatron.training import get_args
+ from megatron.core import parallel_state
+ from mindspeed.utils import get_position_ids
+-from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embedding
++#from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embedding
+ 
+ from mindspeed.core.parallel_state import (get_context_parallel_for_hybrid_ulysses_world_size,
+                                              get_context_parallel_for_hybrid_ulysses_rank,
+                                              get_context_parallel_for_hybrid_ring_world_size,
+                                              get_context_parallel_for_hybrid_ring_rank)
+-from mindspeed.core.context_parallel.utils import get_remapped_seq_order
++#from mindspeed.core.context_parallel.utils import get_remapped_seq_order
+ from mindspeed.core.tensor_parallel_y_union_cp import TensorParallelYUnionCP
+ 
+ 
+@@ -68,11 +68,11 @@ def apply_rotary_pos_emb_bshd(t: Tensor, freqs: Tensor, rotary_interleaved: bool
+     cos_ = (torch.cos(freqs) * _mscale).to(t.dtype)
+     sin_ = (torch.sin(freqs) * _mscale).to(t.dtype)
+ 
+-    if args.use_fused_rotary_pos_emb:
+-        mode = 1 if rotary_interleaved else 0
+-        t = npu_rotary_position_embedding(t.contiguous(), cos_, sin_, mode).to(t.dtype)
+-    else:
+-        t = (t * cos_) + (_rotate_half(t, rotary_interleaved) * sin_)
++    #if args.use_fused_rotary_pos_emb:
++    #    mode = 1 if rotary_interleaved else 0
++    #    t = npu_rotary_position_embedding(t.contiguous(), cos_, sin_, mode).to(t.dtype)
++    #else:
++    t = (t * cos_) + (_rotate_half(t, rotary_interleaved) * sin_)
+ 
+     return torch.cat((t, t_pass), dim=-1)
+ 
+@@ -287,7 +287,7 @@ def _get_pos_emb_on_this_cp_rank_in_hybrid_adaptive_cp(pos_emd, seq_dim):
+     ulys_rank = get_context_parallel_for_hybrid_ulysses_rank()
+     adap_rank = get_context_parallel_for_hybrid_ring_rank()
+ 
+-    remapped_seq_order = get_remapped_seq_order()
++    remapped_seq_order = None #get_remapped_seq_order()
+     if remapped_seq_order is not None:
+         per = pos_emd.shape[seq_dim] // adap_size // ulys_size
+         which_per = adap_rank * ulys_size + ulys_rank
+diff --git a/mindspeed/core/models/gpt/gpt_layer_specs.py b/mindspeed/core/models/gpt/gpt_layer_specs.py
+index c4b83a9..c615cd7 100644
+--- a/mindspeed/core/models/gpt/gpt_layer_specs.py
++++ b/mindspeed/core/models/gpt/gpt_layer_specs.py
+@@ -6,9 +6,9 @@ from megatron.core.transformer.identity_op import IdentityOp
+ from megatron.training import get_args
+ from megatron.core.transformer.moe.moe_layer import MoELayer
+ from megatron.core.transformer.custom_layers.transformer_engine import TENorm
+-from mindspeed.core.transformer.transformer import norm_recompute_forward
++#from mindspeed.core.transformer.transformer import norm_recompute_forward
+ from mindspeed.core.transformer.transformer_block import NoopTransformerLayer
+-from mindspeed.model.transformer import should_recompute_norm
++#from mindspeed.model.transformer import should_recompute_norm
+ import types
+ 
+ 
+@@ -57,6 +57,7 @@ def build_norm_recompute_layer_wrapper(fn):
+         for layer in self.layers:
+             if isinstance(layer, NoopTransformerLayer):
+                 continue
+-            if should_recompute_norm(layer.layer_number):
+-                layer.forward = types.MethodType(norm_recompute_forward, layer)
+-    return wrapper
+\ No newline at end of file
++            #if should_recompute_norm(layer.layer_number):
++                #layer.forward = types.MethodType(norm_recompute_forward, layer)
++            #    pass
++    return wrapper
+diff --git a/mindspeed/core/tensor_parallel/random.py b/mindspeed/core/tensor_parallel/random.py
+index 3e96442..59927f1 100644
+--- a/mindspeed/core/tensor_parallel/random.py
++++ b/mindspeed/core/tensor_parallel/random.py
+@@ -4,7 +4,7 @@ from typing import List, Union
+ import torch
+ from torch import _C
+ from torch_npu.npu import _lazy_call, device as device_ctx_manager
+-from torch.utils.checkpoint import _get_autocast_kwargs
++#from torch.utils.checkpoint import _get_autocast_kwargs
+ from megatron.training import get_args
+ from megatron.core.tensor_parallel.utils import gather_split_1d_tensor
+ from megatron.core.tensor_parallel.random import get_cuda_rng_tracker
+@@ -293,4 +293,4 @@ def checkpoint_wrapper(checkpoint):
+ 
+         return CheckpointFunctionRipipe.apply(function, distribute_saved_activations, *args)
+ 
+-    return wrapper
+\ No newline at end of file
++    return wrapper
+diff --git a/mindspeed/megatron_adaptor.py b/mindspeed/megatron_adaptor.py
+index 0a49571..9e748d3 100644
+--- a/mindspeed/megatron_adaptor.py
++++ b/mindspeed/megatron_adaptor.py
+@@ -120,21 +120,21 @@ def te_adaptation(aspm):
+     aspm.register_patch('importlib.metadata.version', version_wrapper)
+     aspm.register_patch('transformer_engine.pytorch.LayerNormLinear', torch.nn.Module, create_dummy=True)
+     aspm.register_patch('transformer_engine.pytorch.DotProductAttention', torch.nn.Module, create_dummy=True)
+-    aspm.register_patch('transformer_engine.pytorch.Linear', torch.nn.Module, create_dummy=True)
++    # aspm.register_patch('transformer_engine.pytorch.Linear', torch.nn.Module, create_dummy=True)
+     aspm.register_patch('flash_attn.flash_attn_interface.flash_attn_unpadded_func', create_dummy=True)
+ 
+ 
+ def apex_adaptation(aspm):
+     from .core.fusions.fused_layer_norm import fused_layer_norm_affine
+-    from .ops.npu_matmul_add import npu_matmul_add_fp32, npu_matmul_add_fp16
++    #from .ops.npu_matmul_add import npu_matmul_add_fp32, npu_matmul_add_fp16
+     aspm.register_patch('amp_C.multi_tensor_l2norm', multi_tensor_l2norm, create_dummy=True)
+     aspm.register_patch('amp_C.multi_tensor_scale', multi_tensor_scale, create_dummy=True)
+     aspm.register_patch('fused_layer_norm_cuda', create_dummy=True)
+     aspm.register_patch('apex.multi_tensor_apply.multi_tensor_applier', multi_tensor_applier, create_dummy=True)
+     aspm.register_patch('apex.normalization.fused_layer_norm.fused_layer_norm_affine', fused_layer_norm_affine,
+                         create_dummy=True)
+-    aspm.register_patch('fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp32', npu_matmul_add_fp32, create_dummy=True)
+-    aspm.register_patch('fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp16', npu_matmul_add_fp16, create_dummy=True)
++    #aspm.register_patch('fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp32', npu_matmul_add_fp32, create_dummy=True)
++    #aspm.register_patch('fused_weight_gradient_mlp_cuda.wgrad_gemm_accum_fp16', npu_matmul_add_fp16, create_dummy=True)
+ 
+ 
+ def torch_adaptation(aspm):
+@@ -364,7 +364,7 @@ def mcore_multiparam_pipeline_parallel_adaptation(aspm, mindspeed_args):
+ 
+ def mcore_tensor_parallel_adaptation_l0(aspm):
+     from .core.tensor_parallel.random import _set_cuda_rng_state
+-    aspm.register_patch('megatron.core.tensor_parallel.random._set_cuda_rng_state', _set_cuda_rng_state)
++    # aspm.register_patch('megatron.core.tensor_parallel.random._set_cuda_rng_state', _set_cuda_rng_state)
+ 
+ 
+ def mcore_tensor_parallel_adaptation_l1(aspm):
+@@ -472,7 +472,7 @@ def legacy_model_transformer(aspm, args):
+ 
+ def megatron_training_adaptation_l0(aspm, args):
+     from .initialize import _compile_dependencies, set_jit_fusion_options_wrapper
+-    from .utils import get_batch_on_this_cp_rank
++    #from .utils import get_batch_on_this_cp_rank
+     from .training import pretrain
+     from .arguments import parse_args_wrapper, validate_args_wrapper, core_transformer_config_from_args_wrapper
+     from .yaml_arguments import core_transformer_config_from_yaml_wrapper, print_args_wrapper
+@@ -488,7 +488,7 @@ def megatron_training_adaptation_l0(aspm, args):
+     aspm.register_patch('megatron.training.yaml_arguments.core_transformer_config_from_yaml',
+                         core_transformer_config_from_yaml_wrapper)
+     aspm.register_patch('megatron.training.initialize._compile_dependencies', _compile_dependencies)
+-    aspm.register_patch('megatron.training.utils.get_batch_on_this_cp_rank', get_batch_on_this_cp_rank)
++    #aspm.register_patch('megatron.training.utils.get_batch_on_this_cp_rank', get_batch_on_this_cp_rank)
+     aspm.register_patch('megatron.training.arguments.parse_args', parse_args_wrapper)
+     aspm.register_patch('megatron.training.arguments.validate_args', validate_args_wrapper)
+     aspm.register_patch('megatron.training.arguments._print_args', print_args_wrapper)
+@@ -553,137 +553,137 @@ def ascend_adaptation(aspm, args):
+         aspm.register_patch('megatron.training.initialize_megatron', megatron.training.initialize.initialize_megatron)
+ 
+ 
+-def mcore_moe_adaptation_l0(pm):
+-    from .core.transformer.moe.grouped_gemm_util import Ops, grouped_gemm_is_available, get_device_capability
+-    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.ops', Ops)
+-    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.grouped_gemm_is_available',
+-                      grouped_gemm_is_available)
+-    pm.register_patch('torch.cuda.get_device_capability', get_device_capability)
+-
+-
+-def mcore_moe_adaptation(pm, args):
+-    from .core.pipeline_parallel.schedules import forward_step
+-    pm.register_patch('megatron.core.pipeline_parallel.schedules.forward_step',
+-                        forward_step)
+-    if args.moe_permutation_async_comm:
+-        if hasattr(args, 'moe_token_dispatcher_type') and args.moe_token_dispatcher_type == 'alltoall':
+-            from .core.transformer.moe.experts import sequential_mlp_forward
+-            from .core.transformer.moe.moe_utils import permute, unpermute
+-            if args.moe_tp_extend_ep:
+-                from .core.transformer.moe.token_dispatcher import (
+-                    preprocess_tp_extend_ep, alltoall_token_unpermutation_tp_extend_ep,
+-                    alltoall_token_permutation_tp_extend_ep
+-                )
+-                from .core.transformer.moe.router import routing_tp_extend_ep
+-                from .core.transformer.moe.moe_layer import base_moe_init_wrapper
+-                pm.register_patch('megatron.core.transformer.moe.moe_layer.BaseMoELayer.__init__',
+-                                  base_moe_init_wrapper)
+-                pm.register_patch(
+-                    'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.preprocess',
+-                    preprocess_tp_extend_ep)
+-                pm.register_patch('megatron.core.transformer.moe.router.TopKRouter.routing', routing_tp_extend_ep)
+-
+-                if args.moe_alltoall_overlap_comm:
+-                    from .core.transformer.moe.token_dispatcher import alltoall_token_permutation_new, \
+-                        alltoall_token_unpermutation_new
+-                    from .core.transformer.moe.experts import group_mlp_forward
+-                    from .core.transformer.mlp import mlp_init
+-                    pm.register_patch('megatron.core.transformer.mlp.MLP.__init__', mlp_init)
+-                    pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.forward', group_mlp_forward)
+-                    pm.register_patch(
+-                        'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
+-                        alltoall_token_permutation_new)
+-                    pm.register_patch(
+-                        'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_unpermutation',
+-                        alltoall_token_unpermutation_new)
+-                else:
+-                    pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
+-                                      alltoall_token_permutation_tp_extend_ep)
+-                    pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_unpermutation',
+-                                      alltoall_token_unpermutation_tp_extend_ep)
+-            else:
+-                from .core.transformer.moe.token_dispatcher import preprocess, alltoall_token_permutation
+-                pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.preprocess', preprocess)
+-                if args.moe_alltoall_overlap_comm:
+-                    from .core.transformer.moe.token_dispatcher import preprocess, alltoall_token_permutation
+-                    from .core.transformer.moe.token_dispatcher import alltoall_token_permutation_new, \
+-                        alltoall_token_unpermutation_new
+-                    from .core.transformer.moe.experts import group_mlp_forward
+-                    from .core.transformer.mlp import mlp_init
+-                    pm.register_patch('megatron.core.transformer.mlp.MLP.__init__', mlp_init)
+-                    pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.forward', group_mlp_forward)
+-                    pm.register_patch(
+-                        'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
+-                        alltoall_token_permutation_new)
+-                    pm.register_patch(
+-                        'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_unpermutation',
+-                        alltoall_token_unpermutation_new)
+-                else:
+-                    pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
+-                                      alltoall_token_permutation)
+-            pm.register_patch('megatron.core.transformer.moe.experts.SequentialMLP.forward', sequential_mlp_forward)
+-            pm.register_patch('megatron.core.transformer.moe.moe_utils.permute', permute)
+-            pm.register_patch('megatron.core.transformer.moe.moe_utils.unpermute', unpermute)
+-        else:
+-            from .core.transformer.moe.router import aux_loss_load_balancing
+-            pm.register_patch('megatron.core.transformer.moe.router.TopKRouter.aux_loss_load_balancing', aux_loss_load_balancing)
+-
+-            if args.moe_tp_extend_ep:
+-                from .core.transformer.moe.moe_layer import base_moe_init_wrapper
+-                pm.register_patch('megatron.core.transformer.moe.moe_layer.BaseMoELayer.__init__', base_moe_init_wrapper)
+-
+-            if args.moe_allgather_overlap_comm:
+-                from .core.transformer.moe.token_dispatcher import (allgather_token_permutation_new,
+-                                                                    allgather_token_unpermutation_new)
+-                from .core.transformer.moe.experts import group_mlp_forward
+-                from .core.transformer.mlp import mlp_init
+-                pm.register_patch('megatron.core.transformer.mlp.MLP.__init__', mlp_init)
+-                pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.forward', group_mlp_forward)
+-                pm.register_patch(
+-                    'megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_permutation',
+-                    allgather_token_permutation_new)
+-                pm.register_patch(
+-                    'megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_unpermutation',
+-                    allgather_token_unpermutation_new)
+-            else:
+-                from .core.transformer.moe.token_dispatcher import (allgather_token_permutation,
+-                                                                    allgather_token_unpermutation)
+-                pm.register_patch(
+-                    'megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_permutation',
+-                    allgather_token_permutation)
+-                pm.register_patch(
+-                    'megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_unpermutation',
+-                    allgather_token_unpermutation)
+-
+-        from .core.transformer.moe.moe_layer import moe_layer_init_wrapper
+-        pm.register_patch('megatron.core.transformer.moe.moe_layer.MoELayer.__init__', moe_layer_init_wrapper)
+-
+-    from .core.transformer.moe.experts import groupedmlp_init_wrapper, groupedmlp_forward
+-    pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.__init__', groupedmlp_init_wrapper)
+-    if not args.moe_alltoall_overlap_comm and not args.moe_allgather_overlap_comm:
+-        pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.forward', groupedmlp_forward)
+-
+-
+-    if args.use_ascend_mc2 and not hasattr(args, 'moe_grouped_gemm'):
+-        # MoE MLP not use mc2 linear
+-        from .core.models.gpt.gpt_layer_specs import build_layers_wrapper
+-        from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
+-        from megatron.core.transformer.transformer_block import TransformerBlock
+-        TransformerBlock._build_layers = build_layers_wrapper(TransformerBlock._build_layers, ColumnParallelLinear.forward,
+-            RowParallelLinear.forward)
+-
+-
+-def deepspeed_moe_adaptation(pm, args):
+-    if args.use_pipe_experts or args.use_nanopipe:
+-        from .core.tensor_parallel.layers import (row_parallel_moe, column_parallel_moe,
+-                                                  linear_with_grad_accumulation_and_async_allreduce_moe)
+-        pm.register_patch('megatron.core.tensor_parallel.layers.RowParallelLinear.forward', row_parallel_moe)
+-        pm.register_patch('megatron.core.tensor_parallel.layers.ColumnParallelLinear.forward', column_parallel_moe)
+-        pm.register_patch('megatron.core.tensor_parallel.layers.linear_with_grad_accumulation_and_async_allreduce',
+-                          linear_with_grad_accumulation_and_async_allreduce_moe)
+-    if args.use_pipe_experts:
+-        from .core.distributed.param_and_grad_buffer import pipe_register_grad_ready
+-        pm.register_patch('megatron.core.distributed.ParamAndGradBuffer.register_grad_ready', pipe_register_grad_ready)
++#def mcore_moe_adaptation_l0(pm):
++#    from .core.transformer.moe.grouped_gemm_util import Ops, grouped_gemm_is_available, get_device_capability
++#    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.ops', Ops)
++#    pm.register_patch('megatron.core.transformer.moe.grouped_gemm_util.grouped_gemm_is_available',
++#                      grouped_gemm_is_available)
++#    pm.register_patch('torch.cuda.get_device_capability', get_device_capability)
++#
++#
++#def mcore_moe_adaptation(pm, args):
++#    from .core.pipeline_parallel.schedules import forward_step
++#    pm.register_patch('megatron.core.pipeline_parallel.schedules.forward_step',
++#                        forward_step)
++#    if args.moe_permutation_async_comm:
++#        if hasattr(args, 'moe_token_dispatcher_type') and args.moe_token_dispatcher_type == 'alltoall':
++#            from .core.transformer.moe.experts import sequential_mlp_forward
++#            from .core.transformer.moe.moe_utils import permute, unpermute
++#            if args.moe_tp_extend_ep:
++#                from .core.transformer.moe.token_dispatcher import (
++#                    preprocess_tp_extend_ep, alltoall_token_unpermutation_tp_extend_ep,
++#                    alltoall_token_permutation_tp_extend_ep
++#                )
++#                from .core.transformer.moe.router import routing_tp_extend_ep
++#                from .core.transformer.moe.moe_layer import base_moe_init_wrapper
++#                pm.register_patch('megatron.core.transformer.moe.moe_layer.BaseMoELayer.__init__',
++#                                  base_moe_init_wrapper)
++#                pm.register_patch(
++#                    'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.preprocess',
++#                    preprocess_tp_extend_ep)
++#                pm.register_patch('megatron.core.transformer.moe.router.TopKRouter.routing', routing_tp_extend_ep)
++#
++#                if args.moe_alltoall_overlap_comm:
++#                    from .core.transformer.moe.token_dispatcher import alltoall_token_permutation_new, \
++#                        alltoall_token_unpermutation_new
++#                    from .core.transformer.moe.experts import group_mlp_forward
++#                    from .core.transformer.mlp import mlp_init
++#                    pm.register_patch('megatron.core.transformer.mlp.MLP.__init__', mlp_init)
++#                    pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.forward', group_mlp_forward)
++#                    pm.register_patch(
++#                        'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
++#                        alltoall_token_permutation_new)
++#                    pm.register_patch(
++#                        'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_unpermutation',
++#                        alltoall_token_unpermutation_new)
++#                else:
++#                    pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
++#                                      alltoall_token_permutation_tp_extend_ep)
++#                    pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_unpermutation',
++#                                      alltoall_token_unpermutation_tp_extend_ep)
++#            else:
++#                from .core.transformer.moe.token_dispatcher import preprocess, alltoall_token_permutation
++#                pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.preprocess', preprocess)
++#                if args.moe_alltoall_overlap_comm:
++#                    from .core.transformer.moe.token_dispatcher import preprocess, alltoall_token_permutation
++#                    from .core.transformer.moe.token_dispatcher import alltoall_token_permutation_new, \
++#                        alltoall_token_unpermutation_new
++#                    from .core.transformer.moe.experts import group_mlp_forward
++#                    from .core.transformer.mlp import mlp_init
++#                    pm.register_patch('megatron.core.transformer.mlp.MLP.__init__', mlp_init)
++#                    pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.forward', group_mlp_forward)
++#                    pm.register_patch(
++#                        'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
++#                        alltoall_token_permutation_new)
++#                    pm.register_patch(
++#                        'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_unpermutation',
++#                        alltoall_token_unpermutation_new)
++#                else:
++#                    pm.register_patch('megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
++#                                      alltoall_token_permutation)
++#            pm.register_patch('megatron.core.transformer.moe.experts.SequentialMLP.forward', sequential_mlp_forward)
++#            pm.register_patch('megatron.core.transformer.moe.moe_utils.permute', permute)
++#            pm.register_patch('megatron.core.transformer.moe.moe_utils.unpermute', unpermute)
++#        else:
++#            from .core.transformer.moe.router import aux_loss_load_balancing
++#            pm.register_patch('megatron.core.transformer.moe.router.TopKRouter.aux_loss_load_balancing', aux_loss_load_balancing)
++#
++#            if args.moe_tp_extend_ep:
++#                from .core.transformer.moe.moe_layer import base_moe_init_wrapper
++#                pm.register_patch('megatron.core.transformer.moe.moe_layer.BaseMoELayer.__init__', base_moe_init_wrapper)
++#
++#            if args.moe_allgather_overlap_comm:
++#                from .core.transformer.moe.token_dispatcher import (allgather_token_permutation_new,
++#                                                                    allgather_token_unpermutation_new)
++#                from .core.transformer.moe.experts import group_mlp_forward
++#                from .core.transformer.mlp import mlp_init
++#                pm.register_patch('megatron.core.transformer.mlp.MLP.__init__', mlp_init)
++#                pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.forward', group_mlp_forward)
++#                pm.register_patch(
++#                    'megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_permutation',
++#                    allgather_token_permutation_new)
++#                pm.register_patch(
++#                    'megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_unpermutation',
++#                    allgather_token_unpermutation_new)
++#            else:
++#                from .core.transformer.moe.token_dispatcher import (allgather_token_permutation,
++#                                                                    allgather_token_unpermutation)
++#                pm.register_patch(
++#                    'megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_permutation',
++#                    allgather_token_permutation)
++#                pm.register_patch(
++#                    'megatron.core.transformer.moe.token_dispatcher.MoEAllGatherTokenDispatcher.token_unpermutation',
++#                    allgather_token_unpermutation)
++#
++#        from .core.transformer.moe.moe_layer import moe_layer_init_wrapper
++#        pm.register_patch('megatron.core.transformer.moe.moe_layer.MoELayer.__init__', moe_layer_init_wrapper)
++#
++#    from .core.transformer.moe.experts import groupedmlp_init_wrapper, groupedmlp_forward
++#    pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.__init__', groupedmlp_init_wrapper)
++#    if not args.moe_alltoall_overlap_comm and not args.moe_allgather_overlap_comm:
++#        pm.register_patch('megatron.core.transformer.moe.experts.GroupedMLP.forward', groupedmlp_forward)
++#
++#
++#    if args.use_ascend_mc2 and not hasattr(args, 'moe_grouped_gemm'):
++#        # MoE MLP not use mc2 linear
++#        from .core.models.gpt.gpt_layer_specs import build_layers_wrapper
++#        from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
++#        from megatron.core.transformer.transformer_block import TransformerBlock
++#        TransformerBlock._build_layers = build_layers_wrapper(TransformerBlock._build_layers, ColumnParallelLinear.forward,
++#            RowParallelLinear.forward)
++#
++#
++#def deepspeed_moe_adaptation(pm, args):
++#    if args.use_pipe_experts or args.use_nanopipe:
++#        from .core.tensor_parallel.layers import (row_parallel_moe, column_parallel_moe,
++#                                                  linear_with_grad_accumulation_and_async_allreduce_moe)
++#        pm.register_patch('megatron.core.tensor_parallel.layers.RowParallelLinear.forward', row_parallel_moe)
++#        pm.register_patch('megatron.core.tensor_parallel.layers.ColumnParallelLinear.forward', column_parallel_moe)
++#        pm.register_patch('megatron.core.tensor_parallel.layers.linear_with_grad_accumulation_and_async_allreduce',
++#                          linear_with_grad_accumulation_and_async_allreduce_moe)
++#    if args.use_pipe_experts:
++#        from .core.distributed.param_and_grad_buffer import pipe_register_grad_ready
++#        pm.register_patch('megatron.core.distributed.ParamAndGradBuffer.register_grad_ready', pipe_register_grad_ready)
+ 
+ 
+ def coc_adaptation(aspm, args):
+@@ -834,7 +834,7 @@ def adaptation_l0(aspm, args):
+     mcore_models_adaptation_l0(aspm)
+     mcore_tensor_parallel_adaptation_l0(aspm)
+     mcore_transformer_adaptation_l0(aspm)
+-    mcore_moe_adaptation_l0(aspm)
++    #mcore_moe_adaptation_l0(aspm)
+     legacy_model_transformer_l0(aspm)
+     megatron_training_adaptation_l0(aspm, args)
+     # context parallel(ring attention) requires mcore parallel state patch
+@@ -873,8 +873,8 @@ def adaptation_l2(aspm, mindspeed_args):
+     megatron_training_adaptation(aspm, mindspeed_args)
+     ascend_adaptation(aspm, mindspeed_args)
+     coc_adaptation(aspm, mindspeed_args)
+-    mcore_moe_adaptation(aspm, mindspeed_args)
+-    deepspeed_moe_adaptation(aspm, mindspeed_args)
++    #mcore_moe_adaptation(aspm, mindspeed_args)
++    #deepspeed_moe_adaptation(aspm, mindspeed_args)
+     zero3_adaptation(aspm, mindspeed_args)
+     high_availability_adaptation(aspm, mindspeed_args)
+     tensor_2d_adaptation(aspm, mindspeed_args)
+@@ -898,9 +898,8 @@ def exe_adaptation():
+         adaptation_l2(aspm, mindspeed_args)
+ 
+     aspm.apply_patches()
+-
+     # accelerate package will check TE on sys.modules，so we need remove this patch
+     del sys.modules['transformer_engine']
+ 
+ 
+-exe_adaptation()
+\ No newline at end of file
++exe_adaptation()
+diff --git a/mindspeed/model/transformer.py b/mindspeed/model/transformer.py
+index 2c26e9f..412b423 100644
+--- a/mindspeed/model/transformer.py
++++ b/mindspeed/model/transformer.py
+@@ -35,7 +35,7 @@ from megatron.legacy.model.fused_bias_gelu import bias_gelu_impl
+ from megatron.core.transformer.module import MegatronModule
+ 
+ from mindspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
+-from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
++#from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
+ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid_ulysses,
+                                            get_context_parallel_group_for_hybrid_ring,
+                                            get_context_parallel_for_hybrid_ring_world_size,
+@@ -55,12 +55,12 @@ from mindspeed.core.tensor_parallel.comm_group_api import TPYOverlapCollectiveCo
+ from mindspeed.core.tensor_parallel.tp_2d.parallel_linear_2d import ParallelLinear2D
+ from mindspeed.core.tensor_parallel.random import CheckpointWithoutOutput
+ from mindspeed.core.tensor_parallel_y_union_cp import TensorParallelYUnionCP
+-from mindspeed.ops.fusion_attention_v2 import npu_fusion_attention
++#from mindspeed.ops.fusion_attention_v2 import npu_fusion_attention
+ from mindspeed.core.tensor_parallel.layers import Nd_ParallelLinear
+ from mindspeed.core.tensor_parallel.checkpoint_manager import get_pipeline_checkpoint_manager
+ from mindspeed.model.alibi_mask import AlibiForFusionAttnSingleton, get_slopes
+-from mindspeed.core.context_parallel.adaptive_context_parallel import adaptive_attn_context_parallel
+-from mindspeed.core.context_parallel.utils import get_scheduling_info
++#from mindspeed.core.context_parallel.adaptive_context_parallel import adaptive_attn_context_parallel
++#from mindspeed.core.context_parallel.utils import get_scheduling_info
+ 
+ try:
+     from einops import rearrange
+@@ -895,13 +895,14 @@ def flash_self_attention_forward(self, q, k, v, attention_mask):
+                 cp_para['cp_group_for_intra_window'] = get_ring_group_for_intra_window()
+                 cp_para['cp_group_for_intra_window_send_recv_overlap'] = get_ring_group_for_intra_window_send_recv_overlap()
+ 
+-            output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask, self.dropout_p)
++            #output = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask, self.dropout_p)
+         else:
+-            cp_para['scheduling_info'] = get_scheduling_info()
+-            output = adaptive_attn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask, self.dropout_p)
++            pass
++            #cp_para['scheduling_info'] = get_scheduling_info()
++            #output = adaptive_attn_context_parallel(q, k, v, head_num, cp_para, scale, attention_mask, self.dropout_p)
+     else:
+         if args.use_fusion_attn_v2:
+-            output = npu_fusion_attention(
++            output = torch_npu.npu_fusion_attention(
+                 q, k, v, head_num, args.shape_order,
+                 pse=self.pse,
+                 padding_mask=None,
+diff --git a/mindspeed/ops/npu_rotary_position_embedding.py b/mindspeed/ops/npu_rotary_position_embedding.py
+index 8a9cc10..ae09db0 100644
+--- a/mindspeed/ops/npu_rotary_position_embedding.py
++++ b/mindspeed/ops/npu_rotary_position_embedding.py
+@@ -7,6 +7,19 @@ __all__ = ["npu_rotary_position_embedding"]
+ rope_op_builder = RotaryPositionEmbeddingOpBuilder()
+ 
+ 
++# def npu_rotary_position_embedding(x, cos, sin, mode=0):
++#     rope_ops = rope_op_builder.load()
++#     return rope_ops.npu_rotary_position_embedding(x, cos, sin, mode)
++import mindspore
++
+ def npu_rotary_position_embedding(x, cos, sin, mode=0):
+-    rope_ops = rope_op_builder.load()
+-    return rope_ops.npu_rotary_position_embedding(x, cos, sin, mode)
++    if not isinstance(x, torch.Tensor):
++        raise TypeError("Input x must be a torch.Tensor, got {}".format(type(x)))
++    if not isinstance(cos, torch.Tensor):
++        raise TypeError("Input cos must be a torch.Tensor, got {}".format(type(cos)))
++    if not isinstance(sin, torch.Tensor):
++        raise TypeError("Input sin must be a torch.Tensor, got {}".format(type(sin)))
++    if not isinstance(mode, (int, type(None))):
++        raise TypeError("Input mode must be an int or None, got {}".format(type(mode)))
++    # return RotaryPositionEmbeddingFunction.apply(x, cos, sin, mode)
++    return mindspore.ops.rotary_position_embedding(x, cos, sin, mode)
+\ No newline at end of file
+diff --git a/mindspeed/utils.py b/mindspeed/utils.py
+index 62b1b36..61554b2 100644
+--- a/mindspeed/utils.py
++++ b/mindspeed/utils.py
+@@ -20,13 +20,13 @@ from mindspeed.core.parallel_state import (get_context_parallel_for_hybrid_ulyss
+                                              get_context_parallel_for_hybrid_ulysses_rank,
+                                              get_context_parallel_for_hybrid_ring_world_size,
+                                              get_context_parallel_for_hybrid_ring_rank)
+-from mindspeed.core.context_parallel.utils import (set_scheduling_info,
+-                                                   set_remapped_seq_order,
+-                                                   adaptive_reschedule_task,
+-                                                   get_adaptive_cp_mask_list_by_user,
+-                                                   get_adaptive_cp_grid_mask_by_user,
+-                                                   generate_adaptive_cp_mask_list_by_user,
+-                                                   generate_adaptive_cp_grid_mask_by_user)
++#from mindspeed.core.context_parallel.utils import (set_scheduling_info,
++#                                                   set_remapped_seq_order,
++#                                                   adaptive_reschedule_task,
++#                                                   get_adaptive_cp_mask_list_by_user,
++#                                                   get_adaptive_cp_grid_mask_by_user,
++#                                                   generate_adaptive_cp_mask_list_by_user,
++#                                                   generate_adaptive_cp_grid_mask_by_user)
+ from mindspeed.model.transformer import set_attention_mask, get_attention_mask
+ 
+ 
+@@ -68,257 +68,257 @@ def print_rank_0_once(message):
+         print(message, flush=True)
+ 
+ 
+-def get_batch_on_this_cp_rank(batch):
+-    """ Slice batch input along sequence dimension into multiple chunks,
+-        which are parallelized across GPUs in a context parallel group.
+-    """
+-
+-    # With causal masking, each token only attends to its prior tokens. Simply split
+-    # sequence into CP chunks can result in severe load imbalance. That's to say, chunks
+-    # at the end of sequence have bigger workload than others. To address this issue,
+-    # we split sequence into 2*CP ranks. Assuming CP=2, we then get 4 chunks, chunk_0
+-    # and chunk_3 are assigned to GPU0, chunk_1 and chunk_2 are assigned to GPU1, so
+-    # that we can get balanced workload among GPUs in a context parallel group.
+-    from megatron.training import get_args
+-
+-    args = get_args()
+-
+-    if args.reset_attention_mask:
+-        position_ids = batch['position_ids']
+-        position_ids = position_ids.transpose(0, 1).contiguous()
+-        set_position_ids(position_ids)    
+- 
+-    tp_y_cp_size = args.context_parallel_size * args.tp_y if args.tp_2d else args.context_parallel_size
+-    if not tp_y_cp_size > 1:
+-        return batch
+-
+-    cp_expanded_by_2d_tp = args.tp_y > 1
+-    if args.context_parallel_algo == 'megatron_cp_algo':
+-        if args.cp_attention_mask_type == 'general':
+-            batch = _get_batch_on_this_cp_rank_in_megatron_cp_general(batch)
+-        elif cp_expanded_by_2d_tp:
+-            batch = _get_batch_on_this_tp_y_cp_rank_in_megatron_cp(batch)
+-        else:
+-            batch = _get_batch_on_this_cp_rank_in_megatron_cp(batch)
+-    elif args.context_parallel_algo == 'ulysses_cp_algo':
+-        batch = _get_batch_on_this_cp_rank_in_ulysses_cp(batch)
+-    elif args.context_parallel_algo == 'hybrid_cp_algo':
+-        if args.cp_attention_mask_type == 'general':
+-            batch = _get_batch_on_this_cp_rank_in_hybrid_cp_general(batch)
+-        else:
+-            batch = _get_batch_on_this_cp_rank_in_hybrid_cp(batch)
+-    elif args.context_parallel_algo == 'adaptive_cp_algo':
+-        batch = _get_batch_on_this_cp_rank_in_adaptive_cp(batch)
+-    elif args.context_parallel_algo == 'hybrid_adaptive_cp_algo':
+-        batch = _get_batch_on_this_cp_rank_in_hybrid_adaptive_cp(batch)
+-    return batch
+-
+-
+-def _get_batch_on_this_cp_rank_in_megatron_cp(batch):
+-    cp_rank = mpu.get_context_parallel_rank()
+-    cp_size = mpu.get_context_parallel_world_size()
+-    for key, val in batch.items():
+-        if key == 'attention_mask':
+-            continue
+-        if val is not None:
+-            seq_dim = 1 if key != 'attention_mask' else 2
+-            val = val.view(
+-                *val.shape[0:seq_dim],
+-                2 * cp_size,
+-                val.shape[seq_dim] // (2 * cp_size),
+-                *val.shape[(seq_dim + 1):],
+-            )
+-            index = torch.tensor([cp_rank, (2 * cp_size - cp_rank - 1)], device=val.device)
+-            val = val.index_select(seq_dim, index)
+-            val = val.view(*val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2):])
+-            batch[key] = val
+-
+-    return batch
+-
+-
+-def _get_batch_on_this_cp_rank_in_megatron_cp_general(batch):
+-    cp_rank = mpu.get_context_parallel_rank()
+-    cp_size = mpu.get_context_parallel_world_size()
+-
+-    attention_mask = get_attention_mask()
+-    if attention_mask is not None:
+-        if len(attention_mask.shape) != 2:
+-            raise AssertionError("The fusion attention operator currently only support 2D attention mask.")
+-        seq_dim = 0
+-        mask_row = attention_mask.chunk(cp_size, dim=seq_dim)[cp_rank].contiguous()
+-        from megatron.training import get_args
+-        if get_args().attention_mask_on_cpu:
+-            mask_list = [m.contiguous().npu(non_blocking=True) for m in mask_row.chunk(cp_size, dim=1)]
+-        else:
+-            mask_list = [m.contiguous() for m in mask_row.chunk(cp_size, dim=1)]
+-        batch['attention_mask'] = mask_list
+-        set_attention_mask(mask_list)
+-
+-    for key, val in batch.items():
+-        if key != 'attention_mask' and val is not None:
+-            seq_dim = 1
+-            val = val.chunk(cp_size, dim=seq_dim)[cp_rank].contiguous()
+-            batch[key] = val
+-
+-    return batch
+-
+-
+-def _get_batch_on_this_cp_rank_in_ulysses_cp(batch):
+-    cp_rank = mpu.get_context_parallel_rank()
+-    cp_size = mpu.get_context_parallel_world_size()
+-    for key, val in batch.items():
+-        if key == 'attention_mask':
+-            continue
+-        if val is not None:
+-            seq_dim = 1 if key != 'attention_mask' else 2
+-            val = val.chunk(cp_size, dim=seq_dim)[cp_rank].contiguous()
+-            batch[key] = val
+-
+-    return batch
+-
+-
+-def _get_batch_on_this_cp_rank_in_hybrid_cp(batch):
+-    u_size = get_context_parallel_for_hybrid_ulysses_world_size()
+-    r_size = get_context_parallel_for_hybrid_ring_world_size()
+-
+-    u_rank = get_context_parallel_for_hybrid_ulysses_rank()
+-    r_rank = get_context_parallel_for_hybrid_ring_rank()
+-
+-    for key, val in batch.items():
+-        if key == 'attention_mask':
+-            continue
+-        if val is not None:
+-            seq_dim = 1 if key != 'attention_mask' else 2
+-            val = val.view(
+-                *val.shape[0:seq_dim],
+-                2 * r_size,
+-                val.shape[seq_dim] // (2 * r_size),
+-                *val.shape[(seq_dim + 1):],
+-            )
+-            index = torch.tensor([r_rank, (2 * r_size - r_rank - 1)], device=val.device)
+-            val = val.index_select(seq_dim, index)
+-            val = val.view(*val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2):])
+-            val = val.chunk(u_size, dim=seq_dim)[u_rank].contiguous()
+-            batch[key] = val
+-
+-    return batch
+-
+-
+-def _get_batch_on_this_cp_rank_in_hybrid_cp_general(batch):
+-    u_size = get_context_parallel_for_hybrid_ulysses_world_size()
+-    r_size = get_context_parallel_for_hybrid_ring_world_size()
+-
+-    u_rank = get_context_parallel_for_hybrid_ulysses_rank()
+-    r_rank = get_context_parallel_for_hybrid_ring_rank()
+-
+-    attention_mask = get_attention_mask()
+-    if attention_mask is not None:
+-        if len(attention_mask.shape) != 2:
+-            raise AssertionError("The fusion attention operator currently only support 2D attention mask.")
+-        seq_dim = 0
+-        mask_row = attention_mask.chunk(r_size, dim=seq_dim)[r_rank].contiguous()
+-        from megatron.training import get_args
+-        if get_args().attention_mask_on_cpu:
+-            mask_list = [m.contiguous().npu(non_blocking=True) for m in mask_row.chunk(r_size, dim=1)]
+-        else:
+-            mask_list = [m.contiguous() for m in mask_row.chunk(r_size, dim=1)]
+-        batch['attention_mask'] = mask_list
+-        set_attention_mask(mask_list)
+-
+-    for key, val in batch.items():
+-        if key != 'attention_mask' and val is not None:
+-            seq_dim = 1
+-            val = val.chunk(r_size, dim=seq_dim)[r_rank].contiguous()
+-            val = val.chunk(u_size, dim=seq_dim)[u_rank].contiguous()
+-            batch[key] = val
+-
+-    return batch
+-
+-
+-def _get_batch_on_this_cp_rank_in_adaptive_cp(batch):
+-    from megatron.training import get_args
+-    args = get_args()
+-    cp_rank = mpu.get_context_parallel_rank()
+-    cp_size = mpu.get_context_parallel_world_size()
+-
+-    attention_mask = get_attention_mask()
+-    if args.adaptive_cp_manually_set_mask_list:
+-        if not args.adaptive_cp_only_reschedule:
+-            raise AssertionError("No sequence remapping allowed if manually set mast list, enable "
+-                                 "--adaptive-cp-only-reschedule")
+-        remapped_seq_order = list(range(args.seq_length))
+-        generate_adaptive_cp_grid_mask_by_user(cp_size)
+-        grid_mask = get_adaptive_cp_grid_mask_by_user()
+-        scheduling = adaptive_reschedule_task(grid_mask, cp_size)
+-        generate_adaptive_cp_mask_list_by_user(remapped_seq_order, scheduling, cp_rank, cp_size)
+-        mask_list = get_adaptive_cp_mask_list_by_user()
+-    else:
+-        if attention_mask is None:
+-            raise AssertionError("Do not use adaptive cp with full mask")
+-        if len(attention_mask.shape) != 2:
+-            raise AssertionError("The fusion attention operator currently only support 2D attention mask.")
+-        from mindspeed.core.context_parallel.utils import adaptive_cp_ops
+-        remapped_seq_order, scheduling = adaptive_cp_ops.get_adaptive_cp_info(attention_mask, cp_size)
+-        mask_list = adaptive_cp_ops.get_mask_list(attention_mask, scheduling, remapped_seq_order, cp_rank, cp_size)
+-
+-    batch['attention_mask'] = mask_list
+-    set_attention_mask(mask_list)
+-    set_scheduling_info(torch.distributed.get_rank(), scheduling)
+-    set_remapped_seq_order(remapped_seq_order)
+-
+-    for key, val in batch.items():
+-        if key != 'attention_mask' and val is not None:
+-            seq_dim = 1
+-            per = val.shape[seq_dim] // cp_size
+-            index = torch.tensor(remapped_seq_order[cp_rank * per:(cp_rank + 1) * per], device=val.device,
+-                                 dtype=torch.int)
+-            val = val.index_select(seq_dim, index)
+-            batch[key] = val
+-    return batch
+-
+-
+-def _get_batch_on_this_cp_rank_in_hybrid_adaptive_cp(batch):
+-    from megatron.training import get_args
+-    args = get_args()
+-    ulys_size = get_context_parallel_for_hybrid_ulysses_world_size()
+-    adap_size = get_context_parallel_for_hybrid_ring_world_size()
+-    ulys_rank = get_context_parallel_for_hybrid_ulysses_rank()
+-    adap_rank = get_context_parallel_for_hybrid_ring_rank()
+-
+-    attention_mask = get_attention_mask()
+-    if args.adaptive_cp_manually_set_mask_list:
+-        if not args.adaptive_cp_only_reschedule:
+-            raise AssertionError("No sequence remapping allowed if manually set mast list, enable "
+-                                 "--adaptive-cp-only-reschedule")
+-        remapped_seq_order = list(range(args.seq_length))
+-        generate_adaptive_cp_grid_mask_by_user(adap_size)
+-        grid_mask = get_adaptive_cp_grid_mask_by_user()
+-        scheduling = adaptive_reschedule_task(grid_mask, adap_size)
+-        generate_adaptive_cp_mask_list_by_user(remapped_seq_order, scheduling, adap_rank, adap_size)
+-        mask_list = get_adaptive_cp_mask_list_by_user()
+-    else:
+-        if attention_mask is None:
+-            raise AssertionError("Do not use adaptive cp with full mask")
+-        if len(attention_mask.shape) != 2:
+-            raise AssertionError("The fusion attention operator currently only support 2D attention mask.")
+-        from mindspeed.core.context_parallel.utils import adaptive_cp_ops
+-        remapped_seq_order, scheduling = adaptive_cp_ops.get_adaptive_cp_info(attention_mask, adap_size)
+-        mask_list = adaptive_cp_ops.get_mask_list(attention_mask, scheduling, remapped_seq_order, adap_rank, adap_size)
+-
+-    batch['attention_mask'] = mask_list
+-    set_scheduling_info(torch.distributed.get_rank(), scheduling)
+-    set_remapped_seq_order(remapped_seq_order)
+-    set_attention_mask(mask_list)
+-
+-    for key, val in batch.items():
+-        if key != 'attention_mask' and val is not None:
+-            seq_dim = 1
+-            per = val.shape[seq_dim] // adap_size // ulys_size
+-            which_per = adap_rank * ulys_size + ulys_rank
+-            index = torch.tensor(remapped_seq_order[which_per * per:(which_per + 1) * per], device=val.device)
+-            val = val.index_select(seq_dim, index)
+-            batch[key] = val
+-    return batch
++#def get_batch_on_this_cp_rank(batch):
++#    """ Slice batch input along sequence dimension into multiple chunks,
++#        which are parallelized across GPUs in a context parallel group.
++#    """
++#
++#    # With causal masking, each token only attends to its prior tokens. Simply split
++#    # sequence into CP chunks can result in severe load imbalance. That's to say, chunks
++#    # at the end of sequence have bigger workload than others. To address this issue,
++#    # we split sequence into 2*CP ranks. Assuming CP=2, we then get 4 chunks, chunk_0
++#    # and chunk_3 are assigned to GPU0, chunk_1 and chunk_2 are assigned to GPU1, so
++#    # that we can get balanced workload among GPUs in a context parallel group.
++#    from megatron.training import get_args
++#
++#    args = get_args()
++#
++#    if args.reset_attention_mask:
++#        position_ids = batch['position_ids']
++#        position_ids = position_ids.transpose(0, 1).contiguous()
++#        set_position_ids(position_ids)
++# 
++#    tp_y_cp_size = args.context_parallel_size * args.tp_y if args.tp_2d else args.context_parallel_size
++#    if not tp_y_cp_size > 1:
++#        return batch
++#
++#    cp_expanded_by_2d_tp = args.tp_y > 1
++#    if args.context_parallel_algo == 'megatron_cp_algo':
++#        if args.cp_attention_mask_type == 'general':
++#            batch = _get_batch_on_this_cp_rank_in_megatron_cp_general(batch)
++#        elif cp_expanded_by_2d_tp:
++#            batch = _get_batch_on_this_tp_y_cp_rank_in_megatron_cp(batch)
++#        else:
++#            batch = _get_batch_on_this_cp_rank_in_megatron_cp(batch)
++#    elif args.context_parallel_algo == 'ulysses_cp_algo':
++#        batch = _get_batch_on_this_cp_rank_in_ulysses_cp(batch)
++#    elif args.context_parallel_algo == 'hybrid_cp_algo':
++#        if args.cp_attention_mask_type == 'general':
++#            batch = _get_batch_on_this_cp_rank_in_hybrid_cp_general(batch)
++#        else:
++#            batch = _get_batch_on_this_cp_rank_in_hybrid_cp(batch)
++#    elif args.context_parallel_algo == 'adaptive_cp_algo':
++#        batch = _get_batch_on_this_cp_rank_in_adaptive_cp(batch)
++#    elif args.context_parallel_algo == 'hybrid_adaptive_cp_algo':
++#        batch = _get_batch_on_this_cp_rank_in_hybrid_adaptive_cp(batch)
++#    return batch
++#
++#
++#def _get_batch_on_this_cp_rank_in_megatron_cp(batch):
++#    cp_rank = mpu.get_context_parallel_rank()
++#    cp_size = mpu.get_context_parallel_world_size()
++#    for key, val in batch.items():
++#        if key == 'attention_mask':
++#            continue
++#        if val is not None:
++#            seq_dim = 1 if key != 'attention_mask' else 2
++#            val = val.view(
++#                *val.shape[0:seq_dim],
++#                2 * cp_size,
++#                val.shape[seq_dim] // (2 * cp_size),
++#                *val.shape[(seq_dim + 1):],
++#            )
++#            index = torch.tensor([cp_rank, (2 * cp_size - cp_rank - 1)], device=val.device)
++#            val = val.index_select(seq_dim, index)
++#            val = val.view(*val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2):])
++#            batch[key] = val
++#
++#    return batch
++#
++#
++#def _get_batch_on_this_cp_rank_in_megatron_cp_general(batch):
++#    cp_rank = mpu.get_context_parallel_rank()
++#    cp_size = mpu.get_context_parallel_world_size()
++#
++#    attention_mask = get_attention_mask()
++#    if attention_mask is not None:
++#        if len(attention_mask.shape) != 2:
++#            raise AssertionError("The fusion attention operator currently only support 2D attention mask.")
++#        seq_dim = 0
++#        mask_row = attention_mask.chunk(cp_size, dim=seq_dim)[cp_rank].contiguous()
++#        from megatron.training import get_args
++#        if get_args().attention_mask_on_cpu:
++#            mask_list = [m.contiguous().npu(non_blocking=True) for m in mask_row.chunk(cp_size, dim=1)]
++#        else:
++#            mask_list = [m.contiguous() for m in mask_row.chunk(cp_size, dim=1)]
++#        batch['attention_mask'] = mask_list
++#        set_attention_mask(mask_list)
++#
++#    for key, val in batch.items():
++#        if key != 'attention_mask' and val is not None:
++#            seq_dim = 1
++#            val = val.chunk(cp_size, dim=seq_dim)[cp_rank].contiguous()
++#            batch[key] = val
++#
++#    return batch
++#
++#
++#def _get_batch_on_this_cp_rank_in_ulysses_cp(batch):
++#    cp_rank = mpu.get_context_parallel_rank()
++#    cp_size = mpu.get_context_parallel_world_size()
++#    for key, val in batch.items():
++#        if key == 'attention_mask':
++#            continue
++#        if val is not None:
++#            seq_dim = 1 if key != 'attention_mask' else 2
++#            val = val.chunk(cp_size, dim=seq_dim)[cp_rank].contiguous()
++#            batch[key] = val
++#
++#    return batch
++#
++#
++#def _get_batch_on_this_cp_rank_in_hybrid_cp(batch):
++#    u_size = get_context_parallel_for_hybrid_ulysses_world_size()
++#    r_size = get_context_parallel_for_hybrid_ring_world_size()
++#
++#    u_rank = get_context_parallel_for_hybrid_ulysses_rank()
++#    r_rank = get_context_parallel_for_hybrid_ring_rank()
++#
++#    for key, val in batch.items():
++#        if key == 'attention_mask':
++#            continue
++#        if val is not None:
++#            seq_dim = 1 if key != 'attention_mask' else 2
++#            val = val.view(
++#                *val.shape[0:seq_dim],
++#                2 * r_size,
++#                val.shape[seq_dim] // (2 * r_size),
++#                *val.shape[(seq_dim + 1):],
++#            )
++#            index = torch.tensor([r_rank, (2 * r_size - r_rank - 1)], device=val.device)
++#            val = val.index_select(seq_dim, index)
++#            val = val.view(*val.shape[0:seq_dim], -1, *val.shape[(seq_dim + 2):])
++#            val = val.chunk(u_size, dim=seq_dim)[u_rank].contiguous()
++#            batch[key] = val
++#
++#    return batch
++#
++#
++#def _get_batch_on_this_cp_rank_in_hybrid_cp_general(batch):
++#    u_size = get_context_parallel_for_hybrid_ulysses_world_size()
++#    r_size = get_context_parallel_for_hybrid_ring_world_size()
++#
++#    u_rank = get_context_parallel_for_hybrid_ulysses_rank()
++#    r_rank = get_context_parallel_for_hybrid_ring_rank()
++#
++#    attention_mask = get_attention_mask()
++#    if attention_mask is not None:
++#        if len(attention_mask.shape) != 2:
++#            raise AssertionError("The fusion attention operator currently only support 2D attention mask.")
++#        seq_dim = 0
++#        mask_row = attention_mask.chunk(r_size, dim=seq_dim)[r_rank].contiguous()
++#        from megatron.training import get_args
++#        if get_args().attention_mask_on_cpu:
++#            mask_list = [m.contiguous().npu(non_blocking=True) for m in mask_row.chunk(r_size, dim=1)]
++#        else:
++#            mask_list = [m.contiguous() for m in mask_row.chunk(r_size, dim=1)]
++#        batch['attention_mask'] = mask_list
++#        set_attention_mask(mask_list)
++#
++#    for key, val in batch.items():
++#        if key != 'attention_mask' and val is not None:
++#            seq_dim = 1
++#            val = val.chunk(r_size, dim=seq_dim)[r_rank].contiguous()
++#            val = val.chunk(u_size, dim=seq_dim)[u_rank].contiguous()
++#            batch[key] = val
++#
++#    return batch
++#
++#
++#def _get_batch_on_this_cp_rank_in_adaptive_cp(batch):
++#    from megatron.training import get_args
++#    args = get_args()
++#    cp_rank = mpu.get_context_parallel_rank()
++#    cp_size = mpu.get_context_parallel_world_size()
++#
++#    attention_mask = get_attention_mask()
++#    if args.adaptive_cp_manually_set_mask_list:
++#        if not args.adaptive_cp_only_reschedule:
++#            raise AssertionError("No sequence remapping allowed if manually set mast list, enable "
++#                                 "--adaptive-cp-only-reschedule")
++#        remapped_seq_order = list(range(args.seq_length))
++#        generate_adaptive_cp_grid_mask_by_user(cp_size)
++#        grid_mask = get_adaptive_cp_grid_mask_by_user()
++#        scheduling = adaptive_reschedule_task(grid_mask, cp_size)
++#        generate_adaptive_cp_mask_list_by_user(remapped_seq_order, scheduling, cp_rank, cp_size)
++#        mask_list = get_adaptive_cp_mask_list_by_user()
++#    else:
++#        if attention_mask is None:
++#            raise AssertionError("Do not use adaptive cp with full mask")
++#        if len(attention_mask.shape) != 2:
++#            raise AssertionError("The fusion attention operator currently only support 2D attention mask.")
++#        from mindspeed.core.context_parallel.utils import adaptive_cp_ops
++#        remapped_seq_order, scheduling = adaptive_cp_ops.get_adaptive_cp_info(attention_mask, cp_size)
++#        mask_list = adaptive_cp_ops.get_mask_list(attention_mask, scheduling, remapped_seq_order, cp_rank, cp_size)
++#
++#    batch['attention_mask'] = mask_list
++#    set_attention_mask(mask_list)
++#    set_scheduling_info(torch.distributed.get_rank(), scheduling)
++#    set_remapped_seq_order(remapped_seq_order)
++#
++#    for key, val in batch.items():
++#        if key != 'attention_mask' and val is not None:
++#            seq_dim = 1
++#            per = val.shape[seq_dim] // cp_size
++#            index = torch.tensor(remapped_seq_order[cp_rank * per:(cp_rank + 1) * per], device=val.device,
++#                                 dtype=torch.int)
++#            val = val.index_select(seq_dim, index)
++#            batch[key] = val
++#    return batch
++#
++#
++#def _get_batch_on_this_cp_rank_in_hybrid_adaptive_cp(batch):
++#    from megatron.training import get_args
++#    args = get_args()
++#    ulys_size = get_context_parallel_for_hybrid_ulysses_world_size()
++#    adap_size = get_context_parallel_for_hybrid_ring_world_size()
++#    ulys_rank = get_context_parallel_for_hybrid_ulysses_rank()
++#    adap_rank = get_context_parallel_for_hybrid_ring_rank()
++#
++#    attention_mask = get_attention_mask()
++#    if args.adaptive_cp_manually_set_mask_list:
++#        if not args.adaptive_cp_only_reschedule:
++#            raise AssertionError("No sequence remapping allowed if manually set mast list, enable "
++#                                 "--adaptive-cp-only-reschedule")
++#        remapped_seq_order = list(range(args.seq_length))
++#        generate_adaptive_cp_grid_mask_by_user(adap_size)
++#        grid_mask = get_adaptive_cp_grid_mask_by_user()
++#        scheduling = adaptive_reschedule_task(grid_mask, adap_size)
++#        generate_adaptive_cp_mask_list_by_user(remapped_seq_order, scheduling, adap_rank, adap_size)
++#        mask_list = get_adaptive_cp_mask_list_by_user()
++#    else:
++#        if attention_mask is None:
++#            raise AssertionError("Do not use adaptive cp with full mask")
++#        if len(attention_mask.shape) != 2:
++#            raise AssertionError("The fusion attention operator currently only support 2D attention mask.")
++#        from mindspeed.core.context_parallel.utils import adaptive_cp_ops
++#        remapped_seq_order, scheduling = adaptive_cp_ops.get_adaptive_cp_info(attention_mask, adap_size)
++#        mask_list = adaptive_cp_ops.get_mask_list(attention_mask, scheduling, remapped_seq_order, adap_rank, adap_size)
++#
++#    batch['attention_mask'] = mask_list
++#    set_scheduling_info(torch.distributed.get_rank(), scheduling)
++#    set_remapped_seq_order(remapped_seq_order)
++#    set_attention_mask(mask_list)
++#
++#    for key, val in batch.items():
++#        if key != 'attention_mask' and val is not None:
++#            seq_dim = 1
++#            per = val.shape[seq_dim] // adap_size // ulys_size
++#            which_per = adap_rank * ulys_size + ulys_rank
++#            index = torch.tensor(remapped_seq_order[which_per * per:(which_per + 1) * per], device=val.device)
++#            val = val.index_select(seq_dim, index)
++#            batch[key] = val
++#    return batch
+ 
+ 
+ def _broadcast(item):
+@@ -585,4 +585,4 @@ def _scatter_hccl(recv_tensor, send_tensors, source_rank, data_parallel_group):
+             for send in send_part:
+                 send.untyped_storage().resize_(0)
+ 
+-        recv_tensor[start_index:end_index] = recv_part_cpu
+\ No newline at end of file
++        recv_tensor[start_index:end_index] = recv_part_cpu
