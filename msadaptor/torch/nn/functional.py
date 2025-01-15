@@ -466,7 +466,7 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
 def conv3d(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
     if use_pyboost():
         return mindspore.mint.nn.functional.conv3d(input, weight, bias, stride, padding, dilation, groups)
-    raise ValueError("Only mindspore.mint.nn.functional.conv3d is supported.")
+    raise ValueError("Requires mindspore >= 2.3.0 by default, or set into pyboost mode by calling torch.config.set_byboost(True).")
 
 def max_pool2d(input, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False, return_indices=False):
     if use_pyboost():
