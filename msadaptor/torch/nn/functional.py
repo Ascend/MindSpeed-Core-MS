@@ -222,10 +222,9 @@ def log_softmax(input, dim=-1, dtype=None):
     return out
 
 def embedding(input, weight, padding_idx=None, max_norm=None, norm_type=2.0, scale_grad_by_freq=False):
-    #if use_pyboost():
-    #    return mindspore.ops.auto_generate.gen_ops_prim.embedding_op(input, weight, padding_idx, max_norm, norm_type, scale_grad_by_freq)
-    #return ops.gather(weight, input, 0)
-    return mindspore.mint.nn.functional.embedding(input, weight, padding_idx, max_norm, norm_type, scale_grad_by_freq)
+    if use_pyboost():
+        return mindspore.mint.nn.functional.embedding(input, weight, padding_idx, max_norm, norm_type, scale_grad_by_freq)
+    return ops.gather(weight, input, 0)
 
 def rms_norm(input, weight, eps=1e-5):
     return ops.rms_norm(input, weight, eps)
@@ -463,6 +462,11 @@ def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
         pad_mode = padding
 
     return ops.conv2d(input, weight, bias=bias, stride=stride, pad_mode=pad_mode, padding=padding, dilation=dilation, groups=groups)
+
+def conv3d(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+    if use_pyboost():
+        return mindspore.mint.nn.functional.conv3d(input, weight, bias, stride, padding, dilation, groups)
+    raise ValueError("Only mindspore.mint.nn.functional.conv3d is supported.")
 
 def max_pool2d(input, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False, return_indices=False):
     if use_pyboost():
