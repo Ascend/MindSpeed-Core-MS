@@ -1,0 +1,775 @@
+diff --git a/mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py b/mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py
+index 5836616c..51565761 100644
+--- a/mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py
++++ b/mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py
+@@ -21,7 +21,7 @@ def apply_llama3_scaling(freqs: torch.Tensor):
+     high_freq_wavelen = original_length / args.high_freq_factor
+     new_freqs = []
+     for freq in freqs:
+-        wavelen = 2 * math.pi / freq
++        wavelen = 2 / freq * math.pi
+         if wavelen < high_freq_wavelen:
+             new_freqs.append(freq)
+         elif wavelen > low_freq_wavelen:
+@@ -51,7 +51,7 @@ def apply_yarn_scaling(freqs: torch.Tensor):
+     )
+ 
+     inv_freq_mask = 1.0 - yarn_linear_ramp_mask(low, high, dim // 2).to(
+-        device=freqs.device, dtype=torch.float32
++        dtype=torch.float32
+     )
+ 
+     inv_freq = freq_inter * (1 - inv_freq_mask) + freq_extra * inv_freq_mask
+@@ -183,7 +183,6 @@ def apply_rotary_pos_emb_bshd(t: Tensor, freqs: Tensor, rotary_interleaved: bool
+         t = torch_npu.npu_rotary_mul(t, cos_, sin_).to(t.dtype)
+     else:
+         t = (t * cos_) + (_rotate_half(t, rotary_interleaved) * sin_)
+-    
+     return torch.cat((t, t_pass), dim=-1)
+ 
+ 
+diff --git a/mindspeed_llm/legacy/data/data_samplers.py b/mindspeed_llm/legacy/data/data_samplers.py
+index 9265f7b8..f43bbddb 100644
+--- a/mindspeed_llm/legacy/data/data_samplers.py
++++ b/mindspeed_llm/legacy/data/data_samplers.py
+@@ -73,11 +73,9 @@ def build_pretraining_data_loader(dataset, consumed_samples):
+         )
+     else:
+         collator = None
+-
+     # Torch dataloader.
+     return torch.utils.data.DataLoader(dataset,
+                                        batch_sampler=batch_sampler,
+                                        num_workers=args.num_workers,
+-                                       generator=torch.Generator().manual_seed(args.seed),
+                                        collate_fn=collator,
+-                                       pin_memory=True)
++                                       pin_memory=False)
+diff --git a/mindspeed_llm/tasks/checkpoint/loader_hf.py b/mindspeed_llm/tasks/checkpoint/loader_hf.py
+index 5014a252..1a44c727 100644
+--- a/mindspeed_llm/tasks/checkpoint/loader_hf.py
++++ b/mindspeed_llm/tasks/checkpoint/loader_hf.py
+@@ -341,6 +341,9 @@ def _load_checkpoint(model_provider, queue, args):
+ 
+     def queue_put(name, msg):
+         logger.info(f"sending {name}")
++        for k, v in msg.items():
++            if isinstance(v, torch.Tensor):
++                msg[k] = v.asnumpy()
+         msg["name"] = name
+         queue.put(msg)
+ 
+diff --git a/mindspeed_llm/tasks/checkpoint/models.py b/mindspeed_llm/tasks/checkpoint/models.py
+index 70ee09b1..695fbde1 100644
+--- a/mindspeed_llm/tasks/checkpoint/models.py
++++ b/mindspeed_llm/tasks/checkpoint/models.py
+@@ -35,6 +35,26 @@ def tensor_info(tensor):
+     return f"shape: {shape} mean_val: {mean_val} min_val: {min_val} max_val: {max_val}"
+ 
+ 
++class FakesubModule():
++    def __init__(self, module_name, weight_dict):
++        self.weight = weight_dict.get(f"{module_name}.weight", )
++        self.bias = weight_dict.get(f"{module_name}.bias")
++
++
++class FakeModule():
++    def __init__(self, weight_dicts, module_mapping):
++        self.module_keys = set(map(lambda x: ".".join(x.split(".")[:-1]),weight_dicts.keys()))
++        for module_name in self.module_keys:
++            weight_dict = dict(filter(lambda x : module_name in x[0], weight_dicts.items()))
++            setattr(self, module_name, self.assemodule(module_name, weight_dict))
++
++    def assemodule(self, module_name, weight_dict):
++        return FakesubModule(module_name, weight_dict)
++    
++    def to(self, model_type):
++        return self
++
++
+ class ModelBase(abc.ABC):
+     def __init__(self, args_cmd=None):
+         self.args_cmd = args_cmd
+@@ -352,6 +372,7 @@ class HuggingfaceModel(ModelBase):
+         super(HuggingfaceModel, self).__init__(args_cmd)
+         self.initialize_args()
+         self.layers_self_attention_linear_qkv_caches = {"layer_idx": -1, "weight": None, "bias": None}
++        self.__register_functions()
+ 
+     def initialize_args(self):
+         # Read huggingface args.
+@@ -390,14 +411,87 @@ class HuggingfaceModel(ModelBase):
+         self.args.add_dense_bias = self.args_cmd.add_dense_bias
+         self.args.post_norm = self.args_cmd.post_norm
+ 
++    def __register_functions(self):
++        self.get_module_mapping()
++
++        def _get_obj(self, value, **kwargs):
++            self.update_kwargs_idx(**kwargs)
++            obj = self.get_model_item(**kwargs)
++            if "layer_idx" in value:
++                attr_idx = self.kwargs_idx["layer_idx"]
++                value = value.replace("[layer_idx]", f".{attr_idx}")
++            return getattr(obj, value, None)
++
++        def _func_generator_get_module(value):
++            def func(self, **kwargs):
++                return _get_obj(self, value, **kwargs)
++            return func
++
++        def _func_generator_get_weight(value):
++            def func(self, **kwargs):
++                return _get_obj(self, value, **kwargs).weight.data
++            return func
++
++        def _func_generator_get_bias(value):
++            def func(self, **kwargs):
++                return _get_obj(self, value, **kwargs).bias.data
++            return func
++
++        def _func_generator_set_weight(value):
++            def func(self, **kwargs):
++                return _get_obj(self, value, **kwargs).weight.data.copy_(kwargs.get('data'))
++            return func
++
++        def _func_generator_set_module(value):
++            def func(self, **kwargs):
++                return _get_obj(self, value, **kwargs).data.copy_(kwargs.get('data'))
++            return func
++
++        def _func_generator_set_bias(value):
++            def func(self, **kwargs):
++                return _get_obj(self, value, **kwargs).bias.data.copy_(kwargs.get('data'))
++            return func
++
++        def _func_generator_has_module(value):
++            def func(self, **kwargs):
++                # print("self", self)
++                obj = _get_obj(self, value, **kwargs)
++                return True if obj else False
++            return func
++        
++        def _func_generator_has_bias(value):
++            def func(self, **kwargs):
++                bias = getattr(_get_obj(self, value, **kwargs), 'bias', None)
++                return bias is not None
++            return func
++
++        if self.module_mapping:
++            for key, value in self.module_mapping.items():
++                setattr(self, "get_" + key + "_module", _func_generator_get_module(value).__get__(self, ModelBase))
++                setattr(self, "set_" + key + "_module", _func_generator_set_module(value).__get__(self, ModelBase))
++                setattr(self, "get_" + key + "_weight", _func_generator_get_weight(value).__get__(self, ModelBase))
++                setattr(self, "get_" + key + "_bias", _func_generator_get_bias(value).__get__(self, ModelBase))
++                setattr(self, "set_" + key + "_weight", _func_generator_set_weight(value).__get__(self, ModelBase))
++                setattr(self, "set_" + key + "_bias", _func_generator_set_bias(value).__get__(self, ModelBase))
++                setattr(self, "has_" + key + "_module", _func_generator_has_module(value).__get__(self, ModelBase))
++                setattr(self, "has_" + key + "_bias", _func_generator_has_bias(value).__get__(self, ModelBase))
++
+     def get_modules_from_pretrained(self, device_map="cpu", trust_remote_code=True):
+         # Load Huggingface model.
+         if self.args_cmd.save_model_type == "hf":
+             load_dir = self.args_cmd.save_dir
+         else:
+             load_dir = self.args_cmd.load_dir
+-        self.module = [AutoModelForCausalLM.from_pretrained(load_dir, device_map=device_map, trust_remote_code=trust_remote_code, local_files_only=True)]
+-        if hasattr(self.args, "torch_dtype") and self.args.torch_dtype in ["float16", "bfloat16"]:
++        import glob
++        from torch.serialization import safe_load_file
++        hf_model_dict = {}
++        checkpoint_files_path = load_dir + "*.safetensors"
++        checkpoint_files = glob.glob(checkpoint_files_path)
++        for checkpoint_file in checkpoint_files:
++            checkpoint = safe_load_file(checkpoint_file)
++            hf_model_dict.update(checkpoint)
++        self.module = [FakeModule(hf_model_dict, self.module_mapping)]
++        if hasattr(self.args, "torch_dtype") and self.args.torch_dtype in ["float16", "bfloat16"]: #不一样
+             self.module[0] = self.module[0].to(eval(f'torch.{self.args.torch_dtype}'))
+ 
+     def get_module_mapping(self):
+diff --git a/mindspeed_llm/tasks/checkpoint/saver.py b/mindspeed_llm/tasks/checkpoint/saver.py
+index 9d8ac85a..9557ebd9 100644
+--- a/mindspeed_llm/tasks/checkpoint/saver.py
++++ b/mindspeed_llm/tasks/checkpoint/saver.py
+@@ -17,6 +17,7 @@
+ import os
+ import sys
+ import logging as logger
++import numpy as np
+ import torch
+ from megatron.training.checkpointing import save_checkpoint
+ from megatron.core import mpu
+@@ -432,6 +433,10 @@ def save_model_checkpoint(model_provider, queue, args):
+ 
+     def queue_get(name=None):
+         val = queue.get()
++        if isinstance(val, dict):
++            for k, v in val.items():
++                if isinstance(v, np.ndarray):
++                    val[k] = torch.Tensor(v)
+         if val == "exit":
+             logger.error("Loader exited, exiting saver")
+             exit(1)
+diff --git a/mindspeed_llm/tasks/evaluation/eval_impl/ceval_exam.py b/mindspeed_llm/tasks/evaluation/eval_impl/ceval_exam.py
+index f6379824..b931e60f 100644
+--- a/mindspeed_llm/tasks/evaluation/eval_impl/ceval_exam.py
++++ b/mindspeed_llm/tasks/evaluation/eval_impl/ceval_exam.py
+@@ -63,12 +63,7 @@ class CEvalExam(DatasetEval):
+ 
+         for file in os.listdir(self.test_dir):
+             file_path = os.path.join(self.test_dir, file)
+-            
+-            if os.path.exists(file_path):
+-                data_df = pd.read_csv(file_path)
+-            else:
+-                raise FileNotFoundError(f"Error: {file_path} does not exist.")
+-            
++            data_df = pd.read_csv(file_path)
+             subject_name = re.sub(r'(?:_test|_val|_dev)?\.\w+$', "", file)
+             subject_result = {}
+             sample_n += len(data_df)
+diff --git a/mindspeed_llm/tasks/evaluation/eval_impl/gsm8k_eval.py b/mindspeed_llm/tasks/evaluation/eval_impl/gsm8k_eval.py
+index 8cc3243c..34d9c73d 100644
+--- a/mindspeed_llm/tasks/evaluation/eval_impl/gsm8k_eval.py
++++ b/mindspeed_llm/tasks/evaluation/eval_impl/gsm8k_eval.py
+@@ -56,10 +56,6 @@ class Gsm8kEval(DatasetEval):
+ 
+         for file in os.listdir(self.test_dir):
+             file_path = os.path.join(self.test_dir, file)
+-            
+-            if not os.path.exists(file_path):
+-                raise FileNotFoundError(f"Error: {file_path} does not exist.")
+-            
+             with open(file_path, encoding='utf-8') as f:
+                 gsm8k_list = []
+                 for line in f.readlines():
+diff --git a/mindspeed_llm/tasks/evaluation/eval_impl/human_eval.py b/mindspeed_llm/tasks/evaluation/eval_impl/human_eval.py
+index 440cd357..2a3f7b29 100644
+--- a/mindspeed_llm/tasks/evaluation/eval_impl/human_eval.py
++++ b/mindspeed_llm/tasks/evaluation/eval_impl/human_eval.py
+@@ -105,10 +105,6 @@ class HumanEval(DatasetEval):
+ 
+         for file in os.listdir(test_dir):
+             test_code_path = os.path.join(self.test_dir, file)
+-            
+-            if not os.path.exists(test_code_path):
+-                raise FileNotFoundError(f"Error: {test_code_path} does not exist.")
+-
+             with open(test_code_path, 'r') as fp:
+                 for line in fp:
+                     if any(not x.isspace() for x in line):
+diff --git a/mindspeed_llm/tasks/evaluation/eval_impl/mmlu_eval.py b/mindspeed_llm/tasks/evaluation/eval_impl/mmlu_eval.py
+index 3f79eff6..0d1fac16 100644
+--- a/mindspeed_llm/tasks/evaluation/eval_impl/mmlu_eval.py
++++ b/mindspeed_llm/tasks/evaluation/eval_impl/mmlu_eval.py
+@@ -63,12 +63,7 @@ class MmluEval(DatasetEval):
+ 
+         for file in os.listdir(self.test_dir):
+             file_path = os.path.join(self.test_dir, file)
+-            
+-            if os.path.exists(file_path):
+-                data_df = pd.read_csv(file_path, names=['question', 'A', 'B', 'C', 'D', 'answer'])
+-            else:
+-                raise FileNotFoundError(f"Error: {file_path} does not exist.")
+-            
++            data_df = pd.read_csv(file_path, names=['question', 'A', 'B', 'C', 'D', 'answer'])
+             subject_name = re.sub(r'(?:_test|_val|_dev)?\.\w+$', "", file)  # 文件命名规则类似  {subject}_test.csv
+             subject = subject_name.replace("_", " ")
+             subject_result = {}
+diff --git a/mindspeed_llm/tasks/finetune/lora/cc_lora_forward.py b/mindspeed_llm/tasks/finetune/lora/cc_lora_forward.py
+index 619d2639..b54a893a 100644
+--- a/mindspeed_llm/tasks/finetune/lora/cc_lora_forward.py
++++ b/mindspeed_llm/tasks/finetune/lora/cc_lora_forward.py
+@@ -44,17 +44,14 @@ def _reduce_scatter_along_first_dim_async(input_):
+ 
+ 
+ def _reduce_async(input_):
+-    """ALL-Reduce the input tensor across model parallel group async."""
++    if get_tensor_model_parallel_world_size() == 1:
++        return input_, None
++
++    # All-reduce.
+     handle = torch.distributed.all_reduce(input_, group=get_tensor_model_parallel_group(), async_op=True)
+     return input_, handle
+ 
+ 
+-def lora_backward(grad_output_, input_b, grad_ax, input_, scaling):
+-    grad_weight_b = grad_output_.t().matmul(input_b)
+-    grad_weight_a = grad_ax.t().matmul(input_) * scaling
+-    return grad_weight_a, grad_weight_b
+-
+-
+ class _FusedColumnSeqParallelLoRAFunction(torch.autograd.Function):
+     """Accelerate ColumnParallelLoRA with TP and SP."""
+ 
+@@ -62,41 +59,49 @@ class _FusedColumnSeqParallelLoRAFunction(torch.autograd.Function):
+     def forward(ctx, input_, weight, weight_a, weight_b, scaling):
+         """
+         1. gx = gather(x)
+-              a_scale = a * scaling
+-              ax = a_scale * x
+-              W_combine = w + b @ a_scale
+-        2. output = W_combine * gx
++            a_scale = a * scaling
++            ax = a_scale * x
++        2. gax = gather(ax)
++            output = w * gx
++        3. bx = b * gax
++        4. output += bx
+         """
+         total_input, handle = _gather_along_first_dim_async(input_)
+         weight_a_scale = weight_a * scaling
+         ax = torch.matmul(input_, weight_a_scale.t())
+-        weight_combine = weight + weight_b @ weight_a_scale
+         handle.wait()
+-        output = torch.matmul(total_input, weight_combine.t())
+-        ctx.save_for_backward(input_, ax, weight, weight_a_scale, weight_b)
++        total_ax, handle = _gather_along_first_dim_async(ax)
++        output = torch.matmul(total_input, weight.t())
++        handle.wait()
++        bx = torch.matmul(total_ax, weight_b.t())
++        output += bx
++        ctx.save_for_backward(input_, ax, weight, weight_b)
+         ctx.scaling = scaling
+         return output
+ 
+     @staticmethod
+     def backward(ctx, grad_output):
+-        input_, input_b, weight, weight_a_scale, weight_b = ctx.saved_tensors
++        input_, input_b, weight, weight_b = ctx.saved_tensors
+         is_dense = len(grad_output.shape) == 3
+         total_a, handle = _gather_along_first_dim_async(input_b)
+         if is_dense:
+-            grad_output_ = grad_output.reshape(-1, grad_output.shape[-1])
++            grad_output_ = grad_output.view(grad_output.shape[0] * grad_output.shape[1],
++                                            grad_output.shape[2])
+         else:
+             grad_output_ = grad_output
+         grad_gax = grad_output_.matmul(weight_b)
+-        delta_weight = weight_b @ weight_a_scale
+         handle.wait()
+         grad_ax, handle = _reduce_scatter_along_first_dim_async(grad_gax)
+-        grad_input = grad_output.matmul(weight + delta_weight)
++        grad_input = grad_output.matmul(weight)
+         handle.wait()
+         grad_sub_input, handle = _reduce_scatter_along_first_dim_async(grad_input)
+         if is_dense:
+-            input_ = input_.reshape(-1, input_.shape[-1])
+-            total_a = total_a.reshape(-1, total_a.shape[-1])
+-        grad_weight_a, grad_weight_b = lora_backward(grad_output_, total_a, grad_ax, input_, ctx.scaling)
++            x_ = input_.view(input_.shape[0] * input_.shape[1], input_.shape[2])
++            total_a = total_a.view(total_a.shape[0] * total_a.shape[1], total_a.shape[2])
++        else:
++            x_ = input_
++        grad_weight_b = grad_output_.t().matmul(total_a)
++        grad_weight_a = grad_ax.t().matmul(x_) * ctx.scaling
+         handle.wait()
+         return grad_sub_input, None, grad_weight_a, grad_weight_b, None
+ 
+@@ -110,18 +115,18 @@ class _FusedRowSeqParallelLoRAFunction(torch.autograd.Function):
+         1. a_scale = a * scaling
+         2. ax = a_scale * x
+         3. rax = reduce_scatter(ax)
+-              W_combine = w + b @ a_scale
+-        4. output = reduce_scatter(W_combine * x)
++              output = w * x
++        4. output = reduce_scatter(output)
++              bx = b * rax
++        5. output += bx
+         """
+-
+         weight_a_scale = weight_a * scaling
+         ax = torch.matmul(input_, weight_a_scale.t())
+         rax, handle = _reduce_scatter_along_first_dim_async(ax)
+-        weight_combine = weight + weight_b @ weight_a_scale
+-        if input_.dim() == 3:
+-            reshape = True
+-            seq_len, batch, d = input_.shape[:]
+-            input_ = input_.view(seq_len * batch, d)
++        output = torch.matmul(input_, weight.t())
++        handle.wait()
++        output_parallel, handle = _reduce_scatter_along_first_dim_async(output)
++        bx = torch.matmul(rax, weight_b.t())
+         group = get_tensor_model_parallel_group()
+         rank = torch.distributed.get_rank(group)
+         if torch.__version__ > "2.0":
+@@ -135,39 +140,31 @@ class _FusedRowSeqParallelLoRAFunction(torch.autograd.Function):
+         ctx.hcomm_info = hcomm_info
+         ctx.world_size = world_size
+         handle.wait()
+-        output_parallel = torch_npu.npu_mm_reduce_scatter_base(
+-            input_, weight_combine.t(), hcomm_info, world_size, reduce_op="sum", bias=None
+-        )
+-        ctx.save_for_backward(input_, rax, weight, weight_a_scale, weight_b)
++        output_parallel += bx
++        ctx.save_for_backward(input_, rax, weight, weight_b)
+         ctx.scaling = scaling
+-        return output_parallel.view(seq_len // world_size, batch, -1) if reshape else output_parallel
++        return output_parallel
+ 
+     @staticmethod
+     def backward(ctx, grad_output):
+-        """
+-        grad_weight_b = grad_out * scaling * reduce_scatter(a * x)
+-                      = grad_out * (scaling * reduce_scatter(a * x))
+-                      = grad_out * input_b
+-        grad_weight_a = gather(grad_out * scaling * b) * x
+-                      = gather(grad_out) * b * x * scaling
+-        grad_input = gather(grad_out) * w_combine
+-        """
+-
+-        input_, input_b, weight, weight_a_scale, weight_b = ctx.saved_tensors
++        input_, input_b, weight, weight_b = ctx.saved_tensors
+         is_dense = len(grad_output.shape) == 3
+         if is_dense:
+-            grad_output_ = grad_output.reshape(-1, grad_output.shape[-1])
+-            input_b = input_b.reshape(-1, input_b.shape[-1])
+-            input_ = input_.reshape(-1, input_.shape[-1])
++            grad_output_ = grad_output.reshape(
++                grad_output.shape[0] * grad_output.shape[1], grad_output.shape[2]
++            )
++            input_b = input_b.view(input_b.shape[0] * input_b.shape[1], input_b.shape[2])
++            x = input_.view(input_.shape[0] * input_.shape[1], input_.shape[2])
+         else:
+             grad_output_ = grad_output
++            x = input_
+         grad_input, grad_total_output = torch_npu.npu_all_gather_base_mm(
+             grad_output_, weight, ctx.hcomm_info, ctx.world_size, bias=None, gather_index=0, gather_output=True
+         )
++        grad_weight_b = grad_output_.t().matmul(input_b)
+         grad_ax = grad_total_output.matmul(weight_b)
+-        grad_weight_a, grad_weight_b = lora_backward(grad_output_, input_b, grad_ax, input_, ctx.scaling)
+-        grad_input += grad_ax.matmul(weight_a_scale)
+-        grad_input = grad_input.view(-1, grad_output.shape[1], input_.shape[-1])
++        grad_weight_a = grad_ax.t().matmul(x) * ctx.scaling
++        grad_input = grad_input.view_as(input_)
+         return grad_input, None, grad_weight_a, grad_weight_b, None
+ 
+ 
+@@ -180,37 +177,43 @@ class _FusedRowNoSeqParallelLoRAFunction(torch.autograd.Function):
+         1. a_scale = a * scaling
+         2. ax = a_scale * x
+         3. rax = _reduce_async(ax)
+-              output = w * x
++            output = w * x
+         4. output = _reduce_async(output)
+-              bx = b * rax
++            bx = b * rax
+         5. output += bx
++        reduce_from_tensor_model_parallel_region
+         """
+         weight_a_scale = weight_a * scaling
+         ax = torch.matmul(input_, weight_a_scale.t())
+         rax, handle = _reduce_async(ax)
+         output = torch.matmul(input_, weight.t())
+-        handle.wait()
++        if handle is not None:
++            handle.wait()
+         output_parallel, handle = _reduce_async(output)
+         bx = torch.matmul(rax, weight_b.t())
+-        handle.wait()
++        if handle is not None:
++            handle.wait()
+         output_parallel += bx
+-        ctx.save_for_backward(input_, rax, weight, weight_a_scale, weight_b)
++        ctx.save_for_backward(input_, rax, weight, weight_b)
+         ctx.scaling = scaling
+         return output_parallel
+ 
+     @staticmethod
+     def backward(ctx, grad_output):
+-        input_, input_b, weight, weight_a_scale, weight_b = ctx.saved_tensors
+-        if grad_output.dim() == 3:
+-            grad_output_ = grad_output.reshape(-1, grad_output.shape[-1])
+-            input_b = input_b.reshape(-1, input_b.shape[-1])
+-            input_ = input_.reshape(-1, input_.shape[-1])
++        input_, input_b, weight, weight_b = ctx.saved_tensors
++        is_dense = len(grad_output.shape) == 3
++        grad_output_ = grad_output.reshape(
++            grad_output.shape[0] * grad_output.shape[1], grad_output.shape[2]
++        )
++        if is_dense:
++            input_b = input_b.view(input_b.shape[0] * input_b.shape[1], input_b.shape[2])
++            x = input_.view(input_.shape[0] * input_.shape[1], input_.shape[2])
+         else:
+-            grad_output_ = grad_output
++            x = input_
++        grad_weight_b = grad_output_.t().matmul(input_b)
+         grad_ax = grad_output_.matmul(weight_b)
+-        grad_weight_a, grad_weight_b = lora_backward(grad_output_, input_b, grad_ax, input_, ctx.scaling)
++        grad_weight_a = grad_ax.t().matmul(x) * ctx.scaling
+         grad_input = grad_output.matmul(weight)
+-        grad_input += grad_ax.matmul(weight_a_scale).view_as(grad_input)
+         return grad_input, None, grad_weight_a, grad_weight_b, None
+ 
+ 
+@@ -224,70 +227,33 @@ class _FusedColumnNoSeqParallelLoRAFunction(torch.autograd.Function):
+         ax = torch.matmul(input_, weight_a_scale.t())
+         bx = torch.matmul(ax, weight_b.t())
+         output += bx
+-        ctx.save_for_backward(input_, ax, weight, weight_a_scale, weight_b)
++        ctx.save_for_backward(input_, ax, weight, weight_b)
+         ctx.scaling = scaling
+         return output
+ 
+     @staticmethod
+     def backward(ctx, grad_output):
+-        input_, input_b, weight, weight_a_scale, weight_b = ctx.saved_tensors
+-        if grad_output.dim() == 3:
+-            grad_output_ = grad_output.reshape(-1, grad_output.shape[-1])
+-            input_b = input_b.reshape(-1, input_b.shape[-1])
+-            input_ = input_.reshape(-1, input_.shape[-1])
++        input_, input_b, weight, weight_b = ctx.saved_tensors
++        is_dense = len(grad_output.shape) == 3
++        if is_dense:
++            grad_output_ = grad_output.reshape(
++                grad_output.shape[0] * grad_output.shape[1], grad_output.shape[2]
++            )
++            input_b = input_b.view(input_b.shape[0] * input_b.shape[1], input_b.shape[2])
++            x = input_.view(input_.shape[0] * input_.shape[1], input_.shape[2])
+         else:
+             grad_output_ = grad_output
++            x = input_
+         grad_ax = grad_output_.matmul(weight_b)
+         grad_ax, handle = _reduce_async(grad_ax)
+-        grad_input = grad_output.matmul(weight + weight_b @ weight_a_scale)
+-        handle.wait()
++        grad_input = grad_output.matmul(weight)
++        grad_weight_b = grad_output_.t().matmul(input_b)
++        if handle is not None:
++            handle.wait()
+         grad_input, handle = _reduce_async(grad_input)
+-        grad_weight_a, grad_weight_b = lora_backward(grad_output_, input_b, grad_ax, input_, ctx.scaling)
+-        handle.wait()
+-        return grad_input, None, grad_weight_a, grad_weight_b, None
+-
+-
+-class _FusedBaseParallelLoRAFunction(torch.autograd.Function):
+-    """Accelerate ParallelLoRA."""
+-
+-    @staticmethod
+-    def forward(ctx, input_, weight, weight_a, weight_b, scaling):
+-        if input_.dim() == 3:
+-            seq_len, batch, d = input_.shape[:]
+-            seq_size = seq_len * batch
+-        else:
+-            seq_size, d = input_.shape[:]
+-        weight_a_scale = weight_a * scaling
+-        ax = torch.matmul(input_, weight_a_scale.t())
+-        if seq_size < d:
+-            ctx.combine = False
+-            output = torch.matmul(input_, weight.t())
+-            bx = torch.matmul(ax, weight_b.t())
+-            output += bx
+-        else:
+-            ctx.combine = True
+-            weight_combine = weight + weight_b @ weight_a_scale
+-            output = torch.matmul(input_, weight_combine.t())
+-        ctx.save_for_backward(input_, ax, weight_a_scale, weight_b, weight)
+-        ctx.scaling = scaling
+-        return output
+-
+-    @staticmethod
+-    def backward(ctx, grad_output):
+-        input_, input_b, weight_a_scale, weight_b, weight = ctx.saved_tensors
+-        if grad_output.dim() == 3:
+-            grad_output_ = grad_output.reshape(-1, grad_output.shape[-1])
+-            input_b = input_b.reshape(-1, input_b.shape[-1])
+-            input_ = input_.reshape(-1, input_.shape[-1])
+-        else:
+-            grad_output_ = grad_output
+-        grad_ax = grad_output_.matmul(weight_b)
+-        grad_weight_a, grad_weight_b = lora_backward(grad_output_, input_b, grad_ax, input_, ctx.scaling)
+-        if ctx.combine:
+-            grad_input = grad_output.matmul((weight + weight_b @ weight_a_scale))
+-        else:
+-            grad_input = grad_output.matmul(weight)
+-            grad_input += grad_ax.matmul(weight_a_scale).view_as(grad_input)
++        grad_weight_a = grad_ax.t().matmul(x) * ctx.scaling
++        if handle is not None:
++            handle.wait()
+         return grad_input, None, grad_weight_a, grad_weight_b, None
+ 
+ 
+@@ -296,18 +262,18 @@ def column_cc_lora_parallel_linear_forward(input_, base_layer, weight_a, weight_
+     Forward of ColumnParallelLinear with CCLora
+     """
+     weight = base_layer.weight
+-    bias = base_layer.bias if not base_layer.skip_bias_add else None
+-    lora_params = [input_, weight, weight_a, weight_b, scaling]
+-    if base_layer.explicit_expert_comm or get_tensor_model_parallel_world_size() == 1:
+-        output_parallel = _FusedBaseParallelLoRAFunction.apply(*lora_params)
+-    elif base_layer.sequence_parallel:
+-        output_parallel = _FusedColumnSeqParallelLoRAFunction.apply(*lora_params)
++    skip_bias_add, bias = base_layer.skip_bias_add, base_layer.bias
++    sequence_parallel = base_layer.sequence_parallel
++    bias = bias if not skip_bias_add else None
++    if sequence_parallel:
++        output_parallel = _FusedColumnSeqParallelLoRAFunction.apply(input_, weight, weight_a, weight_b, scaling)
+     else:
+-        output_parallel = _FusedColumnNoSeqParallelLoRAFunction.apply(*lora_params)
++        output_parallel = _FusedColumnNoSeqParallelLoRAFunction.apply(input_, weight, weight_a, weight_b, scaling)
+     if bias is not None:
+         output_parallel = output_parallel + bias
+-    output_bias = base_layer.bias if base_layer.skip_bias_add else None
+-    return output_parallel, output_bias
++    output = output_parallel
++    output_bias = bias if skip_bias_add else None
++    return output, output_bias
+ 
+ 
+ def row_cc_lora_parallel_linear_forward(input_, base_layer, weight_a, weight_b, scaling):
+@@ -316,13 +282,11 @@ def row_cc_lora_parallel_linear_forward(input_, base_layer, weight_a, weight_b,
+     """
+     weight = base_layer.weight
+     skip_bias_add, bias = base_layer.skip_bias_add, base_layer.bias
+-    lora_params = [input_, weight, weight_a, weight_b, scaling]
+-    if base_layer.explicit_expert_comm or get_tensor_model_parallel_world_size() == 1:
+-        output_ = _FusedBaseParallelLoRAFunction.apply(*lora_params)
+-    elif base_layer.sequence_parallel:
+-        output_ = _FusedRowSeqParallelLoRAFunction.apply(*lora_params)
++    sequence_parallel = base_layer.sequence_parallel
++    if sequence_parallel:
++        output_ = _FusedRowSeqParallelLoRAFunction.apply(input_, weight, weight_a, weight_b, scaling)
+     else:
+-        output_ = _FusedRowNoSeqParallelLoRAFunction.apply(*lora_params)
++        output_ = _FusedRowNoSeqParallelLoRAFunction.apply(input_, weight, weight_a, weight_b, scaling)
+     if not skip_bias_add:
+         output = (output_ + bias) if bias is not None else output_
+         output_bias = None
+diff --git a/mindspeed_llm/tasks/finetune/lora/lora_moe.py b/mindspeed_llm/tasks/finetune/lora/lora_moe.py
+index ccaf5e88..d9b7bb99 100644
+--- a/mindspeed_llm/tasks/finetune/lora/lora_moe.py
++++ b/mindspeed_llm/tasks/finetune/lora/lora_moe.py
+@@ -134,8 +134,11 @@ class LoraParallelLinearMoE(nn.Module, LoraLayer):
+         weight = getattr(self.get_base_layer(), "weight", None)
+         if weight is not None:
+             # the layer is already completely initialized, this is an update
+-            if weight.dtype.is_floating_point or weight.dtype.is_complex:
+-                self.to(weight.device, dtype=weight.dtype)
++            floating_point_list = [torch.float64, torch.float32, torch.float16, torch.bfloat16]
++            # if weight.dtype.is_floating_point or weight.dtype.is_complex:
++            if weight.dtype in floating_point_list or weight.dtype.is_complex:
++                # self.to(weight.device, dtype=weight.dtype)
++                self.to(dtype=weight.dtype)
+             else:
+                 self.to(weight.device)
+         self.set_adapter(self.active_adapters)
+diff --git a/mindspeed_llm/tasks/megatron_adaptor.py b/mindspeed_llm/tasks/megatron_adaptor.py
+index b769a246..1191a8ab 100644
+--- a/mindspeed_llm/tasks/megatron_adaptor.py
++++ b/mindspeed_llm/tasks/megatron_adaptor.py
+@@ -20,12 +20,6 @@ import argparse
+ import torch
+ 
+ 
+-def dummy_jit(fn):
+-    def wrapper(*args, **kwargs):
+-        return fn(*args, **kwargs)
+-    return wrapper
+-
+-
+ class MegatronAdaptation:
+     """
+         A module manager supports adaptation registration, application and execution.
+@@ -96,7 +90,7 @@ class MegatronAdaptation:
+         from mindspeed.megatron_adaptor import te_adaptation, apex_adaptation, torch_adaptation
+ 
+         # For torch >= 2.2.0
+-        torch.compile = torch.jit.script
++        # torch.compile = torch.jit.script
+ 
+         te_adaptation(MindSpeedPatchesManager)
+         apex_adaptation(MindSpeedPatchesManager)
+@@ -143,7 +137,6 @@ class CoreAdaptation(MegatronAdaptationABC):
+         self.patch_utils()
+ 
+     def patch_fusions(self):
+-        import megatron.core
+         from mindspeed.core.fusions.fused_layer_norm import (FusedLayerNormAffineFunction, FastLayerNormFN)
+         from mindspeed.core.fusions.fused_softmax import (is_kernel_available, ScaledUpperTriangMaskedSoftmax,
+                                                           ScaledMaskedSoftmax, ScaledSoftmax, forward_fused_softmax)
+@@ -170,8 +163,6 @@ class CoreAdaptation(MegatronAdaptationABC):
+         MegatronAdaptation.register('megatron.core.fusions.fused_bias_swiglu.BiasSwiGLUFunction',
+                                     BiasSwiGLUFunction)
+ 
+-        megatron.core.jit.jit_fuser = dummy_jit
+-
+     def patch_core_models(self):
+         from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
+         from mindspeed.core.models.common.embeddings.rotary_pos_embedding import get_pos_emb_on_this_cp_rank
+@@ -238,10 +229,10 @@ class CoreAdaptation(MegatronAdaptationABC):
+             transformer_block_checkpointed_forward_wrapper)
+ 
+     def patch_core_transformers(self):
+-        from mindspeed.core.transformer.moe.token_dispatcher import allgather_token_permutation, \
+-            allgather_token_unpermutation
+-        from mindspeed.core.transformer.moe.grouped_gemm_util import Ops, grouped_gemm_is_available, \
+-            get_device_capability
++        # from mindspeed.core.transformer.moe.token_dispatcher import allgather_token_permutation, \
++        #     allgather_token_unpermutation
++        # from mindspeed.core.transformer.moe.grouped_gemm_util import Ops, grouped_gemm_is_available, \
++        #     get_device_capability
+         from mindspeed.core.transformer.transformer import core_mlp_forward_wrapper
+ 
+         from ..core.transformer.moe.moe_layer import moe_layer_init_wrapper, moe_layer_forward
+@@ -251,7 +242,7 @@ class CoreAdaptation(MegatronAdaptationABC):
+                             TransformerLayerSubmodules,
+                             transformer_layer_forward, get_num_layers_to_build_wrapper,
+                             transformer_block_init_wrapper, transformer_block_forward, core_mlp_init)
+-        MegatronAdaptation.register('torch.cuda.get_device_capability', get_device_capability)
++        # MegatronAdaptation.register('torch.cuda.get_device_capability', get_device_capability)
+         MegatronAdaptation.register('megatron.core.transformer.transformer_block.TENorm', PTNorm)
+         MegatronAdaptation.register('megatron.core.transformer.moe.router.TopKRouter.routing', topk_router_routing)
+         MegatronAdaptation.register('megatron.core.transformer.moe.router.TopKRouter.forward', topk_router_forward)
+@@ -264,9 +255,9 @@ class CoreAdaptation(MegatronAdaptationABC):
+         MegatronAdaptation.register('megatron.core.transformer.moe.router.z_loss_func', z_loss_func)
+         MegatronAdaptation.register('megatron.core.transformer.transformer_block.get_num_layers_to_build',
+                                     get_num_layers_to_build_wrapper)
+-        MegatronAdaptation.register('megatron.core.transformer.moe.grouped_gemm_util.ops', Ops)
+-        MegatronAdaptation.register('megatron.core.transformer.moe.grouped_gemm_util.grouped_gemm_is_available',
+-                                    grouped_gemm_is_available)
++        # MegatronAdaptation.register('megatron.core.transformer.moe.grouped_gemm_util.ops', Ops)
++        # MegatronAdaptation.register('megatron.core.transformer.moe.grouped_gemm_util.grouped_gemm_is_available',
++        #                             grouped_gemm_is_available)
+ 
+         # Transformer block
+         MegatronAdaptation.register('megatron.core.transformer.transformer_block.TransformerBlock.__init__',
+@@ -320,11 +311,11 @@ class CoreAdaptation(MegatronAdaptationABC):
+                     MoEAlltoAllTokenDispatcher)
+ 
+         # For groupMLP especially deepseek
+-        from mindspeed.core.transformer.moe.experts import groupedmlp_init_wrapper, groupedmlp_forward_wrapper
+-        MegatronAdaptation.register('megatron.core.transformer.moe.experts.GroupedMLP.__init__',
+-                                    groupedmlp_init_wrapper)
+-        MegatronAdaptation.register('megatron.core.transformer.moe.experts.GroupedMLP.forward',
+-                                    groupedmlp_forward_wrapper)
++        # from mindspeed.core.transformer.moe.experts import groupedmlp_init_wrapper, groupedmlp_forward_wrapper
++        # MegatronAdaptation.register('megatron.core.transformer.moe.experts.GroupedMLP.__init__',
++        #                             groupedmlp_init_wrapper)
++        # MegatronAdaptation.register('megatron.core.transformer.moe.experts.GroupedMLP.forward',
++                                    # groupedmlp_forward_wrapper)
+ 
+     def patch_pipeline_parallel(self):
+         from ..core.pipeline_parallel.p2p_communication import _batched_p2p_ops
+@@ -345,15 +336,15 @@ class CoreAdaptation(MegatronAdaptationABC):
+     def patch_tensor_parallel(self):
+         from mindspeed.core.tensor_parallel.layers import vocab_parallel_embedding_forward
+         from mindspeed.core.tensor_parallel.random import _set_cuda_rng_state
+-        from mindspeed.core.tensor_parallel.cross_entropy import vocab_parallel_cross_entropy_forward
++        # from mindspeed.core.tensor_parallel.cross_entropy import vocab_parallel_cross_entropy_forward
+         from ..core import vocab_embedding_forward_wrapper, vocab_embedding_init_wrapper, checkpoint_forward_wrapper, checkpoint_backward_wrapper
+ 
+         # default_generators need replace after set_device
+         MegatronAdaptation.register('megatron.core.tensor_parallel.random._set_cuda_rng_state', _set_cuda_rng_state)
+         # change masked_target for better performance
+-        MegatronAdaptation.register(
+-            'megatron.core.tensor_parallel.cross_entropy._VocabParallelCrossEntropy.forward',
+-            vocab_parallel_cross_entropy_forward)
++        # MegatronAdaptation.register(
++        #     'megatron.core.tensor_parallel.cross_entropy._VocabParallelCrossEntropy.forward',
++        #     vocab_parallel_cross_entropy_forward)
+         MegatronAdaptation.register('megatron.core.tensor_parallel.layers.VocabParallelEmbedding.forward',
+                                     vocab_parallel_embedding_forward)
+         MegatronAdaptation.register('megatron.core.tensor_parallel.layers.VocabParallelEmbedding.forward',
