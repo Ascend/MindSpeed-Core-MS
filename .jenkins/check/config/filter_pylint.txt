@@ -1,3 +1,1 @@
-"mindspeed-core-ms/mindspeed_ms/legacy/model/gpt_model.py"    "unused-argument"
-"mindspeed-core-ms/mindspeed_ms/training/tokenizer"
-"mindspeed-core-ms/mindspeed_ms/core/datasets"
+"mindspeed-core-ms/msadaptor/"
