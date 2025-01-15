@@ -1,0 +1,215 @@
+diff --git a/src/peft/__init__.py b/src/peft/__init__.py
+index 4043e74..425f565 100644
+--- a/src/peft/__init__.py
++++ b/src/peft/__init__.py
+@@ -53,8 +53,6 @@ from .tuners import (
+     LoraModel,
+     LoHaConfig,
+     LoHaModel,
+-    LoKrConfig,
+-    LoKrModel,
+     IA3Config,
+     IA3Model,
+     AdaLoraConfig,
+diff --git a/src/peft/mapping.py b/src/peft/mapping.py
+index f34bdb5..1db77c0 100644
+--- a/src/peft/mapping.py
++++ b/src/peft/mapping.py
+@@ -38,8 +38,6 @@ from .tuners import (
+     IA3Model,
+     LoHaConfig,
+     LoHaModel,
+-    LoKrConfig,
+-    LoKrModel,
+     LoraConfig,
+     LoraModel,
+     MultitaskPromptTuningConfig,
+@@ -72,7 +70,6 @@ PEFT_TYPE_TO_CONFIG_MAPPING: Dict[str, PeftConfig] = {
+     "P_TUNING": PromptEncoderConfig,
+     "LORA": LoraConfig,
+     "LOHA": LoHaConfig,
+-    "LOKR": LoKrConfig,
+     "ADALORA": AdaLoraConfig,
+     "IA3": IA3Config,
+     "MULTITASK_PROMPT_TUNING": MultitaskPromptTuningConfig,
+@@ -82,7 +79,6 @@ PEFT_TYPE_TO_CONFIG_MAPPING: Dict[str, PeftConfig] = {
+ PEFT_TYPE_TO_TUNER_MAPPING = {
+     "LORA": LoraModel,
+     "LOHA": LoHaModel,
+-    "LOKR": LoKrModel,
+     "ADALORA": AdaLoraModel,
+     "IA3": IA3Model,
+     "OFT": OFTModel,
+diff --git a/src/peft/mixed_model.py b/src/peft/mixed_model.py
+index b22c1ad..a1fb693 100644
+--- a/src/peft/mixed_model.py
++++ b/src/peft/mixed_model.py
+@@ -20,7 +20,7 @@ from contextlib import contextmanager
+ from typing import Any, Optional, Union
+ 
+ import torch
+-from accelerate.hooks import remove_hook_from_submodules
++#from accelerate.hooks import remove_hook_from_submodules
+ from torch import nn
+ from transformers.utils import PushToHubMixin
+ 
+@@ -32,7 +32,6 @@ from .tuners import (
+     AdaLoraModel,
+     IA3Model,
+     LoHaModel,
+-    LoKrModel,
+     LoraModel,
+     MixedModel,
+     OFTModel,
+@@ -43,7 +42,6 @@ from .utils import PeftType, _set_adapter, _set_trainable
+ PEFT_TYPE_TO_MODEL_MAPPING = {
+     PeftType.LORA: LoraModel,
+     PeftType.LOHA: LoHaModel,
+-    PeftType.LOKR: LoKrModel,
+     PeftType.ADALORA: AdaLoraModel,
+     PeftType.IA3: IA3Model,
+     PeftType.OFT: OFTModel,
+diff --git a/src/peft/peft_model.py b/src/peft/peft_model.py
+index d6282ba..0118598 100644
+--- a/src/peft/peft_model.py
++++ b/src/peft/peft_model.py
+@@ -26,9 +26,9 @@ from typing import Any, Dict, List, Optional, Union
+ import packaging.version
+ import torch
+ import transformers
+-from accelerate import dispatch_model, infer_auto_device_map
+-from accelerate.hooks import AlignDevicesHook, add_hook_to_module, remove_hook_from_submodules
+-from accelerate.utils import get_balanced_memory
++#from accelerate import dispatch_model, infer_auto_device_map
++#from accelerate.hooks import AlignDevicesHook, add_hook_to_module, remove_hook_from_submodules
++#from accelerate.utils import get_balanced_memory
+ from huggingface_hub import ModelCard, ModelCardData, hf_hub_download
+ from safetensors.torch import save_file as safe_save_file
+ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+@@ -43,7 +43,6 @@ from .tuners import (
+     AdaptionPromptModel,
+     IA3Model,
+     LoHaModel,
+-    LoKrModel,
+     LoraModel,
+     MultitaskPromptEmbedding,
+     OFTModel,
+@@ -73,7 +72,6 @@ from .utils import (
+ PEFT_TYPE_TO_MODEL_MAPPING = {
+     PeftType.LORA: LoraModel,
+     PeftType.LOHA: LoHaModel,
+-    PeftType.LOKR: LoKrModel,
+     PeftType.PROMPT_TUNING: PromptEmbedding,
+     PeftType.P_TUNING: PromptEncoder,
+     PeftType.PREFIX_TUNING: PrefixEncoder,
+diff --git a/src/peft/tuners/__init__.py b/src/peft/tuners/__init__.py
+index 9211cfb..5132d91 100644
+--- a/src/peft/tuners/__init__.py
++++ b/src/peft/tuners/__init__.py
+@@ -20,7 +20,7 @@
+ from .adaption_prompt import AdaptionPromptConfig, AdaptionPromptModel
+ from .lora import LoraConfig, LoraModel, LoftQConfig
+ from .loha import LoHaConfig, LoHaModel
+-from .lokr import LoKrConfig, LoKrModel
++#from .lokr import LoKrConfig, LoKrModel
+ from .ia3 import IA3Config, IA3Model
+ from .adalora import AdaLoraConfig, AdaLoraModel
+ from .p_tuning import PromptEncoder, PromptEncoderConfig, PromptEncoderReparameterizationType
+diff --git a/src/peft/tuners/mixed/model.py b/src/peft/tuners/mixed/model.py
+index 24bdb9f..3cdad0e 100644
+--- a/src/peft/tuners/mixed/model.py
++++ b/src/peft/tuners/mixed/model.py
+@@ -20,7 +20,8 @@ from typing import Any, Optional, Union
+ from torch import nn
+ from tqdm import tqdm
+ 
+-from peft.tuners import adalora, loha, lokr, lora, oft
++from peft.tuners import lora
++#from peft.tuners import adalora, loha, lokr, lora, oft
+ from peft.tuners.tuners_utils import BaseTuner, BaseTunerLayer, check_target_module_exists
+ from peft.utils import (
+     TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING,
+@@ -33,10 +34,12 @@ from peft.utils import (
+ 
+ # Collection of constants used for all tuners
+ COMPATIBLE_TUNER_TYPES = (PeftType.LORA, PeftType.LOHA, PeftType.LOKR, PeftType.ADALORA, PeftType.OFT)
+-PREFIXES = [lora.LoraModel.prefix, lokr.LoKrModel.prefix, loha.LoHaModel.prefix, oft.OFTModel.prefix]
+-Configs = Union[lora.LoraConfig, loha.LoHaConfig, lokr.LoKrConfig, adalora.AdaLoraConfig, oft.OFTConfig]
+-Layers = (lora.layer.LoraLayer, loha.layer.LoHaLayer, lokr.layer.LoKrLayer, adalora.layer.AdaLoraLayer, oft.OFTLayer)
+-
++#PREFIXES = [lora.LoraModel.prefix, lokr.LoKrModel.prefix, loha.LoHaModel.prefix, oft.OFTModel.prefix]
++#Configs = Union[lora.LoraConfig, loha.LoHaConfig, lokr.LoKrConfig, adalora.AdaLoraConfig, oft.OFTConfig]
++#Layers = (lora.layer.LoraLayer, loha.layer.LoHaLayer, lokr.layer.LoKrLayer, adalora.layer.AdaLoraLayer, oft.OFTLayer)
++PREFIXES = [lora.LoraModel.prefix]
++Configs = Union[lora.LoraConfig]
++Layers = (lora.layer.LoraLayer)
+ 
+ class MixedModel(BaseTuner):
+     """
+@@ -87,6 +90,12 @@ class MixedModel(BaseTuner):
+         *args: Any,
+         **kwargs: Any,
+     ) -> None:
++        
++        if isinstance(config, lora.LoraConfig):
++            lora.LoraModel._create_and_replace(self, config, *args, **kwargs)
++        else:
++            raise ValueError(f"Unsupported config type {type(config)}, should be one of {COMPATIBLE_TUNER_TYPES}.")
++        ''' 
+         if isinstance(config, adalora.AdaLoraConfig):
+             adalora.AdaLoraModel._create_and_replace(self, config, *args, **kwargs)
+         elif isinstance(config, lora.LoraConfig):
+@@ -97,8 +106,10 @@ class MixedModel(BaseTuner):
+             lokr.LoKrModel._create_and_replace(self, config, *args, **kwargs)
+         elif isinstance(config, oft.OFTConfig):
+             oft.OFTModel._create_and_replace(self, config, *args, **kwargs)
++        
+         else:
+             raise ValueError(f"Unsupported config type {type(config)}, should be one of {COMPATIBLE_TUNER_TYPES}.")
++        '''
+ 
+     def _replace_module(self, parent, child_name, new_module, child) -> None:
+         setattr(parent, child_name, new_module)
+@@ -164,7 +175,12 @@ class MixedModel(BaseTuner):
+         loaded_in_4bit = kwargs.pop("loaded_in_4bit", False)
+         if loaded_in_8bit or loaded_in_4bit:
+             raise ValueError(f"8bit and 4bit quantization not supported for {config.peft_type.value} (yet).")
+-
++        
++        if isinstance(config, lora.LoraConfig):
++            new_module = lora.LoraModel._create_new_module(config, adapter_name, target, **kwargs)
++        else:
++            raise ValueError(f"Unknown config type {type(config)}, should be one of {COMPATIBLE_TUNER_TYPES}.")
++        '''
+         if isinstance(config, adalora.AdaLoraConfig):
+             new_module = adalora.AdaLoraModel._create_new_module(config, adapter_name, target, **kwargs)
+         elif isinstance(config, lora.LoraConfig):
+@@ -175,8 +191,10 @@ class MixedModel(BaseTuner):
+             new_module = lokr.LoKrModel._create_new_module(config, adapter_name, target, **kwargs)
+         elif isinstance(config, oft.OFTConfig):
+             new_module = oft.OFTModel._create_new_module(config, adapter_name, target, **kwargs)
++        
+         else:
+             raise ValueError(f"Unknown config type {type(config)}, should be one of {COMPATIBLE_TUNER_TYPES}.")
++        '''
+         return new_module
+ 
+     def _set_adapter_layers(self, enabled=True):
+diff --git a/src/peft/utils/other.py b/src/peft/utils/other.py
+index 73196c0..61b5371 100644
+--- a/src/peft/utils/other.py
++++ b/src/peft/utils/other.py
+@@ -17,10 +17,10 @@ import inspect
+ import warnings
+ from typing import Optional, Tuple
+ 
+-import accelerate
++#import accelerate
+ import torch
+-from accelerate.hooks import add_hook_to_module, remove_hook_from_module
+-from accelerate.utils import is_npu_available, is_xpu_available
++#from accelerate.hooks import add_hook_to_module, remove_hook_from_module
++#from accelerate.utils import is_npu_available, is_xpu_available
+ from safetensors.torch import storage_ptr, storage_size
+ 
+ from ..import_utils import is_auto_gptq_available, is_torch_tpu_available
