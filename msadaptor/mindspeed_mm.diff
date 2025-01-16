@@ -469,19 +469,6 @@ index 484fc9e..3a643d5 100644
          self.model = automodel.from_pretrained(**config)
  
      def get_model(self):
-diff --git a/mindspeed_mm/models/vision/vision_encoders/__init__.py b/mindspeed_mm/models/vision/vision_encoders/__init__.py
-index 23d51b9..927f550 100644
---- a/mindspeed_mm/models/vision/vision_encoders/__init__.py
-+++ b/mindspeed_mm/models/vision/vision_encoders/__init__.py
-@@ -1,4 +1,4 @@
- from .clip_vit_model import CLIPViT
--from .qwen2vl_vit_model import Qwen2VLViT
-+# from .qwen2vl_vit_model import Qwen2VLViT
- 
--__all__ = ["CLIPViT", "Qwen2VLViT"]
-\ No newline at end of file
-+__all__ = ["CLIPViT"]
-\ No newline at end of file
 diff --git a/mindspeed_mm/models/vision/vision_encoders/internvit_model.py b/mindspeed_mm/models/vision/vision_encoders/internvit_model.py
 index 4b70577..15dcd38 100644
 --- a/mindspeed_mm/models/vision/vision_encoders/internvit_model.py
@@ -499,47 +486,32 @@ diff --git a/mindspeed_mm/models/vision/vision_model.py b/mindspeed_mm/models/vi
 index fa695cb..c01f7f1 100644
 --- a/mindspeed_mm/models/vision/vision_model.py
 +++ b/mindspeed_mm/models/vision/vision_model.py
-@@ -7,23 +7,23 @@ from megatron.core.transformer.spec_utils import ModuleSpec
- 
+@@ -7,21 +7,21 @@ from megatron.core.transformer.spec_utils import ModuleSpec
+
  from mindspeed_mm.models.common.module import MultiModalModule
  from .vision_encoders.clip_vit_model import CLIPViT
 -from .vision_encoders.internvit_model import InternViT
--from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
--from .projectors.multimodal_projector import MultimodalProjector
--from .projectors.internvl_mlp import InternVLMLP
--
--
--VISION_ENCODER_MAPPINGS = {
--    "clip": CLIPViT,
--    "InternViT": InternViT,
--    "qwen2vit": Qwen2VLViT,
--}
--
--VISION_PROJECTION_MAPPINGS = {
--    "mlp": MultimodalProjector,
--    "InternVLMLP": InternVLMLP,
--    "lnmlp": MultimodalProjector,
--}
 +# from .vision_encoders.internvit_model import InternViT
-+# from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
-+# from .projectors.multimodal_projector import MultimodalProjector
+ from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
+ from .projectors.multimodal_projector import MultimodalProjector
+-from .projectors.internvl_mlp import InternVLMLP
 +# from .projectors.internvl_mlp import InternVLMLP
-+
-+
-+# VISION_ENCODER_MAPPINGS = {
-+#     "clip": CLIPViT,
-+#     "InternViT": InternViT,
-+#     "qwen2vit": Qwen2VLViT,
-+# }
-+
-+# VISION_PROJECTION_MAPPINGS = {
-+#     "mlp": MultimodalProjector,
-+#     "InternVLMLP": InternVLMLP,
-+#     "lnmlp": MultimodalProjector,
-+# }
- 
- 
- class VisionModel(MultiModalModule):
+
+
+ VISION_ENCODER_MAPPINGS = {
+     "clip": CLIPViT,
+-    "InternViT": InternViT,
++    #"InternViT": InternViT,
+     "qwen2vit": Qwen2VLViT,
+ }
+
+ VISION_PROJECTION_MAPPINGS = {
+     "mlp": MultimodalProjector,
+-    "InternVLMLP": InternVLMLP,
++    #"InternVLMLP": InternVLMLP,
+     "lnmlp": MultimodalProjector,
+ }
+
 diff --git a/mindspeed_mm/patchs/diffusers_patches.py b/mindspeed_mm/patchs/diffusers_patches.py
 index 96e1961..d259f1b 100644
 --- a/mindspeed_mm/patchs/diffusers_patches.py
@@ -606,6 +578,15 @@ index beae077..af1bd4d 100644
          return dtype
      dtype_mapping = {
          "int32": torch.int32,
+@@ -100,7 +100,7 @@ def cast_tuple(t, length=1):
+
+
+ def quick_gelu(x: torch.Tensor) -> torch.Tensor:
+-    return x * torch.sigmoid(1.702 * x)
++    return x * torch.sigmoid(torch.Tensor([1.702], dtype=x.dtype) * x)
+
+
+ _CONTEXT_PARALLEL_GROUP = None
 diff --git a/pretrain_sora.py b/pretrain_sora.py
 index 5abd459..3dd759d 100644
 --- a/pretrain_sora.py
@@ -623,3 +604,291 @@ index 5abd459..3dd759d 100644
      return batch
  
  
+
+diff --git a/examples/qwen2vl/dot_product_attention.py b/examples/qwen2vl/dot_product_attention.py
+index b6e9d33..8718216 100644
+--- a/examples/qwen2vl/dot_product_attention.py
++++ b/examples/qwen2vl/dot_product_attention.py
+@@ -14,8 +14,8 @@ from torch import Tensor
+ from megatron.training import get_args
+ from megatron.core import mpu
+ from mindspeed.core.models.common.embeddings.rotary_pos_embedding import yarn_get_mscale
+-from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
+-from mindspeed.ops.fusion_attention_v2 import npu_fusion_attention
++#from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
++#from mindspeed.ops.fusion_attention_v2 import npu_fusion_attention
+ from mindspeed.model.alibi_mask import AlibiForFusionAttnSingleton
+ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid_ring,
+                                            get_context_parallel_for_hybrid_ring_world_size,
+@@ -115,7 +115,7 @@ def dot_product_attention_forward(
+             padding_mask=None,
+             atten_mask=None,
+             scale=1.0 / math.sqrt(query.shape[-1]),
+-            keep_prob=1,
++            keep_prob=1.0,
+             input_layout='TND',
+             actual_seq_qlen=actual_seq_len,
+             actual_seq_kvlen=actual_seq_len,
+@@ -137,7 +137,7 @@ def dot_product_attention_forward(
+             padding_mask=None,
+             atten_mask=attention_mask_npu,
+             scale=1.0 / math.sqrt(query.shape[-1]),
+-            keep_prob=1,
++            keep_prob=1.0,
+             input_layout='TND',
+             actual_seq_qlen=tuple(cu_seq_lens[1:].cpu().numpy().tolist()),
+             actual_seq_kvlen=tuple(cu_seq_lens[1:].cpu().numpy().tolist()),
+@@ -198,9 +198,10 @@ class IndexFirstAxis(torch.autograd.Function):
+     def forward(ctx, input_tensor, indices):
+         ctx.save_for_backward(indices)
+         ctx.first_axis_dim, other_shape = input_tensor.shape[0], input_tensor.shape[1:]
++        other_shape = torch.Size(other_shape)
+         second_dim = other_shape.numel()
+         return torch.gather(
+-            rearrange(input_tensor, "b ... -> b (...)"), 0, repeat(indices, "z -> z d", d=second_dim)
++            rearrange(input_tensor, "b ... -> b (...)").contiguous(), 0, repeat(indices, "z -> z d", d=second_dim).contiguous()
+         ).reshape(-1, *other_shape)
+
+     @staticmethod
+diff --git a/mindspeed_mm/data/datasets/qwen2vl_dataset.py b/mindspeed_mm/data/datasets/qwen2vl_dataset.py
+index 396cbf2..faf170d 100644
+--- a/mindspeed_mm/data/datasets/qwen2vl_dataset.py
++++ b/mindspeed_mm/data/datasets/qwen2vl_dataset.py
+@@ -1,71 +1,78 @@
+-import os
+ from functools import partial
+
+ from datasets import load_dataset
+-from torch.utils.data import Dataset
+-from transformers.training_args import TrainingArguments
++from torch.utils.data import Dataset, ConcatDataset
++from transformers import AutoProcessor
+
+ from mindspeed_mm.data.data_utils.func_utils.convert import DataArguments, DatasetAttr, load_tokenizer, \
+     convert_sharegpt, preprocess_supervised_dataset
+-from mindspeed_mm.data.data_utils.func_utils.log import get_logger
+ from mindspeed_mm.data.data_utils.func_utils.model_args import ProcessorArguments
+ from mindspeed_mm.data.data_utils.func_utils.template import get_template_and_fix_tokenizer
+
+-logger = get_logger(__name__)
+-
+
+ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
+     data_args = DataArguments(**basic_param)
+     process_args = ProcessorArguments(**preprocess_param)
+     dataset_attr = DatasetAttr(**dataset_param["attr"])
+-
+     tokenizer_module = load_tokenizer(process_args)
+-    tokenizer, processor = tokenizer_module['tokenizer'], tokenizer_module['processor']
++    tokenizer = tokenizer_module['tokenizer']
++    processor = AutoProcessor.from_pretrained(process_args.model_name_or_path, local_files_only=True)
+     template = get_template_and_fix_tokenizer(tokenizer, data_args.template)
+-    # 确保主进程进行数据处理，其他进程复用缓存避免重复计算，该策略和llamafactory对数据处理策略一致
+-    with TrainingArguments(output_dir='./').main_process_first(desc="pre-process dataset"):
+-        # -----------------load dataset from file-------------------------------------------------------------------------
+-        dataset = load_dataset(path="json", data_files=data_args.dataset, split="train", cache_dir=data_args.cache_dir,
+-                               streaming=data_args.streaming)
+-        if data_args.max_samples:
+-            dataset = dataset.select(range(data_args.max_samples))
+-        local_process_index = int(os.getenv("LOCAL_RANK", -1))
+-        if data_args.streaming:
+-            kwargs = {}
+-        else:
+-            kwargs = {
+-                "num_proc": data_args.preprocessing_num_workers,
+-                # 配置了overwrite_cache为false（默认为false)时，非rank0节点读取cache不再进行map处理
+-                # 配置了overwrite_cache为true（默认为false)时，所有节点都读取cache不再进行map处理
+-                "load_from_cache_file": (not data_args.overwrite_cache) or (local_process_index != 0)
+-            }
+-        logger.debug(f'Rank: %s, kwargs: %s', local_process_index, kwargs)
+-        # -----------------convert to sharegpt ---------------------------------------------------------------------------
+-        convert_func = partial(convert_sharegpt, dataset_attr=dataset_attr, dataset_dir=data_args.dataset_dir)
+-        dataset = dataset.map(
+-            convert_func,
+-            batched=False,
+-            remove_columns=(list(next(iter(dataset)).keys())),
+-            desc=f"Rank {local_process_index}, Converting format of dataset",
+-            **kwargs,
+-        )
+-        # -----------------convert text to token id ----------------------------------------------------------------------
+-        preprocess_func = partial(
+-            preprocess_supervised_dataset,
+-            template=template,
+-            tokenizer=tokenizer,
+-            processor=processor,
+-            data_args=data_args,
++    # -----------------load dataset from file-------------------------------------------------------------------------
++    dataset = load_dataset(
++        path="json",
++        name=None,
++        data_dir=None,
++        data_files=data_args.dataset,
++        split="train",
++        cache_dir=data_args.cache_dir,
++        token=None,
++        streaming=data_args.streaming,
++        trust_remote_code=False,
++    )
++    # -----------------convert to sharegpt ---------------------------------------------------------------------------
++    convert_func = partial(convert_sharegpt, dataset_attr=dataset_attr, dataset_dir=data_args.dataset_dir)
++    column_names = list(next(iter(dataset)).keys())
++    kwargs = {}
++    if not data_args.streaming:
++        local_process_index = 0
++        kwargs = dict(
++            num_proc=data_args.preprocessing_num_workers,
++            load_from_cache_file=(not data_args.overwrite_cache) or (local_process_index != 0),
++            desc="Converting format of dataset",
+         )
+-        dataset = dataset.map(
+-            preprocess_func,
+-            batched=True,
+-            batch_size=data_args.preprocessing_batch_size,
+-            remove_columns=(list(next(iter(dataset)).keys())),
+-            desc=f"Rank {local_process_index}, Running tokenizer on dataset",
+-            **kwargs,
++    if data_args.max_samples:
++        dataset = dataset.select(range(data_args.max_samples))
++    dataset = dataset.map(
++        convert_func,
++        batched=False,
++        remove_columns=column_names,
++        **kwargs,
++    )
++    # -----------------convert text to token id ----------------------------------------------------------------------
++    preprocess_func = partial(
++        preprocess_supervised_dataset,
++        template=template,
++        tokenizer=tokenizer,
++        processor=processor,
++        data_args=data_args,
++    )
++    column_names = list(next(iter(dataset)).keys())
++    kwargs = {}
++    if not data_args.streaming:
++        kwargs = dict(
++            num_proc=data_args.preprocessing_num_workers,
++            load_from_cache_file=(not data_args.overwrite_cache) or (local_process_index != 0),
++            desc="Running tokenizer on dataset",
+         )
+-        return dataset
++    dataset = dataset.map(
++        preprocess_func,
++        batched=True,
++        batch_size=data_args.preprocessing_batch_size,
++        remove_columns=column_names,
++        **kwargs,
++    )
++    return dataset
+
+
+ class Qwen2vlDataset(Dataset):
+ diff --git a/mindspeed_mm/models/qwen2vl_model.py b/mindspeed_mm/models/qwen2vl_model.py
+index 6226377..71dbfc6 100644
+--- a/mindspeed_mm/models/qwen2vl_model.py
++++ b/mindspeed_mm/models/qwen2vl_model.py
+@@ -297,7 +297,11 @@ class Qwen2VLModel(MultiModalModule):
+                 input_embeds = input_embeds.transpose(0, 1)
+                 image_mask = torch.eq(input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
+                 vit_embeds = vit_embeds[:, 0, :]
++                orig_dtype = vit_embeds.dtype
++                input_embeds = input_embeds.to(torch.float32)
++                vit_embeds = vit_embeds.to(torch.float32)
+                 input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
++                input_embeds = input_embeds.to(orig_dtype)
+                 input_embeds = input_embeds.transpose(0, 1).clone()
+
+             past_seen_tokens = 0
+diff --git a/mindspeed_mm/models/qwen2vl_model.py b/mindspeed_mm/models/qwen2vl_model.py
+index 6226377..71dbfc6 100644
+--- a/mindspeed_mm/models/qwen2vl_model.py
++++ b/mindspeed_mm/models/qwen2vl_model.py
+@@ -297,7 +297,11 @@ class Qwen2VLModel(MultiModalModule):
+                 input_embeds = input_embeds.transpose(0, 1)
+                 image_mask = torch.eq(input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
+                 vit_embeds = vit_embeds[:, 0, :]
++                orig_dtype = vit_embeds.dtype
++                input_embeds = input_embeds.to(torch.float32)
++                vit_embeds = vit_embeds.to(torch.float32)
+                 input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
++                input_embeds = input_embeds.to(orig_dtype)
+                 input_embeds = input_embeds.transpose(0, 1).clone()
+
+             past_seen_tokens = 0
+diff --git a/mindspeed_mm/models/vision/vision_encoders/qwen2vl_vit_model.py b/mindspeed_mm/models/vision/vision_encoders/qwen2vl_vit_model.py
+index aef68f0..89cd201 100644
+--- a/mindspeed_mm/models/vision/vision_encoders/qwen2vl_vit_model.py
++++ b/mindspeed_mm/models/vision/vision_encoders/qwen2vl_vit_model.py
+@@ -43,8 +43,10 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
+     if use_fused_rope:
+         import torch_npu
+         cos, sin = cos[:1], sin[:1]
+-        q_embed = torch_npu.npu_rotary_mul(q, cos, sin)
+-        k_embed = torch_npu.npu_rotary_mul(k, cos, sin)
++        #q_embed = torch_npu.npu_rotary_mul(q, cos, sin)
++        #k_embed = torch_npu.npu_rotary_mul(k, cos, sin)
++        q_embed = torch_npu.npu_rotary_position_embedding(q, cos, sin)
++        k_embed = torch_npu.npu_rotary_position_embedding(k, cos, sin)
+     else:
+         q_embed = (q * cos) + (rotate_half(q) * sin)
+         k_embed = (k * cos) + (rotate_half(k) * sin)
+@@ -61,7 +63,8 @@ def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor, use_f
+     sin = sin.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
+     if use_fused_rope:
+         import torch_npu
+-        output = torch_npu.npu_rotary_mul(tensor, cos, sin).to(orig_dtype)
++        #output = torch_npu.npu_rotary_mul(tensor, cos, sin).to(orig_dtype)
++        output = torch_npu.npu_rotary_position_embedding(t, cos, sin).to(orig_dtype)
+     else:
+         output = ((tensor * cos) + (rotate_half(tensor) * sin)).to(orig_dtype)
+     return output
+@@ -78,7 +81,7 @@ class Qwen2VLRotaryEmbedding_llm(Qwen2VLRotaryEmbedding):
+
+         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+         position_ids_expanded = position_ids[:, :, None, :].float()
+-        device_type = x_device.type
++        device_type = x_device #.type
+         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+         with torch.autocast(device_type=device_type, enabled=False):
+             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+@@ -290,8 +293,8 @@ class VisionRotaryEmbedding(nn.Module):
+         self.theta = theta
+
+     def forward(self, seqlen: int) -> torch.Tensor:
+-        inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.bfloat16) / self.dim)).to(
+-            self.inv_freq.device)
++        inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.bfloat16) / self.dim))
++        #.to(self.inv_freq.device)
+         self.register_buffer("inv_freq", inv_freq, persistent=False)
+         seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=torch.bfloat16)
+         freqs = torch.outer(seq, self.inv_freq)
+@@ -432,7 +435,7 @@ class Qwen2VLViT(MultiModalModule):
+
+         seq_len = images.shape[0]
+         attention_mask = torch.full(
+-            [1, seq_len, seq_len], torch.finfo(images.dtype).min, device=images.device,
++            [1, seq_len, seq_len], -3.3895313892515355e+38, device=images.device,
+             dtype=torch.bool
+         )
+         for i in range(1, len(cu_seqlens)):
+diff --git a/pretrain_qwen2vl.py b/pretrain_qwen2vl.py
+index 98d217b..9184052 100644
+--- a/pretrain_qwen2vl.py
++++ b/pretrain_qwen2vl.py
+@@ -45,11 +45,11 @@ def get_batch(data_iterator):
+         batch = next(data_iterator)
+     else:
+         raise ValueError("Data iterator is None. Unable to retrieve batch.")
+-    input_ids = batch['input_ids'].to(torch.cuda.current_device())
+-    labels = batch['labels'].to(torch.cuda.current_device())
+-    attention_mask = batch['attention_mask'].to(torch.cuda.current_device())
+-    pixel_values = batch['pixel_values'].to(torch.cuda.current_device())
+-    image_grid_thw = batch['image_grid_thw'].to(torch.cuda.current_device())
++    input_ids = batch['input_ids']#.to(torch.cuda.current_device())
++    labels = batch['labels']#.to(torch.cuda.current_device())
++    attention_mask = batch['attention_mask']#.to(torch.cuda.current_device())
++    pixel_values = batch['pixel_values']#.to(torch.cuda.current_device())
++    image_grid_thw = batch['image_grid_thw']#.to(torch.cuda.current_device())
+     batch = {
+         'input_ids': input_ids,
+         'labels': labels,
