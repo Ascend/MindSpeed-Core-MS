@@ -45,7 +45,7 @@ __all__ = [
     "zeros",
 ]
 
-aten = torch.ops.aten
+# aten = torch.ops.aten
 
 
 # NOTE [Autograd interaction between torch.Tensor]
@@ -236,10 +236,10 @@ class DTensor(torch.Tensor):
     __slots__ = ["_local_tensor", "_spec"]
 
     # _op_dispatcher instance as a class attribute to handle runtime dispatching logic
-    _op_dispatcher: op_dispatch.OpDispatcher = op_dispatch.OpDispatcher()
+    # _op_dispatcher: op_dispatch.OpDispatcher = op_dispatch.OpDispatcher()
 
     @staticmethod
-    @torch._disable_dynamo
+    # @torch._disable_dynamo
     def __new__(
         cls,
         local_tensor: torch.Tensor,
@@ -336,15 +336,15 @@ class DTensor(torch.Tensor):
         )
 
     @classmethod
-    @torch._disable_dynamo
+    # @torch._disable_dynamo
     # pyre-fixme[3]: Return type must be annotated.
     # pyre-fixme[2]: Parameter must be annotated.
-    def __torch_dispatch__(cls, func, types, args=(), kwargs=None):
-        return DTensor._op_dispatcher.dispatch(
-            func,
-            args,
-            kwargs or {},
-        )
+    # def __torch_dispatch__(cls, func, types, args=(), kwargs=None):
+    #     return DTensor._op_dispatcher.dispatch(
+    #         func,
+    #         args,
+    #         kwargs or {},
+    #     )
 
     @staticmethod
     def from_local(
@@ -974,15 +974,22 @@ def _dtensor_init_helper(  # type: ignore[no-untyped-def]
         requires_grad=kwargs["requires_grad"],
     )
 
-
 def ones(  # type: ignore[no-untyped-def]
     *size,
-    dtype: Optional[torch.dtype] = None,
-    layout: torch.layout = torch.strided,
+    dtype = None,
+    layout = torch.strided,
     requires_grad: bool = False,
     device_mesh: Optional[DeviceMesh] = None,
     placements: Optional[Sequence[Placement]] = None,
 ) -> DTensor:
+# def ones(  # type: ignore[no-untyped-def]
+#     *size,
+#     dtype: Optional[torch.dtype] = None,
+#     layout: torch.layout = torch.strided,
+#     requires_grad: bool = False,
+#     device_mesh: Optional[DeviceMesh] = None,
+#     placements: Optional[Sequence[Placement]] = None,
+# ) -> DTensor:
     """
     Returns a :class:`DTensor` filled with the scalar value 1, with the shape defined
     by the variable argument ``size``.
@@ -1020,12 +1027,20 @@ def ones(  # type: ignore[no-untyped-def]
 
 def empty(  # type: ignore[no-untyped-def]
     *size,
-    dtype: Optional[torch.dtype] = None,
-    layout: torch.layout = torch.strided,
+    dtype = None,
+    layout = torch.strided,
     requires_grad: bool = False,
     device_mesh: Optional[DeviceMesh] = None,
     placements: Optional[Sequence[Placement]] = None,
 ) -> DTensor:
+# def empty(  # type: ignore[no-untyped-def]
+#     *size,
+#     dtype: Optional[torch.dtype] = None,
+#     layout: torch.layout = torch.strided,
+#     requires_grad: bool = False,
+#     device_mesh: Optional[DeviceMesh] = None,
+#     placements: Optional[Sequence[Placement]] = None,
+# ) -> DTensor:
     """
     Returns a :class:`DTensor` filled with uninitialized data. The shape of the :class:`DTensor`
     is defined by the variable argument ``size``.
@@ -1065,12 +1080,22 @@ def full(  # type: ignore[no-untyped-def]
     size,
     fill_value,
     *,
-    dtype: Optional[torch.dtype] = None,
-    layout: torch.layout = torch.strided,
+    dtype = None,
+    layout = torch.strided,
     requires_grad: bool = False,
     device_mesh: Optional[DeviceMesh] = None,
     placements: Optional[Sequence[Placement]] = None,
 ) -> DTensor:
+# def full(  # type: ignore[no-untyped-def]
+#     size,
+#     fill_value,
+#     *,
+#     dtype: Optional[torch.dtype] = None,
+#     layout: torch.layout = torch.strided,
+#     requires_grad: bool = False,
+#     device_mesh: Optional[DeviceMesh] = None,
+#     placements: Optional[Sequence[Placement]] = None,
+# ) -> DTensor:
     """
     Returns a :class:`DTensor` filled with ``fill_value`` according to ``device_mesh`` and
     ``placements``, with the shape defined by the argument ``size``.
@@ -1111,11 +1136,19 @@ def full(  # type: ignore[no-untyped-def]
 def rand(  # type: ignore[no-untyped-def]
     *size,
     requires_grad: bool = False,
-    dtype: Optional[torch.dtype] = None,
-    layout: torch.layout = torch.strided,
+    dtype = None,
+    layout = torch.strided,
     device_mesh: Optional[DeviceMesh] = None,
     placements: Optional[Sequence[Placement]] = None,
 ) -> DTensor:
+# def rand(  # type: ignore[no-untyped-def]
+#     *size,
+#     requires_grad: bool = False,
+#     dtype: Optional[torch.dtype] = None,
+#     layout: torch.layout = torch.strided,
+#     device_mesh: Optional[DeviceMesh] = None,
+#     placements: Optional[Sequence[Placement]] = None,
+# ) -> DTensor:
     """
     Returns a :class:`DTensor` filled with random numbers from a uniform distribution
     on the interval ``[0, 1)``. The shape of the tensor is defined by the variable
@@ -1151,15 +1184,22 @@ def rand(  # type: ignore[no-untyped-def]
         placements=placements,
     )
 
-
 def randn(  # type: ignore[no-untyped-def]
     *size,
     requires_grad: bool = False,
-    dtype: Optional[torch.dtype] = None,
-    layout: torch.layout = torch.strided,
+    dtype = None,
+    layout = torch.strided,
     device_mesh: Optional[DeviceMesh] = None,
     placements: Optional[Sequence[Placement]] = None,
 ) -> DTensor:
+# def randn(  # type: ignore[no-untyped-def]
+#     *size,
+#     requires_grad: bool = False,
+#     dtype: Optional[torch.dtype] = None,
+#     layout: torch.layout = torch.strided,
+#     device_mesh: Optional[DeviceMesh] = None,
+#     placements: Optional[Sequence[Placement]] = None,
+# ) -> DTensor:
     """
     Returns a :class:`DTensor` filled with random numbers from a normal distribution
     with mean 0 and variance 1. The shape of the tensor is defined by the variable
@@ -1199,11 +1239,19 @@ def randn(  # type: ignore[no-untyped-def]
 def zeros(  # type: ignore[no-untyped-def]
     *size,
     requires_grad: bool = False,
-    dtype: Optional[torch.dtype] = None,
-    layout: torch.layout = torch.strided,
+    dtype = None,
+    layout = torch.strided,
     device_mesh: Optional[DeviceMesh] = None,
     placements: Optional[Sequence[Placement]] = None,
 ) -> DTensor:
+# def zeros(  # type: ignore[no-untyped-def]
+#     *size,
+#     requires_grad: bool = False,
+#     dtype: Optional[torch.dtype] = None,
+#     layout: torch.layout = torch.strided,
+#     device_mesh: Optional[DeviceMesh] = None,
+#     placements: Optional[Sequence[Placement]] = None,
+# ) -> DTensor:
     """
     Returns a :class:`DTensor` filled with the scalar value 0.
 

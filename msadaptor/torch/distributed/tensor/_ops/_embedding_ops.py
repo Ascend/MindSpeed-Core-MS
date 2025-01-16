@@ -26,7 +26,7 @@ from torch.distributed.tensor.placement_types import (
 )
 
 
-aten = torch.ops.aten
+# aten = torch.ops.aten
 
 
 @dataclass
@@ -186,7 +186,7 @@ class _MaskPartial(Partial):
         return "MaskP"
 
 
-@register_op_strategy(aten.embedding.default)
+# @register_op_strategy(aten.embedding.default)
 def embedding_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> StrategyType:
     """
     This strategy handles embedding op. We have two possible embedding shardings:
@@ -234,7 +234,7 @@ def embedding_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> StrategyType:
     return expand_to_full_mesh_op_strategy(mesh, op_schema, single_mesh_dim_strategies)
 
 
-@register_op_strategy(aten.embedding_dense_backward.default)
+# @register_op_strategy(aten.embedding_dense_backward.default)
 def embedding_dense_backward_strategy(
     mesh: DeviceMesh, op_schema: OpSchema
 ) -> StrategyType:

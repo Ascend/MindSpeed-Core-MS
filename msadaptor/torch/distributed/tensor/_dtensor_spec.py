@@ -17,7 +17,7 @@ class TensorMeta(NamedTuple):
     # propagation purposes.
     shape: torch.Size
     stride: Tuple[int, ...]
-    dtype: torch.dtype
+    # dtype: torch.dtype
 
 
 # used internally to propagate the placements

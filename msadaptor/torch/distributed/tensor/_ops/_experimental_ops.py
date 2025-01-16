@@ -15,10 +15,10 @@ from torch.distributed.tensor.device_mesh import DeviceMesh
 from torch.distributed.tensor.placement_types import Replicate
 
 
-aten = torch.ops.aten
+# aten = torch.ops.aten
 
 
-@register_op_strategy(aten.slice_backward.default)
+# @register_op_strategy(aten.slice_backward.default)
 def slice_backward_rules(mesh: DeviceMesh, op_schema: OpSchema) -> StrategyType:
     """
     slice_backward is a new_zeros + slice_scatter, we only allow replication

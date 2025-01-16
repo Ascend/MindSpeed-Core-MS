@@ -4,7 +4,7 @@ import contextlib
 from typing import cast, Dict, Optional, Tuple
 
 import torch
-import torch._prims_common as utils
+# import torch._prims_common as utils
 import torch.distributed._functional_collectives as funcol
 import torch.distributed.distributed_c10d as c10d
 from torch import Tensor
@@ -20,7 +20,7 @@ from torch.distributed.tensor._ops._math_ops import (
 from torch.distributed.tensor.placement_types import Placement
 
 
-aten = torch.ops.aten
+# aten = torch.ops.aten
 
 
 __all__ = ["loss_parallel"]
@@ -106,10 +106,15 @@ def _cast_to_dtensor(
 
 
 def _propagate_tensor_meta(
-    op_call: torch._ops.OpOverload,
+    op_call,
     args: Tuple[object, ...],
     kwargs: Dict[str, object],
 ) -> TensorMeta:
+# def _propagate_tensor_meta(
+#     op_call: torch._ops.OpOverload,
+#     args: Tuple[object, ...],
+#     kwargs: Dict[str, object],
+# ) -> TensorMeta:
     op_info = DTensor._op_dispatcher.unwrap_to_op_info(op_call, args, kwargs)
     tensor_meta = DTensor._op_dispatcher.sharding_propagator._propagate_tensor_meta(
         op_info.schema
@@ -152,10 +157,15 @@ def _log_softmax(x, dim, half_to_float, mesh, mesh_dim):
 
 
 def _log_softmax_handler(
-    op_call: torch._ops.OpOverload,
+    op_call,
     args: Tuple[object, ...],
     kwargs: Dict[str, object],
 ) -> object:
+# def _log_softmax_handler(
+#     op_call: torch._ops.OpOverload,
+#     args: Tuple[object, ...],
+#     kwargs: Dict[str, object],
+# ) -> object:
     x = cast(DTensor, args[0])
     dim = cast(int, args[1])
     half_to_float = cast(bool, args[2])
@@ -183,10 +193,15 @@ def _log_softmax_handler(
 # NOTE: As explained below at _nll_loss_and_log_softmax_backward, the
 # _log_softmax_backward_handler does not actually do any computation.
 def _log_softmax_backward_handler(
-    op_call: torch._ops.OpOverload,
+    op_call,
     args: Tuple[object, ...],
     kwargs: Dict[str, object],
 ) -> object:
+# def _log_softmax_backward_handler(
+#     op_call: torch._ops.OpOverload,
+#     args: Tuple[object, ...],
+#     kwargs: Dict[str, object],
+# ) -> object:
     grad_output = cast(DTensor, args[0])
     input_dtype = cast(torch.dtype, args[3])
     return grad_output.to(input_dtype)
@@ -266,12 +281,16 @@ def _nll_loss_forward(
 
     return result, total_weight
 
-
 def _nll_loss_forward_handler(
-    op_call: torch._ops.OpOverload,
+    op_call,
     args: Tuple[object, ...],
     kwargs: Dict[str, object],
 ) -> object:
+# def _nll_loss_forward_handler(
+#     op_call: torch._ops.OpOverload,
+#     args: Tuple[object, ...],
+#     kwargs: Dict[str, object],
+# ) -> object:
     x = cast(DTensor, args[0])
     target = args[1]
     weight = args[2]
@@ -412,10 +431,15 @@ def _nll_loss_and_log_softmax_backward(
 
 
 def _nll_loss_backward_handler(
-    op_call: torch._ops.OpOverload,
+    op_call,
     args: Tuple[object, ...],
     kwargs: Dict[str, object],
 ) -> object:
+# def _nll_loss_backward_handler(
+#     op_call: torch._ops.OpOverload,
+#     args: Tuple[object, ...],
+#     kwargs: Dict[str, object],
+# ) -> object:
     grad_output = cast(DTensor, args[0])
     x = cast(DTensor, args[1])
     target = args[2]
@@ -470,20 +494,20 @@ def _nll_loss_backward_handler(
     )
 
 
-customized_loss_ops = {
-    aten._log_softmax.default: _log_softmax_handler,
-    aten._log_softmax_backward_data.default: _log_softmax_backward_handler,
-    aten.nll_loss_forward.default: _nll_loss_forward_handler,
-    aten.nll_loss2d_forward.default: _nll_loss_forward_handler,
-    aten.nll_loss_backward.default: _nll_loss_backward_handler,
-    aten.nll_loss2d_backward.default: _nll_loss_backward_handler,
-}
-
-
-def _enable_custom_loss_ops():
-    DTensor._op_dispatcher._custom_op_handlers.update(customized_loss_ops)
-
-
-def _disable_custom_loss_ops():
-    for custom_op in customized_loss_ops:
-        DTensor._op_dispatcher._custom_op_handlers.pop(custom_op)
+# customized_loss_ops = {
+#     aten._log_softmax.default: _log_softmax_handler,
+#     aten._log_softmax_backward_data.default: _log_softmax_backward_handler,
+#     aten.nll_loss_forward.default: _nll_loss_forward_handler,
+#     aten.nll_loss2d_forward.default: _nll_loss_forward_handler,
+#     aten.nll_loss_backward.default: _nll_loss_backward_handler,
+#     aten.nll_loss2d_backward.default: _nll_loss_backward_handler,
+# }
+#
+#
+# def _enable_custom_loss_ops():
+#     DTensor._op_dispatcher._custom_op_handlers.update(customized_loss_ops)
+#
+#
+# def _disable_custom_loss_ops():
+#     for custom_op in customized_loss_ops:
+#         DTensor._op_dispatcher._custom_op_handlers.pop(custom_op)
