@@ -253,7 +253,7 @@ def try_find_mesh_from_args(
 
 
 def compute_local_stride(
-    global_stride: ShapeType, mesh: DeviceMesh, placements: Sequence[Placement]
+    global_stride, mesh: DeviceMesh, placements: Sequence[Placement]
 ) -> Tuple[int, ...]:
     """
     Compute the stride of a local tensor shard, given the global stride of the DTensor.

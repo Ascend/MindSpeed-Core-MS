@@ -8,7 +8,7 @@ from .configs import use_pyboost
 from ._utils import _rebuild_tensor_v2
 from ._C.size import Size
 from .ops import (transpose, mean, repeat_interleave, unsqueeze, pow, 
-                  split, norm, reshape)
+                  split, norm, reshape, squeeze)
 from .ops._inner import get_item
 
 MS_PT_DTYPE_MAP = {
@@ -319,3 +319,9 @@ def _reshape(self, *sizes):
 
 Tensor.reshape = _reshape
 StubTensor.reshape = _reshape
+
+def squeeze_(self, dim):
+    return ops.squeeze(self, axis=dim)
+
+Tensor.squeeze = squeeze_
+StubTensor.squeeze = squeeze_
