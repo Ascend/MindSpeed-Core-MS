@@ -16,6 +16,17 @@ MS_PT_DTYPE_MAP = {
     'Float16': 'torch.cuda.HalfTensor',
 }
 
+def npu(self):
+    return Tensor(self.move_to("Ascend"))
+Tensor.npu = npu
+StubTensor.npu = npu
+
+def data_ptr(self):
+    return self._data_ptr()
+
+Tensor.data_ptr = data_ptr
+StubTensor.data_ptr = data_ptr
+
 def type_(self, dtype=None):
     if dtype is None:
         return MS_PT_DTYPE_MAP[str(self.dtype)]
