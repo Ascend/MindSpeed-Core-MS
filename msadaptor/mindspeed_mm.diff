@@ -1,0 +1,625 @@
+diff --git a/mindspeed_mm/__init__.py b/mindspeed_mm/__init__.py
+index 24ee0b3..f4fce2b 100644
+--- a/mindspeed_mm/__init__.py
++++ b/mindspeed_mm/__init__.py
+@@ -14,7 +14,7 @@ from mindspeed_mm.models import (
+     VLModel
+ )
+ from mindspeed_mm.patchs import PatchesManager
+-from mindspeed_mm.tasks import sora_pipeline_dict, vlm_pipeline_dict
++# from mindspeed_mm.tasks import sora_pipeline_dict, vlm_pipeline_dict
+ from mindspeed_mm.utils.utils import (
+     is_npu_available,
+     get_device,
+diff --git a/mindspeed_mm/data/data_utils/utils.py b/mindspeed_mm/data/data_utils/utils.py
+index 577cba1..272b1a2 100644
+--- a/mindspeed_mm/data/data_utils/utils.py
++++ b/mindspeed_mm/data/data_utils/utils.py
+@@ -40,7 +40,6 @@ from torchvision.transforms import InterpolationMode
+ from torchvision.io.video import (
+     _align_audio_frames,
+     _check_av_available,
+-    _log_api_usage_once,
+     _read_from_stream,
+     _video_opt,
+ )
+diff --git a/mindspeed_mm/models/ae/vae.py b/mindspeed_mm/models/ae/vae.py
+index 53a7d6d..d6d85fe 100644
+--- a/mindspeed_mm/models/ae/vae.py
++++ b/mindspeed_mm/models/ae/vae.py
+@@ -1,6 +1,6 @@
+ import torch
+ import torch.nn as nn
+-from diffusers.models import AutoencoderKL
++# from diffusers.models import AutoencoderKL
+ from einops import rearrange
+ from megatron.core import mpu
+ 
+diff --git a/mindspeed_mm/models/common/blocks.py b/mindspeed_mm/models/common/blocks.py
+index a4eeff0..1458385 100644
+--- a/mindspeed_mm/models/common/blocks.py
++++ b/mindspeed_mm/models/common/blocks.py
+@@ -16,7 +16,7 @@ from typing import Optional
+ import torch
+ import torch.nn as nn
+ 
+-from diffusers.models.activations import GELU, GEGLU, ApproximateGELU
++# from diffusers.models.activations import GELU, GEGLU, ApproximateGELU
+ from mindspeed_mm.models.common.linear import MatmulAddLinear
+ 
+ 
+diff --git a/mindspeed_mm/models/common/checkpoint.py b/mindspeed_mm/models/common/checkpoint.py
+index 8d0b05a..c3b6a03 100644
+--- a/mindspeed_mm/models/common/checkpoint.py
++++ b/mindspeed_mm/models/common/checkpoint.py
+@@ -3,7 +3,7 @@ import os
+ 
+ import torch
+ import torch.nn as nn
+-from torch.utils.checkpoint import checkpoint, checkpoint_sequential
++# from torch.utils.checkpoint import checkpoint, checkpoint_sequential
+ 
+ import safetensors
+ 
+diff --git a/mindspeed_mm/models/common/embeddings/common_embeddings.py b/mindspeed_mm/models/common/embeddings/common_embeddings.py
+index 4c6b6d7..290d523 100644
+--- a/mindspeed_mm/models/common/embeddings/common_embeddings.py
++++ b/mindspeed_mm/models/common/embeddings/common_embeddings.py
+@@ -3,7 +3,7 @@ from einops import rearrange
+ 
+ import torch
+ from torch import nn
+-from timm.models.vision_transformer import Mlp
++# from timm.models.vision_transformer import Mlp
+ 
+ 
+ class TimestepEmbedder(nn.Module):
+diff --git a/mindspeed_mm/models/common/embeddings/pos_embeddings.py b/mindspeed_mm/models/common/embeddings/pos_embeddings.py
+index 420d2e6..8e36461 100644
+--- a/mindspeed_mm/models/common/embeddings/pos_embeddings.py
++++ b/mindspeed_mm/models/common/embeddings/pos_embeddings.py
+@@ -533,8 +533,8 @@ class Rotary3DPositionEmbedding(nn.Module):
+         freqs = broad_cat((freqs_t[:, None, None, :], freqs_h[None, :, None, :], freqs_w[None, None, :, :]), dim=-1)
+ 
+         freqs = freqs.contiguous()
+-        self.freqs_sin = freqs.sin().npu()
+-        self.freqs_cos = freqs.cos().npu()
++        self.freqs_sin = freqs.sin()
++        self.freqs_cos = freqs.cos()
+ 
+         self.text_length = text_length
+         if learnable_pos_embed:
+diff --git a/mindspeed_mm/models/common/embeddings/time_embeddings.py b/mindspeed_mm/models/common/embeddings/time_embeddings.py
+index 6bb7f33..23fa647 100644
+--- a/mindspeed_mm/models/common/embeddings/time_embeddings.py
++++ b/mindspeed_mm/models/common/embeddings/time_embeddings.py
+@@ -1,5 +1,5 @@
+ import math
+-
++import numpy as np
+ import torch
+ import torch.nn as nn
+ from einops import rearrange, repeat
+@@ -16,9 +16,9 @@ def timestep_embedding(timesteps, dim, max_period=10000, repeat_only=False, dtyp
+     """
+     if not repeat_only:
+         half = dim // 2
+-        freqs = torch.exp(-math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half).to(
+-            device=timesteps.device
+-        )
++
++        tmp = -math.log(max_period) * torch.arange(0, half) / half
++        freqs = torch.exp(torch.Tensor(tmp.astype(np.float32)))
+         args = timesteps[:, None].float() * freqs[None]
+         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+         if dim % 2:
+diff --git a/mindspeed_mm/models/common/ffn.py b/mindspeed_mm/models/common/ffn.py
+index 89bcdca..1e82d26 100644
+--- a/mindspeed_mm/models/common/ffn.py
++++ b/mindspeed_mm/models/common/ffn.py
+@@ -3,7 +3,7 @@ from typing import Optional
+ import torch
+ from torch import nn
+ import torch.nn.functional as F
+-from diffusers.models.activations import GEGLU, ApproximateGELU
++# from diffusers.models.activations import GEGLU, ApproximateGELU
+ from megatron.core import mpu, tensor_parallel
+ from megatron.training import get_args
+ from megatron.training.arguments import core_transformer_config_from_args
+diff --git a/mindspeed_mm/models/common/regularizer.py b/mindspeed_mm/models/common/regularizer.py
+index 2dc215c..938035a 100644
+--- a/mindspeed_mm/models/common/regularizer.py
++++ b/mindspeed_mm/models/common/regularizer.py
+@@ -15,10 +15,10 @@ class DiagonalGaussianDistribution(object):
+         self.std = torch.exp(0.5 * self.logvar)
+         self.var = torch.exp(self.logvar)
+         if self.deterministic:
+-            self.var = self.std = torch.zeros_like(self.mean).to(device=self.parameters.device)
++            self.var = self.std = torch.zeros_like(self.mean)
+ 
+     def sample(self):
+-        x = self.mean + self.std * torch.randn_like(self.mean).to(device=self.parameters.device)
++        x = self.mean + self.std * torch.randn_like(self.mean)
+         return x
+ 
+     def kl(self, other=None):
+diff --git a/mindspeed_mm/models/diffusion/cogvideo_diffusion.py b/mindspeed_mm/models/diffusion/cogvideo_diffusion.py
+index 85dbf37..53ed119 100644
+--- a/mindspeed_mm/models/diffusion/cogvideo_diffusion.py
++++ b/mindspeed_mm/models/diffusion/cogvideo_diffusion.py
+@@ -95,10 +95,10 @@ def make_beta_schedule(
+     linear_end=2e-2,
+ ):
+     if schedule == "linear":
+-        betas = torch.linspace(linear_start**0.5, linear_end**0.5, n_timestep, dtype=torch.float64) ** 2
++        betas = np.linspace(linear_start**0.5, linear_end**0.5, n_timestep, dtype=np.float64) ** 2
+     else:
+         raise NotImplementedError("Only support linear schedule")
+-    return betas.numpy()
++    return betas
+ 
+ 
+ class Discretization:
+@@ -220,11 +220,11 @@ class DiscreteDenoiser(nn.Module):
+         return c_in, c_noise, c_out, c_skip
+ 
+     def sigma_to_idx(self, sigma):
+-        dists = sigma - self.sigmas.to(sigma.device)[:, None]
++        dists = sigma - self.sigmas[:, None]
+         return dists.abs().argmin(dim=0).view(sigma.shape)
+ 
+     def idx_to_sigma(self, idx):
+-        return self.sigmas.to(idx.device)[idx]
++        return self.sigmas[idx]
+ 
+     def possibly_quantize_sigma(self, sigma):
+         return self.idx_to_sigma(self.sigma_to_idx(sigma))
+@@ -285,8 +285,8 @@ class CogVideoDiffusion(nn.Module):
+ 
+         additional_model_inputs = dict()
+         alphas_cumprod_sqrt, idx = self.sigma_sampler(latents.shape[0], return_idx=True)
+-        self.alphas_cumprod_sqrt = alphas_cumprod_sqrt.to(latents.device)
+-        idx = idx.to(latents.device)
++        self.alphas_cumprod_sqrt = alphas_cumprod_sqrt
++        idx = idx
+ 
+         # broadcast noise here
+ 
+@@ -294,7 +294,7 @@ class CogVideoDiffusion(nn.Module):
+ 
+         if self.offset_noise_level > 0.0:
+             noise = (
+-                    noise + append_dims(torch.randn(latents.shape[0]).to(latents.device),
++                    noise + append_dims(torch.randn(latents.shape[0]),
+                                         latents.ndim) * self.offset_noise_level
+             )
+ 
+diff --git a/mindspeed_mm/models/diffusion/diffusers_scheduler.py b/mindspeed_mm/models/diffusion/diffusers_scheduler.py
+index a3ab791..e41d882 100644
+--- a/mindspeed_mm/models/diffusion/diffusers_scheduler.py
++++ b/mindspeed_mm/models/diffusion/diffusers_scheduler.py
+@@ -7,38 +7,38 @@ import torch.distributed as dist
+ from torch import Tensor
+ from tqdm.auto import tqdm
+ import torch.nn.functional as F
+-from diffusers.schedulers import (
+-    DDIMScheduler,
+-    DDPMScheduler,
+-    PNDMScheduler,
+-    EulerDiscreteScheduler,
+-    DPMSolverMultistepScheduler,
+-    HeunDiscreteScheduler,
+-    EulerAncestralDiscreteScheduler,
+-    DEISMultistepScheduler,
+-    KDPM2AncestralDiscreteScheduler,
+-    CogVideoXDPMScheduler,
+-    CogVideoXDDIMScheduler,
+-    FlowMatchEulerDiscreteScheduler
+-)
+-from diffusers.training_utils import compute_snr
++# from diffusers.schedulers import (
++#     DDIMScheduler,
++#     DDPMScheduler,
++#     PNDMScheduler,
++#     EulerDiscreteScheduler,
++#     DPMSolverMultistepScheduler,
++#     HeunDiscreteScheduler,
++#     EulerAncestralDiscreteScheduler,
++#     DEISMultistepScheduler,
++#     KDPM2AncestralDiscreteScheduler,
++#     CogVideoXDPMScheduler,
++#     CogVideoXDDIMScheduler,
++#     FlowMatchEulerDiscreteScheduler
++# )
++# from diffusers.training_utils import compute_snr
+ from megatron.core import mpu
+ 
+ from mindspeed_mm.models.diffusion.diffusion_utils import explicit_uniform_sampling
+ from mindspeed_mm.utils.utils import get_device
+ 
+ DIFFUSERS_SCHEDULE_MAPPINGS = {
+-    "DDIM": DDIMScheduler,
+-    "EulerDiscrete": EulerDiscreteScheduler,
+-    "DDPM": DDPMScheduler,
+-    "DPMSolverMultistep": DPMSolverMultistepScheduler,
+-    "PNDM": PNDMScheduler,
+-    "HeunDiscrete": HeunDiscreteScheduler,
+-    "EulerAncestralDiscrete": EulerAncestralDiscreteScheduler,
+-    "DEISMultistep": DEISMultistepScheduler,
+-    "KDPM2AncestralDiscrete": KDPM2AncestralDiscreteScheduler,
+-    "cogvideox_5b": CogVideoXDPMScheduler,
+-    "cogvideox_2b": CogVideoXDDIMScheduler
++    # "DDIM": DDIMScheduler,
++    # "EulerDiscrete": EulerDiscreteScheduler,
++    # "DDPM": DDPMScheduler,
++    # "DPMSolverMultistep": DPMSolverMultistepScheduler,
++    # "PNDM": PNDMScheduler,
++    # "HeunDiscrete": HeunDiscreteScheduler,
++    # "EulerAncestralDiscrete": EulerAncestralDiscreteScheduler,
++    # "DEISMultistep": DEISMultistepScheduler,
++    # "KDPM2AncestralDiscrete": KDPM2AncestralDiscreteScheduler,
++    # "cogvideox_5b": CogVideoXDPMScheduler,
++    # "cogvideox_2b": CogVideoXDDIMScheduler
+ }
+ 
+ 
+diff --git a/mindspeed_mm/models/diffusion/rflow.py b/mindspeed_mm/models/diffusion/rflow.py
+index c0278f3..52011c1 100644
+--- a/mindspeed_mm/models/diffusion/rflow.py
++++ b/mindspeed_mm/models/diffusion/rflow.py
+@@ -1,7 +1,7 @@
+ from tqdm.auto import tqdm
+ import torch
+ from torch import Tensor
+-from torch.distributions import LogisticNormal
++# from torch.distributions import LogisticNormal
+ 
+ from .diffusion_utils import extract_into_tensor, mean_flat
+ 
+diff --git a/mindspeed_mm/models/predictor/dits/__init__.py b/mindspeed_mm/models/predictor/dits/__init__.py
+index a834c2d..8f3be8a 100644
+--- a/mindspeed_mm/models/predictor/dits/__init__.py
++++ b/mindspeed_mm/models/predictor/dits/__init__.py
+@@ -4,6 +4,6 @@ from .latte import Latte
+ from .stdit import STDiT
+ from .stdit3 import STDiT3
+ from .sat_dit import SatDiT
+-from .pt_dit_diffusers import PTDiTDiffuser as PTDiT
++# from .pt_dit_diffusers import PTDiTDiffuser as PTDiT
+ 
+-__all__ = ["VideoDiT", "VideoDitSparse", "Latte", "STDiT", "STDiT3", "SatDiT", "VideoDitSparseI2V", "PTDiT"]
++__all__ = ["VideoDiT", "VideoDitSparse", "Latte", "STDiT", "STDiT3", "SatDiT", "VideoDitSparseI2V"]
+diff --git a/mindspeed_mm/models/predictor/dits/pt_dit_diffusers.py b/mindspeed_mm/models/predictor/dits/pt_dit_diffusers.py
+index 9c99d9a..0fc389e 100644
+--- a/mindspeed_mm/models/predictor/dits/pt_dit_diffusers.py
++++ b/mindspeed_mm/models/predictor/dits/pt_dit_diffusers.py
+@@ -23,26 +23,26 @@ import torch_npu
+ import torch
+ import torch.nn.functional as F
+ import torch.nn.init as init
+-from diffusers.configuration_utils import ConfigMixin, register_to_config
+-from diffusers.models.embeddings import Timesteps, TimestepEmbedding
+-from diffusers.models.modeling_utils import ModelMixin
+-from diffusers.models.normalization import AdaLayerNormSingle
+-from diffusers.models.attention import AdaLayerNorm, FeedForward
+-from diffusers.models.attention_processor import Attention
+-
+-from diffusers.utils import BaseOutput, is_torch_version
++# from diffusers.configuration_utils import ConfigMixin, register_to_config
++# from diffusers.models.embeddings import Timesteps, TimestepEmbedding
++# from diffusers.models.modeling_utils import ModelMixin
++# from diffusers.models.normalization import AdaLayerNormSingle
++# from diffusers.models.attention import AdaLayerNorm, FeedForward
++# from diffusers.models.attention_processor import Attention
++
++# from diffusers.utils import BaseOutput, is_torch_version
+ from einops import rearrange, repeat
+ from torch import nn
+-from diffusers.utils.torch_utils import maybe_allow_in_graph
++# from diffusers.utils.torch_utils import maybe_allow_in_graph
+ 
+ from mindspeed_mm.models.common.embeddings import PatchEmbed2D_3DsincosPE
+ 
+ 
+-try:
+-    from diffusers.models.embeddings import PixArtAlphaTextProjection
+-except ImportError:
+-    from diffusers.models.embeddings import \
+-        CaptionProjection as PixArtAlphaTextProjection
++# try:
++#     from diffusers.models.embeddings import PixArtAlphaTextProjection
++# except ImportError:
++#     from diffusers.models.embeddings import \
++#         CaptionProjection as PixArtAlphaTextProjection
+ 
+ 
+ def zero_module(module):
+@@ -51,7 +51,7 @@ def zero_module(module):
+     return module
+ 
+ 
+-@maybe_allow_in_graph
++# @maybe_allow_in_graph
+ class ProxyTokensTransformerBlock(nn.Module):
+     r"""
+     Parameters:
+diff --git a/mindspeed_mm/models/predictor/dits/sat_dit.py b/mindspeed_mm/models/predictor/dits/sat_dit.py
+index 820b2e0..d1bc784 100644
+--- a/mindspeed_mm/models/predictor/dits/sat_dit.py
++++ b/mindspeed_mm/models/predictor/dits/sat_dit.py
+@@ -4,7 +4,7 @@ from typing import Optional, Tuple, Dict
+ from contextlib import nullcontext
+ 
+ import torch
+-from diffusers.models.embeddings import SinusoidalPositionalEmbedding
++# from diffusers.models.embeddings import SinusoidalPositionalEmbedding
+ from einops import rearrange
+ from megatron.core import mpu, tensor_parallel
+ from megatron.training import get_args
+@@ -244,7 +244,7 @@ class SatDiT(MultiModalModule):
+         height, width = latents.shape[-2] // self.patch_size_h, latents.shape[-1] // self.patch_size_w
+ 
+         if "masked_video" in kwargs.keys() and kwargs["masked_video"] is not None:
+-            latents = torch.cat([latents, kwargs["masked_video"]], dim=1)
++            latents = torch.cat([latents, kwargs["masked_video"].to(latents.dtype)], dim=1)
+ 
+         added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
+         latents_vid, latents_img, prompt_vid, prompt_img, timestep_vid, timestep_img, \
+@@ -479,7 +479,7 @@ class SatDiT(MultiModalModule):
+ 
+         # unpatchify
+         output = rearrange(latents, "b (t h w) (c o p q) -> b (t o) c (h p) (w q)",
+-                           b=latents.shape[0], h=height, w=width,
++                           b=latents.shape[0], h=height.item(), w=width.item(),
+                            o=self.patch_size_t, p=self.patch_size_h, q=self.patch_size_w,
+                            c=self.out_channels).transpose(1, 2)
+         return output
+diff --git a/mindspeed_mm/models/predictor/dits/stdit.py b/mindspeed_mm/models/predictor/dits/stdit.py
+index d11c38e..3583d68 100644
+--- a/mindspeed_mm/models/predictor/dits/stdit.py
++++ b/mindspeed_mm/models/predictor/dits/stdit.py
+@@ -2,8 +2,8 @@ import numpy as np
+ import torch
+ import torch.nn as nn
+ from einops import rearrange
+-from timm.models.layers import DropPath
+-from timm.models.vision_transformer import Mlp
++# from timm.models.layers import DropPath
++# from timm.models.vision_transformer import Mlp
+ from megatron.core import mpu, tensor_parallel
+ from megatron.training import get_args
+ 
+diff --git a/mindspeed_mm/models/predictor/dits/stdit3.py b/mindspeed_mm/models/predictor/dits/stdit3.py
+index 5629496..bd1638e 100644
+--- a/mindspeed_mm/models/predictor/dits/stdit3.py
++++ b/mindspeed_mm/models/predictor/dits/stdit3.py
+@@ -4,8 +4,8 @@ import torch_npu
+ import torch.distributed as dist
+ import torch.nn as nn
+ from einops import rearrange
+-from timm.models.layers import DropPath
+-from timm.models.vision_transformer import Mlp
++# from timm.models.layers import DropPath
++# from timm.models.vision_transformer import Mlp
+ 
+ from megatron.core import mpu
+ from mindspeed_mm.models.common.module import MultiModalModule
+diff --git a/mindspeed_mm/models/predictor/dits/video_dit.py b/mindspeed_mm/models/predictor/dits/video_dit.py
+index b16dfd0..868cc5e 100644
+--- a/mindspeed_mm/models/predictor/dits/video_dit.py
++++ b/mindspeed_mm/models/predictor/dits/video_dit.py
+@@ -4,9 +4,9 @@ from einops import rearrange, repeat
+ import torch
+ from torch import nn
+ import torch.nn.functional as F
+-from diffusers.models.embeddings import SinusoidalPositionalEmbedding, PixArtAlphaTextProjection
+-from diffusers.models.normalization import AdaLayerNorm, AdaLayerNormContinuous, AdaLayerNormZero, AdaLayerNormSingle
+-from diffusers.models.attention import FeedForward
++# from diffusers.models.embeddings import SinusoidalPositionalEmbedding, PixArtAlphaTextProjection
++# from diffusers.models.normalization import AdaLayerNorm, AdaLayerNormContinuous, AdaLayerNormZero, AdaLayerNormSingle
++# from diffusers.models.attention import FeedForward
+ from megatron.core import mpu, tensor_parallel
+ from megatron.training import get_args
+ 
+diff --git a/mindspeed_mm/models/predictor/dits/video_dit_sparse.py b/mindspeed_mm/models/predictor/dits/video_dit_sparse.py
+index 4e980ad..9ec2ca5 100644
+--- a/mindspeed_mm/models/predictor/dits/video_dit_sparse.py
++++ b/mindspeed_mm/models/predictor/dits/video_dit_sparse.py
+@@ -5,8 +5,8 @@ from einops import rearrange, repeat
+ import torch
+ from torch import nn
+ import torch.nn.functional as F
+-from diffusers.models.embeddings import PixArtAlphaTextProjection
+-from diffusers.models.normalization import AdaLayerNormSingle
++# from diffusers.models.embeddings import PixArtAlphaTextProjection
++# from diffusers.models.normalization import AdaLayerNormSingle
+ from megatron.core import mpu, tensor_parallel
+ from megatron.training import get_args
+ 
+diff --git a/mindspeed_mm/models/predictor/predict_model.py b/mindspeed_mm/models/predictor/predict_model.py
+index 83fc772..54fcf73 100644
+--- a/mindspeed_mm/models/predictor/predict_model.py
++++ b/mindspeed_mm/models/predictor/predict_model.py
+@@ -2,7 +2,7 @@ from torch import nn
+ from megatron.training.utils import print_rank_0
+ 
+ from mindspeed_mm.models.common.checkpoint import load_checkpoint
+-from .dits import VideoDiT, Latte, STDiT, STDiT3, VideoDitSparse, SatDiT, VideoDitSparseI2V, PTDiT
++from .dits import VideoDiT, Latte, STDiT, STDiT3, VideoDitSparse, SatDiT, VideoDitSparseI2V
+ 
+ PREDICTOR_MODEL_MAPPINGS = {
+     "videodit": VideoDiT,
+@@ -12,7 +12,6 @@ PREDICTOR_MODEL_MAPPINGS = {
+     "stdit": STDiT,
+     "stdit3": STDiT3,
+     "satdit": SatDiT,
+-    "ptdit": PTDiT,
+ }
+ 
+ 
+diff --git a/mindspeed_mm/models/text_encoder/text_encoder.py b/mindspeed_mm/models/text_encoder/text_encoder.py
+index 484fc9e..3a643d5 100644
+--- a/mindspeed_mm/models/text_encoder/text_encoder.py
++++ b/mindspeed_mm/models/text_encoder/text_encoder.py
+@@ -46,6 +46,7 @@ class TextEncoder(nn.Module):
+         # Only huggingface backend is supported, OpenMind backend will be supported soon.
+         module = importlib.import_module("transformers")
+         automodel = getattr(module, self.automodel_name)
++        config["low_cpu_mem_usage"] = False
+         self.model = automodel.from_pretrained(**config)
+ 
+     def get_model(self):
+diff --git a/mindspeed_mm/models/vision/vision_encoders/__init__.py b/mindspeed_mm/models/vision/vision_encoders/__init__.py
+index 23d51b9..927f550 100644
+--- a/mindspeed_mm/models/vision/vision_encoders/__init__.py
++++ b/mindspeed_mm/models/vision/vision_encoders/__init__.py
+@@ -1,4 +1,4 @@
+ from .clip_vit_model import CLIPViT
+-from .qwen2vl_vit_model import Qwen2VLViT
++# from .qwen2vl_vit_model import Qwen2VLViT
+ 
+-__all__ = ["CLIPViT", "Qwen2VLViT"]
+\ No newline at end of file
++__all__ = ["CLIPViT"]
+\ No newline at end of file
+diff --git a/mindspeed_mm/models/vision/vision_encoders/internvit_model.py b/mindspeed_mm/models/vision/vision_encoders/internvit_model.py
+index 4b70577..15dcd38 100644
+--- a/mindspeed_mm/models/vision/vision_encoders/internvit_model.py
++++ b/mindspeed_mm/models/vision/vision_encoders/internvit_model.py
+@@ -11,7 +11,7 @@ from torch import nn
+ import torch.nn.functional as F
+ import torch.utils.checkpoint
+ import torch_npu
+-from timm.models.layers import DropPath
++# from timm.models.layers import DropPath
+ 
+ from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
+ from megatron.core.transformer.enums import AttnMaskType
+diff --git a/mindspeed_mm/models/vision/vision_model.py b/mindspeed_mm/models/vision/vision_model.py
+index fa695cb..c01f7f1 100644
+--- a/mindspeed_mm/models/vision/vision_model.py
++++ b/mindspeed_mm/models/vision/vision_model.py
+@@ -7,23 +7,23 @@ from megatron.core.transformer.spec_utils import ModuleSpec
+ 
+ from mindspeed_mm.models.common.module import MultiModalModule
+ from .vision_encoders.clip_vit_model import CLIPViT
+-from .vision_encoders.internvit_model import InternViT
+-from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
+-from .projectors.multimodal_projector import MultimodalProjector
+-from .projectors.internvl_mlp import InternVLMLP
+-
+-
+-VISION_ENCODER_MAPPINGS = {
+-    "clip": CLIPViT,
+-    "InternViT": InternViT,
+-    "qwen2vit": Qwen2VLViT,
+-}
+-
+-VISION_PROJECTION_MAPPINGS = {
+-    "mlp": MultimodalProjector,
+-    "InternVLMLP": InternVLMLP,
+-    "lnmlp": MultimodalProjector,
+-}
++# from .vision_encoders.internvit_model import InternViT
++# from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
++# from .projectors.multimodal_projector import MultimodalProjector
++# from .projectors.internvl_mlp import InternVLMLP
++
++
++# VISION_ENCODER_MAPPINGS = {
++#     "clip": CLIPViT,
++#     "InternViT": InternViT,
++#     "qwen2vit": Qwen2VLViT,
++# }
++
++# VISION_PROJECTION_MAPPINGS = {
++#     "mlp": MultimodalProjector,
++#     "InternVLMLP": InternVLMLP,
++#     "lnmlp": MultimodalProjector,
++# }
+ 
+ 
+ class VisionModel(MultiModalModule):
+diff --git a/mindspeed_mm/patchs/diffusers_patches.py b/mindspeed_mm/patchs/diffusers_patches.py
+index 96e1961..d259f1b 100644
+--- a/mindspeed_mm/patchs/diffusers_patches.py
++++ b/mindspeed_mm/patchs/diffusers_patches.py
+@@ -14,8 +14,8 @@
+ # limitations under the License.
+ 
+ import torch_npu
+-from diffusers.utils.deprecation_utils import deprecate
+-from diffusers.utils.import_utils import is_torch_npu_available
++# from diffusers.utils.deprecation_utils import deprecate
++# from diffusers.utils.import_utils import is_torch_npu_available
+ 
+ 
+ def geglu_forward(self, hidden_states, *args, **kwargs):
+diff --git a/mindspeed_mm/tasks/__init__.py b/mindspeed_mm/tasks/__init__.py
+index 701e37a..382e9ca 100644
+--- a/mindspeed_mm/tasks/__init__.py
++++ b/mindspeed_mm/tasks/__init__.py
+@@ -1,3 +1,3 @@
+-from mindspeed_mm.tasks.inference import sora_pipeline_dict, vlm_pipeline_dict
++# from mindspeed_mm.tasks.inference import sora_pipeline_dict, vlm_pipeline_dict
+ 
+-__all__ = ["sora_pipeline_dict", "vlm_pipeline_dict"]
++# __all__ = ["sora_pipeline_dict", "vlm_pipeline_dict"]
+diff --git a/mindspeed_mm/training.py b/mindspeed_mm/training.py
+index db52bd8..78cc2a9 100644
+--- a/mindspeed_mm/training.py
++++ b/mindspeed_mm/training.py
+@@ -108,8 +108,8 @@ def pretrain(
+     if args.log_progress:
+         append_to_progress_log("Starting job")
+ 
+-    torch.backends.cuda.matmul.allow_tf32 = getattr(args.mm.model, "allow_tf32", False)
+-    torch.npu.config.allow_internal_format = getattr(args.mm.model, "allow_internal_format", False)
++    # torch.backends.cuda.matmul.allow_tf32 = getattr(args.mm.model, "allow_tf32", False)
++    # torch.npu.config.allow_internal_format = getattr(args.mm.model, "allow_internal_format", False)
+ 
+     # Set pytorch JIT layer fusion options and warmup JIT functions.
+     set_jit_fusion_options()
+diff --git a/mindspeed_mm/utils/extra_processor/cogvideox_i2v_processor.py b/mindspeed_mm/utils/extra_processor/cogvideox_i2v_processor.py
+index 87ce289..3d3a21f 100644
+--- a/mindspeed_mm/utils/extra_processor/cogvideox_i2v_processor.py
++++ b/mindspeed_mm/utils/extra_processor/cogvideox_i2v_processor.py
+@@ -24,7 +24,7 @@ class CogVideoXI2VProcessor:
+         self.noised_image_input = config.get("noised_image_input", True)
+ 
+     def add_noise_to_image(self, image):
+-        sigma = torch.normal(mean=-3.0, std=0.5, size=(image.shape[0],)).to(image.device)
++        sigma = torch.normal(mean=-3.0, std=0.5, size=(image.shape[0],))
+         sigma = torch.exp(sigma).to(image.dtype)
+         image_noise = torch.randn_like(image) * sigma[:, None, None, None, None]
+         image = image + image_noise
+diff --git a/mindspeed_mm/utils/utils.py b/mindspeed_mm/utils/utils.py
+index beae077..af1bd4d 100644
+--- a/mindspeed_mm/utils/utils.py
++++ b/mindspeed_mm/utils/utils.py
+@@ -66,7 +66,7 @@ def get_device(device="npu"):
+ 
+ def get_dtype(dtype):
+     """return torch type according to the string"""
+-    if isinstance(dtype, torch.dtype):
++    if dtype == torch.bfloat16 or dtype == torch.float32:
+         return dtype
+     dtype_mapping = {
+         "int32": torch.int32,
+diff --git a/pretrain_sora.py b/pretrain_sora.py
+index 5abd459..3dd759d 100644
+--- a/pretrain_sora.py
++++ b/pretrain_sora.py
+@@ -48,9 +48,9 @@ def get_batch_on_this_tp_rank(data_iterator):
+         batch = next(data_iterator)
+     else:
+         return None
+-    for k, v in batch.items():
+-        if isinstance(v, torch.Tensor):
+-            batch[k] = v.to(torch.cuda.current_device())
++    # for k, v in batch.items():
++    #     if isinstance(v, torch.Tensor):
++    #         batch[k] = v.to(torch.cuda.current_device())
+     return batch
+ 
+ 
