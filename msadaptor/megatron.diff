@@ -1436,16 +1436,6 @@ index 025f7c2b..d22b35ed 100644
  def erf_gelu(x):
      return (
          x * 0.5 * (torch.erf(x / 1.41421).to(dtype=x.dtype) + torch.ones_like(x).to(dtype=x.dtype))
-diff --git a/megatron/legacy/fp16_deprecated/loss_scaler.py b/megatron/legacy/fp16_deprecated/loss_scaler.py
-index cb64aa92..b17e8cc8 100755
---- a/megatron/legacy/fp16_deprecated/loss_scaler.py
-+++ b/megatron/legacy/fp16_deprecated/loss_scaler.py
-@@ -1,4 +1,4 @@
--# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
-+# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
- 
- """For backward compatibility, we need the class definitions to deserialize."""
- 
 diff --git a/megatron/legacy/fused_kernels/__init__.py b/megatron/legacy/fused_kernels/__init__.py
 index 87cceac3..a2bc8ca8 100644
 --- a/megatron/legacy/fused_kernels/__init__.py
