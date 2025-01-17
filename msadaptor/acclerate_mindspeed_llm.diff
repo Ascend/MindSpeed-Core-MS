@@ -675,3 +675,25 @@ index c7fe7b3..fd6f935 100644
      else:
          args.sparse_mode = 0
          if args.attention_mask_on_cpu:
+diff --git a/mindspeed/op_builder/algorithm_builder.py b/mindspeed/op_builder/algorithm_builder.py
+index 3e6a543..2bcd18e 100644
+--- a/mindspeed/op_builder/algorithm_builder.py
++++ b/mindspeed/op_builder/algorithm_builder.py
+@@ -1,11 +1,15 @@
+ from mindspeed.op_builder.builder import MindSpeedOpBuilder
+-
++from mindspore.utils import _reuse_data_ptr
+ 
+ class AlgorithmOpBuilder(MindSpeedOpBuilder):
+     OP_NAME = "algorithm"
++    reuse_data_ptr = _reuse_data_ptr
+ 
+     def __init__(self):
+         super(AlgorithmOpBuilder, self).__init__(self.OP_NAME)
+ 
+     def sources(self):
+-        return ['ops/csrc/algorithm/algorithm.cpp']
++        raise NotImplementedError
++
++    def load(self, verbose=True):
++        return self

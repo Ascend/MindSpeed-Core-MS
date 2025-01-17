@@ -6,6 +6,7 @@ from mindspore import ops
 from mindspore.ops._primitive_cache import _get_cache_prim
 from ..configs import use_pyboost, ON_ORANGE_PI
 from .._bind import get_default_dtype
+from ._inner import get_item
 
 def as_strided(self, size, stride, storage_offset=None):
     if len(size) != len(stride):
@@ -79,6 +80,9 @@ has_arange = hasattr(mindspore.mint, 'arange')
 def arange(start=0, end=None, step=1, *, dtype=None, device=None):
     if ON_ORANGE_PI and dtype in (None, mindspore.int64):
         dtype = mindspore.int32
+    start = get_item(start)
+    end = get_item(end)
+    step = get_item(step)
     if use_pyboost() and has_arange:
         return mindspore.mint.arange(start, end, step, dtype=dtype)
     return ops.arange(start, end, step, dtype=dtype)

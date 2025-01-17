@@ -314,19 +314,25 @@ class Conv3d(_ConvNd):
             in_channels, out_channels, kernel_size_, stride_, padding_, dilation_,
             False, _triple(0), groups, bias, padding_mode, **factory_kwargs)
 
-        if isinstance(padding, str) and padding_mode == "zeros":
-            self.conv3d = conv3d_padding_op
-        else:
-            self.conv3d = conv3d_ext_op
+        def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
+            if self.padding_mode != "zeros":
+                return F.conv3d(
+                    F.pad(
+                        input, self._reversed_padding_repeated_twice, mode=self.padding_mode
+                    ),
+                    weight,
+                    bias,
+                    self.stride,
+                    _triple(0),
+                    self.dilation,
+                    self.groups,
+                )
+            return F.conv3d(
+                input, weight, bias, self.stride, self.padding, self.dilation, self.groups
+            )
 
-
-    def forward(self, input):
-        if self.padding_mode != "zeros":
-            output = self.conv3d(pad_ext(input, self._reversed_padding_repeated_twice, mode=self.padding_mode), self.weight,
-                                 self.bias, self.stride, (0, 0, 0), self.dilation, self.groups)
-        else:
-            output = self.conv3d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
-        return output
+        def forward(self, input: Tensor) -> Tensor:
+            return self._conv_forward(input, self.weight, self.bias)
 
 # class Conv3d(_ConvNd):
 
