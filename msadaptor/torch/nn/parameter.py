@@ -13,8 +13,8 @@ class Parameter(Tensor):
         self.param_info.name = str(uuid.uuid4())
         self.param_info.parameter_shape = self._shape
         self.param_info.requires_grad = requires_grad
-        self.requires_grad = requires_grad
-        if self.requires_grad:
+        self._requires_grad = requires_grad
+        if self._requires_grad:
             self.retain_grad()
 
     def __deepcopy__(self, memodict):
@@ -44,10 +44,28 @@ class Parameter(Tensor):
 
     @property
     def data(self):
-        return Parameter(self)
+        return Tensor(self)
 
     @data.setter
     def data(self, new_value):
         if isinstance(new_value, StubTensor):
             new_value = new_value.stub.get_value()
         self.assign_value(new_value)
+
+    @property
+    def requires_grad(self):
+        return self._requires_grad
+
+    @requires_grad.setter
+    def requires_grad(self, value):
+        if not isinstance(value, bool):
+            raise TypeError("The 'requires_grad' attribute of parameter must be set as bool.")
+        self.param_info.requires_grad = value
+        self._requires_grad = value
+        if value:
+            if not hasattr(self, 'handle'):
+                self.retain_grad()
+        else:
+            if hasattr(self, 'handle'):
+                self.handle.remove()
+                self.handle = None
