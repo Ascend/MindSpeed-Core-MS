@@ -22,7 +22,6 @@ git clone https://gitee.com/ascend/MindSpeed.git
 cd MindSpeed
 git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
 git apply ../msadaptor/acclerate_mindspeed_mm.diff
-git diff
 cd ..
 ```
 
@@ -48,8 +47,8 @@ cd ..
 # 设置环境变量
 
 ```shell
-MindSpeed-Core-MS_PATH=PATH
-export PYTHONPATH=$MindSpeed-Core-MS_PATH/msadaptor:$MindSpeed-Core-MS_PATH/Megatron-LM/:$MindSpeed-Core-MS_PATH/MindSpeed/:$MindSpeed-Core-MS_PATH/transformers/src/:$PYTHONPATH
+MindSpeed_Core_MS_PATH=PATH
+export PYTHONPATH=${MindSpeed-Core-MS_PATH}/msadaptor:${MindSpeed-Core-MS_PATH}/Megatron-LM/:${MindSpeed-Core-MS_PATH}/MindSpeed/:${MindSpeed-Core-MS_PATH}/transformers/src/:$PYTHONPATH
 cd MindSpeed-MM/
 ```
 
