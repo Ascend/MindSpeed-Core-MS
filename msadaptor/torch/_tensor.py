@@ -8,7 +8,8 @@ from .configs import use_pyboost
 from ._utils import _rebuild_tensor_v2
 from ._C.size import Size
 from .ops import (transpose, mean, repeat_interleave, unsqueeze, pow, 
-                  split, norm)
+                  split, norm, reshape)
+from .ops._inner import get_item
 
 MS_PT_DTYPE_MAP = {
     'Float32': 'torch.cuda.FloatTensor',
@@ -97,6 +98,9 @@ StubTensor.nelement = numel
 StubTensor.__hash__ = Tensor.__hash__
 
 def _repeat(self, *sizes):
+    if len(sizes) == 1 and isinstance(sizes[0], Sequence):
+        sizes = sizes[0]
+    sizes = tuple([get_item(t) for t in sizes])
     return ops.tile(self, tuple(sizes))
 
 Tensor.repeat = _repeat
@@ -276,6 +280,7 @@ StubTensor.float = _float
 def expand(self, *sizes):
     if len(sizes) == 1 and isinstance(sizes[0], Sequence):
         sizes = sizes[0]
+    sizes = tuple([get_item(t) for t in sizes])
     return self.broadcast_to(sizes)
 
 Tensor.expand = expand
@@ -299,3 +304,18 @@ def __imul__(self, other):
 
 Tensor.__imul__ = __imul__
 StubTensor.__imul__ = __imul__
+
+def cpu(self):
+    return self
+
+Tensor.cpu = cpu
+StubTensor.cpu = cpu
+
+def _reshape(self, *sizes):
+    if len(sizes) == 1 and isinstance(sizes[0], Sequence):
+        sizes = sizes[0]
+    sizes = tuple([get_item(t) for t in sizes])
+    return reshape(self, sizes)
+
+Tensor.reshape = _reshape
+StubTensor.reshape = _reshape

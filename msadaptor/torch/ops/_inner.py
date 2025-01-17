@@ -16,4 +16,12 @@ def pad(input, pad, mode='constant', value=0.0):
         return ops.pad(input, pad, mode)
     return ops.pad(input, pad, mode, value)
 
+def get_item(t):
+    if isinstance(t, mindspore.Tensor):
+        if t.numel() == 1:
+            return t.item()
+        else:
+            raise ValueError("Cannot get item from tensor whose size is larger than 1")
+    return t
+
 __all__ = ['cast', 'assign']
