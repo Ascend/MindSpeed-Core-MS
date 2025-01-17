@@ -1,5 +1,5 @@
 diff --git a/mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py b/mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py
-index 5836616c..51565761 100644
+index 5836616c..9e9ae670 100644
 --- a/mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py
 +++ b/mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py
 @@ -21,7 +21,7 @@ def apply_llama3_scaling(freqs: torch.Tensor):
@@ -20,8 +20,25 @@ index 5836616c..51565761 100644
      )
  
      inv_freq = freq_inter * (1 - inv_freq_mask) + freq_extra * inv_freq_mask
-@@ -183,7 +183,6 @@ def apply_rotary_pos_emb_bshd(t: Tensor, freqs: Tensor, rotary_interleaved: bool
-         t = torch_npu.npu_rotary_mul(t, cos_, sin_).to(t.dtype)
+@@ -152,7 +152,9 @@ def apply_rotary_pos_emb(t, freqs, rotary_interleaved=False):
+     if args.use_fused_rotary_pos_emb:
+         cos = torch.cos(freqs)
+         sin = torch.sin(freqs)
+-        return torch_npu.npu_rotary_mul(t, cos, sin).to(t.dtype)
++        mode = 1 if rotary_interleaved else 0
++        return torch_npu.npu_rotary_position_embedding(t, cos.to(t.dtype), sin.to(t.dtype), mode=mode).to(t.dtype)
++        # return torch_npu.npu_rotary_mul(t, cos, sin).to(t.dtype)
+ 
+     rot_dim = freqs.shape[-1]
+     t, t_pass = t[..., :rot_dim], t[..., rot_dim:]
+@@ -180,10 +182,11 @@ def apply_rotary_pos_emb_bshd(t: Tensor, freqs: Tensor, rotary_interleaved: bool
+     sin_ = (torch.sin(freqs) * _mscale).to(t.dtype)
+     
+     if args.use_fused_rotary_pos_emb:
+-        t = torch_npu.npu_rotary_mul(t, cos_, sin_).to(t.dtype)
++        mode = 1 if rotary_interleaved else 0
++        t = torch_npu.npu_rotary_position_embedding(t, cos_.to(t.dtype), sin_.to(t.dtype), mode=mode).to(t.dtype)
++        # t = torch_npu.npu_rotary_mul(t, cos_, sin_).to(t.dtype)
      else:
          t = (t * cos_) + (_rotate_half(t, rotary_interleaved) * sin_)
 -    
@@ -773,3 +790,97 @@ index b769a246..1191a8ab 100644
          MegatronAdaptation.register('megatron.core.tensor_parallel.layers.VocabParallelEmbedding.forward',
                                      vocab_parallel_embedding_forward)
          MegatronAdaptation.register('megatron.core.tensor_parallel.layers.VocabParallelEmbedding.forward',
+diff --git a/pretrain_gpt.py b/pretrain_gpt.py
+index 2470c2d9..1c7f642f 100644
+--- a/pretrain_gpt.py
++++ b/pretrain_gpt.py
+@@ -109,6 +109,27 @@ def get_batch(data_iterator):
+     return batch.values()
+ 
+ 
++class ReduceFromContextParallelRegion(torch.autograd.Function):
++    """All-reduce the input from the model parallel region."""
++
++    @staticmethod
++    def symbolic(graph, input_):
++        torch.distributed.all_reduce(input_, group=mpu.get_context_parallel_group())
++        return input_
++        # return _reduce(input_)
++
++    @staticmethod
++    def forward(ctx, input_):
++        torch.distributed.all_reduce(input_, group=mpu.get_context_parallel_group())
++        return input_
++        # torch.distributed.all_reduce(_input, group=mpu.get_context_parallel_group())
++        # return _reduce(input_)
++
++    @staticmethod
++    def backward(ctx, grad_output):
++        return grad_output
++
++
+ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
+     """Loss function.
+ 
+@@ -121,9 +142,13 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
+     losses = output_tensor.float()
+     loss_mask = loss_mask.view(-1).float()
+     if args.context_parallel_size > 1:
+-        loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
+-        torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
+-        loss = loss[0] / loss[1]
++        loss1 = torch.sum(losses.view(-1) * loss_mask)
++        loss2 = loss_mask.sum()
++
++        loss1 = ReduceFromContextParallelRegion()(loss1)
++        loss2 = ReduceFromContextParallelRegion()(loss2)
++
++        loss = loss1 / loss2
+     else:
+         loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+ 
+@@ -133,13 +158,43 @@ def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
+         if loss.isnan():
+             raise ValueError(f'Rank {global_rank}: found NaN in local forward loss calculation. '
+                              f'Device: {torch.cuda.current_device()}, node: {os.uname()[1]}')
+-
+     # Reduce loss for logging.
+     averaged_loss = average_losses_across_data_parallel_group([loss])
+ 
+     return loss * args.context_parallel_size, {'lm loss': averaged_loss[0]}
+ 
+ 
++# def loss_func(loss_mask: torch.Tensor, output_tensor: torch.Tensor):
++#     """Loss function.
++
++#     Args:
++#         loss_mask (torch.Tensor): Used to mask out some portions of the loss
++#         output_tensor (torch.Tensor): The tensor with the losses
++#     """    
++#     args = get_args()
++
++#     losses = output_tensor.float()
++#     loss_mask = loss_mask.view(-1).float()
++#     if args.context_parallel_size > 1:
++#         loss = torch.cat([torch.sum(losses.view(-1) * loss_mask).view(1), loss_mask.sum().view(1)])
++#         torch.distributed.all_reduce(loss, group=mpu.get_context_parallel_group())
++#         loss = loss[0] / loss[1]
++#     else:
++#         loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
++
++#     # Check individual rank losses are not NaN prior to DP all-reduce.
++#     if args.check_for_nan_in_loss_and_grad:
++#         global_rank = torch.distributed.get_rank()
++#         if loss.isnan():
++#             raise ValueError(f'Rank {global_rank}: found NaN in local forward loss calculation. '
++#                              f'Device: {torch.cuda.current_device()}, node: {os.uname()[1]}')
++
++#     # Reduce loss for logging.
++#     averaged_loss = average_losses_across_data_parallel_group([loss])
++
++#     return loss * args.context_parallel_size, {'lm loss': averaged_loss[0]}
++
++
+ def forward_step(data_iterator, model: GPTModel):
+     """Forward training step.
+ 

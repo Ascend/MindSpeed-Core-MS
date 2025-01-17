@@ -15,6 +15,24 @@ def npu_swiglu(x, dim=-1):
     return swiglu(x, dim)
 
 
+from mindspore.ops import rotary_position_embedding
+
+
+def npu_rotary_position_embedding(x, cos, sin, mode=0):
+    """
+    Inputs:
+        - **x** (Tensor) - The input tensor.
+        - **cos** (Tensor) - The input cos tensor.
+        - **sin** (Tensor) - The input sin tensor.
+        - **mode** (int) - Optional mode value: 0 rotate half, 1 rotate interleaved.
+
+    Outputs:
+        - **y** (Tensor) - The output tensor.
+
+    """
+    return rotary_position_embedding(x, cos, sin, mode)
+
+
 # def npu_fusion_attention(query, key, value, head_num, input_layout, pse=None, padding_mask=None, atten_mask=None,
 #                          scale=1., keep_prob=1., pre_tockens=2147483647, next_tockens=2147483647, inner_precise=0,
 #                          prefix=None, actual_seq_qlen=None, actual_seq_kvlen=None, sparse_mode=0,

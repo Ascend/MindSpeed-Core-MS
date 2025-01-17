@@ -18,7 +18,7 @@ from torch.distributed.tensor._op_schema import (
     TupleStrategy,
 )
 from torch.distributed.tensor._ops.utils import (
-    as_list,
+    # as_list,
     expand_to_full_mesh_op_strategy,
     generate_redistribute_costs,
     is_tensor_evenly_shardable,
@@ -35,7 +35,7 @@ from torch.distributed.tensor.placement_types import (
 )
 
 
-aten = torch.ops.aten
+# aten = torch.ops.aten
 
 
 class Reduction(Enum):
@@ -303,58 +303,58 @@ def common_reduction_strategy(
     return reduction_strategy
 
 
-LINEAR_REDUCTION_OP_MAP = {
-    aten.all.default: "sum",
-    aten.all.dim: "sum",
-    aten.sum.default: "sum",
-    aten.sum.dim_IntList: "sum",
-    aten.prod.default: "product",
-    aten.prod.dim_int: "product",
-    aten.prod.int_out: "product",
-    aten.mean.default: "avg",
-    aten.mean.dim: "avg",
-    aten.mean.out: "avg",
-    aten.max.default: "max",
-    aten.max.dim: "max",
-    aten.max.out: "max",
-    aten.min.default: "min",
-    aten.min.dim: "min",
-    aten.min.out: "min",
-    aten.any.default: "sum",
-    aten.any.dim: "sum",
-    aten.any.out: "sum",
-}
+# LINEAR_REDUCTION_OP_MAP = {
+#     aten.all.default: "sum",
+#     aten.all.dim: "sum",
+#     aten.sum.default: "sum",
+#     aten.sum.dim_IntList: "sum",
+#     aten.prod.default: "product",
+#     aten.prod.dim_int: "product",
+#     aten.prod.int_out: "product",
+#     aten.mean.default: "avg",
+#     aten.mean.dim: "avg",
+#     aten.mean.out: "avg",
+#     aten.max.default: "max",
+#     aten.max.dim: "max",
+#     aten.max.out: "max",
+#     aten.min.default: "min",
+#     aten.min.dim: "min",
+#     aten.min.out: "min",
+#     aten.any.default: "sum",
+#     aten.any.dim: "sum",
+#     aten.any.out: "sum",
+# }
 
 
-@register_op_strategy(
-    list(LINEAR_REDUCTION_OP_MAP.keys()), schema_info=RuntimeSchemaInfo(1)
-)
-def linear_reduction_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
-    args_schema = op_schema.args_schema
-    input_strategy = args_schema[0]
-    assert isinstance(input_strategy, OpStrategy)
-    dims = None
-    if len(op_schema.args_schema) > 1:
-        dims = _infer_reduction_dims(args_schema[1], input_strategy.ndim)
+# @register_op_strategy(
+#     list(LINEAR_REDUCTION_OP_MAP.keys()), schema_info=RuntimeSchemaInfo(1)
+# )
+# def linear_reduction_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
+#     args_schema = op_schema.args_schema
+#     input_strategy = args_schema[0]
+#     assert isinstance(input_strategy, OpStrategy)
+#     dims = None
+#     if len(op_schema.args_schema) > 1:
+#         dims = _infer_reduction_dims(args_schema[1], input_strategy.ndim)
+#
+#     reduce_dims = list(range(input_strategy.ndim)) if dims is None else dims
+#
+#     keep_dim = len(op_schema.args_schema) > 2 and bool(op_schema.args_schema[2])
+#     reduction_op = LINEAR_REDUCTION_OP_MAP[op_schema.op]
+#     return common_reduction_strategy(
+#         mesh,
+#         input_strategy,
+#         reduce_dims,
+#         keep_dim=keep_dim,
+#         reduction_linear=True,
+#         reduction_op=reduction_op,
+#     )
 
-    reduce_dims = list(range(input_strategy.ndim)) if dims is None else dims
 
-    keep_dim = len(op_schema.args_schema) > 2 and bool(op_schema.args_schema[2])
-    reduction_op = LINEAR_REDUCTION_OP_MAP[op_schema.op]
-    return common_reduction_strategy(
-        mesh,
-        input_strategy,
-        reduce_dims,
-        keep_dim=keep_dim,
-        reduction_linear=True,
-        reduction_op=reduction_op,
-    )
-
-
-@register_op_strategy(
-    [aten.var.correction, aten.var.correction_out],
-    schema_info=RuntimeSchemaInfo(1, ["keepdim"]),
-)
+# @register_op_strategy(
+#     [aten.var.correction, aten.var.correction_out],
+#     schema_info=RuntimeSchemaInfo(1, ["keepdim"]),
+# )
 def var_reduction_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     args_schema = op_schema.args_schema
     input_strategy = args_schema[0]
@@ -371,9 +371,9 @@ def var_reduction_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     )
 
 
-@register_op_strategy(
-    [aten.linalg_vector_norm.default], schema_info=RuntimeSchemaInfo(1)
-)
+# @register_op_strategy(
+#     [aten.linalg_vector_norm.default], schema_info=RuntimeSchemaInfo(1)
+# )
 def vector_norm_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     args_schema = op_schema.args_schema
     input_strategy = args_schema[0]
@@ -394,9 +394,9 @@ def vector_norm_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     )
 
 
-@register_op_strategy(
-    [aten._foreach_norm.Scalar], schema_info=RuntimeSchemaInfo(1, needs_pytree=True)
-)
+# @register_op_strategy(
+#     [aten._foreach_norm.Scalar], schema_info=RuntimeSchemaInfo(1, needs_pytree=True)
+# )
 def foreach_norm_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> TupleStrategy:
     args_schema = op_schema.args_schema
     input_tuple_strategy = args_schema[0]
@@ -418,28 +418,28 @@ def foreach_norm_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> TupleStrateg
     return TupleStrategy(output_tuple_strategy_childs)
 
 
-@register_op_strategy(
-    [
-        aten._linalg_svd.default,
-        aten.linalg_qr.default,
-        # TODO: The diagonal ops can have an improved sharding strategy for
-        # shard placements that does not require redistributing to replicate.
-        aten.diagonal_copy.default,
-        aten.diag_embed.default,
-        aten.diag.default,
-        aten.diagonal.default,
-        aten.tril.default,
-        aten.triu.default,
-        aten._linalg_eigh.default,
-        aten.upsample_bicubic2d.default,
-        aten.upsample_bilinear2d.default,
-        aten.upsample_linear1d.default,
-        aten.upsample_nearest2d.default,
-        aten.upsample_trilinear3d.default,
-        # TODO: support the full F.interpolate set of options.
-    ],
-    schema_info=RuntimeSchemaInfo(1),
-)
+# @register_op_strategy(
+#     [
+#         aten._linalg_svd.default,
+#         aten.linalg_qr.default,
+#         # TODO: The diagonal ops can have an improved sharding strategy for
+#         # shard placements that does not require redistributing to replicate.
+#         aten.diagonal_copy.default,
+#         aten.diag_embed.default,
+#         aten.diag.default,
+#         aten.diagonal.default,
+#         aten.tril.default,
+#         aten.triu.default,
+#         aten._linalg_eigh.default,
+#         aten.upsample_bicubic2d.default,
+#         aten.upsample_bilinear2d.default,
+#         aten.upsample_linear1d.default,
+#         aten.upsample_nearest2d.default,
+#         aten.upsample_trilinear3d.default,
+#         # TODO: support the full F.interpolate set of options.
+#     ],
+#     schema_info=RuntimeSchemaInfo(1),
+# )
 def linalg_replicate_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     """
     Since we do not have a simple way to compute some linear algebra operations
@@ -468,10 +468,10 @@ def linalg_replicate_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrate
     return OpStrategy(output_strategies)
 
 
-@register_op_strategy(
-    [aten._log_softmax.default, aten._softmax.default, aten._safe_softmax.default],
-    schema_info=RuntimeSchemaInfo(1),
-)
+# @register_op_strategy(
+#     [aten._log_softmax.default, aten._softmax.default, aten._safe_softmax.default],
+#     schema_info=RuntimeSchemaInfo(1),
+# )
 def softmax_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     input_strategy, softmax_dim, *_ = op_schema.args_schema
     input_strategy = cast(OpStrategy, input_strategy)
@@ -506,13 +506,13 @@ def softmax_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     return output_strategy
 
 
-@register_op_strategy(
-    [
-        aten._log_softmax_backward_data.default,
-        aten._softmax_backward_data.default,
-    ],
-    schema_info=RuntimeSchemaInfo(2),
-)
+# @register_op_strategy(
+#     [
+#         aten._log_softmax_backward_data.default,
+#         aten._softmax_backward_data.default,
+#     ],
+#     schema_info=RuntimeSchemaInfo(2),
+# )
 def softmax_backward_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     grad_out_strategy, out_strategy, softmax_dim, _ = op_schema.args_schema
     grad_out_strategy = cast(OpStrategy, grad_out_strategy)
@@ -550,10 +550,10 @@ def softmax_backward_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrate
     return grad_in_strategy
 
 
-@register_op_strategy(
-    [aten.nll_loss_forward.default, aten.nll_loss2d_forward.default],
-    schema_info=RuntimeSchemaInfo(3),
-)
+# @register_op_strategy(
+#     [aten.nll_loss_forward.default, aten.nll_loss2d_forward.default],
+#     schema_info=RuntimeSchemaInfo(3),
+# )
 def nll_loss_forward_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     assert len(op_schema.args_schema) == 5
     (
@@ -671,10 +671,10 @@ def nll_loss_forward_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrate
     return output_strategy
 
 
-@register_op_strategy(
-    [aten.nll_loss_backward.default, aten.nll_loss2d_backward.default],
-    schema_info=RuntimeSchemaInfo(4),
-)
+# @register_op_strategy(
+#     [aten.nll_loss_backward.default, aten.nll_loss2d_backward.default],
+#     schema_info=RuntimeSchemaInfo(4),
+# )
 def nll_loss_backward_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     assert len(op_schema.args_schema) == 7
     (
@@ -783,10 +783,10 @@ def nll_loss_backward_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrat
     return grad_in_strategy
 
 
-@register_op_strategy(
-    [aten.native_layer_norm.default],
-    schema_info=RuntimeSchemaInfo(1),
-)
+# @register_op_strategy(
+#     [aten.native_layer_norm.default],
+#     schema_info=RuntimeSchemaInfo(1),
+# )
 def layer_norm_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     # args must be: input, normalized_shape, weight, bias, eps
     # for None weight and bias, their corresponding objects will
@@ -878,10 +878,10 @@ def layer_norm_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     return output_strategy
 
 
-@register_op_strategy(
-    [aten.native_layer_norm_backward.default],
-    schema_info=RuntimeSchemaInfo(2),
-)
+# @register_op_strategy(
+#     [aten.native_layer_norm_backward.default],
+#     schema_info=RuntimeSchemaInfo(2),
+# )
 def layer_norm_bwd_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     # args must be: grad_out, input, normalized_shape, mean, rstd,
     # weight, bias, output_mask. For None weight and bias, their
@@ -1032,10 +1032,10 @@ def layer_norm_bwd_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy
     return out_tuple_strategy
 
 
-@register_op_strategy(
-    [aten.topk.default],
-    schema_info=RuntimeSchemaInfo(2),
-)
+# @register_op_strategy(
+#     [aten.topk.default],
+#     schema_info=RuntimeSchemaInfo(2),
+# )
 def topk_strategy(mesh: DeviceMesh, op_schema: OpSchema) -> OpStrategy:
     input_strategy = cast(OpStrategy, op_schema.args_schema[0])
     topk_dim = (

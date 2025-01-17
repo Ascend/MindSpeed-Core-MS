@@ -85,17 +85,17 @@ def register_op_strategy(op, schema_info=None):
     return wrapper
 
 
-def as_list(
-    x: Union[List[object], object]
-    # pyre-fixme[11]: Annotation `immutable_list` is not defined as a type.
-) -> Union[List[object], torch.fx.immutable_collections.immutable_list]:  # type: ignore[valid-type]
-    # During tracing, `aten.sum.dim_IntList` uses `immutable_list` for its args,
-    # which is an object but treated as a list by the tracer. Therefore, keep
-    # `immutable_list` intact here as well.
-    if type(x) is list or isinstance(x, torch.fx.immutable_collections.immutable_list):
-        return x
-    else:
-        return [x]
+# def as_list(
+#     x: Union[List[object], object]
+#     # pyre-fixme[11]: Annotation `immutable_list` is not defined as a type.
+# ) -> Union[List[object], torch.fx.immutable_collections.immutable_list]:  # type: ignore[valid-type]
+#     # During tracing, `aten.sum.dim_IntList` uses `immutable_list` for its args,
+#     # which is an object but treated as a list by the tracer. Therefore, keep
+#     # `immutable_list` intact here as well.
+#     if type(x) is list or isinstance(x, torch.fx.immutable_collections.immutable_list):
+#         return x
+#     else:
+#         return [x]
 
 
 def normalize_dim(dim: int, ndim: int) -> int:

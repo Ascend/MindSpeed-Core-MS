@@ -4,7 +4,7 @@ from functools import cached_property
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
-from torch._ops import OpOverload
+# from torch._ops import OpOverload
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.tensor._dtensor_spec import DTensorSpec
 from torch.distributed.tensor.placement_types import Placement
@@ -42,15 +42,16 @@ def _rebuild_tensor_from_dtensor_meta(arg) -> object:
         dtype=arg.tensor_meta.dtype,
     )
 
-
-def _is_inplace_op(op: OpOverload):
+def _is_inplace_op(op):
+# def _is_inplace_op(op: OpOverload):
     # simple analysis of function schema to determine
     # if this is an inplace variant, it might not
     # be entirely correct, but it's good enough for now.
     return op._schema.name[-1] == "_"
 
 
-def _is_out_variant_op(op: OpOverload):
+def _is_out_variant_op(op):
+# def _is_out_variant_op(op: OpOverload):
     # simple analysis of function schema to determine
     # if this is an out variant, it might not
     # be entirely correct, but it's good enough for now.
@@ -229,7 +230,7 @@ class OpSchema:
             with its DTensorSpec or OpStrategy
     """
 
-    op: OpOverload
+    # op: OpOverload
     args_schema: ArgsType
     kwargs_schema: KwargsType
 
