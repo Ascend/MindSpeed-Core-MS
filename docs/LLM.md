@@ -35,11 +35,19 @@ git checkout core_r0.6.0
 git apply ../msadaptor/megatron.diff
 ```
 
+# 拉取transformers并应用patch
+
+```shell
+git clone https://github.com/huggingface/transformers.git -b v4.47.0
+cd transformers
+git apply ../msadaptor/transformers.diff
+```
+
 # 设置环境变量
 
 ```shell
-MindSpeed-Core-MS_PATH = PATH
-export PYTHONPATH=$MindSpeed-Core-MS_PATH/msadaptor:$MindSpeed-Core-MS_PATH/Megatron-LM/:$MindSpeed-Core-MS_PATH/MindSpeed/:$PYTHONPATH
+MindSpeed_Core_MS_PATH=PATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadaptor:${MindSpeed_Core_MS_PATH}/Megatron-LM/:${MindSpeed_Core_MS_PATH}/MindSpeed/:${MindSpeed_Core_MS_PATH}/transformers/src/:$PYTHONPATH
 cd MindSpeed-LLM/
 ```
 
