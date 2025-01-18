@@ -46,7 +46,7 @@ def retain_grad(self):
             cur_self.grad = grad
         return grad
 
-    self.register_hook(_tensor_hook)
+    self.handle = self.register_hook(_tensor_hook)
 
 Tensor.retain_grad = retain_grad
 StubTensor.retain_grad = retain_grad
