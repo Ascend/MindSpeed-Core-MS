@@ -288,7 +288,7 @@ index 420d2e6..8e36461 100644
          self.text_length = text_length
          if learnable_pos_embed:
 diff --git a/mindspeed_mm/models/common/embeddings/time_embeddings.py b/mindspeed_mm/models/common/embeddings/time_embeddings.py
-index 6bb7f33..23fa647 100644
+index 6bb7f33..4174769 100644
 --- a/mindspeed_mm/models/common/embeddings/time_embeddings.py
 +++ b/mindspeed_mm/models/common/embeddings/time_embeddings.py
 @@ -1,5 +1,5 @@
@@ -306,7 +306,7 @@ index 6bb7f33..23fa647 100644
 -            device=timesteps.device
 -        )
 +
-+        tmp = -math.log(max_period) * torch.arange(0, half) / half
++        tmp = -math.log(max_period) * np.arange(0, half) / half
 +        freqs = torch.exp(torch.Tensor(tmp.astype(np.float32)))
          args = timesteps[:, None].float() * freqs[None]
          embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
