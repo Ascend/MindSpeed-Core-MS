@@ -62,6 +62,8 @@ def ones(*size, dtype=None, device=None):
         size = size[0]
     if dtype is None:
         dtype = get_default_dtype()
+    if dtype == bool:
+        dtype = mindspore.bool_
     if use_pyboost() and has_ones:
         return mindspore.mint.ones(size, dtype=dtype)
     return _ones(size, dtype)
