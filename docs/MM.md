@@ -48,7 +48,7 @@ cd ..
 
 ```shell
 MindSpeed_Core_MS_PATH=PATH
-export PYTHONPATH=${MindSpeed-Core-MS_PATH}/msadaptor:${MindSpeed-Core-MS_PATH}/Megatron-LM/:${MindSpeed-Core-MS_PATH}/MindSpeed/:${MindSpeed-Core-MS_PATH}/transformers/src/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadaptor:${MindSpeed_Core_MS_PATH}/Megatron-LM/:${MindSpeed_Core_MS_PATH}/MindSpeed/:${MindSpeed_Core_MS_PATH}/transformers/src/:$PYTHONPATH
 cd MindSpeed-MM/
 ```
 
