@@ -130,7 +130,7 @@ class VocabParallelCrossEntropy(nn.Cell):
     # pylint: disable=W0613, C0111
     def _calculate_gradients(self, grad_2d, arange_1d, masked_target_1d, softmax_update, grad_input, grad_output,
                              softmax):
-        grad_2d[arange_1d, masked_target_1d] -= softmax_update
+        grad_2d[arange_1d, masked_target_1d] -= softmax_update.to(grad_2d.dtype)
 
         grad_2d = grad_2d.reshape(softmax.shape)
         grad_input = grad_2d.mul(grad_output.unsqueeze(axis=-1))
