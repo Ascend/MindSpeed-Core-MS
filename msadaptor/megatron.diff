@@ -118,10 +118,10 @@ index 13e321f5..dfe3e672 100644
  
      def forward(self, *inputs, **kwargs):
          """
-@@ -187,16 +188,17 @@ class DistributedDataParallel(MegatronModule):
+@@ -187,21 +188,24 @@ class DistributedDataParallel(MegatronModule):
          Creates the all-reduce / reduce-scatter hook for backprop.
          """
- 
+
 -        def param_hook(*unused):
 +        def param_hook(grad):
              if param.requires_grad:
@@ -140,8 +140,16 @@ index 13e321f5..dfe3e672 100644
 +                    param.main_grad.add_(grad)
 +
                  param.grad = None
- 
+
                  if self.overlap_grad_reduce:
+                     param_to_buffer[param].register_grad_ready(param)
+-
++                if hasattr(param, "main_grad"):
++                    return param.main_grad
++                return param.grad
+         return param_hook
+
+     @contextmanager
 diff --git a/megatron/core/distributed/finalize_model_grads.py b/megatron/core/distributed/finalize_model_grads.py
 index 445f00a2..68253843 100644
 --- a/megatron/core/distributed/finalize_model_grads.py
@@ -324,13 +332,14 @@ diff --git a/megatron/core/distributed/param_and_grad_buffer.py b/megatron/core/
 index 8032591a..febda3e9 100644
 --- a/megatron/core/distributed/param_and_grad_buffer.py
 +++ b/megatron/core/distributed/param_and_grad_buffer.py
-@@ -124,7 +124,8 @@ class Bucket:
+@@ -124,7 +124,9 @@ class Bucket:
                  f'Device: {torch.cuda.current_device()}, node: {os.uname()[1]}'
              )
- 
+
 -        self.grad_data *= self.gradient_scaling_factor
 +        # self.grad_data *= self.gradient_scaling_factor
-+        self.grad_data.copy_(self.grad_data * self.gradient_scaling_factor)
++        # self.grad_data.copy_(self.grad_data * self.gradient_scaling_factor)
++        self.grad_data.div_(1 / self.gradient_scaling_factor)
          # Use async_op only when overlap_grad_reduce is True.
          if self.use_distributed_optimizer:
              local_data_view = shard_buffer(self.grad_data, self.data_parallel_world_size)[
