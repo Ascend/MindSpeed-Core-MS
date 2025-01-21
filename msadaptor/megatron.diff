@@ -1531,27 +1531,26 @@ index 4fb5ae0d..095d5171 100644
          if self.add_retriever and self.pre_process:
              retriever_input = self.embedding(retriever_input_ids,
 diff --git a/megatron/legacy/model/module.py b/megatron/legacy/model/module.py
-index 849fda74..5a9bac8d 100644
+index 849fda74..fbec4100 100644
 --- a/megatron/legacy/model/module.py
 +++ b/megatron/legacy/model/module.py
-@@ -142,7 +142,8 @@ def fp32_to_float16(val, float16_convertor):
-         val_typecheck = val
+@@ -143,7 +143,8 @@ def fp32_to_float16(val, float16_convertor):
          if isinstance(val_typecheck, (Parameter, Variable)):
              val_typecheck = val.data
--        if isinstance(val_typecheck, _FLOAT_TYPES):
-+        # if isinstance(val_typecheck, _FLOAT_TYPES):
-+        if val is not None and val_typecheck.dtype == torch.float32:
-             val = float16_convertor(val)
+         if isinstance(val_typecheck, _FLOAT_TYPES):
+-            val = float16_convertor(val)
++            if val_typecheck.dtype == torch.float32:
++                val = float16_convertor(val)
          return val
      return conversion_helper(val, half_conversion)
-@@ -154,7 +155,8 @@ def float16_to_fp32(val):
-         val_typecheck = val
+ 
+@@ -155,7 +156,8 @@ def float16_to_fp32(val):
          if isinstance(val_typecheck, (Parameter, Variable)):
              val_typecheck = val.data
--        if isinstance(val_typecheck, (_BF16_TYPES, _HALF_TYPES)):
-+        # if isinstance(val_typecheck, (_BF16_TYPES, _HALF_TYPES)):
-+        if val_typecheck.dtype in (torch.float16, torch.bfloat16):
-             val = val.float()
+         if isinstance(val_typecheck, (_BF16_TYPES, _HALF_TYPES)):
+-            val = val.float()
++            if val_typecheck.dtype in (torch.float16, torch.bfloat16):
++                val = val.float()
          return val
      return conversion_helper(val, float_conversion)
 diff --git a/megatron/legacy/model/rms_norm.py b/megatron/legacy/model/rms_norm.py
