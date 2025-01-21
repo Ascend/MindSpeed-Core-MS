@@ -876,7 +876,7 @@ index beae077..a40310d 100644
  
  _CONTEXT_PARALLEL_GROUP = None
 diff --git a/pretrain_qwen2vl.py b/pretrain_qwen2vl.py
-index 98d217b..be247aa 100644
+index 98d217b..9184052 100644
 --- a/pretrain_qwen2vl.py
 +++ b/pretrain_qwen2vl.py
 @@ -45,11 +45,11 @@ def get_batch(data_iterator):
@@ -896,27 +896,6 @@ index 98d217b..be247aa 100644
      batch = {
          'input_ids': input_ids,
          'labels': labels,
-@@ -88,8 +88,20 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
-     train_dataloader, val_dataloader, test_dataloader = build_iterations(train_dataloader)
-     return train_dataloader, val_dataloader, test_dataloader
- 
-+def seed_all(seed=42):
-+    import os
-+    import random
-+    import numpy as np
-+    random.seed(seed)
-+    os.environ['PYTHONHASHSEED'] = str(seed)
-+    np.random.seed(seed)
-+    torch.manual_seed(seed)
-+    torch.use_deterministic_algorithms(True)
-+    # torch_npu.npu.manual_seed_all(seed)
-+    # torch_npu.npu.manual_seed(seed)
- 
- if __name__ == "__main__":
-+    seed_all()
-     train_valid_test_datasets_provider.is_distributed = True
-     pretrain(
-         train_valid_test_datasets_provider,
 diff --git a/pretrain_sora.py b/pretrain_sora.py
 index 5abd459..3dd759d 100644
 --- a/pretrain_sora.py
