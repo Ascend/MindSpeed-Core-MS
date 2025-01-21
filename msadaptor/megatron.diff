@@ -1553,6 +1553,7 @@ index 849fda74..fbec4100 100644
 +                val = val.float()
          return val
      return conversion_helper(val, float_conversion)
+ 
 diff --git a/megatron/legacy/model/rms_norm.py b/megatron/legacy/model/rms_norm.py
 index 7e4424c7..9607f6c7 100644
 --- a/megatron/legacy/model/rms_norm.py
