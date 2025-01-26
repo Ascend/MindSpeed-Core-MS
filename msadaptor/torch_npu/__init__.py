@@ -115,7 +115,7 @@ from mindspore.ops.auto_generate import FlashAttentionScoreGrad
 
 
 def npu_fusion_attention_grad(query, key, value, dy, head_num, input_layout, *,
-                              pse=None, padding_mask=None, atten_mask=None, scale=1.,
+                              pse=None, padding_mask=None, atten_mask=None, scale_value=1.,
                               keep_prob=1., pre_tockens=2147483647, next_tockens=2147483647,
                               inner_precise=0,
                               softmax_max=None, softmax_sum=None, softmax_in=None, attention_in=None,
@@ -130,7 +130,7 @@ def npu_fusion_attention_grad(query, key, value, dy, head_num, input_layout, *,
         - **dv** (Tensor[float16, bfloat16]) - The gradient of the Value vector.
     """
     fag_op = FlashAttentionScoreGrad(head_num=head_num,
-                                     scale_value=scale,
+                                     scale_value=scale_value,
                                      keep_prob=keep_prob,
                                      pre_tokens=pre_tockens,
                                      next_tokens=next_tockens,

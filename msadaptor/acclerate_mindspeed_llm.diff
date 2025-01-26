@@ -375,15 +375,6 @@ index 4634f34..3c97b03 100644
  
          if causal:
              # split chunk[i]~chunk[cp_size-i-1] into chunk[i] and chunk[cp_size-i-1], [2s, b, h] -> [2, s, b, h]
-@@ -553,7 +560,7 @@ class AttentionWithCp(torch.autograd.Function):
-                         softmax_max=cur_softmax_max,
-                         softmax_sum=cur_softmax_sum,
-                         attention_in=cur_attn_out,
--                        scale_value=softmax_scale,
-+                        scale=softmax_scale,
-                         pre_tockens=cur_k.shape[0],
-                         next_tockens=0 if cur_attn_mask is not None else cur_k.shape[0],
-                         sparse_mode=3 if cur_attn_mask is not None else 0,
 @@ -581,9 +588,9 @@ class AttentionWithCp(torch.autograd.Function):
              else:
                  this_mask = AttentionWithCp.compute_mask(
