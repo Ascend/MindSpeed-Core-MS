@@ -24,6 +24,7 @@ import mindspore
 from mindspore.communication import init, GlobalComm, get_group_size, get_process_group_ranks as _get_group_ranks, \
     create_group, get_rank as _get_rank
 from mindspore.mint.distributed import batch_isend_irecv
+from mindspore.common.api import _pynative_executor
 
 import torch
 # from torch._C import _DistStoreError as DistStoreError
@@ -4085,6 +4086,7 @@ def barrier(
         return work
     else:
         work.wait()
+        _pynative_executor.sync()
 
 
 def monitored_barrier(
