@@ -1,3 +1,25 @@
+diff --git a/mindspeed_llm/core/datasets/blended_megatron_dataset_builder.py b/mindspeed_llm/core/datasets/blended_megatron_dataset_builder.py
+index 63c92e29..02103f28 100644
+--- a/mindspeed_llm/core/datasets/blended_megatron_dataset_builder.py
++++ b/mindspeed_llm/core/datasets/blended_megatron_dataset_builder.py
+@@ -5,6 +5,8 @@ from typing import Any, Callable, Iterable, Optional, Type, Union
+ 
+ import torch
+ 
++from mindspore.communication import get_local_rank
++
+ from megatron.training import get_args
+ from megatron.core.datasets.blended_dataset import BlendedDataset
+ from megatron.core.datasets.megatron_dataset import MegatronDataset, LowLevelDataset, MockDataset
+@@ -30,7 +32,7 @@ def need_to_build_dataset():
+     if share_save:
+         return rank == 0
+     gpus_per_node = torch.cuda.device_count()
+-    current_rank = torch.cuda.current_device()
++    current_rank = get_local_rank()
+     if args.tensor_model_parallel_size > gpus_per_node:
+         return mpu.get_tensor_model_parallel_rank() == 0
+     return mpu.get_tensor_model_parallel_rank() == 0 and current_rank % gpus_per_node == 0
 diff --git a/mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py b/mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py
 index 5836616c..9e9ae670 100644
 --- a/mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py
@@ -45,6 +67,19 @@ index 5836616c..9e9ae670 100644
      return torch.cat((t, t_pass), dim=-1)
  
  
+diff --git a/mindspeed_llm/core/transformer/moe/router.py b/mindspeed_llm/core/transformer/moe/router.py
+index b4dab79d..2f79584b 100644
+--- a/mindspeed_llm/core/transformer/moe/router.py
++++ b/mindspeed_llm/core/transformer/moe/router.py
+@@ -31,7 +31,7 @@ def group_limited_greedy_topKgating(self, logits: torch.Tensor):
+     
+     scores = F.softmax(logits, dim=1)
+     group_scores = (
+-        scores.view(args.micro_batch_size * seq_length, args.expert_model_parallel_size, -1).max(dim=-1).values
++        scores.view(args.micro_batch_size * seq_length, args.expert_model_parallel_size, -1).max(dim=-1)[0]
+     )  # [n, EP]
+ 
+     group_idx = torch.topk(group_scores, k=args.topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
 diff --git a/mindspeed_llm/legacy/data/data_samplers.py b/mindspeed_llm/legacy/data/data_samplers.py
 index 9265f7b8..f43bbddb 100644
 --- a/mindspeed_llm/legacy/data/data_samplers.py
@@ -674,7 +709,7 @@ index ccaf5e88..d9b7bb99 100644
                  self.to(weight.device)
          self.set_adapter(self.active_adapters)
 diff --git a/mindspeed_llm/tasks/megatron_adaptor.py b/mindspeed_llm/tasks/megatron_adaptor.py
-index b769a246..1191a8ab 100644
+index b769a246..590a34e9 100644
 --- a/mindspeed_llm/tasks/megatron_adaptor.py
 +++ b/mindspeed_llm/tasks/megatron_adaptor.py
 @@ -20,12 +20,6 @@ import argparse
@@ -716,22 +751,19 @@ index b769a246..1191a8ab 100644
      def patch_core_models(self):
          from megatron.core.models.gpt.gpt_layer_specs import get_gpt_layer_local_spec
          from mindspeed.core.models.common.embeddings.rotary_pos_embedding import get_pos_emb_on_this_cp_rank
-@@ -238,10 +229,10 @@ class CoreAdaptation(MegatronAdaptationABC):
-             transformer_block_checkpointed_forward_wrapper)
- 
+@@ -240,8 +231,9 @@ class CoreAdaptation(MegatronAdaptationABC):
      def patch_core_transformers(self):
--        from mindspeed.core.transformer.moe.token_dispatcher import allgather_token_permutation, \
--            allgather_token_unpermutation
+         from mindspeed.core.transformer.moe.token_dispatcher import allgather_token_permutation, \
+             allgather_token_unpermutation
 -        from mindspeed.core.transformer.moe.grouped_gemm_util import Ops, grouped_gemm_is_available, \
 -            get_device_capability
-+        # from mindspeed.core.transformer.moe.token_dispatcher import allgather_token_permutation, \
-+        #     allgather_token_unpermutation
 +        # from mindspeed.core.transformer.moe.grouped_gemm_util import Ops, grouped_gemm_is_available, \
 +        #     get_device_capability
++        from mindspeed.core.transformer.moe.grouped_gemm_util import get_device_capability
          from mindspeed.core.transformer.transformer import core_mlp_forward_wrapper
  
          from ..core.transformer.moe.moe_layer import moe_layer_init_wrapper, moe_layer_forward
-@@ -251,7 +242,7 @@ class CoreAdaptation(MegatronAdaptationABC):
+@@ -251,7 +243,7 @@ class CoreAdaptation(MegatronAdaptationABC):
                              TransformerLayerSubmodules,
                              transformer_layer_forward, get_num_layers_to_build_wrapper,
                              transformer_block_init_wrapper, transformer_block_forward, core_mlp_init)
@@ -740,7 +772,7 @@ index b769a246..1191a8ab 100644
          MegatronAdaptation.register('megatron.core.transformer.transformer_block.TENorm', PTNorm)
          MegatronAdaptation.register('megatron.core.transformer.moe.router.TopKRouter.routing', topk_router_routing)
          MegatronAdaptation.register('megatron.core.transformer.moe.router.TopKRouter.forward', topk_router_forward)
-@@ -264,9 +255,9 @@ class CoreAdaptation(MegatronAdaptationABC):
+@@ -264,9 +256,9 @@ class CoreAdaptation(MegatronAdaptationABC):
          MegatronAdaptation.register('megatron.core.transformer.moe.router.z_loss_func', z_loss_func)
          MegatronAdaptation.register('megatron.core.transformer.transformer_block.get_num_layers_to_build',
                                      get_num_layers_to_build_wrapper)
@@ -753,7 +785,7 @@ index b769a246..1191a8ab 100644
  
          # Transformer block
          MegatronAdaptation.register('megatron.core.transformer.transformer_block.TransformerBlock.__init__',
-@@ -320,11 +311,11 @@ class CoreAdaptation(MegatronAdaptationABC):
+@@ -320,11 +312,11 @@ class CoreAdaptation(MegatronAdaptationABC):
                      MoEAlltoAllTokenDispatcher)
  
          # For groupMLP especially deepseek
@@ -770,7 +802,7 @@ index b769a246..1191a8ab 100644
  
      def patch_pipeline_parallel(self):
          from ..core.pipeline_parallel.p2p_communication import _batched_p2p_ops
-@@ -345,15 +336,15 @@ class CoreAdaptation(MegatronAdaptationABC):
+@@ -345,15 +337,15 @@ class CoreAdaptation(MegatronAdaptationABC):
      def patch_tensor_parallel(self):
          from mindspeed.core.tensor_parallel.layers import vocab_parallel_embedding_forward
          from mindspeed.core.tensor_parallel.random import _set_cuda_rng_state

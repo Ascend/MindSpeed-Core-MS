@@ -77,7 +77,7 @@ index db21889e..2a1510d4 100644
      gather_start = time()
      all_results = dist_wrapper.gather_object(write_results)
 diff --git a/megatron/core/distributed/distributed_data_parallel.py b/megatron/core/distributed/distributed_data_parallel.py
-index 13e321f5..dfe3e672 100644
+index 13e321f5..060d1dde 100644
 --- a/megatron/core/distributed/distributed_data_parallel.py
 +++ b/megatron/core/distributed/distributed_data_parallel.py
 @@ -3,6 +3,7 @@
@@ -329,7 +329,7 @@ index 445f00a2..68253843 100644
 +    if config.timers is not None:
 +        config.timers('duplicate-grads-all-reduce').stop()
 diff --git a/megatron/core/distributed/param_and_grad_buffer.py b/megatron/core/distributed/param_and_grad_buffer.py
-index 8032591a..febda3e9 100644
+index 8032591a..d802ba0b 100644
 --- a/megatron/core/distributed/param_and_grad_buffer.py
 +++ b/megatron/core/distributed/param_and_grad_buffer.py
 @@ -124,7 +124,9 @@ class Bucket:
@@ -343,7 +343,7 @@ index 8032591a..febda3e9 100644
          # Use async_op only when overlap_grad_reduce is True.
          if self.use_distributed_optimizer:
              local_data_view = shard_buffer(self.grad_data, self.data_parallel_world_size)[
-@@ -215,7 +216,7 @@ class ParamAndGradBuffer:
+@@ -215,7 +217,7 @@ class ParamAndGradBuffer:
          gradient_scaling_factor: float,
          check_for_nan_in_grad: bool,
      ):
@@ -352,7 +352,7 @@ index 8032591a..febda3e9 100644
          # Check that params are unique.
          unique_params = set()
          for param in params:
-@@ -305,7 +306,6 @@ class ParamAndGradBuffer:
+@@ -305,7 +307,6 @@ class ParamAndGradBuffer:
                      # data_start_index should already be padded.
                      assert data_start_index % self.data_parallel_world_size == 0
                  _create_new_bucket(data_start_index)
@@ -766,7 +766,7 @@ index 3daf1832..d93fa849 100644
  
  
 diff --git a/megatron/core/pipeline_parallel/schedules.py b/megatron/core/pipeline_parallel/schedules.py
-index eb251761..facc9e6f 100644
+index eb251761..200dfdba 100644
 --- a/megatron/core/pipeline_parallel/schedules.py
 +++ b/megatron/core/pipeline_parallel/schedules.py
 @@ -4,7 +4,8 @@ import contextlib
@@ -899,7 +899,36 @@ index eb251761..facc9e6f 100644
  
      if config.timers is not None:
          config.timers('forward-backward').stop()
-@@ -1117,6 +1137,7 @@ def forward_backward_pipelining_without_interleaving(
+@@ -421,6 +441,7 @@ def forward_backward_pipelining_with_interleaving(
+     ), "interleaved pipeline parallelism expected each model chunk to have a data iterator"
+ 
+     config = get_model_config(model[0])
++    config.forward_step_func = forward_step_func
+     if config.overlap_p2p_comm and config.batch_p2p_comm:
+         raise ValueError("Can not use both overlap_p2p_comm and batch_p2p_comm")
+ 
+@@ -593,6 +614,11 @@ def forward_backward_pipelining_with_interleaving(
+         if parallel_state.is_pipeline_first_stage():
+             if len(input_tensors[model_chunk_id]) == len(output_tensors[model_chunk_id]):
+                 input_tensors[model_chunk_id].append(None)
++
++        # for the first stage, ms need a fake tensor as flag to discriminate different micro
++        if input_tensors[model_chunk_id][-1] is None:
++            input_tensors[model_chunk_id][-1] = torch.tensor(0, dtype=torch.int)
++
+         input_tensor = input_tensors[model_chunk_id][-1]
+ 
+         output_tensor = forward_step(
+@@ -637,7 +663,7 @@ def forward_backward_pipelining_with_interleaving(
+         output_tensor = output_tensors[model_chunk_id].pop(0)
+         output_tensor_grad = output_tensor_grads[model_chunk_id].pop(0)
+         input_tensor_grad = backward_step(
+-            input_tensor, output_tensor, output_tensor_grad, model_type, config
++            input_tensor, output_tensor, output_tensor_grad, model_type, config, model[model_chunk_id]
+         )
+ 
+         # launch grad synchronization (custom grad sync)
+@@ -1117,6 +1143,7 @@ def forward_backward_pipelining_without_interleaving(
          data_iterator = data_iterator[0]
  
      config = get_model_config(model)
@@ -907,7 +936,7 @@ index eb251761..facc9e6f 100644
      if config.overlap_p2p_comm:
          raise ValueError(
              "Non-interleaved pipeline parallelism does not support overlapping p2p communication"
-@@ -1288,7 +1309,7 @@ def forward_backward_pipelining_without_interleaving(
+@@ -1288,7 +1315,7 @@ def forward_backward_pipelining_without_interleaving(
                      enable_grad_sync()
  
              input_tensor_grad = backward_step(
@@ -916,7 +945,7 @@ index eb251761..facc9e6f 100644
              )
  
              if last_iteration:
-@@ -1318,7 +1339,7 @@ def forward_backward_pipelining_without_interleaving(
+@@ -1318,7 +1345,7 @@ def forward_backward_pipelining_without_interleaving(
              output_tensor_grad = recv_backward(send_tensor_shapes, config)
  
              input_tensor_grad = backward_step(
@@ -925,7 +954,7 @@ index eb251761..facc9e6f 100644
              )
  
              send_backward(input_tensor_grad, recv_tensor_shapes, config)
-@@ -1338,4 +1359,4 @@ def forward_backward_pipelining_without_interleaving(
+@@ -1338,4 +1365,4 @@ def forward_backward_pipelining_without_interleaving(
          # embedding all-reduce for pipeline parallelism).
          config.finalize_model_grads_func([model])
  
