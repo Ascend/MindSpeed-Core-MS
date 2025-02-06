@@ -542,7 +542,7 @@ index 9c99d9a..0fc389e 100644
      r"""
      Parameters:
 diff --git a/mindspeed_mm/models/predictor/dits/sat_dit.py b/mindspeed_mm/models/predictor/dits/sat_dit.py
-index 820b2e0..d1bc784 100644
+index 820b2e0..c403bcb 100644
 --- a/mindspeed_mm/models/predictor/dits/sat_dit.py
 +++ b/mindspeed_mm/models/predictor/dits/sat_dit.py
 @@ -4,7 +4,7 @@ from typing import Optional, Tuple, Dict
@@ -554,7 +554,48 @@ index 820b2e0..d1bc784 100644
  from einops import rearrange
  from megatron.core import mpu, tensor_parallel
  from megatron.training import get_args
-@@ -244,7 +244,7 @@ class SatDiT(MultiModalModule):
+@@ -128,6 +128,16 @@ class SatDiT(MultiModalModule):
+         else:
+             self.patch_embed = VideoPatch2D(in_channels, inner_dim, self.patch_size_h)
+ 
++        # self.pos_embed = Rotary3DPositionEmbedding(
++        #     hidden_size_head=head_dim,
++        #     text_length=text_length,
++        #     height=input_size[1] // self.patch_size_h,
++        #     width=input_size[2] // self.patch_size_w,
++        #     compressed_num_frames=(input_size[0] - 1) // interpolation_scale[0] + 1,
++        #     hidden_size=inner_dim,
++        #     learnable_pos_embed=learnable_pos_embed
++        # )
++
+         self.pos_embed = Rotary3DPositionEmbedding(
+             hidden_size_head=head_dim,
+             text_length=text_length,
+@@ -135,8 +145,22 @@ class SatDiT(MultiModalModule):
+             width=input_size[2] // self.patch_size_w,
+             compressed_num_frames=(input_size[0] - 1) // interpolation_scale[0] + 1,
+             hidden_size=inner_dim,
+-            learnable_pos_embed=learnable_pos_embed
++            learnable_pos_embed=False#learnable_pos_embed
+         )
++
++        self.learnable_pos_embed=learnable_pos_embed
++        if  self.learnable_pos_embed:
++
++            height=input_size[1] // self.patch_size_h
++            width=input_size[2] // self.patch_size_w
++            compressed_num_frames=(input_size[0] - 1) // interpolation_scale[0] + 1
++            hidden_size=inner_dim
++            num_patches = int(height * width * compressed_num_frames + text_length)
++            self.text_length_tmp = text_length
++            self.pos_embedding = nn.Parameter(torch.zeros(1, num_patches, int(hidden_size)), requires_grad=True)
++        else:
++            self.pos_embedding = None
++
+         # Init VideoDiTBlock
+         self.videodit_blocks = nn.ModuleList(
+             [
+@@ -244,7 +268,7 @@ class SatDiT(MultiModalModule):
          height, width = latents.shape[-2] // self.patch_size_h, latents.shape[-1] // self.patch_size_w
  
          if "masked_video" in kwargs.keys() and kwargs["masked_video"] is not None:
@@ -563,7 +604,28 @@ index 820b2e0..d1bc784 100644
  
          added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
          latents_vid, latents_img, prompt_vid, prompt_img, timestep_vid, timestep_img, \
-@@ -479,7 +479,7 @@ class SatDiT(MultiModalModule):
+@@ -425,8 +449,18 @@ class SatDiT(MultiModalModule):
+                                                         rope_H=h // self.patch_size[1],
+                                                         rope_W=w // self.patch_size[2])
+             _, seq_len, _ = latents_vid.shape
+-            pos_emb = self.pos_embed.position_embedding_forward(latents.to(self.dtype),
+-                                                                seq_length=seq_len - self.text_length)
++            #megatron sync parameter in forward only
++            # pos_emb = self.pos_embed.position_embedding_forward(latents.to(self.dtype),
++            #                                                     seq_length=seq_len - self.text_length)
++
++            if self.learnable_pos_embed:
++                #BB_DEBUUG
++                seq_length=seq_len - self.text_length_tmp
++                pos_emb = self.pos_embedding[:, :self.text_length_tmp + seq_length]
++            else:
++                pos_emb = self.pos_embed.position_embedding_forward(latents.to(self.dtype),
++                        seq_length=seq_len - self.text_length)
++
+             if pos_emb is not None:
+                 latents_vid = latents_vid + pos_emb
+         else:
+@@ -479,7 +513,7 @@ class SatDiT(MultiModalModule):
  
          # unpatchify
          output = rearrange(latents, "b (t h w) (c o p q) -> b (t o) c (h p) (w q)",
