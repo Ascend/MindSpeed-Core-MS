@@ -11,7 +11,7 @@ from .grad_mode import no_grad
 
 grad_ = GradOperation(False, True, False)
 grad_sens_ = GradOperation(False, True, True)
-grad_input_sens_ = GradOperation(True, False, True)
+grad_input_sens_ = GradOperation(True, True, True)
 
 def value_and_grad(fn, params_or_argnums, has_aux=False, attach_grads=True):
     use_argnums = False
@@ -85,25 +85,31 @@ def vjp(fn, *inputs, weights=None, has_aux=False):
         fn_ = fn
 
 
+    #_pynative_executor.set_is_run_recompute(True)
     _pynative_executor.set_grad_flag(True)
-    _pynative_executor.new_graph(fn, *inputs)
+    _pynative_executor.new_graph(fn_, *inputs)
     values = fn_(*inputs)
-    _pynative_executor.end_graph(fn, values, *inputs)
-
+    _pynative_executor.end_graph(fn_, values, *inputs)
+    #_pynative_executor.set_is_run_recompute(False)
     def wrap_container(*v):
         sens = v
         if len(v) == 1:
             sens = v[0]
+        _pynative_executor.check_run(grad_, fn_, weights, None, *inputs)
+        grads, _ = _pynative_executor.grad(fn_, grad_, weights, None, *inputs, sens)
+        grads_ = [None] * len(inputs)
+        idx = 0
+        for i in range(len(inputs)):
+            if isinstance(inputs[i], mindspore.Tensor):
+                grads_[i] = grads[idx]
+                idx += 1
+        return tuple(grads_)
 
-        grads = _pynative_executor.grad(fn_, grad_, weights, None, *inputs, sens)
-        return grads
-
-    res = fn(*inputs)
     if has_aux:
-        if len(res) == 2:
-            return res[0], wrap_container, res[1]
-        return res[0], wrap_container, res[1:]
-    return res, wrap_container
+        if len(values) == 2:
+            return values[0], wrap_container, values[1]
+        return values[0], wrap_container, values[1:]
+    return values, wrap_container
 
 
 class Function(Cell_):
