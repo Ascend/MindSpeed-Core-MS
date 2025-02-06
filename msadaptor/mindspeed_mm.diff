@@ -542,7 +542,7 @@ index 9c99d9a..0fc389e 100644
      r"""
      Parameters:
 diff --git a/mindspeed_mm/models/predictor/dits/sat_dit.py b/mindspeed_mm/models/predictor/dits/sat_dit.py
-index 820b2e0..c403bcb 100644
+index 820b2e0..1d641fe 100644
 --- a/mindspeed_mm/models/predictor/dits/sat_dit.py
 +++ b/mindspeed_mm/models/predictor/dits/sat_dit.py
 @@ -4,7 +4,7 @@ from typing import Optional, Tuple, Dict
@@ -604,13 +604,14 @@ index 820b2e0..c403bcb 100644
  
          added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
          latents_vid, latents_img, prompt_vid, prompt_img, timestep_vid, timestep_img, \
-@@ -425,8 +449,18 @@ class SatDiT(MultiModalModule):
+@@ -425,8 +449,15 @@ class SatDiT(MultiModalModule):
                                                          rope_H=h // self.patch_size[1],
                                                          rope_W=w // self.patch_size[2])
              _, seq_len, _ = latents_vid.shape
 -            pos_emb = self.pos_embed.position_embedding_forward(latents.to(self.dtype),
 -                                                                seq_length=seq_len - self.text_length)
 +            #megatron sync parameter in forward only
++
 +            if self.learnable_pos_embed:
 +                seq_length=seq_len - self.text_length_tmp
 +                pos_emb = self.pos_embedding[:, :self.text_length_tmp + seq_length]
@@ -621,7 +622,7 @@ index 820b2e0..c403bcb 100644
              if pos_emb is not None:
                  latents_vid = latents_vid + pos_emb
          else:
-@@ -479,7 +513,7 @@ class SatDiT(MultiModalModule):
+@@ -479,7 +510,7 @@ class SatDiT(MultiModalModule):
  
          # unpatchify
          output = rearrange(latents, "b (t h w) (c o p q) -> b (t o) c (h p) (w q)",
