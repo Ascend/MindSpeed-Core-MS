@@ -1,5 +1,5 @@
 diff --git a/examples/qwen2vl/dot_product_attention.py b/examples/qwen2vl/dot_product_attention.py
-index b6e9d33..27bbca4 100644
+index b6e9d33..8718216 100644
 --- a/examples/qwen2vl/dot_product_attention.py
 +++ b/examples/qwen2vl/dot_product_attention.py
 @@ -14,8 +14,8 @@ from torch import Tensor
@@ -43,13 +43,6 @@ index b6e9d33..27bbca4 100644
          ).reshape(-1, *other_shape)
  
      @staticmethod
-@@ -237,4 +238,4 @@ class IndexPutFirstAxis(torch.autograd.Function):
-         return grad_values, None, None
- 
- 
--index_put_first_axis = IndexPutFirstAxis.apply
-\ No newline at end of file
-+index_put_first_axis = IndexPutFirstAxis.apply
 diff --git a/mindspeed_mm/__init__.py b/mindspeed_mm/__init__.py
 index 24ee0b3..f4fce2b 100644
 --- a/mindspeed_mm/__init__.py
@@ -474,6 +467,49 @@ index c0278f3..52011c1 100644
  
  from .diffusion_utils import extract_into_tensor, mean_flat
  
+diff --git a/mindspeed_mm/models/internvl_model.py b/mindspeed_mm/models/internvl_model.py
+index bd5c9ca..39b3ab1 100644
+--- a/mindspeed_mm/models/internvl_model.py
++++ b/mindspeed_mm/models/internvl_model.py
+@@ -258,7 +258,8 @@ class InternVLModel(MultiModalModule):
+             Make causal mask used for bi-directional self-attention.
+             """
+             bsz, tgt_len = input_ids_shape
+-            mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
++            type_min = -3.4028234663852886e+38
++            mask = torch.full((tgt_len, tgt_len), torch.tensor(type_min))
+             mask_cond = torch.arange(mask.size(-1), device=device)
+             mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+             mask = mask.to(dtype)
+@@ -278,8 +279,8 @@ class InternVLModel(MultiModalModule):
+             expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+ 
+             inverted_mask = 1.0 - expanded_mask
+-
+-            return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
++            type_min = -3.4028234663852886e+38
++            return inverted_mask.masked_fill(inverted_mask.to(torch.bool), type_min)
+ 
+         input_shape = attention_mask.shape
+         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+@@ -294,7 +295,7 @@ class InternVLModel(MultiModalModule):
+ 
+         if attention_mask is not None:
+             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+-            expanded_attn_mask = _expand_mask(attention_mask, dtype, tgt_len=input_shape[-1]).to(device)
++            expanded_attn_mask = _expand_mask(attention_mask, dtype, tgt_len=input_shape[-1])
+             combined_attention_mask = (
+                 expanded_attn_mask if combined_attention_mask is None
+                 else expanded_attn_mask + combined_attention_mask
+@@ -311,7 +312,7 @@ class InternVLModel(MultiModalModule):
+         shift_logits = shift_logits.view(-1, self.vocab_size)
+         shift_labels = shift_labels.view(-1)
+ 
+-        shift_labels = shift_labels.to(shift_logits.device)
++        shift_labels = shift_labels
+         loss = loss_fct(shift_logits, shift_labels)
+         if ignore_flag:
+             loss = loss * 0.0
 diff --git a/mindspeed_mm/models/predictor/dits/__init__.py b/mindspeed_mm/models/predictor/dits/__init__.py
 index a834c2d..8f3be8a 100644
 --- a/mindspeed_mm/models/predictor/dits/__init__.py
@@ -542,7 +578,7 @@ index 9c99d9a..0fc389e 100644
      r"""
      Parameters:
 diff --git a/mindspeed_mm/models/predictor/dits/sat_dit.py b/mindspeed_mm/models/predictor/dits/sat_dit.py
-index 820b2e0..c403bcb 100644
+index 820b2e0..1d641fe 100644
 --- a/mindspeed_mm/models/predictor/dits/sat_dit.py
 +++ b/mindspeed_mm/models/predictor/dits/sat_dit.py
 @@ -4,7 +4,7 @@ from typing import Optional, Tuple, Dict
@@ -604,13 +640,14 @@ index 820b2e0..c403bcb 100644
  
          added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
          latents_vid, latents_img, prompt_vid, prompt_img, timestep_vid, timestep_img, \
-@@ -425,8 +449,18 @@ class SatDiT(MultiModalModule):
+@@ -425,8 +449,15 @@ class SatDiT(MultiModalModule):
                                                          rope_H=h // self.patch_size[1],
                                                          rope_W=w // self.patch_size[2])
              _, seq_len, _ = latents_vid.shape
 -            pos_emb = self.pos_embed.position_embedding_forward(latents.to(self.dtype),
 -                                                                seq_length=seq_len - self.text_length)
 +            #megatron sync parameter in forward only
++
 +            if self.learnable_pos_embed:
 +                seq_length=seq_len - self.text_length_tmp
 +                pos_emb = self.pos_embedding[:, :self.text_length_tmp + seq_length]
@@ -621,7 +658,7 @@ index 820b2e0..c403bcb 100644
              if pos_emb is not None:
                  latents_vid = latents_vid + pos_emb
          else:
-@@ -479,7 +513,7 @@ class SatDiT(MultiModalModule):
+@@ -479,7 +510,7 @@ class SatDiT(MultiModalModule):
  
          # unpatchify
          output = rearrange(latents, "b (t h w) (c o p q) -> b (t o) c (h p) (w q)",
@@ -741,17 +778,6 @@ index 484fc9e..3a643d5 100644
          self.model = automodel.from_pretrained(**config)
  
      def get_model(self):
-diff --git a/mindspeed_mm/models/vision/vision_encoders/__init__.py b/mindspeed_mm/models/vision/vision_encoders/__init__.py
-index 23d51b9..fd6b988 100644
---- a/mindspeed_mm/models/vision/vision_encoders/__init__.py
-+++ b/mindspeed_mm/models/vision/vision_encoders/__init__.py
-@@ -1,4 +1,4 @@
- from .clip_vit_model import CLIPViT
- from .qwen2vl_vit_model import Qwen2VLViT
- 
--__all__ = ["CLIPViT", "Qwen2VLViT"]
-\ No newline at end of file
-+__all__ = ["CLIPViT", "Qwen2VLViT"]
 diff --git a/mindspeed_mm/models/vision/vision_encoders/internvit_model.py b/mindspeed_mm/models/vision/vision_encoders/internvit_model.py
 index 4b70577..15dcd38 100644
 --- a/mindspeed_mm/models/vision/vision_encoders/internvit_model.py
@@ -821,43 +847,6 @@ index aef68f0..2a8ba76 100644
              dtype=torch.bool
          )
          for i in range(1, len(cu_seqlens)):
-diff --git a/mindspeed_mm/models/vision/vision_model.py b/mindspeed_mm/models/vision/vision_model.py
-index fa695cb..572407b 100644
---- a/mindspeed_mm/models/vision/vision_model.py
-+++ b/mindspeed_mm/models/vision/vision_model.py
-@@ -7,21 +7,21 @@ from megatron.core.transformer.spec_utils import ModuleSpec
- 
- from mindspeed_mm.models.common.module import MultiModalModule
- from .vision_encoders.clip_vit_model import CLIPViT
--from .vision_encoders.internvit_model import InternViT
-+# from .vision_encoders.internvit_model import InternViT
- from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
- from .projectors.multimodal_projector import MultimodalProjector
--from .projectors.internvl_mlp import InternVLMLP
-+# from .projectors.internvl_mlp import InternVLMLP
- 
- 
- VISION_ENCODER_MAPPINGS = {
-     "clip": CLIPViT,
--    "InternViT": InternViT,
-+#     "InternViT": InternViT,
-     "qwen2vit": Qwen2VLViT,
- }
- 
- VISION_PROJECTION_MAPPINGS = {
-     "mlp": MultimodalProjector,
--    "InternVLMLP": InternVLMLP,
-+#     "InternVLMLP": InternVLMLP,
-     "lnmlp": MultimodalProjector,
- }
- 
-@@ -107,4 +107,4 @@ class Qwen2vlVisionModel(VisionModel):
-         if self.add_projector:
-             image_embeddings = self.projector(image_embeddings)
- 
--        return image_embeddings 
-\ No newline at end of file
-+        return image_embeddings
 diff --git a/mindspeed_mm/patchs/diffusers_patches.py b/mindspeed_mm/patchs/diffusers_patches.py
 index 96e1961..d259f1b 100644
 --- a/mindspeed_mm/patchs/diffusers_patches.py
@@ -933,6 +922,53 @@ index beae077..a40310d 100644
  
  
  _CONTEXT_PARALLEL_GROUP = None
+diff --git a/pretrain_internvl.py b/pretrain_internvl.py
+index bc5abc6..af16a19 100644
+--- a/pretrain_internvl.py
++++ b/pretrain_internvl.py
+@@ -7,7 +7,7 @@ import torch
+ import torch.distributed
+ import torch.nn.functional as F
+ import mindspeed.megatron_adaptor
+-from mindspeed.utils import get_batch_on_this_cp_rank
++# from mindspeed.utils import get_batch_on_this_cp_rank
+ 
+ from megatron.core import mpu
+ from megatron.core.enums import ModelType
+@@ -52,11 +52,11 @@ def get_batch_on_this_tp_rank(data_iterator):
+         else:
+             batch = None
+ 
+-        input_ids = batch['input_ids'].to(torch.cuda.current_device())
+-        labels = batch['labels'].to(torch.cuda.current_device())
+-        attention_mask = batch['attention_mask'].to(torch.cuda.current_device())
+-        image = batch['pixel_values'].to(torch.cuda.current_device())
+-        image_flags = batch['image_flags'].to(torch.cuda.current_device())
++        input_ids = batch['input_ids']
++        labels = batch['labels']
++        attention_mask = batch['attention_mask']
++        image = batch['pixel_values']
++        image_flags = batch['image_flags']
+         _broadcast(input_ids)
+         _broadcast(labels)
+         _broadcast(attention_mask)
+@@ -83,11 +83,11 @@ def get_batch(data_iterator):
+         batch = next(data_iterator)
+     else:
+         raise ValueError("Data iterator is None. Unable to retrieve batch.")
+-    input_ids = batch['input_ids'].to(torch.cuda.current_device())
+-    labels = batch['labels'].to(torch.cuda.current_device())
+-    attention_mask = batch['attention_mask'].to(torch.cuda.current_device())
+-    image = batch['pixel_values'].to(torch.cuda.current_device())
+-    image_flags = batch['image_flags'].to(torch.cuda.current_device())
++    input_ids = batch['input_ids']
++    labels = batch['labels']
++    attention_mask = batch['attention_mask']
++    image = batch['pixel_values']
++    image_flags = batch['image_flags']
+     batch = {
+         'input_ids': input_ids,
+         'labels': labels,
 diff --git a/pretrain_qwen2vl.py b/pretrain_qwen2vl.py
 index 98d217b..9184052 100644
 --- a/pretrain_qwen2vl.py
