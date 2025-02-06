@@ -57,7 +57,7 @@ index 0f96438..166d39e 100644
  
  def flash_attn_p2p_communicate(scheduling_info, send_q_dst, recv_q_src, send_kv_dst, recv_kv_src, cp_group, rank):
 diff --git a/mindspeed/core/context_parallel/ring_context_parallel.py b/mindspeed/core/context_parallel/ring_context_parallel.py
-index 4634f34..3c97b03 100644
+index 4634f34..73224cb 100644
 --- a/mindspeed/core/context_parallel/ring_context_parallel.py
 +++ b/mindspeed/core/context_parallel/ring_context_parallel.py
 @@ -2,11 +2,10 @@
@@ -566,20 +566,49 @@ index 3e96442..fe40d88 100644
  from megatron.training import get_args
  from megatron.core.tensor_parallel.utils import gather_split_1d_tensor
  from megatron.core.tensor_parallel.random import get_cuda_rng_tracker
+diff --git a/mindspeed/core/transformer/moe/moe_layer_overlap_all2all.py b/mindspeed/core/transformer/moe/moe_layer_overlap_all2all.py
+index f416616..9876cc2 100644
+--- a/mindspeed/core/transformer/moe/moe_layer_overlap_all2all.py
++++ b/mindspeed/core/transformer/moe/moe_layer_overlap_all2all.py
+@@ -6,7 +6,7 @@ from megatron.core.transformer.moe.moe_layer import MoELayer
+ from megatron.training import get_args
+ from mindspeed.core.transformer.moe.comm_utils import async_all_to_all, async_all_gather
+ from mindspeed.core.transformer.moe.moe_utils import forward_func, backward_func
+-from mindspeed.ops.gmm import GMMFunction
++# from mindspeed.ops.gmm import GMMFunction
+ from mindspeed.core.transformer.moe.moe_utils import AG_SHARED_EXPERTS_INPUTS
+ 
+ 
+diff --git a/mindspeed/core/transformer/moe/router.py b/mindspeed/core/transformer/moe/router.py
+index e236a4e..360cf43 100644
+--- a/mindspeed/core/transformer/moe/router.py
++++ b/mindspeed/core/transformer/moe/router.py
+@@ -32,7 +32,9 @@ class _GatherFromSequenceParallelRegionToMOEAsync(torch.autograd.Function):
+         return _gather_along_first_dim_moe_async(input_, async_op=True)
+ 
+     @staticmethod
+-    def backward(ctx, grad_output, grad_handle):
++    def backward(ctx, grad_output, grad_handle=None):
++        if isinstance(grad_output, tuple) and len(grad_output) > 1 and grad_output[1] is None:
++            grad_output = grad_output[0]
+         return _reduce_scatter_along_first_dim_moe(grad_output)
+ 
+ 
 diff --git a/mindspeed/core/transformer/moe/token_dispatcher.py b/mindspeed/core/transformer/moe/token_dispatcher.py
-index 878c37e..0ff4b59 100644
+index 878c37e..42f9984 100644
 --- a/mindspeed/core/transformer/moe/token_dispatcher.py
 +++ b/mindspeed/core/transformer/moe/token_dispatcher.py
-@@ -1,7 +1,7 @@
+@@ -1,7 +1,8 @@
  # Copyright (c) 2024; NVIDIA CORPORATION. All rights reserved.
  # Copyright (c) 2024, Huawei Technologies Co., Ltd.  All rights reserved.
  import torch
 -from torch_npu.utils.collect_env import get_cann_version
++import mindspore
 +# from torch_npu.utils.collect_env import get_cann_version
  from megatron.training import get_args
  from megatron.core import parallel_state, tensor_parallel
  from megatron.core.transformer.moe.moe_utils import permute, unpermute
-@@ -14,11 +14,12 @@ from mindspeed.core.transformer.moe.unpermute_without_activation import Unpermut
+@@ -14,11 +15,12 @@ from mindspeed.core.transformer.moe.unpermute_without_activation import Unpermut
  
  
  def is_less_or_equal_rc2_cann_version():
@@ -597,6 +626,36 @@ index 878c37e..0ff4b59 100644
  
  
  cann_version_check = is_less_or_equal_rc2_cann_version()
+@@ -40,15 +42,16 @@ def allgather_token_permutation(self, hidden_states: torch.Tensor, max_prob: tor
+ 
+         with torch.no_grad():
+             gi_handle.wait()
+-            global_local_mask = (global_indices >= self.local_expert_indices[0]) & \
+-                                (global_indices <= self.local_expert_indices[-1])
++            tmp_a = global_indices >= self.local_expert_indices[0]
++            tmp_b = global_indices <= self.local_expert_indices[-1]
++            global_local_mask = mindspore.mint.bitwise_and(tmp_a, tmp_b)
+             local_indices = global_indices.masked_select(global_local_mask)
+             self.indices = torch.argsort(local_indices.float(), dim=0)
+             num_global_experts = self.num_local_experts * parallel_state.get_expert_model_parallel_world_size()
+             if args.moe_tp_extend_ep:
+                 num_global_experts *= parallel_state.get_tensor_model_parallel_world_size()
+-            all_tokens_per_expert = torch.histc(
+-                global_indices,
++            all_tokens_per_expert = mindspore.ops.histc(
++                global_indices.to(torch.int32),
+                 bins=num_global_experts,
+                 min=0,
+                 max=num_global_experts - 1,
+@@ -127,7 +130,7 @@ class NewIndePut(torch.autograd.Function):
+             return output.to(ori_dtype)
+         return output
+ 
+-    def backward(self, grad_input):
++    def backward(self, ctx, grad_input):
+         map_ = self.map_
+         grad_output = grad_input.index_select(0, map_[0])
+         return None, None, grad_output
 diff --git a/mindspeed/megatron_adaptor.py b/mindspeed/megatron_adaptor.py
 index f295aea..bddef60 100644
 --- a/mindspeed/megatron_adaptor.py
