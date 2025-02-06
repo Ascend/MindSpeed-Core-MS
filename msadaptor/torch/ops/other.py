@@ -600,6 +600,11 @@ def flip(input, dims):
 
 
 # histc
+has_histc = hasattr(mindspore.mint, 'histc')
+def histc(input, bins, min, max):
+    if use_pyboost() and has_histc:
+        return mindspore.mint.histc(input, bins=bins, min=min, max=max)
+    return ops.histc(input, bins=bins, min=min, max=max)
 
 
 # histogram
@@ -728,25 +733,6 @@ def contains(self, key):
 def initialize(self, init_method):
     r"""
     Initializes the object with the given initialization method.
-
-    Args:
-        self (object): The instance of the class.
-        init_method (str): The method used for initialization.
-            This parameter determines how the data is initialized.
-            Valid values for `init_method` are:
-                - "random": Initializes the data with random values.
-                - "zeros": Initializes the data with zeros.
-                - "ones": Initializes the data with ones.
-            Default value is "random".
-
-    Returns:
-        None. This function does not return any value.
-
-    Raises:
-        None.
-
-    Note:
-        This function sets the data of the object using the specified `init_method` and the object's shape and data type.
     """
     self.assign_value(initializer(init_method, self.shape, self.dtype))
 

@@ -1,6 +1,24 @@
 from typing import *  # noqa: F403
 import torch
 
+
+def _get_autocast_kwargs(device_type='cuda'):
+    if torch.amp.is_autocast_available(device_type):
+        device_autocast_kwargs = {
+            "enabled": torch.is_autocast_enabled(device_type),
+            "dtype": torch.get_autocast_dtype(device_type),
+            "cache_enabled": False
+        }
+    else:
+        device_autocast_kwargs = None
+    cpu_autocast_kwargs = {
+        "enabled": torch.is_autocast_enabled('cpu'),
+        "dtype": torch.get_autocast_dtype('cpu'),
+        "cache_enabled": False
+    }
+    return device_autocast_kwargs, cpu_autocast_kwargs
+
+
 def detach_variable(inputs: Tuple[Any, ...]) -> Tuple[torch.Tensor, ...]:
     if isinstance(inputs, tuple):
         out = []
