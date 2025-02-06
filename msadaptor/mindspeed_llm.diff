@@ -709,7 +709,7 @@ index ccaf5e88..d9b7bb99 100644
                  self.to(weight.device)
          self.set_adapter(self.active_adapters)
 diff --git a/mindspeed_llm/tasks/megatron_adaptor.py b/mindspeed_llm/tasks/megatron_adaptor.py
-index b769a246..590a34e9 100644
+index b769a246..0eede1bf 100644
 --- a/mindspeed_llm/tasks/megatron_adaptor.py
 +++ b/mindspeed_llm/tasks/megatron_adaptor.py
 @@ -20,12 +20,6 @@ import argparse
@@ -802,7 +802,7 @@ index b769a246..590a34e9 100644
  
      def patch_pipeline_parallel(self):
          from ..core.pipeline_parallel.p2p_communication import _batched_p2p_ops
-@@ -345,15 +337,15 @@ class CoreAdaptation(MegatronAdaptationABC):
+@@ -345,25 +337,25 @@ class CoreAdaptation(MegatronAdaptationABC):
      def patch_tensor_parallel(self):
          from mindspeed.core.tensor_parallel.layers import vocab_parallel_embedding_forward
          from mindspeed.core.tensor_parallel.random import _set_cuda_rng_state
@@ -822,6 +822,20 @@ index b769a246..590a34e9 100644
          MegatronAdaptation.register('megatron.core.tensor_parallel.layers.VocabParallelEmbedding.forward',
                                      vocab_parallel_embedding_forward)
          MegatronAdaptation.register('megatron.core.tensor_parallel.layers.VocabParallelEmbedding.forward',
+                                     vocab_embedding_forward_wrapper)
+         MegatronAdaptation.register('megatron.core.tensor_parallel.layers.VocabParallelEmbedding.__init__',
+                                     vocab_embedding_init_wrapper)
+-        MegatronAdaptation.register('megatron.core.tensor_parallel.random.CheckpointFunction.forward',
+-                                    checkpoint_forward_wrapper)
+-        MegatronAdaptation.register('megatron.core.tensor_parallel.random.CheckpointFunction.backward',
+-                                    checkpoint_backward_wrapper)
++        # MegatronAdaptation.register('megatron.core.tensor_parallel.random.CheckpointFunction.forward',
++        #                             checkpoint_forward_wrapper)
++        # MegatronAdaptation.register('megatron.core.tensor_parallel.random.CheckpointFunction.backward',
++        #                             checkpoint_backward_wrapper)
+         # For recompute-in-advance
+         from mindspeed.core.tensor_parallel.random import checkpoint_wrapper
+         MegatronAdaptation.register('megatron.core.tensor_parallel.random.checkpoint', checkpoint_wrapper)
 diff --git a/pretrain_gpt.py b/pretrain_gpt.py
 index 2470c2d9..1c7f642f 100644
 --- a/pretrain_gpt.py
