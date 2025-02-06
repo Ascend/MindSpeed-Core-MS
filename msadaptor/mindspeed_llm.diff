@@ -836,6 +836,431 @@ index b769a246..0eede1bf 100644
          # For recompute-in-advance
          from mindspeed.core.tensor_parallel.random import checkpoint_wrapper
          MegatronAdaptation.register('megatron.core.tensor_parallel.random.checkpoint', checkpoint_wrapper)
+diff --git a/mindspeed_llm/tasks/post_train/dpo/dpo_trainer.py b/mindspeed_llm/tasks/post_train/dpo/dpo_trainer.py
+index f7cf8bce..d9503a39 100644
+--- a/mindspeed_llm/tasks/post_train/dpo/dpo_trainer.py
++++ b/mindspeed_llm/tasks/post_train/dpo/dpo_trainer.py
+@@ -12,8 +12,27 @@ from megatron.training.utils import average_losses_across_data_parallel_group
+ from mindspeed_llm.tasks.post_train.base import BaseTrainer
+ from mindspeed_llm.tasks.post_train.dpo.dpo_model import DPOModel
+ from mindspeed_llm.training.utils import get_tune_attention_mask, get_finetune_data_on_this_tp_rank
++from megatron.core.tensor_parallel import mappings
+ 
+ 
++class ReduceFromContextParallelRegionDPO(torch.autograd.Function):
++    """All-reduce the input from the model parallel region."""
++
++    @staticmethod
++    def symbolic(graph, input_):
++        torch.distributed.all_reduce(input_, op=torch.distributed.ReduceOp.MAX, group=mpu.get_tensor_model_parallel_group())
++        return input_
++        # return _reduce(input_)
++
++    @staticmethod
++    def forward(ctx, input_):
++        torch.distributed.all_reduce(input_, group=mpu.get_context_parallel_group())
++        return input_
++
++    @staticmethod
++    def backward(ctx, grad_output):
++        return grad_output
++
+ class DPOTrainer(BaseTrainer):
+     """
+     A trainer class for Direct Preference Optimization (DPO).
+@@ -131,14 +150,15 @@ class DPOTrainer(BaseTrainer):
+             Tensor: Log softmax values.
+         """
+         # Step 1: Compute the local max value for numerical stability
+-        z_max = logits.max(dim=-1, keepdim=True).values
++        z_max = logits.max(dim=-1, keepdim=True)[0]
+ 
+         # Step 2: Perform all-reduce to get the global max across all processes
+-        torch.distributed.all_reduce(
+-            z_max,
+-            op=torch.distributed.ReduceOp.MAX,
+-            group=mpu.get_tensor_model_parallel_group()
+-        )
++        # torch.distributed.all_reduce(
++        #     z_max,
++        #     op=torch.distributed.ReduceOp.MAX,
++        #     group=mpu.get_tensor_model_parallel_group()
++        # )
++        z_max = ReduceFromContextParallelRegionDPO()(z_max)
+ 
+         # Step 3: Compute the log(exp(x - z_max)) for local logits
+         local_exp = torch.exp(logits - z_max)
+@@ -147,11 +167,12 @@ class DPOTrainer(BaseTrainer):
+         local_sum_exp = local_exp.sum(dim=-1, keepdim=True)
+ 
+         # Step 5: Perform all-reduce to get the global sum of exp(x - z_max) across all processes
+-        torch.distributed.all_reduce(
+-            local_sum_exp,
+-            op=torch.distributed.ReduceOp.SUM,
+-            group=mpu.get_tensor_model_parallel_group()
+-        )
++        # torch.distributed.all_reduce(
++        #     local_sum_exp,
++        #     op=torch.distributed.ReduceOp.SUM,
++        #     group=mpu.get_tensor_model_parallel_group()
++        # )
++        local_sum_exp = mappings.reduce_from_tensor_model_parallel_region(local_sum_exp)
+ 
+         # Step 6: Compute the log of the global sum of exp(x - z_max)
+         log_sum_exp = local_sum_exp.log()
+@@ -406,11 +427,12 @@ class DPOTrainer(BaseTrainer):
+             all_log_probs = (per_token_log_probs * loss_mask).sum(-1)
+             valid_length = loss_mask.sum(-1)
+ 
+-            torch.distributed.all_reduce(
+-                all_log_probs,
+-                op=torch.distributed.ReduceOp.SUM,
+-                group=mpu.get_tensor_model_parallel_group()
+-            )
++            # torch.distributed.all_reduce(
++            #     all_log_probs,
++            #     op=torch.distributed.ReduceOp.SUM,
++            #     group=mpu.get_tensor_model_parallel_group()
++            # )
++            all_log_probs = mappings.reduce_from_tensor_model_parallel_region(all_log_probs)
+ 
+             torch.distributed.all_reduce(
+                 valid_length,
+diff --git a/mindspeed_llm/tasks/post_train/launcher.py b/mindspeed_llm/tasks/post_train/launcher.py
+index 93c1fa3c..e58cf486 100644
+--- a/mindspeed_llm/tasks/post_train/launcher.py
++++ b/mindspeed_llm/tasks/post_train/launcher.py
+@@ -6,6 +6,7 @@ from megatron.training.initialize import initialize_megatron
+ from mindspeed_llm.tasks.post_train.sft import SFTTrainer
+ from mindspeed_llm.tasks.post_train.dpo import DPOTrainer
+ from mindspeed_llm.tasks.post_train.rm import RMTrainer
++from mindspeed_llm.tasks.post_train.prm import PRMTrainer
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -23,6 +24,8 @@ def get_trainer(stage):
+         return DPOTrainer()
+     elif stage == "rm":
+         return RMTrainer()
++    elif stage == "prm":
++        return PRMTrainer()
+     else:
+         logger.info(f'Unknown Stage: {stage}')
+         return None
+diff --git a/mindspeed_llm/tasks/post_train/prm/__init__.py b/mindspeed_llm/tasks/post_train/prm/__init__.py
+new file mode 100644
+index 00000000..f1fb2e17
+--- /dev/null
++++ b/mindspeed_llm/tasks/post_train/prm/__init__.py
+@@ -0,0 +1,6 @@
++# Copyright (c) 2024, HUAWEI CORPORATION.  All rights reserved.
++
++__all__ = ["PRMTrainer"]
++
++
++from .prm_trainer import PRMTrainer
+diff --git a/mindspeed_llm/tasks/post_train/prm/prm_trainer.py b/mindspeed_llm/tasks/post_train/prm/prm_trainer.py
+new file mode 100644
+index 00000000..8bca1fb7
+--- /dev/null
++++ b/mindspeed_llm/tasks/post_train/prm/prm_trainer.py
+@@ -0,0 +1,116 @@
++# Copyright (c) 2024, HUAWEI CORPORATION.  All rights reserved.
++from typing import Union
++from functools import partial
++import torch
++import torch.nn as nn
++from megatron.core import mpu, tensor_parallel
++from megatron.training import get_args, get_tokenizer
++from megatron.training.utils import average_losses_across_data_parallel_group
++from mindspeed_llm.tasks.post_train.base import BaseTrainer
++from mindspeed_llm.tasks.post_train.utils import convert_token_to_id
++from mindspeed_llm.training.utils import get_tune_attention_mask, get_finetune_data_on_this_tp_rank
++
++
++class PRMTrainer(BaseTrainer):
++    """
++    A trainer class for Process Reward Model (PRM).
++
++    This class provides methods for model initialize, computing losses and metrics, and training.
++    """
++
++    def __init__(self):
++        """
++        Initializes the PRMTrainer instance.
++
++        Sets up the instance variables for the model provider, actual micro batch size,
++        and initializes the PRM model.
++        """
++        super().__init__(
++            model_provider=self.model_provider,
++            get_batch_func=self.get_batch,
++            loss_func=self.loss_func,
++            forward_step_func=self.forward_step)
++        
++        args = get_args()
++        self.cross_entropy_loss = nn.CrossEntropyLoss()
++        self.tokenizer = get_tokenizer().tokenizer
++        # set placeholder token
++        self.placeholder_token_id = convert_token_to_id(args.placeholder_token, self.tokenizer)
++        self.reward_token_ids = args.reward_tokens
++        if self.reward_token_ids is not None:
++            self.reward_token_ids = sorted(
++                [convert_token_to_id(token, self.tokenizer) for token in self.reward_token_ids]
++            )
++
++    @staticmethod
++    def get_batch(data_iterator):
++        """Generate a batch."""
++
++        args = get_args()
++
++        if (not mpu.is_pipeline_first_stage()) and (not mpu.is_pipeline_last_stage()):
++            if args.variable_seq_lengths and args.pipeline_model_parallel_size > 2:
++                tokens, attention_mask = get_finetune_data_on_this_tp_rank(data_iterator)
++
++                return tokens, None, None, attention_mask, None
++            else:
++                return None, None, None, None, None
++        # Items and their type.
++        keys = ['input_ids', 'attention_mask', 'labels']
++        data_type = torch.int64
++
++        # Broadcast data.
++        data_b = tensor_parallel.broadcast_data(keys, next(data_iterator), data_type)
++
++        # Unpack
++        labels = data_b.get('labels').long()
++        tokens = data_b.get('input_ids').long()
++        attention_mask_1d = data_b.get('attention_mask').long()
++        loss_mask = attention_mask_1d
++
++        attention_mask = get_tune_attention_mask(attention_mask_1d)
++
++        return tokens, labels, loss_mask, attention_mask, None
++
++
++    def loss_func(self, input_ids: torch.Tensor, labels: torch.Tensor, output_tensor: torch.Tensor):
++        """PRM Loss function.
++        """
++        placeholder_mask = input_ids == self.placeholder_token_id
++
++        output_tensor = tensor_parallel.mappings.gather_from_tensor_model_parallel_region(output_tensor)
++        logits = output_tensor[placeholder_mask]
++        labels = labels[placeholder_mask]
++
++        if self.reward_token_ids is not None:
++            # hard label with reward_token_ids set. (otherwise the whole vocab will be trained together.)
++            logits = logits[..., self.reward_token_ids]
++            # this is slow....
++            for i, token in enumerate(self.reward_token_ids):
++                labels = torch.where(labels == token, i, labels)
++
++        loss = self.cross_entropy_loss(logits, labels)
++        averaged_loss = average_losses_across_data_parallel_group([loss])
++        
++        with torch.no_grad():
++            acc = (logits.argmax(dim=-1) == labels).float().mean()
++
++        return loss * self.args.context_parallel_size, {'lm loss': averaged_loss[0], 'acc': acc}
++
++
++    def forward_step(self, data_iterator, model):
++        """PRM Forward training step.
++
++        Args:
++            data_iterator : Input data iterator
++            model (GPTModel): The GPT Model
++        """
++        # Get the batch.
++        self.timers('batch-generator', log_level=2).start()
++        tokens, labels, _, attention_mask, position_ids = self.get_batch(
++            data_iterator)
++        self.timers('batch-generator').stop()
++
++        output_tensor = model(tokens, position_ids, attention_mask)
++
++        return output_tensor, partial(self.loss_func, tokens, labels)
+\ No newline at end of file
+diff --git a/mindspeed_llm/tasks/post_train/utils.py b/mindspeed_llm/tasks/post_train/utils.py
+index 69c94ca5..86e8c095 100644
+--- a/mindspeed_llm/tasks/post_train/utils.py
++++ b/mindspeed_llm/tasks/post_train/utils.py
+@@ -115,4 +115,12 @@ def get_tensor_shapes_decorator(get_tensor_shapes):
+ 
+ def load_checkpoint_loosely():
+     args = get_args()
+-    return args.load_checkpoint_loosely
+\ No newline at end of file
++    return args.load_checkpoint_loosely
++
++def convert_token_to_id(token, tokenizer):
++    if isinstance(token, str):
++        token = tokenizer.encode(token, add_special_tokens=False)
++        assert len(token) == 1
++        return token[0]
++    else:
++        raise ValueError("token should be int or str")
+\ No newline at end of file
+diff --git a/mindspeed_llm/tasks/preprocess/data_handler.py b/mindspeed_llm/tasks/preprocess/data_handler.py
+index cc330a34..4d645531 100644
+--- a/mindspeed_llm/tasks/preprocess/data_handler.py
++++ b/mindspeed_llm/tasks/preprocess/data_handler.py
+@@ -30,6 +30,7 @@ from datasets import load_dataset
+ from megatron.core.datasets import indexed_dataset
+ 
+ from mindspeed_llm.tasks.preprocess.templates import Prompter, AlpacaTemplate, get_model_template
++from mindspeed_llm.tasks.post_train.utils import convert_token_to_id
+ from .utils import get_dataset_list, get_handler_dataset_attr, load_single_dataset, merge_dataset, align_dataset
+ from .utils import greedy_knapsack
+ 
+@@ -797,3 +798,52 @@ def build_dataset(args):
+             return align_dataset(raw_datasets, handler_dataset_attr, args)
+ 
+     return raw_datasets
++
++class AlpacaStyleProcessRewardHandler(BaseDatasetHandler):
++    """
++    Handle alpaca style dataset format in process reward dataset used in PRM training
++    """
++
++    def __init__(self, args, raw_datasets, tokenizer, splitter):
++        super().__init__(args, raw_datasets, tokenizer, splitter)
++        self.train_on_inputs = False
++        self.args.json_keys = ["input_ids", "labels", 'attention_mask']
++        self.args.output_prefix = self.args.output_prefix + "_packed"
++
++        # set placeholder token
++        self.placeholder_token_id = convert_token_to_id(args.placeholder_token, \
++                                                        self._unwrapped_tokenizer)
++        self.reward_tokens = args.reward_tokens
++
++    def _filter(self, sample):
++        inputs = self._unwrapped_tokenizer(sample["input"], padding=False, add_special_tokens=False)
++
++        input_ids = inputs["input_ids"]
++        label_values = sample["value"]
++
++        assert isinstance(label_values, list), "labels should be a list of strings or numbers"
++        label_tokens = []
++        for label in label_values:
++            assert (
++                self.reward_tokens is None or label in self.reward_tokens
++            ), f"label should be in reward tokens {self.reward_tokens}, got {label}"
++            label_tokens.append(convert_token_to_id(label, self._unwrapped_tokenizer))
++
++        labels = [-100] * len(input_ids)
++        indices = [index for index, item in enumerate(input_ids) if item == self.placeholder_token_id]
++        for index, indice in enumerate(indices):
++            labels[indice] = label_tokens[index]
++
++        input_token = inputs['input_ids']
++        attention_mask = inputs['attention_mask']
++        label_token = labels
++
++        concatenated_ids = {
++            "input_ids": [input_token],
++            "attention_mask":[attention_mask],
++            "labels": [label_token]
++        }
++
++        assert len(input_token) == len(label_token)
++
++        return concatenated_ids
+diff --git a/mindspeed_llm/tasks/preprocess/decoder_packed_mtf_dataset.py b/mindspeed_llm/tasks/preprocess/decoder_packed_mtf_dataset.py
+index ae4189db..906801ef 100644
+--- a/mindspeed_llm/tasks/preprocess/decoder_packed_mtf_dataset.py
++++ b/mindspeed_llm/tasks/preprocess/decoder_packed_mtf_dataset.py
+@@ -176,6 +176,12 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
+                 "labels": self._cut_token(item["labels"], np.int64),
+                 "position_ids": self._cut_token(position_ids.numpy(), np.int64)
+             }
++        elif self.args.stage == "prm":
++            return {
++                "input_ids": self._cut_token(item['input_ids'], np.int64),
++                "attention_mask": self._cut_token(item["attention_mask"], np.int64),
++                "labels": self._cut_token(item["labels"], np.int64)
++            }
+         else:
+             return self._cut_instruction_token(item, np.int64)
+ 
+diff --git a/mindspeed_llm/training/arguments.py b/mindspeed_llm/training/arguments.py
+index c56cd254..13bf20cf 100644
+--- a/mindspeed_llm/training/arguments.py
++++ b/mindspeed_llm/training/arguments.py
+@@ -459,7 +459,7 @@ def _add_network_args(parser):
+     group.add_argument(
+         '--stage',
+         default=None,
+-        choices=["sft", "dpo", "rm"],
++        choices=["sft", "dpo", "rm", "prm"],
+         help='Determine training mode'
+     )
+ 
+@@ -503,6 +503,18 @@ def _add_rl_args(parser):
+         "--is-pairwise-dataset", action='store_true',
+         help="Whether the dataset is pairwise format that has a chosen sequence and rejected "
+              "sequence, which usually used in reinforce learning.")
++    group.add_argument(
++        '--placeholder-token',
++        default='ки',
++        help="A special placeholder token marking the end of each step where the PRM can make predictions.",
++    )
++    group.add_argument(
++        '--reward-tokens',
++        nargs='+',
++        type=str,
++        default=[],
++        help="The labels represent the correctness of each reasoning step in the entire reasoning process.",
++    )
+     return parser
+ 
+ 
+diff --git a/mindspeed_llm/training/utils.py b/mindspeed_llm/training/utils.py
+index 6c76e943..d4d3858f 100644
+--- a/mindspeed_llm/training/utils.py
++++ b/mindspeed_llm/training/utils.py
+@@ -205,6 +205,7 @@ def get_finetune_data_on_this_tp_rank(data_iterator):
+     else:
+         via_length = torch.empty((1), dtype=torch.int64, device=torch.cuda.current_device())
+         _broadcast(via_length)
++        via_length = via_length.item()
+         tokens = torch.empty((micro_batch_size, via_length), dtype=torch.int64, device=torch.cuda.current_device())
+         _broadcast(tokens)
+         attention_mask_1d = torch.empty((micro_batch_size, via_length), dtype=torch.int64,
+diff --git a/preprocess_data.py b/preprocess_data.py
+index 00eea764..1733d493 100644
+--- a/preprocess_data.py
++++ b/preprocess_data.py
+@@ -165,6 +165,18 @@ def add_tokenizer_args(parser):
+                             'This value must be greater than the initial size of the tokenizer.'
+                             ' If this argument is used the value of `make-vocab-size-divisible-by` '
+                             'will be ignored.')
++    group.add_argument(
++        '--placeholder-token',
++        default='ки',
++        help="A special placeholder token marking the end of each step where the PRM can make predictions.",
++    )
++    group.add_argument(
++        '--reward-tokens',
++        nargs='+',
++        type=str,
++        default=[],
++        help="The labels represent the correctness of each reasoning step in the entire reasoning process.",
++    )
+ 
+ 
+ def add_output_args(parser):
+@@ -218,7 +230,8 @@ def validate_args(args):
+         "AlpacaStyleInstructionHandler",
+         "SharegptStyleInstructionHandler",
+         "AlpacaStylePairwiseHandler",
+-        "SharegptStylePairwiseHandler"
++        "SharegptStylePairwiseHandler",
++        "AlpacaStyleProcessRewardHandler"
+     ]
+     if args.prompt_type is not None and args.handler_name not in support_prompt_type_handler:
+         raise AssertionError(f'If specify prompt_type , handler name must be in:\n{support_prompt_type_handler}.')
 diff --git a/pretrain_gpt.py b/pretrain_gpt.py
 index 2470c2d9..1c7f642f 100644
 --- a/pretrain_gpt.py
