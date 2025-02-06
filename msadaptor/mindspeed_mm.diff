@@ -611,11 +611,7 @@ index 820b2e0..c403bcb 100644
 -            pos_emb = self.pos_embed.position_embedding_forward(latents.to(self.dtype),
 -                                                                seq_length=seq_len - self.text_length)
 +            #megatron sync parameter in forward only
-+            # pos_emb = self.pos_embed.position_embedding_forward(latents.to(self.dtype),
-+            #                                                     seq_length=seq_len - self.text_length)
-+
 +            if self.learnable_pos_embed:
-+                #BB_DEBUUG
 +                seq_length=seq_len - self.text_length_tmp
 +                pos_emb = self.pos_embedding[:, :self.text_length_tmp + seq_length]
 +            else:
