@@ -86,6 +86,8 @@ def npu_fusion_attention(query, key, value, head_num, input_layout, *,
         elif input_layout == "BSND":
             bsz, q_seq_len, _, _ = query.shape
             _, kv_seq_len, _, _ = key.shape
+            if atten_mask is not None and atten_mask.shape[0] != bsz:
+                atten_mask.squeeze()
         else:
             raise ValueError(f"input_layout is invalid")
         if enable_dropout:
