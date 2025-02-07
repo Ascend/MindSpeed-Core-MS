@@ -837,10 +837,10 @@ index b769a246..0eede1bf 100644
          from mindspeed.core.tensor_parallel.random import checkpoint_wrapper
          MegatronAdaptation.register('megatron.core.tensor_parallel.random.checkpoint', checkpoint_wrapper)
 diff --git a/mindspeed_llm/tasks/post_train/dpo/dpo_trainer.py b/mindspeed_llm/tasks/post_train/dpo/dpo_trainer.py
-index f7cf8bce..d9503a39 100644
+index f7cf8bce..e0340474 100644
 --- a/mindspeed_llm/tasks/post_train/dpo/dpo_trainer.py
 +++ b/mindspeed_llm/tasks/post_train/dpo/dpo_trainer.py
-@@ -12,8 +12,27 @@ from megatron.training.utils import average_losses_across_data_parallel_group
+@@ -12,8 +12,26 @@ from megatron.training.utils import average_losses_across_data_parallel_group
  from mindspeed_llm.tasks.post_train.base import BaseTrainer
  from mindspeed_llm.tasks.post_train.dpo.dpo_model import DPOModel
  from mindspeed_llm.training.utils import get_tune_attention_mask, get_finetune_data_on_this_tp_rank
@@ -854,11 +854,10 @@ index f7cf8bce..d9503a39 100644
 +    def symbolic(graph, input_):
 +        torch.distributed.all_reduce(input_, op=torch.distributed.ReduceOp.MAX, group=mpu.get_tensor_model_parallel_group())
 +        return input_
-+        # return _reduce(input_)
 +
 +    @staticmethod
 +    def forward(ctx, input_):
-+        torch.distributed.all_reduce(input_, group=mpu.get_context_parallel_group())
++        torch.distributed.all_reduce(input_, op=torch.distributed.ReduceOp.MAX, group=mpu.get_tensor_model_parallel_group())
 +        return input_
 +
 +    @staticmethod
@@ -868,7 +867,7 @@ index f7cf8bce..d9503a39 100644
  class DPOTrainer(BaseTrainer):
      """
      A trainer class for Direct Preference Optimization (DPO).
-@@ -131,14 +150,15 @@ class DPOTrainer(BaseTrainer):
+@@ -131,14 +149,15 @@ class DPOTrainer(BaseTrainer):
              Tensor: Log softmax values.
          """
          # Step 1: Compute the local max value for numerical stability
@@ -890,7 +889,7 @@ index f7cf8bce..d9503a39 100644
  
          # Step 3: Compute the log(exp(x - z_max)) for local logits
          local_exp = torch.exp(logits - z_max)
-@@ -147,11 +167,12 @@ class DPOTrainer(BaseTrainer):
+@@ -147,11 +166,12 @@ class DPOTrainer(BaseTrainer):
          local_sum_exp = local_exp.sum(dim=-1, keepdim=True)
  
          # Step 5: Perform all-reduce to get the global sum of exp(x - z_max) across all processes
@@ -908,7 +907,7 @@ index f7cf8bce..d9503a39 100644
  
          # Step 6: Compute the log of the global sum of exp(x - z_max)
          log_sum_exp = local_sum_exp.log()
-@@ -406,11 +427,12 @@ class DPOTrainer(BaseTrainer):
+@@ -406,11 +426,12 @@ class DPOTrainer(BaseTrainer):
              all_log_probs = (per_token_log_probs * loss_mask).sum(-1)
              valid_length = loss_mask.sum(-1)
  
