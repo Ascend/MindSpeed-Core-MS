@@ -1,3 +1,4 @@
+import torch
 from . import npu
 from . import profiler
 from torch.nn.functional import rms_norm, fast_gelu, swiglu
@@ -240,3 +241,7 @@ def npu_mm_reduce_scatter_base(
         bias=bias,
         comm_turn=comm_turn,
     )
+
+
+torch._register_device_module('npu', npu)
+
