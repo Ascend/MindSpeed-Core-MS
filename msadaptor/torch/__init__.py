@@ -141,5 +141,7 @@ def _register_device_module(device_type, module):
     sys.modules[torch_module_name] = module
 
 
-def where(condition):
+def where(condition, true_value, false_value):
+    if true_value is not None and false_value is not None:
+        return mindspore.mint.where(condition, true_value, false_value)
     return condition.nonzero(as_tuple=True)
