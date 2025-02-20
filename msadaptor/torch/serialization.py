@@ -1237,7 +1237,9 @@ def _load(zip_file, pickle_module, overall_storage=None, pickle_file='data.pkl',
             if mod_name == 'torch._utils':
                 return eval(name)
             if mod_name == 'torch':
-                return str(name)
+                if name == 'Size':
+                    return tuple
+                else:return str(name)
             if mod_name == 'torch._tensor':
                 return eval(name)
             mod_name = load_module_mapping.get(mod_name, mod_name)

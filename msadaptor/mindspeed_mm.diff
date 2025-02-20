@@ -43,6 +43,28 @@ index b6e9d33..8718216 100644
          ).reshape(-1, *other_shape)
  
      @staticmethod
+diff --git a/examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py b/examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py
+index 4daf73d..676aff6 100644
+--- a/examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py
++++ b/examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py
+@@ -4,7 +4,7 @@ from pathlib import Path
+ from copy import deepcopy
+ 
+ import torch
+-from safetensors.torch import load_file
++from torch.serialization import safe_load_file
+ 
+ 
+ def load_from_hf(_load_dir):
+@@ -12,7 +12,7 @@ def load_from_hf(_load_dir):
+     load_dir = Path(_load_dir)
+     state_dict = {}
+     for safe_path in load_dir.glob("*.safetensors"):
+-        state_dict.update(load_file(str(safe_path), device='cpu'))
++        state_dict.update(safe_load_file(str(safe_path), device='cpu'))
+     return state_dict
+ 
+ 
 diff --git a/mindspeed_mm/__init__.py b/mindspeed_mm/__init__.py
 index 24ee0b3..f4fce2b 100644
 --- a/mindspeed_mm/__init__.py
@@ -779,7 +801,7 @@ index 484fc9e..3a643d5 100644
  
      def get_model(self):
 diff --git a/mindspeed_mm/models/vision/vision_encoders/clip_vit_model.py b/mindspeed_mm/models/vision/vision_encoders/clip_vit_model.py
-index 30d7df9..da24c0b 100644
+index 30d7df9..f3b1ce3 100644
 --- a/mindspeed_mm/models/vision/vision_encoders/clip_vit_model.py
 +++ b/mindspeed_mm/models/vision/vision_encoders/clip_vit_model.py
 @@ -40,7 +40,7 @@ class CLIPViT(MultiModalModule):
@@ -787,31 +809,19 @@ index 30d7df9..da24c0b 100644
      ) -> None:
          super().__init__(config=config)
 -        self.device = get_device(config.device)
-+        self.device = config.device  #get_device(config.device)
++        self.device = config.device
          self.class_token_len = config.class_token_len
          self.visual_hidden_size = config.hidden_size
          self.patch_size = config.patch_size
-@@ -68,7 +68,7 @@ class CLIPViT(MultiModalModule):
-             bias=False,
-         )
-
--        self.position_ids = torch.arange(self.seq_length).expand(1, -1).to(self.device)
-+        self.position_ids = torch.arange(self.seq_length).expand(1, -1)#.to(self.device)
-
-         self.position_embeddings = torch.nn.Embedding(self.seq_length, self.visual_hidden_size)
-
-@@ -137,9 +137,9 @@ class CLIPViT(MultiModalModule):
+@@ -137,7 +137,7 @@ class CLIPViT(MultiModalModule):
          if attention_mask is None:
              attention_mask = torch.ones(
                  1, 1, self.seq_length, self.seq_length
 -            ).to(self.device)  # [1, 1, s, s]
-+            )#.to(self.device)  # [1, 1, s, s]
++            )  # [1, 1, s, s]
              attention_mask = attention_mask < 0.5  # to bool
--
-+        attention_mask = attention_mask.squeeze(0).squeeze(0)
+ 
          x = self.decoder(x, attention_mask)
-         x = x.permute(1, 0, 2).contiguous()  # [s, b, h] -> [b, s, h]
-         x = x[:, 1:]
 diff --git a/mindspeed_mm/models/vision/vision_encoders/internvit_model.py b/mindspeed_mm/models/vision/vision_encoders/internvit_model.py
 index 4b70577..15dcd38 100644
 --- a/mindspeed_mm/models/vision/vision_encoders/internvit_model.py
@@ -882,7 +892,7 @@ index aef68f0..2a8ba76 100644
          )
          for i in range(1, len(cu_seqlens)):
 diff --git a/mindspeed_mm/models/vl_model.py b/mindspeed_mm/models/vl_model.py
-index a96b02a..5eb12c7 100644
+index a96b02a..7ce001f 100644
 --- a/mindspeed_mm/models/vl_model.py
 +++ b/mindspeed_mm/models/vl_model.py
 @@ -315,7 +315,7 @@ class VLModel(MultiModalModule):
@@ -890,9 +900,9 @@ index a96b02a..5eb12c7 100644
              shift_labels = shift_labels.view(-1)
              # Enable model parallelism
 -            shift_labels = shift_labels.to(shift_logits.device)
-+            #shift_labels = shift_labels.to(shift_logits.device)
++            shift_labels = shift_labels
              loss = loss_fct(shift_logits, shift_labels)
-
+ 
          return loss
 @@ -326,4 +326,4 @@ def _load_checkpoint(model, ckpt_path):
          load_params = torch.load(ckpt_path, map_location="cpu")
@@ -1024,7 +1034,7 @@ index bc5abc6..af16a19 100644
          'input_ids': input_ids,
          'labels': labels,
 diff --git a/pretrain_llava.py b/pretrain_llava.py
-index 37eb005..0d4a0cb 100644
+index 37eb005..b84f4c6 100644
 --- a/pretrain_llava.py
 +++ b/pretrain_llava.py
 @@ -46,10 +46,10 @@ def get_batch(data_iterator):
@@ -1035,13 +1045,13 @@ index 37eb005..0d4a0cb 100644
 -    input_ids = data["input_ids"].to(device=torch.cuda.current_device())
 -    labels = data["labels"].to(device=torch.cuda.current_device())
 -    attention_mask = data["attention_mask"].to(device=torch.cuda.current_device())
-+    images = data["pixel_values"]#.to(dtype=torch.bfloat16, device=torch.cuda.current_device())
-+    input_ids = data["input_ids"]#.to(device=torch.cuda.current_device())
-+    labels = data["labels"]#.to(device=torch.cuda.current_device())
-+    attention_mask = data["attention_mask"]#.to(device=torch.cuda.current_device())
-
++    images = data["pixel_values"]
++    input_ids = data["input_ids"]
++    labels = data["labels"]
++    attention_mask = data["attention_mask"]
+ 
      return images, input_ids, labels, attention_mask
-
+ 
 diff --git a/pretrain_qwen2vl.py b/pretrain_qwen2vl.py
 index 98d217b..9184052 100644
 --- a/pretrain_qwen2vl.py
