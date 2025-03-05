@@ -18,7 +18,7 @@ cd ..
 echo "...............................................done apply acclerate_mindspeed_llm"
 
 rm -rf Megatron-LM/
-git clone https://github.com/NVIDIA/Megatron-LM.git
+git clone https://gitee.com/mirrors/Megatron-LM.git
 cd Megatron-LM/
 git checkout core_r0.6.0
 git apply ../msadaptor/megatron.diff
@@ -26,28 +26,22 @@ cd ..
 echo "..............................................done apply megatron"
 
 rm -rf transformers/
-pip install --no-deps transformers==4.47.0
-mkdir src
-TF_PATH=$(python -c "import site; print(site.getsitepackages()[0])")
-cp -r ${TF_PATH}/transformers ./src/
-pip uninstall -y transformers
+git clone https://gitee.com/mirrors/huggingface_transformers.git
+mv huggingface_transformers transformers
+cd transformers
+git checkout v4.47.0
 cd src/transformers
 git apply ../../msadaptor/transformers.diff
 cd ../..
-mkdir transformers
-mv src/ transformers/
 echo "..............................................done apply transformers"
 
 rm -rf peft/
-pip install --no-deps peft==0.7.1
-mkdir src
-cp -r ${TF_PATH}/peft ./src/
-pip uninstall -y peft
+git clone https://gitee.com/mirrors/peft.git
+cd peft
+git checkout v0.7.1
 cd src/peft
 git apply ../../msadaptor/peft_lora.diff
 cd ../..
-mkdir peft
-mv src/ peft/
 echo "..............................................done apply peft"
 
 pip install -r requirements.txt
