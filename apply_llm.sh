@@ -31,8 +31,8 @@ mv huggingface_transformers transformers
 cd transformers
 git checkout v4.47.0
 cd src/transformers
-git apply ../../msadaptor/transformers.diff
-cd ../..
+git apply ../../../msadaptor/transformers.diff
+cd ../../..
 echo "..............................................done apply transformers"
 
 rm -rf peft/
@@ -40,8 +40,8 @@ git clone https://gitee.com/mirrors/peft.git
 cd peft
 git checkout v0.7.1
 cd src/peft
-git apply ../../msadaptor/peft_lora.diff
-cd ../..
+git apply ../../../msadaptor/peft_lora.diff
+cd ../../..
 echo "..............................................done apply peft"
 
 pip install -r requirements.txt

@@ -31,8 +31,8 @@ mv huggingface_transformers transformers
 cd transformers
 git checkout v4.47.0
 cd src/transformers
-git apply ../../msadaptor/transformers.diff
-cd ../..
+git apply ../../../msadaptor/transformers.diff
+cd ../../..
 echo "..............................................done apply transformers"
 
 pip install -r requirements.txt
