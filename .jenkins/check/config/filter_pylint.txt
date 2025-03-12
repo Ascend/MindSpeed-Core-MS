@@ -1,1 +1,2 @@
 "mindspeed-core-ms/msadaptor/"
+"mindspeed-core-ms/tools/"
