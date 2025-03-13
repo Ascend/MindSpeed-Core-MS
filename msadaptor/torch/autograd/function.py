@@ -151,3 +151,16 @@ class Function(Cell_):
     @classmethod
     def apply(cls, *args, **kwargs):
         return cls()(*args, **kwargs)
+
+
+class RecomputeFlag:
+    def __init__(self):
+        self.recompute = False
+
+    def set_recompute(self, flag):
+        self.recompute = flag
+
+    def get_recompute(self):
+        return self.recompute
+
+recompute_instance = RecomputeFlag()
