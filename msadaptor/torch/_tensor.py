@@ -1,3 +1,4 @@
+import numpy as np
 import mindspore
 from typing import Sequence
 from mindspore import Tensor, ops
@@ -8,7 +9,7 @@ from .configs import use_pyboost
 from ._utils import _rebuild_tensor_v2
 from ._C.size import Size
 from .ops import (transpose, mean, repeat_interleave, unsqueeze, pow, 
-                  split, norm, reshape, squeeze)
+                  split, norm, reshape, squeeze, softmax)
 from .ops._inner import get_item
 
 MS_PT_DTYPE_MAP = {
@@ -183,11 +184,27 @@ StubTensor.view = view
 
 def __or__(self, other):
     if isinstance(other, (int, bool, float, Tensor)):
-        return ops.bitwise_or(self.to(mindspore.int32), other.to(mindspore.int32)).bool()
+        return mindspore.mint.bitwise_or(self, other)
     raise TypeError("Unsupported operand type(s) for |: 'Tensor' and '{}'".format(type(other)))
 
 Tensor.__or__ = __or__
 StubTensor.__or__ = __or__
+
+def __and__(self, other):
+    if isinstance(other, (int, bool, float, Tensor)):
+        return mindspore.mint.bitwise_and(self, other)
+    raise TypeError("Unsupported operand type(s) for |: 'Tensor' and '{}'".format(type(other)))
+
+Tensor.__and__ = __and__
+StubTensor.__and__ = __and__
+
+def __xor__(self, other):
+    if isinstance(other, (int, bool, float, Tensor)):
+        return mindspore.mint.bitwise_xor(self, other)
+    raise TypeError("Unsupported operand type(s) for |: 'Tensor' and '{}'".format(type(other)))
+
+Tensor.__xor__ = __xor__
+StubTensor.__xor__ = __xor__
 
 Tensor.device = 'npu'
 StubTensor.device = 'npu'
@@ -298,13 +315,6 @@ def norm_(self, p='fro', dim=None, keepdim=False, dtype=None):
 Tensor.norm = norm_
 StubTensor.norm = norm_
 
-def __imul__(self, other):
-    self.copy_(self.mul(other))
-    return self
-
-Tensor.__imul__ = __imul__
-StubTensor.__imul__ = __imul__
-
 def cpu(self):
     return self
 
@@ -325,3 +335,53 @@ def squeeze_(self, dim):
 
 Tensor.squeeze = squeeze_
 StubTensor.squeeze = squeeze_
+
+def data_ptr(self):
+    return self._data_ptr()
+
+Tensor.data_ptr = data_ptr
+StubTensor.data_ptr = data_ptr
+
+def pin_memory(self):
+    return self
+
+Tensor.pin_memory = pin_memory
+StubTensor.pin_memory = pin_memory
+
+DTYPE_ELEMENT_SIZE_MAP = {
+    mindspore.float64: 8,
+    mindspore.int64: 8,
+    mindspore.int32: 4,
+    mindspore.float32: 4,
+    mindspore.int16: 2,
+    mindspore.int8: 1,
+    mindspore.bfloat16: 2,
+    mindspore.float16: 2,
+    mindspore.complex64: 8,
+    mindspore.complex128: 16,
+}
+
+def element_size(self,):
+    return DTYPE_ELEMENT_SIZE_MAP[self.dtype]
+
+Tensor.element_size = element_size
+StubTensor.element_size = element_size
+
+def _exponential(self, lambd=1.0, *, generator=None):
+    if generator is not None:
+        raise ValueError("`generator` can not be supported.")
+    output = np.random.exponential(scale=lambd, size=self.shape)
+    self.copy_(mindspore.Tensor(output).to(self.dtype))
+
+Tensor.exponential_ = _exponential
+StubTensor.exponential_ = _exponential
+
+Tensor.softmax = softmax
+StubTensor.softmax = softmax
+
+def is_shared_(self,):
+    return False
+
+Tensor.is_shared = is_shared_
+StubTensor.is_shared = is_shared_
+

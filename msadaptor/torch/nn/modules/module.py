@@ -11,6 +11,7 @@ import mindspore
 from mindspore import Tensor
 from mindspore.common._stub_tensor import StubTensor
 from mindspore.common.dtype import Float
+from mindspore.ops.operations import _inner_ops as inner
 
 from ...configs import ON_ORANGE_PI, set_pyboost
 from ..parameter import Parameter
@@ -358,6 +359,23 @@ def _forward_unimplemented(self, *input: Any) -> None:
         f'Module [{type(self).__name__}] is missing the required "forward" function'
     )
 
+def _get_backward_hooks(self):
+    if (_global_is_full_backward_hook is True):
+        self._backward_hooks.update(_global_backward_hooks)
+
+def _get_backward_pre_hooks(self):
+    self._backward_pre_hooks.update(_global_backward_pre_hooks)
+
+def apply_backward_hook_on_tensors(cell_backward_hook, args):
+    is_tuple = True
+    if not isinstance(args, tuple):
+        args = (args,)
+        is_tuple = False
+    hooked_args = cell_backward_hook(*args)
+    if is_tuple and len(args) == 1:
+        hooked_args = (hooked_args, )
+    return hooked_args
+
 class Module:
     r"""Base class for all neural network modules.
 
@@ -408,7 +426,7 @@ class Module:
     call_super_init: bool = False
     _compiled_call_impl : Optional[Callable] = None
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs) -> None:
         """
         Calls super().__setattr__('a', a) instead of the typical self.a = a
         to avoid Module.__setattr__ overhead. Module's __setattr__ has special
@@ -436,7 +454,7 @@ class Module:
     def forward(self, *input, **kwargs):
         """Defines the computation performed at every call.
 
-        Should be overriden by all subclasses.
+        Should be overridden by all subclasses.
 
         .. note::
             Although the recipe for forward pass needs to be defined within
@@ -665,15 +683,61 @@ class Module:
             return self._compiled_call_impl(*args, **kwargs)  # type: ignore[misc]
         return self._call_impl(*args, **kwargs)
 
+    def register_backward_hook(self, hook) -> RemovableHandle:
+        r"""Register a backward hook on the module.
+
+        This function is deprecated in favor of :meth:`~torch.nn.Module.register_full_backward_hook` and
+        the behavior of this function will change in future versions.
+
+        Returns:
+            :class:`torch.utils.hooks.RemovableHandle`:
+                a handle that can be used to remove the added hook by calling
+                ``handle.remove()``
+
+        """
+        if self._is_full_backward_hook is True:
+            raise RuntimeError(
+                "Cannot use both regular backward hooks and full backward hooks on a "
+                "single Module. Please use only one of them."
+            )
+
+        self._is_full_backward_hook = False
+
+        handle = RemovableHandle(self._backward_hooks)
+        self._backward_hooks[handle.id] = hook
+        return handle
+
+    def register_full_backward_hook(self, hook, prepend: bool = False) -> RemovableHandle:
+        if self._is_full_backward_hook is False:
+            raise RuntimeError(
+                "Cannot use both regular backward hooks and full backward hooks on a "
+                "single Module. Please use only one of them."
+            )
+
+        self._is_full_backward_hook = True
+
+        handle = RemovableHandle(self._backward_hooks)
+        self._backward_hooks[handle.id] = hook
+        if prepend:
+            self._backward_hooks.move_to_end(handle.id, last=False)  # type: ignore[attr-defined]
+        return handle
+
+    def register_full_backward_pre_hook(self, hook, prepend: bool = False) -> RemovableHandle:
+        handle = RemovableHandle(self._backward_pre_hooks)
+        self._backward_pre_hooks[handle.id] = hook
+        if prepend:
+            self._backward_pre_hooks.move_to_end(handle.id, last=False)  # type: ignore[attr-defined]
+        return handle
+
     # torchrec tests the code consistency with the following code
     # fmt: off
     def _call_impl(self, *args, **kwargs):
         forward_call = self.forward
-        # If we don't have any hooks, we want to skip the rest of the logic in
-        # this function, and just call forward.
         if self.__ms_class__:
             return forward_call(*args, **kwargs)
 
+        # If we don't have any hooks, we want to skip the rest of the logic in
+        # this function, and just call forward.
         if not (self._backward_hooks or self._backward_pre_hooks or self._forward_hooks or self._forward_pre_hooks
                 or _global_backward_pre_hooks or _global_backward_hooks
                 or _global_forward_hooks or _global_forward_pre_hooks):
@@ -683,13 +747,11 @@ class Module:
             result = None
             called_always_called_hooks = set()
 
-            full_backward_hooks, non_full_backward_hooks = [], []
-            backward_pre_hooks = []
             if self._backward_pre_hooks or _global_backward_pre_hooks:
-                backward_pre_hooks = self._get_backward_pre_hooks()
+                _get_backward_pre_hooks(self)
 
             if self._backward_hooks or _global_backward_hooks:
-                full_backward_hooks, non_full_backward_hooks = self._get_backward_hooks()
+                _get_backward_hooks(self)
 
             if _global_forward_pre_hooks or self._forward_pre_hooks:
                 for hook_id, hook in (
@@ -714,9 +776,11 @@ class Module:
                             args = args_result
 
             bw_hook = None
-            # if full_backward_hooks or backward_pre_hooks:
-            #     bw_hook = BackwardHook(self, full_backward_hooks, backward_pre_hooks)
-            #     args = bw_hook.setup_input_hook(args)
+            if self._backward_hooks:
+                bw_hook = inner.CellBackwardHook(self.__class__.__name__ + "(" + str(id(self)) + ")",
+                                                self, self._backward_hooks)
+                bw_hook.register_backward_hook()
+                args = apply_backward_hook_on_tensors(bw_hook, args)
 
             result = forward_call(*args, **kwargs)
             if _global_forward_hooks or self._forward_hooks:
@@ -739,43 +803,36 @@ class Module:
             if bw_hook:
                 if not isinstance(result, (mindspore.Tensor, tuple)):
                     warnings.warn("For backward hooks to be called,"
-                                  " module output should be a Tensor or a tuple of Tensors"
-                                  f" but received {type(result)}")
-                result = bw_hook.setup_output_hook(result)
+                                " module output should be a Tensor or a tuple of Tensors"
+                                f" but received {type(result)}")
+                result = apply_backward_hook_on_tensors(bw_hook, result)
 
-            # Handle the non-full backward hooks
-            if non_full_backward_hooks:
-                var = result
-                while not isinstance(var, mindspore.Tensor):
-                    if isinstance(var, dict):
-                        var = next(v for v in var.values() if isinstance(v, mindspore.Tensor))
-                    else:
-                        var = var[0]
-                # grad_fn = var.grad_fn
-                # if grad_fn is not None:
-                #     for hook in non_full_backward_hooks:
-                #         grad_fn.register_hook(_WrappedHook(hook, self))
-                #     self._maybe_warn_non_full_backward_hook(args, result, grad_fn)
+            if self._backward_pre_hooks:
+                bw_pre_hook = inner.CellBackwardHook(self.__class__.__name__ + "(" + str(id(self)) + ")",
+                                                    self, self._backward_pre_hooks)
+                bw_pre_hook.register_backward_pre_hook()
+                result = apply_backward_hook_on_tensors(bw_pre_hook, result)
 
             return result
-
         except Exception:
             # run always called hooks if they have not already been run
             # For now only forward hooks have the always_call option but perhaps
             # this functionality should be added to full backward hooks as well.
             for hook_id, hook in _global_forward_hooks.items():
-                if hook_id in _global_forward_hooks_always_called and hook_id not in called_always_called_hooks:  # type: ignore[possibly-undefined]
+                # type: ignore[possibly-undefined]
+                if hook_id in _global_forward_hooks_always_called and hook_id not in called_always_called_hooks:
                     try:
                         hook_result = hook(self, args, result)  # type: ignore[possibly-undefined]
                         if hook_result is not None:
                             result = hook_result
                     except Exception as e:
                         warnings.warn("global module forward hook with ``always_call=True`` raised an exception "
-                                      f"that was silenced as another error was raised in forward: {str(e)}")
+                                    f"that was silenced as another error was raised in forward: {str(e)}")
                         continue
 
             for hook_id, hook in self._forward_hooks.items():
-                if hook_id in self._forward_hooks_always_called and hook_id not in called_always_called_hooks:  # type: ignore[possibly-undefined]
+                # type: ignore[possibly-undefined]
+                if hook_id in self._forward_hooks_always_called and hook_id not in called_always_called_hooks:
                     try:
                         if hook_id in self._forward_hooks_with_kwargs:
                             hook_result = hook(self, args, kwargs, result)  # type: ignore[possibly-undefined]
@@ -785,7 +842,7 @@ class Module:
                             result = hook_result
                     except Exception as e:
                         warnings.warn("module forward hook with ``always_call=True`` raised an exception "
-                                      f"that was silenced as another error was raised in forward: {str(e)}")
+                                    f"that was silenced as another error was raised in forward: {str(e)}")
                         continue
             # raise exception raised in try block
             raise
@@ -967,7 +1024,7 @@ class Module:
         return self.npu()
 
     def npu(self):
-        return self
+        return self._apply(lambda t: t.move_to('Ascend'))
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
                               missing_keys, unexpected_keys, error_msgs):

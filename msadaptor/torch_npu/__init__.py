@@ -1,10 +1,12 @@
 import torch
-from . import npu
-from . import profiler
 from torch.nn.functional import rms_norm, fast_gelu, swiglu
 import mindspore as ms
 from mindspore import ops
 from mindspore.ops import auto_generate as gen
+from mindspore.ops import rotary_position_embedding
+
+from . import npu
+from . import profiler
 
 
 def npu_rms_norm(x, gamma, epsilon=1e-5):
@@ -14,9 +16,6 @@ def npu_rms_norm(x, gamma, epsilon=1e-5):
 
 def npu_swiglu(x, dim=-1):
     return swiglu(x, dim)
-
-
-from mindspore.ops import rotary_position_embedding
 
 
 def npu_rotary_position_embedding(x, cos, sin, mode=0):
@@ -34,164 +33,95 @@ def npu_rotary_position_embedding(x, cos, sin, mode=0):
     return rotary_position_embedding(x, cos, sin, mode)
 
 
-# def npu_fusion_attention(query, key, value, head_num, input_layout, pse=None, padding_mask=None, atten_mask=None,
-#                          scale=1., keep_prob=1., pre_tockens=2147483647, next_tockens=2147483647, inner_precise=0,
-#                          prefix=None, actual_seq_qlen=None, actual_seq_kvlen=None, sparse_mode=0,
-#                          gen_mask_parallel=True, sync=False):
-#     output = ops.flash_attention_score(query, key, value, real_shift=pse, padding_mask=padding_mask,
-#                                        attn_mask=atten_mask, prefix=prefix, actual_seq_qlen=actual_seq_qlen,
-#                                        actual_seq_kvlen=actual_seq_kvlen, head_num=head_num, keep_prob=keep_prob,
-#                                        scalar_value=scale, pre_tokens=pre_tockens, next_tokens=next_tockens,
-#                                        inner_precise=inner_precise, input_layout=input_layout, sparse_mode=sparse_mode)
-
-#     return (output,)
-
-
-from mindspore.ops.operations.nn_ops import FlashAttentionScore
-
-
-def npu_fusion_attention(query, key, value, head_num, input_layout, *,
-                         pse=None, padding_mask=None, atten_mask=None, scale=1.,
-                         keep_prob=1., pre_tockens=2147483647, next_tockens=2147483647,
-                         inner_precise=0, prefix=None, actual_seq_qlen=None,
-                         actual_seq_kvlen=None, sparse_mode=0, gen_mask_parallel=True,
-                         sync=False, pse_type=1, q_start_idx=None, kv_start_idx=None):
+def npu_rotary_mul(x, cos, sin):
     """
+    Inputs:
+        - **x** (Tensor) - The input tensor.
+        - **cos** (Tensor) - The input cos tensor.
+        - **sin** (Tensor) - The input sin tensor.
+
     Outputs:
-        - **attention_out** (Tensor[float16, bfloat16]) - The output of attention, its shape, and data type
-          are the same as the query.
-        - **softmax_max** (Tensor[float32]) - (B, N1, S1, 8) when input_layout is not `TND` else (T1, N1, D)
-        - **softmax_sum** (Tensor[float32]) - (B, N1, S1, 8) when input_layout is not `TND` else (T1, N1, D)
+        - **y** (Tensor) - The output tensor.
+
     """
-    fa_op = FlashAttentionScore(head_num=head_num,
-                                scale_value=scale,
-                                keep_prob=keep_prob,
-                                pre_tokens=pre_tockens,
-                                next_tokens=next_tockens,
-                                inner_precise=inner_precise,
-                                input_layout=input_layout,
-                                sparse_mode=sparse_mode)
-    # create drop_mask.
-    enable_dropout = keep_prob < 1.0
-    drop_mask_bits = None
-    if input_layout != "TND":
-        if input_layout == "BSH":
-            bsz, q_seq_len, _ = query.shape
-            _, kv_seq_len, _ = key.shape
-        elif input_layout == "SBH":
-            q_seq_len, bsz, _ = query.shape
-            kv_seq_len, _, _ = key.shape
-        elif input_layout == "BNSD":
-            bsz, _, q_seq_len, _ = query.shape
-            _, _, kv_seq_len, _ = key.shape
-        elif input_layout == "BSND":
-            bsz, q_seq_len, _, _ = query.shape
-            _, kv_seq_len, _, _ = key.shape
-            if atten_mask is not None and atten_mask.shape[0] != bsz:
-                atten_mask.squeeze()
-        else:
-            raise ValueError(f"input_layout is invalid")
-        if enable_dropout:
-            drop_gen_mask = DropoutGenMask()
-            keep_prob_tensor = Tensor(keep_prob, dtype=mstype.float16)
-            drop_mask_bits = F.reshape(
-                drop_gen_mask((bsz, head_num, q_seq_len, kv_seq_len), keep_prob_tensor),
-                (bsz, head_num, q_seq_len, kv_seq_len // 8))
-    out = fa_op(query, key, value,
-                real_shift=pse,
-                drop_mask=drop_mask_bits,
-                padding_mask=padding_mask,
-                attn_mask=atten_mask,
-                prefix=prefix,
-                actual_seq_qlen=actual_seq_qlen,
-                actual_seq_kvlen=actual_seq_kvlen)
-    sfm_max, sfm_sum, sfm_out, atten_out = out
-    outputs = []
-    outputs.append(atten_out)
-    outputs.append(sfm_max)
-    outputs.append(sfm_sum)
-    # return atten_out, sfm_max, sfm_sum
-    return outputs
+    return rotary_position_embedding(x, cos, sin, mode=0)
 
 
-from mindspore.ops.auto_generate import FlashAttentionScoreGrad
+def npu_incre_flash_attention(query, key, value, *, padding_mask=None, atten_mask=None, pse_shift=None,
+                              actual_seq_lengths=None, antiquant_scale=None, antiquant_offset=None, block_table=None,
+                              dequant_scale1=None, quant_scale1=None, dequant_scale2=None, quant_scale2=None,
+                              quant_offset2=None, kv_padding_size=None, num_heads=1, scale_value=1.0,
+                              input_layout="BSH", num_key_value_heads=0, block_size=0, inner_precise=1):
+    key = [key]
+    value = [value]
+    output = ops.incre_flash_attention(
+        query, key, value, attn_mask=atten_mask, actual_seq_lengths=actual_seq_lengths, pse_shift=pse_shift,
+        dequant_scale1=dequant_scale1, quant_scale1=quant_scale1, dequant_scale2=dequant_scale2,
+        quant_scale2=quant_scale2, quant_offset2=quant_offset2, antiquant_scale=antiquant_scale,
+        antiquant_offset=antiquant_offset, block_table=block_table, num_heads=num_heads, input_layout=input_layout,
+        scale_value=scale_value, num_key_value_heads=num_key_value_heads, block_size=block_size,
+        inner_precise=inner_precise, kv_padding_size=kv_padding_size
+    )
+    return output
 
 
-def npu_fusion_attention_grad(query, key, value, dy, head_num, input_layout, *,
-                              pse=None, padding_mask=None, atten_mask=None, scale_value=1.,
-                              keep_prob=1., pre_tockens=2147483647, next_tockens=2147483647,
-                              inner_precise=0,
-                              softmax_max=None, softmax_sum=None, softmax_in=None, attention_in=None,
-                              prefix=None, actual_seq_qlen=None,
-                              actual_seq_kvlen=None, sparse_mode=0, gen_mask_parallel=True,
-                              sync=False, pse_type=1, q_start_idx=None, kv_start_idx=None,
-                              seed=None, offset=None, numels=None):
-    """
-    Outputs:
-        - **dq** (Tensor[float16, bfloat16]) - The gradient of the Query vector.
-        - **dk** (Tensor[float16, bfloat16]) - The gradient of the Key vector.
-        - **dv** (Tensor[float16, bfloat16]) - The gradient of the Value vector.
-    """
-    fag_op = FlashAttentionScoreGrad(head_num=head_num,
-                                     scale_value=scale_value,
-                                     keep_prob=keep_prob,
-                                     pre_tokens=pre_tockens,
-                                     next_tokens=next_tockens,
-                                     inner_precise=inner_precise,
-                                     input_layout=input_layout,
-                                     sparse_mode=sparse_mode)
-    # create drop_mask.
-    enable_dropout = keep_prob < 1.0
-    drop_mask_bits = None
-    if input_layout != "TND":
-        if input_layout == "BSH":
-            bsz, q_seq_len, _ = query.shape
-            _, kv_seq_len, _ = key.shape
-        elif input_layout == "SBH":
-            q_seq_len, bsz, _ = query.shape
-            kv_seq_len, _, _ = key.shape
-        elif input_layout == "BNSD":
-            bsz, _, q_seq_len, _ = query.shape
-            _, _, kv_seq_len, _ = key.shape
-        elif input_layout == "BSND":
-            bsz, q_seq_len, _, _ = query.shape
-            _, kv_seq_len, _, _ = key.shape
-        else:
-            raise ValueError(f"input_layout is invalid")
-        if enable_dropout:
-            drop_gen_mask = DropoutGenMask()
-            keep_prob_tensor = Tensor(keep_prob, dtype=mstype.float16)
-            drop_mask_bits = F.reshape(
-                drop_gen_mask((bsz, head_num, q_seq_len, kv_seq_len), keep_prob_tensor),
-                (bsz, head_num, q_seq_len, kv_seq_len // 8))
-    out = fag_op(query, key, value,
-                 dy,
-                 pse_shift=pse,
-                 drop_mask=drop_mask_bits,
-                 padding_mask=padding_mask,
-                 atten_mask=atten_mask,
-                 softmax_max=softmax_max,
-                 softmax_sum=softmax_sum,
-                 softmax_in=softmax_in,
-                 attention_in=attention_in,
-                 prefix=prefix,
-                 actual_seq_qlen=actual_seq_qlen,
-                 actual_seq_kvlen=actual_seq_kvlen)
-    dq, dk, dv, dpse = out
-    outputs = []
-    outputs.append(dq)
-    outputs.append(dk)
-    outputs.append(dv)
+def npu_prompt_flash_attention(query, key, value, *, pse_shift=None, padding_mask=None, atten_mask=None,
+                               actual_seq_lengths=None, deq_scale1=None, quant_scale1=None, deq_scale2=None,
+                               quant_scale2=None, quant_offset2=None, num_heads=1, scale_value=1.0,
+                               pre_tokens=2147473647, next_tokens=0, input_layout="BSH", num_key_value_heads=0,
+                               actual_seq_lengths_kv=None, sparse_mode=0):
 
-    # return dq, dk, dv, dpse
-    return outputs
+    output = ops.prompt_flash_attention(
+        query, key, value, attn_mask=atten_mask, actual_seq_lengths=actual_seq_lengths,
+        actual_seq_lengths_kv=actual_seq_lengths_kv, pse_shift=pse_shift, deq_scale1=deq_scale1,
+        quant_scale1=quant_scale1, deq_scale2=deq_scale2, quant_scale2=quant_scale2, quant_offset2=quant_offset2,
+        num_heads=num_heads, scale_value=scale_value, pre_tokens=pre_tokens, next_tokens=next_tokens,
+        input_layout=input_layout, num_key_value_heads=num_key_value_heads, sparse_mode=sparse_mode, inner_precise=1
+    )
+    return output
+
+
+def npu_fusion_attention(query, key, value, head_num, input_layout, *, pse=None, padding_mask=None, atten_mask=None,
+                         scale=1., keep_prob=1., pre_tockens=2147483647, next_tockens=2147483647, inner_precise=0,
+                         drop_mask=None, prefix=None, actual_seq_qlen=None, actual_seq_kvlen=None, sparse_mode=0,
+                         gen_mask_parallel=True, sync=False, pse_type=1, q_start_idx=None, kv_start_idx=None):
+    output = gen.flash_attention_score_impl(
+        query, key, value, real_shift=pse, padding_mask=padding_mask, drop_mask=drop_mask,
+        attn_mask=atten_mask, prefix=prefix, actual_seq_qlen=actual_seq_qlen,
+        actual_seq_kvlen=actual_seq_kvlen, head_num=head_num, keep_prob=keep_prob,
+        scale_value=scale, pre_tokens=pre_tockens, next_tokens=next_tockens,
+        inner_precise=inner_precise, input_layout=input_layout, sparse_mode=sparse_mode
+    )
+    sfm_max, sfm_sum, _, atten_out = output
+
+    return atten_out, sfm_max, sfm_sum
+
+
+def npu_fusion_attention_grad(
+        query, key, value, dy, head_num, input_layout, *, pse=None, padding_mask=None, atten_mask=None,
+        drop_mask=None, softmax_max=None, softmax_sum=None, softmax_in=None, attention_in=None, prefix=None,
+        actual_seq_qlen=None, actual_seq_kvlen=None, keep_prob=1.0, scale_value=1.0,
+        pre_tockens=2147483647, next_tockens=2147483647, inner_precise=0, sparse_mode=0,
+        gen_mask_parallel=True, sync=False, pse_type=1, q_start_idx=None, kv_start_idx=None,
+        seed=1234, offset=0, numels=0
+    ):
+    output = gen.flash_attention_score_grad_impl(
+        query, key, value, dy, pse_shift=pse, padding_mask=padding_mask, atten_mask=atten_mask, drop_mask=drop_mask,
+        softmax_max=softmax_max, softmax_sum=softmax_sum, softmax_in=softmax_in, attention_in=attention_in,
+        prefix=prefix, actual_seq_qlen=actual_seq_qlen, actual_seq_kvlen=actual_seq_kvlen, head_num=head_num,
+        keep_prob=keep_prob, scale_value=scale_value, pre_tokens=pre_tockens, next_tokens=next_tockens,
+        inner_precise=inner_precise, input_layout=input_layout, sparse_mode=sparse_mode
+    )
+    dq, dk, dv, _ = output
+
+    return dq, dk ,dv
 
 
 adamw_opt = gen.ApplyAdamW()
 
-
 def npu_apply_adam_w(beta1_power, beta2_power, lr, weight_decay, beta1, beta2,
                      epsilon, grad, max_grad_norm, amsgrad, maximize, out):
+
     var, m, v = out
     var, m, v = adamw_opt(var, m, v, beta1_power=beta1_power, beta2_power=beta2_power, lr=lr, weight_decay=weight_decay,
                           beta1=beta1, beta2=beta2, epsilon=epsilon, grad=grad, max_grad_norm=max_grad_norm,
@@ -208,7 +138,7 @@ def npu_all_gather_base_mm(
         gather_index: int = 0,
         gather_output: bool = True,
         comm_turn: int = 0,
-) -> None:
+    ) -> None:
     group = ms.communication.GlobalComm.WORLD_COMM_GROUP
     return ms.ops.all_gather_matmul(
         input_,
@@ -230,7 +160,7 @@ def npu_mm_reduce_scatter_base(
         reduce_op: str = ops.ReduceOp.SUM,
         bias: None = None,
         comm_turn: int = 0,
-) -> None:
+    ) -> None:
     group = ms.communication.GlobalComm.WORLD_COMM_GROUP
     return ms.ops.matmul_reduce_scatter(
         input_,
@@ -242,6 +172,6 @@ def npu_mm_reduce_scatter_base(
         comm_turn=comm_turn,
     )
 
+__version__ = "2.5"
 
-torch._register_device_module('npu', npu)
 
