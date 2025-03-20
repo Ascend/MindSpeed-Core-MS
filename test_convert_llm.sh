@@ -8,7 +8,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 cd MindSpeed-LLM
-git checkout 36bd5742b51c84ea762dc57f8943b0ee5301ee74
+git checkout d91c9c31f74cfbd1e3d5ad29b33edf5a56cb95df
 cd ..
 echo "------------------------------------done MindSpeed-LLM"
 
@@ -20,7 +20,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 cd MindSpeed
-git checkout 0b832e42
+git checkout 0dfa0035ec54d9a74b2f6ee2867367df897299df
 cd ..
 echo "...............................................done MindSpeed"
 
@@ -36,14 +36,14 @@ git checkout core_r0.8.0
 cd ..
 echo "..............................................done Megatron-LM"
 
-#msadaptor
-rm -rf msadaptor
-git clone https://gitee.com/mindspore/msadapter.git -b feature-0.1
+#msadapter
+rm -rf msadapter
+git clone https://gitee.com/mindspore/msadapter -b master
 if [ $? -ne 0 ]; then
-    echo "Error: git clone msadaptor"
+    echo "Error: git clone msadapter"
     exit 1
 fi
-echo "..............................................done msadaptor"
+echo "..............................................done msadapter"
 
 #transformers
 rm -rf transformers/

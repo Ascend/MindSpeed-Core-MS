@@ -58,24 +58,24 @@ index dae29111c..39e62282a 100755
      Conv1D,
      apply_chunking_to_forward,
 @@ -380,26 +380,26 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
- 
+
      Note: We fully disable this if we are using `deepspeed`
      """
 -    if model_to_load.device.type == "meta":
 -        return False
 +    # if model_to_load.device.type == "meta":
 +    #     return False
- 
+
 -    if len([key for key in state_dict if key.startswith(start_prefix)]) == 0:
 -        return False
 +    # if len([key for key in state_dict if key.startswith(start_prefix)]) == 0:
 +    #     return False
- 
+
 -    if is_deepspeed_zero3_enabled():
 -        return False
 +    # if is_deepspeed_zero3_enabled():
 +    #     return False
- 
+
 -    # Some models explicitly do not support param buffer assignment
 -    if not getattr(model_to_load, "_supports_param_buffer_assignment", True):
 -        logger.debug(
@@ -88,7 +88,7 @@ index dae29111c..39e62282a 100755
 +    #         f"{model_to_load.__class__.__name__} does not support param buffer assignment, loading will be slower"
 +    #     )
 +    #     return False
- 
+
 -    # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
 -    first_key = next(iter(model_to_load.state_dict().keys()))
 -    if start_prefix + first_key in state_dict:
@@ -97,7 +97,7 @@ index dae29111c..39e62282a 100755
 +    # first_key = next(iter(model_to_load.state_dict().keys()))
 +    # if start_prefix + first_key in state_dict:
 +    #     return state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
- 
+
      # For cases when the `state_dict` doesn't contain real weights to the model (`test_model_weights_reload_no_missing_tied_weights`)
      return False
 @@ -501,13 +501,15 @@ def load_state_dict(
@@ -135,7 +135,7 @@ index dae29111c..39e62282a 100755
 @@ -1599,15 +1601,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                  hard_check_only=False if requested_attn_implementation is None else True,
              )
- 
+
 -            if (
 -                torch.version.hip is not None
 -                and config._attn_implementation == "sdpa"
@@ -169,7 +169,7 @@ index dae29111c..39e62282a 100755
 +        #     raise ValueError(
 +        #         f"Can't instantiate {cls.__name__} model under dtype={dtype} since it is not a floating point dtype"
 +        #     )
- 
+
          logger.info(f"Instantiating {cls.__name__} model under default dtype {dtype}.")
          dtype_orig = torch.get_default_dtype()
 @@ -1693,7 +1695,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
@@ -184,11 +184,11 @@ index dae29111c..39e62282a 100755
 @@ -2619,7 +2621,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
              # the gradients to make sure the gradient flows.
              self.enable_input_require_grads()
- 
+
 -    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
 +    def _set_gradient_checkpointing(self, enable, gradient_checkpointing_func): # Callable = checkpoint):
          is_gradient_checkpointing_set = False
- 
+
          # Apply it on the top-level module in case the top-level modules supports it
 @@ -4487,7 +4489,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
          if device_map is None and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
@@ -198,11 +198,11 @@ index dae29111c..39e62282a 100755
 +                # id_tensor = id_tensor_storage(tensor)
 +                id_tensor = id(tensor)
                  ptrs[id_tensor].append(name)
- 
+
              # These are all the pointers of shared tensors.
 @@ -4554,6 +4557,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                          hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict, unexpected_keys)
- 
+
          # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
 +        _fast_init = False
          if _fast_init:
@@ -219,14 +219,14 @@ index 9012c8db9..d53d398ea 100644
 -
          variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
          hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
- 
+
          # convert into half-precision if necessary
          if self.weight.dtype in [torch.float16, torch.bfloat16]:
              hidden_states = hidden_states.to(self.weight.dtype)
 -
          return self.weight * hidden_states
- 
- 
+
+
 @@ -434,9 +432,13 @@ class T5Attention(nn.Module):
              / math.log(max_distance / max_exact)
              * (num_buckets - max_exact)
@@ -241,7 +241,7 @@ index 9012c8db9..d53d398ea 100644
 +        # relative_position_if_large = torch.min(
 +        #     relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
 +        # )
- 
+
          relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
          return relative_buckets
 @@ -448,8 +450,8 @@ class T5Attention(nn.Module):
@@ -259,9 +259,9 @@ index 9012c8db9..d53d398ea 100644
          )
          values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
          values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
-+        
++
          return values
- 
+
      def forward(
 @@ -684,7 +687,6 @@ class T5Block(nn.Module):
          )
@@ -272,7 +272,7 @@ index 9012c8db9..d53d398ea 100644
          if hidden_states.dtype == torch.float16:
              clamp_value = torch.where(
 @@ -723,7 +725,6 @@ class T5Block(nn.Module):
- 
+
          # Apply Feed Forward layer
          hidden_states = self.layer[-1](hidden_states)
 -
@@ -287,7 +287,7 @@ index 9012c8db9..d53d398ea 100644
 +        # config.num_layers = 1
          self.embed_tokens = embed_tokens
          self.is_decoder = config.is_decoder
- 
+
 @@ -1051,7 +1052,12 @@ class T5Stack(T5PreTrainedModel):
          elif attention_mask is not None:
              causal_mask = attention_mask[:, None, None, :]
@@ -301,10 +301,10 @@ index 9012c8db9..d53d398ea 100644
 +            # causal_mask = (1.0 - causal_mask) * torch.finfo(inputs_embeds.dtype).min
          else:
              causal_mask = None
- 
+
 @@ -1078,7 +1084,6 @@ class T5Stack(T5PreTrainedModel):
          encoder_decoder_position_bias = None
- 
+
          hidden_states = self.dropout(inputs_embeds)
 -
          for i, layer_module in enumerate(self.block):
@@ -338,17 +338,17 @@ index 5bdf8a355..2e138e986 100644
 +    #     unique_id = torch_xla._XLAC._xla_get_tensor_id(tensor)
 +    # else:
 +    unique_id = storage_ptr(tensor)
- 
+
      return tensor.device, unique_id, storage_size(tensor)
- 
+
 diff --git a/src/transformers/utils/import_utils.py b/src/transformers/utils/import_utils.py
 index 32a647594..d17ae5c02 100755
 --- a/src/transformers/utils/import_utils.py
 +++ b/src/transformers/utils/import_utils.py
 @@ -194,13 +194,14 @@ _blobfile_available = _is_package_available("blobfile")
  _liger_kernel_available = _is_package_available("liger_kernel")
- 
- 
+
+
 -_torch_version = "N/A"
 -_torch_available = False
 -if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
@@ -364,6 +364,6 @@ index 32a647594..d17ae5c02 100755
 +# else:
 +#     logger.info("Disabling PyTorch because USE_TF is set")
 +#     _torch_available = False
- 
- 
+
+
  _tf_version = "N/A"
