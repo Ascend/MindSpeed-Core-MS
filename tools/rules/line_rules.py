@@ -840,21 +840,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +            # output_weight = self.output_layer.weight.detach()
 +            from mindspore import ops
 +            output_weight = ops.stop_gradient(self.output_layer.weight)""",
-"""             loss += args.mtp_loss_scale / args.num_nextn_predict_layers * mtp_loss
-+    
-+    logits, _ = self.output_layer(hidden_states, weight=self.output_layer.weight)
-+    # new add to scale logits
-+    if args.output_multiplier_scale:
-+        logits = logits * args.output_multiplier_scale
-+
-+    if args.output_logit_softcapping:
-+        logits = logits / args.output_logit_softcapping
-+        logits = torch.tanh(logits)
-+        logits = logits * args.output_logit_softcapping
-+
-+    if labels[0] is None:
-+        # [s b h] => [b s h]
-+        return logits.transpose(0, 1).contiguous()""","""     for idx in range(1, len(slides)):
+"""     for idx in range(1, len(slides)):
 -        slides[idx] = regenerate_position_ids(slides[idx], idx)
 -    return slides
 -
@@ -978,9 +964,8 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
  
      @staticmethod"""],
         "core/distributed/param_and_grad_buffer.py":[
-            """+        if param in self.params_with_grad:
-+            return
-+        # assert param in self.params, 'Param is not in the bucket'
+            """
+        assert param not in self.params_with_grad, 'Cannot set grad twice'
 +        if param in self.params_with_grad:
 +            return
 +        # assert param not in self.params_with_grad, 'Cannot set grad twice'
