@@ -92,18 +92,6 @@ SPECIAL_RULES = {
         [[r"assert param\.requires\_grad", "# assert param.requires_grad"]],
     "core/optimizer/optimizer.py":
         [[r"assert self\.optimizer\, \'no optimizer is provided\.\'", "assert self.optimizer, 'no optimizer is provided.'\n        self.empty_optmizer = False\n        if getattr(self.optimizer.param_groups[0]['params'][0], 'fake', False):\n            self.empty_optmizer = True"],],
-    "core/pipeline_parallel/schedules.py": 
-        [[r"from torch\.autograd\.variable import Variable",                                                 "from mindspore.ops import composite as C\nfrom mindspore.common.api import _pynative_executor"],
-         [r"set\_input\_tensor\(input_tensor\)",                                                             "set_input_tensor(input_tensor)\n\n    if not parallel_state.is_pipeline_first_stage() and input_tensor is not None:\n        input_tensor[0].retain_grad()\n\n    # run forward\n    num_tokens = torch.tensor(0, dtype=torch.int)\n    if input_tensor[0] is None:\n        input_tensor[0] = num_tokens"],
-         [r"context\_manager = contextlib\.nullcontext\(\)",                                                 "context_manager = contextlib.nullcontext()\n    _pynative_executor.set_grad_flag(True)\n    _pynative_executor.new_graph(forward_step_func, input_tensor[0])"],
-         [r"forward\_data\_store\.append\(data\)",                                                           "forward_data_store.append(data)\n    _pynative_executor.end_graph(forward_step_func, output_tensor, input_tensor[0])"],
-         [r"for x in input_tensor.*\n.*if x is not None.*\n.*x\.retain_grad.*",                              ""],
-         [r"if output_tensor_grad\[0\].*\n.*\n.*\n.*\n.*\n.*\n.*torch\.autograd\.backward.*",                "if output_tensor_grad[0] is None and config.grad_scale_func is not None:\n        output_tensor_grad[0] = config.grad_scale_func(torch.ones_like(output_tensor[0]))\n    if output_tensor_grad[0] is None:\n        output_tensor_grad[0] = torch.ones_like(output_tensor[0])\n\n    # set input tensor for backpropagation\n    if not parallel_state.is_pipeline_first_stage():\n        model.module.set_input_tensor(input_tensor[0])\n\n    # run backward\n    grad_ = C.GradOperation(True, True, True)\n    weights = model.trainable_params()\n    _pynative_executor.check_run(grad_, config.forward_step_func, weights, None, input_tensor[0])\n    _pynative_executor.grad(config.forward_step_func, grad_, weights, None, input_tensor[0], output_tensor_grad[0])"],
-         [r"input\_tensor\_grad\.append\(x\.grad\)",                                                         "input_tensor_grad.append(x.grad)\n\n    if not parallel_state.is_pipeline_first_stage():\n        model.module.set_input_tensor(None)"],
-         [r"config = get\_model\_config\(model\)",                                                           "config = get_model_config(model)\n    config.forward_step_func = forward_step_func"],
-         [r"input\_tensor, output\_tensor\_grad = None\, None",                                              "input_tensor, output_tensor_grad = [None], [None]"],
-         [r"backward_step\(\n?.*input_tensor, output_tensor, output_tensor_grad, model_type, config\n?.*\)", "backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model)"]
-         ],
     "core/tensor_parallel/cross_entropy.py":
         [(r"masked_target\[target_mask\] = 0", "masked_target *= (1-target_mask)"),
          (r"predicted_logits\[target_mask\] = 0\.0", "predicted_logits *= (1-target_mask)"),

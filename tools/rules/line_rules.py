@@ -97,6 +97,18 @@ LINE_RULES = {
 +        #     return do_ulyssesattn_context_parallel(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)""",
 """-            pse_type=self.pse_type, packed_seq_params=packed_seq_params)
 +            pse_type=self.pse_type)#, packed_seq_params=packed_seq_params)"""],
+    "mindspeed_llm/core/datasets/blended_megatron_dataset_builder.py": [""" from ..parallel_state import get_pipeline_model_parallel_node_info
++from mindspore.communication import get_local_rank
+ 
+ logger = logging.getLogger(__name__)""","""     if share_save:
+         return rank == 0
+     gpus_per_node = torch.cuda.device_count()
+-    current_rank = torch.cuda.current_device()
++    # current_rank = torch.cuda.current_device()
++    current_rank = get_local_rank()
+     if args.tensor_model_parallel_size > gpus_per_node:
+         return mpu.get_tensor_model_parallel_rank() == 0
+     return mpu.get_tensor_model_parallel_rank() == 0 and current_rank % gpus_per_node == 0"""],
     "mindspeed_llm/core/models/common/embeddings/rotary_pos_embedding.py": [
         """     for freq in freqs:
 -        wavelen = 2 * math.pi / freq
@@ -154,136 +166,27 @@ LINE_RULES = {
          msg["name"] = name
          queue.put(msg)"""
     ],
-    "mindspeed_llm/tasks/checkpoint/models.py": [
-        """     return f"shape: {shape} mean_val: {mean_val} min_val: {min_val} max_val: {max_val}"
- 
- 
-+class FakesubModule():
-+    def __init__(self, module_name, weight_dict):
-+        self.weight = weight_dict.get(f"{module_name}.weight", )
-+        self.bias = weight_dict.get(f"{module_name}.bias")
-+
-+
-+class FakeModule():
-+    def __init__(self, weight_dicts, module_mapping):
-+        self.module_keys = set(map(lambda x: ".".join(x.split(".")[:-1]),weight_dicts.keys()))
-+        for module_name in self.module_keys:
-+            weight_dict = dict(filter(lambda x : module_name in x[0], weight_dicts.items()))
-+            setattr(self, module_name, self.assemodule(module_name, weight_dict))
-+
-+    def assemodule(self, module_name, weight_dict):
-+        return FakesubModule(module_name, weight_dict)
-+    
-+    def to(self, model_type):
-+        return self
-+
-+""",
-        """         self.layers_self_attention_linear_qkv_caches = {"layer_idx": -1, "weight": None, "bias": None}
-+        self.__register_functions()
- 
-     def initialize_args(self):
-         # Read huggingface args.""","""         self.args.add_dense_bias = self.args_cmd.add_dense_bias
-         self.args.post_norm = self.args_cmd.post_norm
- 
-+    def __register_functions(self):
-+        self.get_module_mapping()
-+
-+        def _get_obj(self, value, **kwargs):
-+            self.update_kwargs_idx(**kwargs)
-+            obj = self.get_model_item(**kwargs)
-+            if "layer_idx" in value:
-+                attr_idx = self.kwargs_idx["layer_idx"]
-+                value = value.replace("[layer_idx]", f".{attr_idx}")
-+            return getattr(obj, value, None)
-+
-+        def _func_generator_get_module(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs)
-+            return func
-+
-+        def _func_generator_get_weight(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs).weight.data
-+            return func
-+
-+        def _func_generator_get_bias(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs).bias.data
-+            return func
-+
-+        def _func_generator_set_weight(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs).weight.data.copy_(kwargs.get('data'))
-+            return func
-+
-+        def _func_generator_set_module(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs).data.copy_(kwargs.get('data'))
-+            return func
-+
-+        def _func_generator_set_bias(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs).bias.data.copy_(kwargs.get('data'))
-+            return func
-+
-+        def _func_generator_has_module(value):
-+            def func(self, **kwargs):
-+                # print("self", self)
-+                obj = _get_obj(self, value, **kwargs)
-+                return True if obj else False
-+            return func
-+        
-+        def _func_generator_has_bias(value):
-+            def func(self, **kwargs):
-+                bias = getattr(_get_obj(self, value, **kwargs), 'bias', None)
-+                return bias is not None
-+            return func
-+
-+        if self.module_mapping:
-+            for key, value in self.module_mapping.items():
-+                setattr(self, "get_" + key + "_module", _func_generator_get_module(value).__get__(self, ModelBase))
-+                setattr(self, "set_" + key + "_module", _func_generator_set_module(value).__get__(self, ModelBase))
-+                setattr(self, "get_" + key + "_weight", _func_generator_get_weight(value).__get__(self, ModelBase))
-+                setattr(self, "get_" + key + "_bias", _func_generator_get_bias(value).__get__(self, ModelBase))
-+                setattr(self, "set_" + key + "_weight", _func_generator_set_weight(value).__get__(self, ModelBase))
-+                setattr(self, "set_" + key + "_bias", _func_generator_set_bias(value).__get__(self, ModelBase))
-+                setattr(self, "has_" + key + "_module", _func_generator_has_module(value).__get__(self, ModelBase))
-+                setattr(self, "has_" + key + "_bias", _func_generator_has_bias(value).__get__(self, ModelBase))
-+
-     def get_modules_from_pretrained(self, device_map="cpu", trust_remote_code=True):
-         # Load Huggingface model.
-         if self.args_cmd.save_model_type == "hf":
-             load_dir = self.args_cmd.save_dir
-         else:
-             load_dir = self.args_cmd.load_dir
--        self.module = [AutoModelForCausalLM.from_pretrained(load_dir, device_map=device_map, trust_remote_code=trust_remote_code, local_files_only=True)]
--        if hasattr(self.args, "torch_dtype") and self.args.torch_dtype in ["float16", "bfloat16"]:
-+        import glob
-+        from torch.serialization import safe_load_file
-+        hf_model_dict = {}
-+        checkpoint_files_path = load_dir + "*.safetensors"
-+        checkpoint_files = glob.glob(checkpoint_files_path)
-+        for checkpoint_file in checkpoint_files:
-+            checkpoint = safe_load_file(checkpoint_file)
-+            hf_model_dict.update(checkpoint)
-+        self.module = [FakeModule(hf_model_dict, self.module_mapping)]
-+        if hasattr(self.args, "torch_dtype") and self.args.torch_dtype in ["float16", "bfloat16"]: #不一样
-             self.module[0] = self.module[0].to(eval(f'torch.{self.args.torch_dtype}'))
-""","""        self.layers_self_attention_linear_qkv_caches = {"layer_idx": -1, "weight": None, "bias": None}
--        self.__register_functions()
-+        # self.__register_functions()""",
-"""-                return _get_dst_obj(self, value, **kwargs).weight.data.copy_(kwargs.get('data'))
+    "mindspeed_llm/tasks/checkpoint/models.py": ["""         def _func_generator_set_weight(value):
+             def func(self, **kwargs):
+-                return _get_dst_obj(self, value, **kwargs).weight.data.copy_(kwargs.get('data'))
 +                set_tensor = _get_dst_obj(self, value, **kwargs)
 +                set_tensor.weight.data = kwargs.get('data')
-+                return set_tensor.weight.data""",
-"""-                return _get_dst_obj(self, value, **kwargs).bias.data.copy_(kwargs.get('data'))
++                return set_tensor.weight.data
+             return func""",
+             """         def _func_generator_set_bias(value):
+             def func(self, **kwargs):
+-                return _get_dst_obj(self, value, **kwargs).bias.data.copy_(kwargs.get('data'))
 +                set_tensor = _get_dst_obj(self, value, **kwargs)
 +                set_tensor.bias.data = kwargs.get('data')
-+                return set_tensor.bias.data""",
-"""            self.module = [AutoModelForCausalLM.from_pretrained(
++                return set_tensor.bias.data
+             return func""","""         self.layers_self_attention_linear_qkv_caches = {"layer_idx": -1, "weight": None, "bias": None}
++        # self.__register_functions()
+ 
+     def initialize_args(self):""","""             self.module = [AutoModelForCausalLM.from_pretrained(
 -                load_dir, device_map=device_map, trust_remote_code=trust_remote_code, local_files_only=True
-+                load_dir, trust_remote_code=trust_remote_code, local_files_only=True, low_cpu_mem_usage=False"""
-    ],
++                load_dir, trust_remote_code=trust_remote_code, local_files_only=True, low_cpu_mem_usage=False
+             )]
+         if hasattr(self.args, "torch_dtype") and self.args.torch_dtype in ["float16", "bfloat16"]:"""],
     "mindspeed_llm/tasks/checkpoint/saver.py": [
         """import logging as logger
 +import numpy as np
@@ -300,13 +203,11 @@ LINE_RULES = {
              exit(1)"""
     ],
     "mindspeed_llm/tasks/megatron_adaptor.py": [
-"""
-         # For torch >= 2.2.0
+"""         # For torch >= 2.2.0
 -        torch.compile = torch.jit.script
  
          if not _get_dummy_args().o2_optimizer:
-             # vanilla optimizer
-""","""
+             # vanilla optimizer""","""         from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
          from megatron.core.transformer.transformer_block import TransformerBlock
 -
 +        # For MOE + Ascend MC2, here we can only execute this after _transformer_block_build_layers takes effect.
@@ -314,21 +215,18 @@ LINE_RULES = {
 +                                                              ColumnParallelLinear.forward,
 +                                                              RowParallelLinear.forward)
  
- class MegatronAdaptationABC:
-""","""
-     def patch_core_distributed(self):
+ class MegatronAdaptationABC:""","""     def patch_core_distributed(self):
          import megatron.core
 -        megatron.core.jit.jit_fuser = dummy_jit
          from mindspeed.core.tensor_parallel.tp_2d.norm_factory import _allreduce_layernorm_grads_wrapper
-""","""
-         MegatronAdaptation.register('megatron.core.transformer.transformer_config.TransformerConfig.__post_init__',
+         MegatronAdaptation.register('megatron.core.distributed.finalize_model_grads._allreduce_layernorm_grads',""",
+         """         MegatronAdaptation.register('megatron.core.transformer.transformer_config.TransformerConfig.__post_init__',
                                      transformer_config_post_init_wrapper)
 -        MegatronAdaptation.register('torch.cuda.get_device_capability', get_device_capability)
 +
          megatron.core.transformer.transformer_block.LayerNormImpl = PTNorm
-         MegatronAdaptation.register('megatron.core.transformer.transformer_block.TENorm', PTNorm)
-""","""
-         MegatronAdaptation.register(
+         MegatronAdaptation.register('megatron.core.transformer.transformer_block.TENorm', PTNorm)""",
+         """         MegatronAdaptation.register(
              'megatron.core.transformer.transformer_layer.TransformerLayer._get_layer_offset',
              get_layer_offset_wrapper)
 -        MegatronAdaptation.register(
@@ -336,8 +234,7 @@ LINE_RULES = {
 +        # MegatronAdaptation.register(
 +        #     'megatron.core.parallel_state.get_nccl_options', get_nccl_options_wrapper)
  
-     def patch_datasets(self):
-"""],
+     def patch_datasets(self):"""],
     "mindspeed_llm/tasks/preprocess/decoder_packed_mtf_dataset.py":[
         """-        position_ids = torch.arange(seq_length, dtype=torch.long, device=data.device)
 +        position_ids_tensor = torch.arange(seq_length, dtype=torch.long, device=data.device)
@@ -500,19 +397,18 @@ LINE_RULES = {
 
     ],
     "mindspeed_llm/tasks/posttrain/rlxf/single_controller/ray/base.py":[
-"""
+""" from unittest.mock import patch
+ 
  from mindspeed_llm.tasks.posttrain.rlxf.single_controller.base import WorkerGroup, ResourcePool, ClassWithInitArgs, Worker
 +from mindspeed_llm.tasks.posttrain.rlxf.single_controller.base.scheduler import create_worker_group_scheduler
- from mindspeed_llm.tasks.posttrain.rlxf.single_controller.base.decorator import MAGIC_ATTR
-""","""
-                  name_prefix: str = None,
+ from mindspeed_llm.tasks.posttrain.rlxf.single_controller.base.decorator import MAGIC_ATTR""",
+ """                  name_prefix: str = None,
                   detached=False,
                   worker_names=None,
 +                 port=None,
                   **kwargs) -> None:
          super().__init__(resource_pool=resource_pool, **kwargs)
-""","""
-             self._init_with_resource_pool(resource_pool=resource_pool,
+         self.ray_cls_with_init = ray_cls_with_init""","""             self._init_with_resource_pool(resource_pool=resource_pool,
                                            ray_cls_with_init=ray_cls_with_init,
                                            bin_pack=bin_pack,
 -                                          detached=detached)
@@ -520,14 +416,12 @@ LINE_RULES = {
 +                                          port=port)
  
          if ray_cls_with_init is not None:
-""","""
+             self._bind_worker_method(self.ray_cls_with_init.cls, func_generator)""","""         self._worker_names = worker_names
          self._world_size = len(worker_names)
  
 -    def _init_with_resource_pool(self, resource_pool, ray_cls_with_init, bin_pack, detached):
 +    def _init_with_resource_pool(self, resource_pool, ray_cls_with_init, bin_pack, detached, port):
-         use_gpu = resource_pool.use_gpu
-""","""
-             for local_rank in range(local_world_size):
+         use_gpu = resource_pool.use_gpu""","""             for local_rank in range(local_world_size):
                  rank += 1
  
 +                import re
@@ -572,17 +466,14 @@ LINE_RULES = {
 -                    env_vars['MASTER_PORT'] = self._master_port
 -
 -                import re
-                 cia_name = type(ray_cls_with_init.cls).__name__
-                 match = re.search(r"ActorClass\(([^)]+)\)", cia_name)  # ray.remote(Obj) -> "ActorClass(Obj)"
-                 cia_name = match.group(1) if match else cia_name  # "ActorClass(Obj)" -> "Obj"
-""","""
+                 cia_name = type(ray_cls_with_init.cls).__name__""","""                 if detached:
                      ray_cls_with_init.update_options({'lifetime': 'detached'})
  
 +                os.system(f"export RANK={str(rank)}")
 +                os.environ['RANK']=str(rank)
                  # create a worker
-""","""
-                 self._workers.append(worker)
+                 worker = ray_cls_with_init(placement_group=pg,
+                                            placement_group_bundle_idx=local_rank,""","""                 self._workers.append(worker)
                  self._worker_names.append(name)
  
 -                if rank == 0:
@@ -597,15 +488,14 @@ LINE_RULES = {
 -                    self._master_addr, self._master_port = rank_zero_info['MASTER_ADDR'], rank_zero_info['MASTER_PORT']
  
      @property
-     def worker_names(self):
-""","""
+     def worker_names(self):""","""             prefix: str = actor_name + '_'
              for method_name in dir(worker_group):
                  if method_name.startswith(prefix):
 -                    original_method_name = remove_prefix(method_name, prefix)
 +                    # only valid when Python >= 3.9
 +                    original_method_name = method_name.removeprefix(prefix)
                      method = getattr(worker_group, method_name)
-"""],
+                     setattr(worker_group, original_method_name, method)"""],
     "mindspeed_llm/tasks/posttrain/rlxf/training/core_algos.py":[
         """     pg_losses = -advantages * ratio
      pg_losses2 = -advantages * torch.clamp(ratio, 1.0 - cliprange, 1.0 + cliprange)
@@ -664,28 +554,23 @@ LINE_RULES = {
 +                    param.data = param.data.cpu()
 +                else:
 +                    param.data = param.data.cuda()"""],
-    "mindspeed_llm/tasks/posttrain/rlxf/workers/actor_train_infer.py":["""
-         device = next(self.node.actor.model[0].parameters()).device
+    "mindspeed_llm/tasks/posttrain/rlxf/workers/actor_train_infer.py":[
+        """         device = next(self.node.actor.model[0].parameters()).device
 -        data = data.to(device)
  
-         dataloader = self.node.actor.make_minibatch_iterator(data=data)    
-""","""
-         # TODO: here, we should return all metrics
-         output = DataProto(meta_info={'metrics': metrics})
+         dataloader = self.node.actor.make_minibatch_iterator(data=data)""",
+         """         output = DataProto(meta_info={'metrics': metrics})
 -        output = output.to('cpu')
-         torch.cuda.empty_cache()
-""","""
-         if old_log_probs is not None:  # pp last stage
-             data.batch['old_log_probs'] = old_log_probs
+         torch.cuda.empty_cache()""",
+         """             data.batch['old_log_probs'] = old_log_probs
 -            data = data.to('cpu')
          else:  # pp intermediate stage, no useful results
-""","""
+             data = None""",
+             """     max_length = max_length if max_length % pad_multi_of == 0 else (max_length // pad_multi_of + 1) * pad_multi_of
      torch.distributed.all_reduce(max_length, op=torch.distributed.ReduceOp.MAX)
 +    max_length = max_length.item()
  
-     tokenizer = get_tokenizer()
-""","""
-                 tokens = batch["input_ids"]
+     tokenizer = get_tokenizer()""","""                 tokens = batch["input_ids"]
 -                tokens_list = tokens.view(-1).cpu().numpy().tolist()
 +                tokens_list = tokens.view(-1).asnumpy().tolist()
  
@@ -693,20 +578,20 @@ LINE_RULES = {
 -                    additional_val = batch.get(additional_key).view(-1).cpu().numpy().tolist()
 +                    additional_val = batch.get(additional_key).view(-1).asnumpy().tolist()
  
-                     for _ in range(args.n_samples_per_prompt):
-                         additional_dict_per_step[additional_key].append(copy.deepcopy(additional_val))
-""","""
-         # We make recompute_old_log_prob by default here.
+                     for _ in range(args.n_samples_per_prompt):""",
+                     """         # We make recompute_old_log_prob by default here.
 -        data = data.to(next(self.model[0].parameters()).device)
-         with torch.no_grad():
-""","""
-         # TODO: actually, we just need to control the sampling order.
+         with torch.no_grad():""","""         # TODO: actually, we just need to control the sampling order.
  
 -        data.batch['attention_mask'] = data.batch['attention_mask'].to(bool)
 +        data.batch['attention_mask'] = data.batch['attention_mask'].to(torch.bool)
  
-         batch_size = self.args.micro_batch_size
-"""],
+         batch_size = self.args.micro_batch_size""","""+        # TODO check
++        self.args.use_kv_cache = False
+         metrics = {}""","""         torch.cuda.empty_cache()
+-
++        self.args.use_kv_cache = True
+         return metrics"""],
     "mindspeed_llm/tasks/posttrain/rlxf/workers/reference.py":[
         """     @register(dispatch_mode=Dispatch.MEGATRON_COMPUTE_PROTO)
      def compute_ref_log_prob(self, data: DataProto):
@@ -781,11 +666,8 @@ LINE_RULES = {
 "mindspeed_llm/tasks/posttrain/rlxf/workers/vllm_rollout/vllm_rollout.py": ["""-from torch.nn.utils.rnn import pad_sequence
 +from torch.nn.utils.rnn_beta import pad_sequence"""],
     "mindspeed_llm/tasks/posttrain/utils.py":[
-"""
- from mindspeed_llm.tasks.preprocess.decoder_packed_mtf_dataset import build_train_valid_test_datasets as build_instruction_dataset
-+from megatron.core.tensor_parallel import mappings
-""","""
-         data[key].append(val)
+""" from mindspeed_llm.tasks.preprocess.decoder_packed_mtf_dataset import build_train_valid_test_datasets as build_instruction_dataset
++from megatron.core.tensor_parallel import mappings""","""         data[key].append(val)
  
  
 +class ReduceFromContextParallelRegionDPO(torch.autograd.Function):
@@ -803,11 +685,10 @@ LINE_RULES = {
 +    @staticmethod
 +    def backward(ctx, grad_output):
 +        return grad_output
-""","""
-     # Step 1: Compute the local max value for numerical stability
+ def vocab_parallel_log_softmax(logits):""","""     # Step 1: Compute the local max value for numerical stability
 -    z_max = logits.max(dim=-1, keepdim=True).values
 +    z_max = logits.max(dim=-1, keepdim=True)[0]
-""","""
+ 
      # Step 2: Perform all-reduce to get the global max across all processes
 -    torch.distributed.all_reduce(
 -        z_max,
@@ -815,17 +696,18 @@ LINE_RULES = {
 -        group=mpu.get_tensor_model_parallel_group()
 -    )
 +    z_max = ReduceFromContextParallelRegionDPO.apply(z_max)
-""","""
-     # Step 5: Perform all-reduce to get the global sum of exp(x - z_max) across all processes
+ 
+     # Step 3: Compute the log(exp(x - z_max)) for local logits""",
+     """     # Step 5: Perform all-reduce to get the global sum of exp(x - z_max) across all processes
 -    torch.distributed.all_reduce(
 -        local_sum_exp,
 -        op=torch.distributed.ReduceOp.SUM,
 -        group=mpu.get_tensor_model_parallel_group()
 -    )
 +    local_sum_exp = mappings.reduce_from_tensor_model_parallel_region(local_sum_exp)
-""","""
-         all_log_probs = per_token_log_probs.sum(-1)
-         valid_length = loss_mask.sum(-1)
+ 
+     # Step 6: Compute the log of the global sum of exp(x - z_max)""",
+     """         valid_length = loss_mask.sum(-1)
  
 -        torch.distributed.all_reduce(
 -            all_log_probs,
@@ -833,8 +715,9 @@ LINE_RULES = {
 -            group=mpu.get_tensor_model_parallel_group()
 -        )
 +        all_log_probs = mappings.reduce_from_tensor_model_parallel_region(all_log_probs)
-""","""
-         )
+ 
+         torch.distributed.all_reduce(""",
+         """         )
  
          if per_token:
 -            torch.distributed.all_reduce(
@@ -843,8 +726,8 @@ LINE_RULES = {
 -                group=mpu.get_tensor_model_parallel_group()
 -            )
 +            per_token_log_probs = mappings.reduce_from_tensor_model_parallel_region(per_token_log_probs)
-""","""
-             group=mpu.get_context_parallel_group()
+ 
+     else:""","""             group=mpu.get_context_parallel_group()
          )
  
 -        torch.distributed.all_reduce(
@@ -861,7 +744,8 @@ LINE_RULES = {
 -                group=mpu.get_context_parallel_group()
 -            )
 +            per_token_log_probs = mappings.reduce_from_tensor_model_parallel_region(per_token_log_probs)
-"""],
+ 
+     return all_log_probs, valid_length, per_token_log_probs"""],
     "mindspeed_llm/tasks/posttrain/rlxf/single_controller/base/scheduler.py":[
         """
 import ray
@@ -899,37 +783,24 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
     return WorkerGroupScheduler.options(**options).remote()"""
     ],
         "mindspeed_llm/training/arguments.py":[
-"""
-     if args.moe_alltoall_overlap_comm and not args.moe_token_dispatcher_type == 'alltoall':
+"""     if args.moe_alltoall_overlap_comm and not args.moe_token_dispatcher_type == 'alltoall':
          raise AssertionError('`--moe-alltoall-overlap-comm` only support with `--moe-token-dispatcher-type alltoall`.')
 -    if not args.moe_tp_extend_ep and args.moe_alltoall_overlap_comm and args.tensor_model_parallel_size > 1:
 -        raise AssertionError(
 -            '`--moe-alltoall-overlap-comm` do not support tp for now. only support with moe_tp_extend_ep when tp > 1.')
-     if args.moe_zero_memory_num_layers is not None:
-""","""
-     if args.shared_expert_gate and args.gradient_accumulation_fusion:
-         raise AssertionError('args.shared_expert_gate does not support gradient_accumulation_fusion.')
+     if args.moe_zero_memory_num_layers is not None:""","""         raise AssertionError('args.shared_expert_gate does not support gradient_accumulation_fusion.')
 +    if args.moe_alltoall_overlap_comm and args.gradient_accumulation_fusion:
 +        raise AssertionError('moe_alltoall_overlap_comm does not support gradient_accumulation_fusion at the same time.')
  
  
- def _validate_mla(args):
-""","""
-             args.first_k_dense_replace))
+ def _validate_mla(args):""","""             args.first_k_dense_replace))
 +    if args.num_experts is not None and args.use_mc2 and args.moe_grouped_gemm:
 +        raise AssertionError('Moe Grouped Gemm is not supported with mc2 in MOE model.')
  
-     if args.num_layer_list:
-""","""
-     args.adaptive_recompute_profiling_step = 10
+     if args.num_layer_list:""","""     args.adaptive_recompute_profiling_step = 10
 +    # args.moe_tp_extend_ep = False
-     args.recompute_in_bubble = False
-""","""
-         _restore_variables(args, variable_dict)
- 
-+        args.use_mc2 = False
-         args.use_legacy_models = not args.use_mcore_models
-"""],
+     args.recompute_in_bubble = False""","""+        args.use_mc2 = False
+         args.use_legacy_models = not args.use_mcore_models"""],
      "mindspeed_llm/training/utils.py":["""             slice_obj[dim] = slice(i, i + window_size)
 -        slices.append(tensor[tuple(slice_obj)])
 +        slices.append(tensor[tuple(slice_obj)].clone())"""],
@@ -1055,23 +926,31 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
     },
     "megatron":{
         "core/optimizer/__init__.py": [
-            """
-                     ## see https://github.com/NVIDIA/apex/blob/7b73b12361068a10b0f44844534613f252a5ea75/apex/optimizers/fused_adam.py#L16
+            """         ## apex's FusedAdam is a drop-in replacement for torch's AdamW
+         ## see https://github.com/NVIDIA/apex/blob/7b73b12361068a10b0f44844534613f252a5ea75/apex/optimizers/fused_adam.py#L16
 -        from torch.optim import AdamW as Adam, SGD
 +        
  
- from megatron.core import mpu
-            """
+ from megatron.core import mpu""","""+    # Fake params to construct optmizer
++    if len(param_groups) == 0:
++        fake_params = torch.zeros([1,], dtype=torch.float, requires_grad=True)
++        fake_params.fake = True
++        fake_params.grad = fake_params.clone()
++        fake_params.main_grad = fake_params.clone()
++        param_groups.append({'params': fake_params, 'wd_mult': 0.0, 'lr_mult': 0.0, 'is_decoupled_lr': False})
++
+     # Collect grad buffers for distributed optimizer.
+     per_model_buffers = {}
+     per_model_ep_buffers = {}"""
         ],
         "core/tensor_parallel/mappings.py": [
-"""
+""" # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+ 
  import torch
 +import mindspore
  
  from megatron.core.parallel_state import (
-     get_expert_model_parallel_group,
-""","""
-         else:
+     get_expert_model_parallel_group,""","""         else:
              # Unequal split (all2all-v)
              output = input.new_empty(
 -                size=[sum(output_split_sizes)] + list(input.size()[1:]),
@@ -1091,7 +970,8 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +            input_split_sizes=input_split_sizes.tolist() if output_split_sizes is not None else None,
 +            group=group._name,)
          return output
-"""],
+ 
+     @staticmethod"""],
         "core/distributed/param_and_grad_buffer.py":[
             """                 requires_grad=False,
 -            )
@@ -1114,15 +994,15 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +            if transformer.input_tensor is not None and len(transformer.input_tensor.shape) > 1:"""
         ],
         "core/pipeline_parallel/schedules.py":[
-"""
+""" from typing import Callable, Iterator, List, Optional, Union
+ 
  import torch
 -from torch.autograd.variable import Variable
 +from mindspore.ops import composite as C
 +from mindspore.common.api import _pynative_executor
  
  from megatron.core import parallel_state
-""","""
-     set_input_tensor(input_tensor)
+ from megatron.core.enums import ModelType""","""     set_input_tensor(input_tensor)
  
 +    if not parallel_state.is_pipeline_first_stage() and input_tensor is not None:
 +        input_tensor[0].retain_grad()
@@ -1139,26 +1019,20 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +    _pynative_executor.set_grad_flag(True)
 +    _pynative_executor.new_graph(forward_step_func, input_tensor[0])
      with context_manager:
-         if checkpoint_activations_microbatch is None:
-""","""
-             forward_data_store.append(data)
+         if checkpoint_activations_microbatch is None:""","""             forward_data_store.append(data)
 +    _pynative_executor.end_graph(forward_step_func, output_tensor, input_tensor[0])
  
-     if config.timers is not None:
-""","""
--def backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config):
-+def backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model):
-""","""
+     if config.timers is not None:""","""-def backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config):
++def backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model):""",
+"""     if not isinstance(input_tensor, list):
+         input_tensor = [input_tensor]
          unwrap_input_tensor_grad = True
 -    for x in input_tensor:
 -        if x is not None:
 -            x.retain_grad()
 +    
  
-     if not isinstance(output_tensor, list):
-""","""
-     # Backward pass.
-     if output_tensor_grad[0] is None and config.grad_scale_func is not None:
+     if not isinstance(output_tensor, list):""","""     if output_tensor_grad[0] is None and config.grad_scale_func is not None:
 -        output_tensor[0] = config.grad_scale_func(output_tensor[0])
 +        output_tensor_grad[0] = config.grad_scale_func(torch.ones_like(output_tensor[0]))
 +    if output_tensor_grad[0] is None:
@@ -1179,59 +1053,40 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +    _pynative_executor.grad(config.forward_step_func, grad_, weights, None, input_tensor[0], output_tensor_grad[0])
  
      # Collect the grad of the input_tensor.
-""","""
+     input_tensor_grad = [None]""","""             else:
                  input_tensor_grad.append(x.grad)
  
 +    if not parallel_state.is_pipeline_first_stage():
 +        model.module.set_input_tensor(None)
 +
      # Handle single skip connection if it exists (encoder_hidden_state in
-""","""
-     config = get_model_config(model)
+     # model with encoder and decoder).""","""     config = get_model_config(model)
 +    config.forward_step_func = forward_step_func
-     if config.timers is not None:
-         config.timers('forward-backward', log_level=1).start(barrier=config.barrier_with_L1_time)
-""","""
-     forward_data_store = []
+     if config.timers is not None:""","""     forward_data_store = []
 -    input_tensor, output_tensor_grad = None, None
 +    input_tensor, output_tensor_grad = [None], [None]
-     total_num_tokens = torch.zeros([], dtype=torch.int, device="cuda")
-""","""
-             if not forward_only:
+     total_num_tokens = torch.zeros([], dtype=torch.int, device="cuda")""","""             if not forward_only:
 -                backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config)
 +                backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model)
  
-     # Run computation for last microbatch out of context handler (want to
-""","""
-     if not forward_only:
+     # Run computation for last microbatch out of context handler (want to""","""     if not forward_only:
 -        backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config)
 +        backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model)
  
-     if config.finalize_model_grads_func is not None and not forward_only:
-""","""
-     config = get_model_config(model[0])
+     if config.finalize_model_grads_func is not None and not forward_only:""","""     config = get_model_config(model[0])
 +    config.forward_step_func = forward_step_func
-     if config.overlap_p2p_comm and config.batch_p2p_comm:
-         raise ValueError("Can not use both overlap_p2p_comm and batch_p2p_comm")
-""","""
-                 input_tensors[model_chunk_id].append(None)
+     if config.overlap_p2p_comm and config.batch_p2p_comm:""","""                 input_tensors[model_chunk_id].append(None)
 +        if input_tensors[model_chunk_id][-1] is None:
 +            input_tensors[model_chunk_id][-1] = torch.tensor(0, dtype=torch.int)
-         input_tensor = input_tensors[model_chunk_id][-1]
-""","""
-         output_tensor_grad = output_tensor_grads[model_chunk_id].pop(0)
+         input_tensor = input_tensors[model_chunk_id][-1]""","""         output_tensor_grad = output_tensor_grads[model_chunk_id].pop(0)
 -        input_tensor_grad = backward_step(
 -            input_tensor, output_tensor, output_tensor_grad, model_type, config
 -        )
 +        input_tensor_grad = backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model[model_chunk_id])
  
-         # launch grad synchronization (custom grad sync)
-""","""
-     config = get_model_config(model)
+         # launch grad synchronization (custom grad sync)""","""     config = get_model_config(model)
 +    config.forward_step_func = forward_step_func
-     if config.overlap_p2p_comm:
-         raise ValueError(
-""","""
+     if config.overlap_p2p_comm:""","""                 if config.grad_sync_func is None or rank == 0:
                      enable_grad_sync()
  
 -            input_tensor_grad = backward_step(
@@ -1239,17 +1094,14 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 -            )
 +            input_tensor_grad = backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model)
  
-             if last_iteration:
-""","""
-             output_tensor_grad = recv_backward(send_tensor_shapes, config)
+             if last_iteration:""","""             output_tensor_grad = recv_backward(send_tensor_shapes, config)
  
 -            input_tensor_grad = backward_step(
 -                input_tensor, output_tensor, output_tensor_grad, model_type, config
 -            )
 +            input_tensor_grad = backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model)
  
-             send_backward(input_tensor_grad, recv_tensor_shapes, config)
-"""],
+             send_backward(input_tensor_grad, recv_tensor_shapes, config)"""],
         "core/optimizer/distrib_optimizer.py":[
             """                         param_range.start : param_range.end
                      ]
@@ -1314,16 +1166,13 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +TERowParallelGroupedLinear = None"""
         ],
         "training/arguments.py":[
-"""
-     # Args from environment
+"""     # Args from environment
 -    args.rank = int(os.getenv('RANK', '0'))
 +    # args.rank = int(os.getenv('RANK', '0'))
 +    args.rank = int(os.getenv('MS_NODE_ID', '0'))
      args.world_size = int(os.getenv("WORLD_SIZE", '1'))
  
-     return args
-""","""
-     if args.moe_grouped_gemm:
+     return args""","""     if args.moe_grouped_gemm:
          assert args.bf16, 'Currently GroupedGEMM for MoE only supports bf16 dtype.'
 -        dc = torch.cuda.get_device_capability()
 -        assert dc[0] >= 8, "Unsupported compute capability for GroupedGEMM kernels."
@@ -1331,15 +1180,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +        # assert dc[0] >= 8, "Unsupported compute capability for GroupedGEMM kernels."
  
      if args.weight_decay_incr_style == 'constant':
-         assert args.start_weight_decay is None
-"""],
-    "mindspeed_llm/core/datasets/blended_megatron_dataset_builder.py": [
-""" from megatron.core import mpu
-+from mindspore.communication import get_local_rank
-""","""
--    current_rank = torch.cuda.current_device()
-+    current_rank = get_local_rank()
-"""],
+         assert args.start_weight_decay is None"""]
     },
     "mindspeed":{
         "op_builder/algorithm_builder.py": [
@@ -1371,7 +1212,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
  
  
  def grouped_gemm_is_available():
-""","""
+""",""" 
  class Ops:
      @staticmethod
 -    def gmm(a, b, batch_sizes, trans_b=False, gemm_fusion=False, original_weight=None):
@@ -1385,8 +1226,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +        return npu_gmm(a, b, bias=None, group_list=group_list, group_type=group_type, gemm_fusion=gemm_fusion, original_weight=original_weight)
  
  
- ops = Ops
-"""],
+ ops = Ops"""],
         "core/data_parallel/distributed_data_parallel.py":[
             """     self.grad_accs = []
      for param in self.module.parameters():
@@ -1410,8 +1250,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
         ],
         "core/transformer/moe/experts.py":[
         """-    return torch.zeros(zeros_shape, dtype=input_.dtype, layout=input_.layout, device=input_.device)
-+    return torch.zeros(zeros_shape, dtype=input_.dtype, device=input_.device)""","""
-     else:
++    return torch.zeros(zeros_shape, dtype=input_.dtype, device=input_.device)""","""     else:
          w1 = self.weight1.view(self.config.hidden_size, -1)
          w2 = self.weight2.view(-1, self.config.hidden_size)
 -    group_list = torch.cumsum(tokens_per_expert, dim=0)
@@ -1425,12 +1264,16 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +                                                               group_list, self.layer_number))
      else:
          return grouped_mlp_with_comp_and_comm_overlap_allgather(permuted_local_hidden_states, w1, w2,
-"""],
+                                                                 (self.weight1, self.weight2, self.activation_func,"""],
         "megatron_adaptor.py":[
-"""
+"""     aspm.register_patch('transformer_engine.pytorch.DotProductAttention', torch.nn.Module, create_dummy=True)
 -    aspm.register_patch('transformer_engine.pytorch.Linear', torch.nn.Module, create_dummy=True)
-""","""
--    from torch.utils.cpp_extension import _get_build_directory
++
+     aspm.register_patch('transformer_engine.common.recipe.DelayedScaling', torch.nn.Module, create_dummy=True)""",
+     """     aspm.register_patch('megatron.core.transformer.attention.Attention.__init__', attention_init)
++    aspm.register_patch('megatron.core.transformer.attention.SelfAttention.__init__', self_attention_init_wrapper)
+     aspm.register_patch('megatron.core.transformer.module.MegatronModule.__init__', megatron_module_init_wrapper)""",
+     """-    from torch.utils.cpp_extension import _get_build_directory
 -    build_directory = _get_build_directory("", True)
 -    delete_lock = Lock()
 -    delete_lock_file(build_directory, delete_lock)
@@ -1438,69 +1281,59 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +    # build_directory = _get_build_directory("", True)
 +    # delete_lock = Lock()
 +    # delete_lock_file(build_directory, delete_lock)
-"""],
+     mindspeed_args.adaptive_recompute_enable = mindspeed_args.adaptive_recompute_device_size > 0 or mindspeed_args.adaptive_recompute_device_swap
+     if (mindspeed_args.adaptive_recompute_enable and not mindspeed_args.memory_fragmentation) or mindspeed_args.swap_attention:"""],
         "ops/gmm.py":[
-"""
+""" import torch
  from torch.library import impl
 +from mindspore import ops
  from mindspeed.op_builder import GMMOpBuilder, GMMV2OpBuilder
-""","""
- class GMMFunction(torch.autograd.Function):
+ from mindspeed.op_builder.builder import AS_LIBRARY""",""" class GMMFunction(torch.autograd.Function):
 -    builder = GMMOpBuilder()
 -    builder2 = GMMV2OpBuilder()
 +    # builder = GMMOpBuilder()
-+    # builder2 = GMMV2OpBuilder()
-""","""
++    # builder2 = GMMV2OpBuilder()""","""     @staticmethod
 -    def forward(ctx, original_weight, x, weight, bias, group_args):
 -        group_list, group_type, gemm_fusion, group_list_type, group_list_data_type = group_args
 +    def forward(ctx, original_weight, x, weight, bias, group_list, group_args):
 +        group_type, gemm_fusion, group_list_type, group_list_data_type = group_args
-""","""
-        if group_list_type == 0:
+         if bias is not None and bias.requires_grad:""","""         if group_list_type == 0:
 -            outputs = GMMFunction.builder.load().npu_gmm([x], [weight], bias, group_list, group_type, group_list_type)
 +            outputs = ops.function.math_func.gmm([x, ], [weight, ], bias=bias, group_list=group_list, group_type=group_type)
-        elif group_list_type == 1:
+         elif group_list_type == 1:
 -            outputs = GMMFunction.builder2.load().npu_gmm([x], [weight], bias, group_list, group_type, group_list_type)
 +            outputs = ops.function.math_func.gmm_v2([x, ], [weight, ], bias=bias, group_list=group_list, group_type=group_type, group_list_type=group_list_type)
-        if group_list_data_type == 0:
-""","""
-            if ctx.group_list_type == 0:
+         if group_list_data_type == 0:""","""             return None, dx[0], grad_weight, dbias, None
+         else:
+             if ctx.group_list_type == 0:
 -                dx, dw, dbias = GMMFunction.builder.load().npu_gmm_backward([grad_outputs], [x], [weight], group_list,
 -                                                                    ctx.group_list_type)
 +                dx, dw, dbias = ops.function.math_func.gmm_backward([grad_outputs, ], [x, ], [weight],
 +                                                        group_list=group_list)
-            elif ctx.group_list_type == 1:
+             elif ctx.group_list_type == 1:
 -                dx, dw, dbias = GMMFunction.builder2.load().npu_gmm_backward([grad_outputs], [x], [weight], group_list,
 -                                                                    ctx.group_list_type)
 +                dx, dw, dbias = ops.function.math_func.gmm_v2_backward([grad_outputs, ], [x, ], [weight],
 +                                                        group_list=group_list, group_list_type=ctx.group_list_type)
-""","""
-            dbias = None if len(dbias) == 0 else dbias[0]
-
+             dbias = None if len(dbias) == 0 else dbias[0]
+ 
 -            return None, dx[0], dw[0], dbias, None
-+            return None, dx[0], dw[0], dbias, None, None
-""","""
-    if weight.dtype not in support_dtype:
-        raise TypeError(f"Only support non quant case, but got weight dtype {weight.dtype}.")
-+   '''     
-    npu_gmm_param_verification(x, weight, bias=bias, group_list=group_list, group_type=group_type,
-                               group_list_type=group_list_type)
-+   '''                            
-""","""
-    if group_list_type == 0:
++            return None, dx[0], dw[0], dbias, None, None""","""     if weight.dtype not in support_dtype:
+         raise TypeError(f"Only support non quant case, but got weight dtype {weight.dtype}.")
+-    npu_gmm_param_verification(x, weight, bias=bias, group_list=group_list, group_type=group_type,
+-                               group_list_type=group_list_type)
+     if group_list_type == 0:
 -        return torch.ops.mindspeed.npu_gmm(original_weight, x, weight, bias=bias, group_list=group_list, group_type=group_type, gemm_fusion=gemm_fusion)
 +        return _npu_gmm(original_weight, x, weight, bias=bias, group_list=group_list, group_type=group_type, gemm_fusion=gemm_fusion)
-    elif group_list_type == 1:
+     elif group_list_type == 1:
 -        return torch.ops.mindspeed.npu_gmm_v2(original_weight, x, weight, bias=bias, group_list=group_list, group_type=group_type, gemm_fusion=gemm_fusion)
 +        return _npu_gmm_v2(original_weight, x, weight, bias=bias, group_list=group_list, group_type=group_type, gemm_fusion=gemm_fusion)
-    else:
-""","""
--@impl(AS_LIBRARY, "npu_gmm.List", "PrivateUse1")
+     else:
+         raise ValueError(f"group_list_type must be 0 or 1, but got {group_list_type}.")""","""-@impl(AS_LIBRARY, "npu_gmm.List", "PrivateUse1")
 -@impl(AS_LIBRARY, "npu_gmm.Tensor", "PrivateUse1")
 +# @impl(AS_LIBRARY, "npu_gmm.List", "PrivateUse1")
 +# @impl(AS_LIBRARY, "npu_gmm.Tensor", "PrivateUse1")
-""","""
-def _npu_gmm(original_weight, x, weight, *, bias=None, group_list=None, group_type=0, gemm_fusion=False):
+ def _npu_gmm(original_weight, x, weight, *, bias=None, group_list=None, group_type=0, gemm_fusion=False):
 -    if isinstance(group_list, (torch.Tensor, type(None))):
 -        group_list_data_type = 1
 -    else:
@@ -1509,20 +1342,22 @@ def _npu_gmm(original_weight, x, weight, *, bias=None, group_list=None, group_ty
 -    return GMMFunction.apply(original_weight, x, weight, bias, group_args)
 +    group_args = (group_type, gemm_fusion, 0, 0)
 +    return GMMFunction.apply(original_weight, x, weight, bias, group_list, group_args)
-""","""
-def npu_gmm(x, weight, *, bias=None, group_list=None, group_type=0, gemm_fusion=False, original_weight=None):
+ 
+ 
+ def npu_gmm(x, weight, *, bias=None, group_list=None, group_type=0, gemm_fusion=False, original_weight=None):
 -    return _npu_gmm_common(original_weight, x, weight, bias=bias, group_list=group_list, group_type=group_type, group_list_type=0, gemm_fusion=gemm_fusion)
 +    return _npu_gmm_common(original_weight, x, weight, bias=bias, group_list=group_list.tolist(), group_type=group_type, group_list_type=0, gemm_fusion=gemm_fusion)
-""","""
+ 
+ 
 -@impl(AS_LIBRARY, "npu_gmm_v2.Tensor", "PrivateUse1")
-+# @impl(AS_LIBRARY, "npu_gmm_v2.Tensor", "PrivateUse1")
-""","""
-def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group_type=0, gemm_fusion=False):
+ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group_type=0, gemm_fusion=False):
 -    group_args = (group_list, group_type, gemm_fusion, 1, 1)
 -    return GMMFunction.apply(original_weight, x, weight, bias, group_args)
 +    group_args = (group_type, gemm_fusion, 1, 0)
 +    return GMMFunction.apply(original_weight, x, weight, bias, group_list, group_args)
-"""],
+ 
+ 
+ def npu_gmm_v2(x, weight, *, bias=None, group_list=None, group_type=0, gemm_fusion=False, original_weight=None):"""],
         "ops/npu_moe_token_permute.py":["""-from mindspeed.op_builder import MoeTokenPermuteOpBuilder
 +from mindspore import ops""","""-moe_token_permute_op_builder = MoeTokenPermuteOpBuilder()""","""-    moe_token_permute_ops = moe_token_permute_op_builder.load()
 -    return moe_token_permute_ops.npu_moe_token_permute(tokens, indices, num_out_tokens, padded_mode)
@@ -1540,20 +1375,22 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +        del vocab_parallel_logits
 +        # vocab_parallel_logits.untyped_storage().resize_(0)"""],
 "core/transformer/moe/comm_utils.py":[
-"""
+""" import einops
 +import mindspore
  import torch
  import torch.distributed
  import torch.distributed as dist
- ""","""
-          if COMM_STREAM is None:
+ ""","""         global COMM_STREAM
+         if COMM_STREAM is None:
 -            COMM_STREAM = torch_npu.npu.Stream(device=torch.npu.current_device())
 -        with torch_npu.npu.stream(COMM_STREAM):
 +            COMM_STREAM = mindspore.runtime.Stream(device=torch.cuda.current_device())
 +        with mindspore.runtime.StreamCtx(COMM_STREAM):
              event.wait()
- ""","""
-          if COMM_STREAM is None:
+             if last_dim:
+                 handle = torch.distributed.all_gather(ag_out, input_, group=group, async_op=True)""","""         # multi stream wait event
+         global COMM_STREAM
+         if COMM_STREAM is None:
 -            COMM_STREAM = torch_npu.npu.Stream(device=torch.npu.current_device())
 -        with torch_npu.npu.stream(COMM_STREAM):
 +            COMM_STREAM = mindspore.runtime.Stream(device=torch.cuda.current_device())
@@ -1565,9 +1402,7 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +                mindspore.runtime.current_stream().wait_stream(stream)
              handle = torch.distributed._reduce_scatter_base(
                  rs_out, input_.contiguous(), group=group, async_op=True
-             )
- ""","""
-      return input_, rs_out, handle
+             )""","""     return input_, rs_out, handle
  
  
 +def transfer_tensor_last_dim_to_first(input_x):
@@ -1580,9 +1415,7 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +
 +
  def async_all_to_all(input_, output_split_sizes, input_split_sizes, group, event=None):
-     world_size = dist.get_world_size(group)
-     if world_size == 1:
- ""","""     else:
+     world_size = dist.get_world_size(group)""","""     else:
          # Unequal split (all2all-v)
          a2a_out = input_.new_empty(
 -            size=[sum(output_split_sizes)] + list(input_.size()[1:]),
@@ -1622,88 +1455,50 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +            group=group._name,
 +            async_op=True)
      return input_, a2a_out, handle"""],
-"core/transformer/moe/grouped_mlp_with_comp_and_comm_overlap_all2all.py":[""" # See the License for the specific language governing permissions and
- # limitations under the License.
-
-+import mindspore
+"core/transformer/moe/grouped_mlp_with_comp_and_comm_overlap_all2all.py":["""+import mindspore
 +from mindspore.common.api import _convert_python_data
  import torch
- from einops import rearrange""","""
-  class GroupedMlpWithCompAndCommOverlapAll2All(torch.autograd.Function):
+ from einops import rearrange""",""" class GroupedMlpWithCompAndCommOverlapAll2All(torch.autograd.Function):
      @staticmethod
 -    def forward(ctx, inputs, weights1, weights2, args, moe_layer_ctx):
 -        original_weight1, original_weight2, activation_func, group_list, layer_number = args
 +    def forward(ctx, inputs, weights1, weights2, original_weight1, original_weight2, activation_func, group_list, layer_number):
-         global_args = get_args()
-         moe_zero_memory = global_args.moe_zero_memory
-         moe_experts_pipeline_degree = global_args.moe_experts_pipeline_degree
- ""","""
-              mm1_out = torch.matmul(inputs, weights1)
-         if moe_zero_memory != "disable" or moe_experts_pipeline_degree:
+         global_args = get_args()""","""         if moe_zero_memory != "disable" or moe_experts_pipeline_degree:
              inputs.untyped_storage().resize_(0)
 -        act_out, detached_act_inputs = forward_func(activation_func, mm1_out)
 +        act_out, detached_act_inputs, ctx.activation_func_vjp = forward_func(activation_func, mm1_out)
  
-         is_only_recompute_activation = only_recompute_activation(layer_number)
-         if moe_zero_memory == "level1" and not is_only_recompute_activation:
- ""","""
-          else:
-             ((detach_input, indices, scores_ep, router_topk, global_input_tokens_local_experts_indices),
-              permute2_input_detach, permute2_graph, output_splits, input_splits,
+         is_only_recompute_activation = only_recompute_activation(layer_number)""","""              permute2_input_detach, permute2_graph, output_splits, input_splits,
 -             input_splits_tp_ep) = get_gemm_backward_need_tensors()
 -
 +             input_splits_tp_ep, permutation_func1_vjp, permutation_func2_vjp) = get_gemm_backward_need_tensors()
-         # grad of mm2 dx
-         if ctx.use_gmm:
- ""","""
-          if moe_hierarchical_alltoallv:
-             ep_group = parallel_state.get_expert_model_parallel_group()
-             tp_group = parallel_state.get_tensor_model_parallel_group()
+         # grad of mm2 dx""","""             tp_group = parallel_state.get_tensor_model_parallel_group()
 -            permute1_graph, scores_ep, hidden_states_ep = get_all2all_experts_output()
 +            permute1_graph, scores_ep, hidden_states_ep, scores_ep_grad = get_all2all_experts_output()
-             if moe_zero_memory == "disable":
- ""","""
-              # grad of activation_func
+             if moe_zero_memory == "disable":""","""             # grad of activation_func
 -            act_graph.backward(grad_mm2_inputs)
 +            act_inputs_grad = _convert_python_data(ctx.activation_func_vjp(grad_mm2_inputs)[0])
 +            ctx.activation_func_vjp = None
-             if moe_zero_memory == "level0" or (moe_zero_memory == "level1" and is_only_recompute_activation):
- ""","""
-              if ctx.use_gmm:
-                 weights1 = rearrange(weights1, 'n h f -> n f h')
-                 mm1_inputs_grad = \
--                    gmm_op(act_inputs.grad, weights1, [], group_list, 0)[0]
-+                    gmm_op(act_inputs_grad, weights1, [], group_list, 0)[0]
-             else:
--                mm1_inputs_grad = torch.matmul(act_inputs.grad, weights1.t())
-+                mm1_inputs_grad = torch.matmul(act_inputs_grad, weights1.t())
- 
--            backward_func(permute2_graph, mm1_inputs_grad)
+             if moe_zero_memory == "level0" or (moe_zero_memory == "level1" and is_only_recompute_activation):""","""-                mm1_inputs_grad = gmm_op(act_inputs.grad, weights1, [], group_list, 0)[0]
++                mm1_inputs_grad = gmm_op(act_inputs_grad, weights1, [], group_list, 0)[0]""","""-                mm1_inputs_grad = torch.matmul(act_inputs.grad, weights1.t())
++                mm1_inputs_grad = torch.matmul(act_inputs_grad, weights1.t())""","""-            backward_func(permute2_graph, mm1_inputs_grad)
 -            mm1_inputs_grad.untyped_storage().resize_(0)
 +            permute2_input_detach_grad = _convert_python_data(permutation_func2_vjp(mm1_inputs_grad)[0])
 +            permutation_func2_vjp = None
-+            del mm1_inputs_grad
- 
-             if moe_zero_memory == "level0" or (moe_zero_memory == "level1" and is_only_recompute_activation):
-                 permute1_ep_all_to_all_handle.wait()
++            del mm1_inputs_grad""","""                 permute1_ep_all_to_all_handle.wait()
 -                permutated_local_input_tokens.untyped_storage().resize_(0)
 +                del permutated_local_input_tokens
-             _, permute1_backward_input, bw_permute1_ep_all2all_handle = async_all_to_all(
--                permute2_input_detach.grad,
+             _, permute1_backward_input, bw_permute1_ep_all2all_handle = async_all_to_all(""","""-                permute2_input_detach.grad,
 +                permute2_input_detach_grad,
                  input_splits,
-                 output_splits,
- ""","""
-              grad_weights2 = torch.matmul(mm2_inputs.t(), grad_outs)
- 
-         # grad of activation_func
+                 output_splits,""",
+             """         # grad of activation_func
 -        grad_outs.untyped_storage().resize_(0)
 -        mm2_inputs.untyped_storage().resize_(0)
 +        del grad_outs
 +        del mm2_inputs
          if moe_hierarchical_alltoallv:
-""","""
-         else:
+             grad_mm2_inputs.untyped_storage().resize_(0)""","""         else:
 -            act_graph.backward(grad_mm2_inputs)
 -            grad_mm2_inputs.untyped_storage().resize_(0)
 -            act_inputs.untyped_storage().resize_(0)
@@ -1711,39 +1506,27 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +            ctx.activation_func_vjp = None
 +            del grad_mm2_inputs
 +            del act_inputs
-             if moe_zero_memory == "level0" or (moe_zero_memory == "level1" and is_only_recompute_activation):
-                 def alltoall_token_permutation1(hidden_states, indices):
- ""","""
-              if ctx.use_gmm:
-                 weights1 = rearrange(weights1, 'n h f -> n f h')
--                mm1_inputs_grad = gmm_op(act_inputs.grad, weights1, [], group_list, 0)[0]
-+                mm1_inputs_grad = gmm_op(act_inputs_grad, weights1, [], group_list, 0)[0]
-             else:
--                mm1_inputs_grad = torch.matmul(act_inputs.grad, weights1.t())
-+                mm1_inputs_grad = torch.matmul(act_inputs_grad, weights1.t())
-""",""""
-             else:
+             if moe_zero_memory == "level0" or (moe_zero_memory == "level1" and is_only_recompute_activation):""",
+             """-                    gmm_op(act_inputs.grad, weights1, [], group_list, 0)[0]
++                    gmm_op(act_inputs_grad, weights1, [], group_list, 0)[0]""","""-                mm1_inputs_grad = torch.matmul(act_inputs.grad, weights1.t())
++                mm1_inputs_grad = torch.matmul(act_inputs_grad, weights1.t())""","""             else:
 -                backward_func(permute2_graph, mm1_inputs_grad)
 -                mm1_inputs_grad.untyped_storage().resize_(0)
 +                permute2_input_detach_grad = _convert_python_data(permutation_func2_vjp(mm1_inputs_grad)[0])
 +                permutation_func2_vjp = None
 +                del mm1_inputs_grad
-                 ep_group = get_expert_model_parallel_group()
-""",""" 
-             if moe_zero_memory == "level0" or (moe_zero_memory == "level1" and is_only_recompute_activation):
-                 permute1_ep_all_to_all_handle.wait()
+                 ep_group = get_expert_model_parallel_group()""","""                 permute1_ep_all_to_all_handle.wait()
 -                permutated_local_input_tokens.untyped_storage().resize_(0)
 +                del permutated_local_input_tokens
  
-             if moe_experts_pipeline_degree:
- ""","""
-              else:
+             if moe_experts_pipeline_degree:""","""             else:
                  _, permute1_backward_input, bw_permute1_ep_all2all_handle = async_all_to_all(
 -                    permute2_input_detach.grad,
 +                    permute2_input_detach_grad,
                      input_splits,
- ""","""
-              else:
+                     output_splits,""","""                 else:
+                     mm1_weights_grad = None
+             else:
 -                mm1_weights_grad = gmm_op(mm1_inputs.t(), act_inputs.grad, [], group_list, 2)[0]
 +                mm1_weights_grad = gmm_op(mm1_inputs.t(), act_inputs_grad, [], group_list, 2)[0]
          else:
@@ -1761,38 +1544,32 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 -def grouped_mlp_with_comp_and_comm_overlap_all2all(inputs, weights1, weights2, args, ctx):
 -    return GroupedMlpWithCompAndCommOverlapAll2All.apply(inputs, weights1, weights2, args, ctx)
 +def grouped_mlp_with_comp_and_comm_overlap_all2all(inputs, weights1, weights2, args):
-+    return GroupedMlpWithCompAndCommOverlapAll2All.apply(inputs, weights1, weights2, *args)
- """],
-"core/transformer/moe/moe_layer_overlap_all2all.py":["""
-+from torch.autograd import recompute_instance
++    return GroupedMlpWithCompAndCommOverlapAll2All.apply(inputs, weights1, weights2, *args)"""],
+"core/transformer/moe/moe_layer_overlap_all2all.py":["""+from torch.autograd import recompute_instance
 +import mindspore
 +from mindspore.common.api import _convert_python_data
- from megatron.core.parallel_state import get_tensor_model_parallel_group, get_tensor_model_parallel_world_size
- from megatron.core import tensor_parallel, parallel_state
-""","""
- from megatron.core.transformer.moe.moe_utils import permute, save_to_aux_losses_tracker
+ from megatron.core.parallel_state import get_tensor_model_parallel_group, get_tensor_model_parallel_world_size""",
+ """ from megatron.core.transformer.moe.moe_utils import permute, save_to_aux_losses_tracker
 +from megatron.core.transformer.moe import grouped_gemm_util as gg
- from mindspeed.moe.utils import MoEAuxLossAutoScaler
-""","""
- from mindspeed.core.transformer.moe.moe_utils import (forward_func, backward_func, permute_with_ep)
+ from mindspeed.moe.utils import MoEAuxLossAutoScaler""",
+ """ from mindspeed.core.transformer.moe.moe_utils import (forward_func, backward_func, permute_with_ep)
 -from mindspeed.ops.gmm import GMMFunction
- from mindspeed.core.transformer.moe.moe_utils import (AG_SHARED_EXPERTS_INPUTS, only_recompute_activation,
-""","""
- def gmm_op(x, weight, bias, group_list, group_type):
+ from mindspeed.core.transformer.moe.moe_utils import (AG_SHARED_EXPERTS_INPUTS, only_recompute_activation,""",
+ """ def gmm_op(x, weight, bias, group_list, group_type):
 -    if isinstance(group_list, torch.Tensor) and group_list.device.type == 'cpu':
 -        group_list = group_list.tolist()
 -    return GMMFunction.builder.load().npu_gmm([x], [weight], bias, group_list, group_type, 0)
 +    out = gg.ops.gmm(x, weight, group_list, trans_b=False, group_type=group_type)
-+    return (out,)
-""","""
++    return (out,)""","""         save_tensors = []
+         ctx.input_shape = hidden_states.shape
 -        hidden_states = hidden_states.detach()
 +        hidden_states = mindspore.ops.stop_gradient(hidden_states)
-""","""
+         hidden_states.requires_grad = True
          ctx.is_only_recompute_activation = only_recompute_activation(moe_layer.layer_number)
 +        def router_func_test(hidden_states):
 +            scores, ctx.indices = moe_layer.router(hidden_states)
 +            return scores
-""","""
+         ctx.layer_number = moe_layer.layer_number""","""         # router
 -        with torch.enable_grad():
 -            scores, indices = moe_layer.router(hidden_states)
 +        if not recompute_instance.recompute:
@@ -1802,26 +1579,28 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +                scores, ctx.router_func = torch.autograd.vjp(router_func_test, router_input)
 +        else:
 +            scores = router_func_test(hidden_states)
-""","""
+ 
+         save_tensors.append(scores)
 -        scores = scores.detach()
 +        scores = mindspore.ops.stop_gradient(scores)
-""","""
+         scores.requires_grad = True""","""             ctx.num_local_experts = moe_layer.token_dispatcher.num_local_experts
+ 
 -        save_tensors.append(indices)
 +        save_tensors.append(ctx.indices)
-""","""
+ 
+         if n_shared_experts:""","""         else:
+             shared_expert_gate = None
+ 
 -        (share_experts_output, dispatched_input, tokens_per_expert) = moe_layer.token_dispatcher.token_permutation(
 -            hidden_states, scores, indices, ctx.shared_experts, save_tensors, shared_expert_gate, ctx
 +        (share_experts_output, dispatched_input, tokens_per_expert, shared_experts_func, permutation_func1, permutation_func2) = moe_layer.token_dispatcher.token_permutation(
 +            hidden_states, scores, ctx.indices, ctx.shared_experts, save_tensors, shared_expert_gate, ctx
-""","""
          )
 +
 +        def experts_func_test(dispatched_input, tokens_per_expert):
 +            expert_output, mlp_bias = moe_layer.experts(dispatched_input, tokens_per_expert)
 +            return expert_output, mlp_bias
 +
-         if moe_experts_pipeline_degree:
-""","""
          if moe_experts_pipeline_degree:
              save_tensors.append(None)
              save_tensors.append(None)
@@ -1841,8 +1620,7 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +            
              if isinstance(share_experts_output, tuple):
                  share_experts_output, rs_share_experts_output, rs_shared_experts_handle = share_experts_output
-             else:
-""","""
+             else:""","""                 rs_share_experts_output = share_experts_output
                  rs_shared_experts_handle = None
  
 -            (expert_output, mlp_bias), *_ = forward_func(moe_layer.experts, (dispatched_input, tokens_per_expert, ctx))
@@ -1859,7 +1637,9 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +            ctx.unpermutation_func1 = unpermutation_func1
 +            ctx.unpermutation_func2 = unpermutation_func2
          if group_limited_greedy:
-""","""
+             save_tensors.append(moe_layer.router.l_aux)
+             moe_layer.router.l_aux = moe_layer.router.l_aux.detach()""","""             if rs_shared_experts_handle is not None:
+                 rs_shared_experts_handle.wait()
              output_sum = output + rs_share_experts_output
 -            output.untyped_storage().resize_(0)
 -            share_experts_output.untyped_storage().resize_(0)
@@ -1869,8 +1649,8 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
          else:
 -            output_sum = output.detach()
 +            output_sum = mindspore.ops.stop_gradient(output)
-""","""
-             set_gemm_backward_need_tensors(
+ 
+         save_tensors.append(share_experts_output)""","""             set_gemm_backward_need_tensors(
                  ((hidden_states_ep, indices_ep, scores_ep, router_topk, global_input_tokens_local_experts_indices),
                   permute2_input_detach, permute2_graph,
 -                 output_splits, input_splits, input_splits_tp_ep))
@@ -1885,10 +1665,7 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +                 output_splits, input_splits, input_splits_tp_ep, ctx.permutation_func1, ctx.permutation_func2))
  
          if n_shared_experts:
-             if get_tensor_model_parallel_world_size() > 1 and not shared_expert_gate:
-""","""
-                     )
-         if moe_hierarchical_alltoallv:
+             if get_tensor_model_parallel_world_size() > 1 and not shared_expert_gate:""","""         if moe_hierarchical_alltoallv:
              output_backward_handle.wait()
 -            unpermute2_graph.backward(unpermute2_graph_backward_input)
 +            unpermute2_input_grad, detach_scores_grad = _convert_python_data(ctx.unpermutation_func2(unpermute2_graph_backward_input))
@@ -1898,9 +1675,7 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +        ctx.unpermutation_func2 = None
          unpermute2_graph = None
          if moe_zero_memory == "level1" and not ctx.is_only_recompute_activation:
-             if n_shared_experts:
-""","""
-         if moe_hierarchical_alltoallv:
+             if n_shared_experts:""","""         if moe_hierarchical_alltoallv:
              tp_group = parallel_state.get_tensor_model_parallel_group()
              _, unpermute1_backward_input, handle = async_all_to_all(
 -                unpermute2_input_detach.grad,
@@ -1915,9 +1690,7 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +                unpermute2_input_grad,
                  output_splits,
                  input_splits,
-                 ep_group,
-""","""
-         elif share_experts_graph is not None:
+                 ep_group,""","""         elif share_experts_graph is not None:
              if backward_ag_shared_handle is not None:
                  backward_ag_shared_handle.wait()
 -            share_experts_graph.backward(backward_ag_shared)
@@ -1941,9 +1714,7 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 -        unpermute1_backward_input.untyped_storage().resize_(0)
          if moe_hierarchical_alltoallv:
              set_all2all_experts_output((permute1_graph, scores_ep, hidden_states_ep))
-             backward_func(experts_graph, unpermute1_input_detach.grad)
-""","""
-             backward_func(permute1_graph, permute2_input_detach.grad)
+             backward_func(experts_graph, unpermute1_input_detach.grad)""","""             backward_func(permute1_graph, permute2_input_detach.grad)
              permute2_input_detach.grad.untyped_storage().resize_(0)
          else:
 -            backward_func(experts_graph, unpermute1_input_detach.grad)
@@ -1961,9 +1732,7 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +            del permute1_backward_input
          if l_aux_graph is not None:
              l_aux_graph.backward(l_aux_detach.grad, retain_graph=True)
-         if moe_zero_memory != "disable":
-""","""
-                 route_graph.backward(detach_scores_grad)
+         if moe_zero_memory != "disable":""","""                 route_graph.backward(detach_scores_grad)
                  detach_input_handle.wait()
              else:
 -                route_graph.backward(detach_scores.grad)
@@ -1976,27 +1745,28 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 -            grad_output = detach_input.grad
 +            grad_output = detach_input_share_grad + hidden_states_grad + detach_input_grad1
 +        ctx.saved_tensors = []
-         return grad_output, None
-"""],
-"core/transformer/moe/moe_utils.py":["""
+         return grad_output, None"""],
+"core/transformer/moe/moe_utils.py":[""" import torch
  import torch_npu
 +from torch.autograd import recompute_instance
 +import mindspore
  from megatron.core.transformer.moe.moe_utils import permute_with_padded_tokens, unpermute_with_padded_tokens
-""","""
+ from megatron.training import get_args""",""" def get_swap_stream():
+     global SWAP_STREAM2
      if SWAP_STREAM2 is None:
 -        _ = torch_npu.npu.Stream(device=torch.npu.current_device())
 -        SWAP_STREAM2 = torch_npu.npu.Stream(device=torch.npu.current_device())
 +        _ = mindspore.runtime.Stream(device=torch.cuda.current_device())
 +        SWAP_STREAM2 = mindspore.runtime.Stream(device=torch.cuda.current_device())
      stream = SWAP_STREAM2
-""","""
+     return stream""",""" def get_swap_status():
+     global SWAP_STREAM
      if SWAP_STREAM is None:
 -        SWAP_STREAM = torch_npu.npu.Stream(device=torch.npu.current_device())
 +        SWAP_STREAM = mindspore.runtime.Stream(device=torch.cuda.current_device())
      global SWAP_TENSOR
-""","""
- def get_prob_backward_need_tensors():
+     stream = SWAP_STREAM
+     tensor = SWAP_TENSOR""",""" def get_prob_backward_need_tensors():
      global SWAP_STREAM2
      if SWAP_STREAM2 is None:
 -        _ = torch_npu.npu.Stream(device=torch.npu.current_device())
@@ -2004,15 +1774,13 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +        _ = mindspore.runtime.Stream(device=torch.cuda.current_device())
 +        SWAP_STREAM2 = mindspore.runtime.Stream(device=torch.cuda.current_device())
      global MATMUL_OUTPUT_GRAD
-""","""
-         if input_.requires_grad and input_.grad_fn is None:
+     global UNPERMUTED_TOKENS""","""         if input_.requires_grad and input_.grad_fn is None:
              return input_
          else:
 -            new_input = input_.detach()
 +            new_input = mindspore.ops.stop_gradient(input_)
              new_input.requires_grad = True
-""","""
-     elif isinstance(inputs, torch.Tensor):
+         return new_input""","""     elif isinstance(inputs, torch.Tensor):
          detach_inputs.append(detach_tensor(inputs))
  
 -    with torch.enable_grad():
@@ -2027,38 +1795,32 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +    return output, *detach_inputs, f_vjp
  
  
- def backward_func(func_tensor, gradinputs):
-""","""
+ def backward_func(func_tensor, gradinputs):""","""         dtype=permuted_tokens.dtype,
+         device=permuted_tokens.device,
      )
 -    unpermuted_tokens.index_copy_(0, sorted_indices, permuted_tokens)
 +    unpermuted_tokens.index_add_(0, sorted_indices, permuted_tokens)
      unpermuted_tokens = unpermuted_tokens.reshape(-1, topk, permuted_tokens.size(-1))
-"""],
-"core/transformer/moe/token_dispatcher.py":["""
- import torch
+     if probs is not None:
+         unpermuted_tokens = unpermuted_tokens * probs.unsqueeze(-1)"""],
+"core/transformer/moe/token_dispatcher.py":[""" import torch
 +import mindspore
  from torch_npu.utils.collect_env import get_cann_version
-""","""
-         # permutation to get the `num_out_tokens` CPU value.
+ from megatron.training import get_args""","""         # permutation to get the `num_out_tokens` CPU value.
 -        self.num_out_tokens = num_local_tokens_per_expert.sum().to(
 -            torch.device("cpu"), non_blocking=True
 -        )
 +        self.num_out_tokens = num_local_tokens_per_expert.sum()
          self.cuda_sync_point = "before_permutation_1"
-""","""
-         self.input_splits = (
+     elif ep_size > 1:""","""         self.input_splits = (
              num_local_tokens_per_expert.reshape(ep_size, self.num_local_experts)
              .sum(axis=1)
 -            .to(torch.device("cpu"), non_blocking=True)
              .numpy()
-         )
-""","""
-         self.output_splits = (
+         )""","""         self.output_splits = (
 -            self.num_global_tokens_per_local_expert.sum(axis=-1).to(torch.device("cpu")).numpy()
 +            self.num_global_tokens_per_local_expert.sum(axis=-1).numpy()
-         )
-""","""
-     if self.num_local_experts > 1:
+         )""","""     if self.num_local_experts > 1:
          if not hasattr(self, 'comm_stream'):
 -            self.comm_stream = torch.cuda.Stream()
 -        self.comm_stream.wait_stream(torch.cuda.current_stream())
@@ -2066,50 +1828,41 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +            self.comm_stream = mindspore.runtime.communication_stream()
 +        self.comm_stream.wait_stream(mindspore.runtime.current_stream())
 +        with mindspore.runtime.StreamCtx(self.comm_stream):
-             # No further synchronization is needed because torch.repeat_interleave() calls stream
-""","""
-     if self.cuda_sync_point == "before_permutation_1":
+             # No further synchronization is needed because torch.repeat_interleave() calls stream""",
+             """     if self.cuda_sync_point == "before_permutation_1":
 -        torch.cuda.current_stream().synchronize()
 +        mindspore.runtime.current_stream().synchronize()
      permutated_local_input_tokens, self.reversed_local_input_permutation_mapping = permute(
-""","""
-     if self.cuda_sync_point == "before_ep_alltoall":
+         hidden_states,""","""     if self.cuda_sync_point == "before_ep_alltoall":
 -        torch.cuda.current_stream().synchronize()
 +        mindspore.runtime.current_stream().synchronize()
-     global_input_tokens = tensor_parallel.all_to_all(
-""","""
+     global_input_tokens = tensor_parallel.all_to_all(""","""     if self.num_local_experts > 1:
          if not self.drop_and_pad:
 -            torch.cuda.current_stream().wait_stream(self.comm_stream)
 +            mindspore.runtime.current_stream().wait_stream(self.comm_stream)
-             global_input_tokens, self.reversed_global_input_permutation_mapping = permute(
-""","""
-     if self.cuda_sync_point == "before_finish":
+             global_input_tokens, self.reversed_global_input_permutation_mapping = permute(""",
+             """     if self.cuda_sync_point == "before_finish":
 -        torch.cuda.current_stream().synchronize()
 +        mindspore.runtime.current_stream().synchronize()
-""","""
-             self.input_splits_tp_ep = (
+ 
+     return global_input_tokens, tokens_per_expert""","""             self.input_splits_tp_ep = (
                  num_local_tokens_per_expert.reshape(tp_extended_ep_size, self.num_local_experts)
                  .sum(axis=1)
 -                .to(torch.device("cpu"))
                  .numpy()
              )
              expert_parallel_rank = mpu.get_expert_model_parallel_rank()
-""","""
-             self.input_splits = (
+""","""             self.input_splits = (
                  num_local_tokens_per_expert.reshape(tp_extended_ep_size, self.num_local_experts)
                  .sum(axis=1)
 -                .to(torch.device("cpu"))
                  .numpy()
-             )
-             num_global_tokens_per_expert = tensor_parallel.gather_from_sequence_parallel_region_to_moe(
-""","""
-         self.output_splits = (
+             )""","""         self.output_splits = (
 -            self.num_global_tokens_per_local_expert.sum(axis=-1).to(torch.device("cpu")).numpy()
 +            self.num_global_tokens_per_local_expert.sum(axis=-1).numpy()
          )
-         num_tokens_per_local_expert = self.num_global_tokens_per_local_expert.sum(axis=0)
-""","""
-     if self.num_local_experts > 1:
+         num_tokens_per_local_expert = self.num_global_tokens_per_local_expert.sum(axis=0)""",
+         """     if self.num_local_experts > 1:
          if not hasattr(self, 'comm_stream'):
 -            self.comm_stream = torch.cuda.Stream()
 -        self.comm_stream.wait_stream(torch.cuda.current_stream())
@@ -2117,14 +1870,10 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +            self.comm_stream = mindspore.runtime.communication_stream()
 +        self.comm_stream.wait_stream(mindspore.runtime.current_stream())
 +        with mindspore.runtime.StreamCtx(self.comm_stream):
-             if moe_hierarchical_alltoallv:
-""","""
-         if not self.drop_and_pad:
+             if moe_hierarchical_alltoallv:""","""         if not self.drop_and_pad:
 -            torch.cuda.current_stream().wait_stream(self.comm_stream)
 +            mindspore.runtime.current_stream().wait_stream(self.comm_stream)
-             global_input_tokens, self.reversed_global_input_permutation_mapping = permute(
-""","""
-         save_tensors.append(indices_ep)
+             global_input_tokens, self.reversed_global_input_permutation_mapping = permute(""","""         save_tensors.append(indices_ep)
  
 -    def alltoall_token_permutation1(hidden_states, indices, *args):
 +    if moe_hierarchical_alltoallv:
@@ -2152,19 +1901,15 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 -            self.probs = self.probs.detach()
 +            self.probs = mindspore.ops.stop_gradient(self.probs)
              self.probs.requires_grad = True
-""","""
-         else:
+""","""         else:
 -            tokens_per_expert = self.preprocess(indices)
 -            save_tensors.append(args[0])
-             if get_args().moe_experts_pipeline_degree:
-""","""
-             self.hiddden_shape_before_permute = hidden_states.shape
+             if get_args().moe_experts_pipeline_degree:""","""             self.hiddden_shape_before_permute = hidden_states.shape
              if self.cuda_sync_point == "before_permutation_1":
 -                torch.cuda.current_stream().synchronize()
 +                mindspore.runtime.current_stream().synchronize()
              scores_ep = None
-""","""
-                 num_out_tokens=self.num_out_tokens,
+             save_tensors.append(scores_ep)""","""                 num_out_tokens=self.num_out_tokens,
                  padded_mode=self.drop_and_pad,
              )
 -        return tokens_per_expert, permutated_local_input_tokens
@@ -2178,17 +1923,12 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 +                                                                                      input_hidden_states)
  
      # permute 1
-     save_tensors.append(permutated_local_input_tokens)
-""","""
-     # Perform expert parallel AlltoAll communication
+     save_tensors.append(permutated_local_input_tokens)""","""     # Perform expert parallel AlltoAll communication
      if self.cuda_sync_point == "before_ep_alltoall":
 -        torch.cuda.current_stream().synchronize()
 +        mindspore.runtime.current_stream().synchronize()
      if moe_hierarchical_alltoallv:
-         tp_group = parallel_state.get_tensor_model_parallel_group()
-""","""
-     # shared experts
-     if shared_experts is not None:
+         tp_group = parallel_state.get_tensor_model_parallel_group()""","""     if shared_experts is not None:
 -        (share_experts_output, _), *_ = forward_func(shared_experts, (hidden_states, moe_ctx))
 +        def shared_experts_func(hidden_states):
 +            output, bias = shared_experts(hidden_states)
@@ -2199,51 +1939,33 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 -                                                                                                       event=permute1_ep_all_to_all_handle, stream=torch.npu.default_stream())
 +                                                                                                       event=permute1_ep_all_to_all_handle, stream=mindspore.runtime.default_stream())
              share_experts_output = (share_experts_graph, share_experts_output, rs_shared_experts_handle)
-         if shared_expert_gate is not None:
-""","""
-     if permute1_ep_all_to_all_handle is not None:
+         if shared_expert_gate is not None:""","""     if permute1_ep_all_to_all_handle is not None:
          permute1_ep_all_to_all_handle.wait()
 -        permutated_local_input_tokens.untyped_storage().resize_(0)
-+        del permutated_local_input_tokens
- 
-     def alltoall_token_permutation2(global_input_tokens):
-""","""
-         if self.num_local_experts > 1:
++        del permutated_local_input_tokens""","""         if self.num_local_experts > 1:
              if not self.drop_and_pad:
                  if self.comm_stream is not None:
 -                    torch.cuda.current_stream().wait_stream(self.comm_stream)
 +                    mindspore.runtime.current_stream().wait_stream(self.comm_stream)
                  global_input_tokens, self.reversed_global_input_permutation_mapping = permute(
-                     global_input_tokens, self.global_input_tokens_local_experts_indices
-                 )
-""","""
-                 global_input_tokens
+                     global_input_tokens, self.global_input_tokens_local_experts_indices""","""                 global_input_tokens
              )
          if self.cuda_sync_point == "before_finish":
 -            torch.cuda.current_stream().synchronize()
 +            mindspore.runtime.current_stream().synchronize()
  
-         return global_input_tokens
-""","""
--    (global_input_tokens), global_input_tokens_detach = forward_func(alltoall_token_permutation2,
+         return global_input_tokens""","""-    (global_input_tokens), global_input_tokens_detach = forward_func(alltoall_token_permutation2,
 +    (global_input_tokens), global_input_tokens_detach, vjp_alltoall_token_permutation2 = forward_func(alltoall_token_permutation2,
                                                                       global_input_tokens)
      save_tensors.append(global_input_tokens_detach)
-     save_tensors.append(global_input_tokens)
-""","""
-     save_tensors.append(global_input_tokens)
--    global_input_tokens_detach.untyped_storage().resize_(0)
+     save_tensors.append(global_input_tokens)""","""-    global_input_tokens_detach.untyped_storage().resize_(0)
 +    del global_input_tokens_detach
  
 -    return share_experts_output, global_input_tokens, tokens_per_expert
 +    return share_experts_output, global_input_tokens, tokens_per_expert, vjp_shared_experts, vjp_alltoall_token_permutation1, vjp_alltoall_token_permutation2
  
  
- def alltoall_token_unpermutation_new(
-""","""
-             hidden_states = alltoall_token_unpermutation1(hidden_states)
-         save_tensors.append(hidden_states)
-     else:
+ def alltoall_token_unpermutation_new(""","""     else:
 -        hidden_states, unpermute1_input_detach = forward_func(alltoall_token_unpermutation1, hidden_states)
 +        hidden_states, unpermute1_input_detach, vjp_alltoall_token_unpermutation1 = forward_func(alltoall_token_unpermutation1, hidden_states)
          save_tensors.append(unpermute1_input_detach)
@@ -2251,9 +1973,7 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 -        unpermute1_input_detach.untyped_storage().resize_(0)
 +        del unpermute1_input_detach
  
-     ep_group = parallel_state.get_expert_model_parallel_group()
-""","""
-     if handle is not None:
+     ep_group = parallel_state.get_expert_model_parallel_group()""","""     if handle is not None:
          handle.wait()
 -        hidden_states.untyped_storage().resize_(0)
 +        del hidden_states
@@ -2261,28 +1981,17 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 -    def alltoall_token_unpermutation2(permutated_local_input_tokens):
 +    def alltoall_token_unpermutation2(permutated_local_input_tokens, probs):
          # Unpermutation 1: AlltoAll output to output
-""","""
-         return output
- 
--    output, unpermute2_input_detach = forward_func(alltoall_token_unpermutation2, permutated_local_input_tokens)
-+    output, unpermute2_input_detach, _, vjp_alltoall_token_unpermutation2 = forward_func(alltoall_token_unpermutation2, (permutated_local_input_tokens, self.probs))
-     save_tensors.append(unpermute2_input_detach)
-     should_resize = not self.drop_and_pad and not moe_hierarchical_alltoallv and \
-                     not get_args().use_fused_moe_token_permute_and_unpermute or get_args().moe_zero_memory != "disable"
-     if should_resize:
--        unpermute2_input_detach.untyped_storage().resize_(0)
-+        del unpermute2_input_detach
-     save_tensors.append(output)
-""","""
-         _, output, output_handle = async_reduce_scatter(output, group=ep_group)
-         output_handle.wait()
+         if get_args().moe_zero_memory != "disable":
+             output = UnpermuteWithoutActivation.apply(""","""-    output, unpermute2_input_detach = forward_func(alltoall_token_unpermutation2, permutated_local_input_tokens)
++    output, unpermute2_input_detach, _, vjp_alltoall_token_unpermutation2 = forward_func(alltoall_token_unpermutation2, (permutated_local_input_tokens, self.probs))""","""-        unpermute2_input_detach.untyped_storage().resize_(0)
++        del unpermute2_input_detach""","""         output_handle.wait()
          output = output.view(self.hidden_shape)
 -    return output, None
 +    return output, None, vjp_alltoall_token_unpermutation1, vjp_alltoall_token_unpermutation2
  
  
- def allgather_token_permutation_npu(self, hidden_states: torch.Tensor, max_prob: torch.Tensor, max_ind: torch.Tensor):
-""","""
+ def allgather_token_permutation_npu(self, hidden_states: torch.Tensor, max_prob: torch.Tensor, max_ind: torch.Tensor):""",
+ """         return num_tokens_per_local_expert
      elif self.config.moe_expert_capacity_factor is not None:
          # Token drop but no pad.
 -        self.num_out_tokens = num_local_tokens_per_expert.sum().to(
@@ -2290,23 +1999,17 @@ def _npu_gmm_v2(original_weight, x, weight, *, bias=None, group_list=None, group
 -        )
 +        self.num_out_tokens = num_local_tokens_per_expert.sum()
          self.cuda_sync_point = "before_permutation_1"
-""","""
-         self.input_splits = (
+     elif ep_size > 1:""","""         self.input_splits = (
              num_local_tokens_per_expert.reshape(ep_size, self.num_local_experts)
              .sum(axis=1)
 -            .to(torch.device("cpu"), non_blocking=True)
              .numpy()
          )
-         num_global_tokens_per_expert = _gather_along_first_dim_expert_parallel(
-""","""
-                                                   :, self.local_expert_indices[0]: self.local_expert_indices[-1] + 1
-                                                   ]
-         self.output_splits = (
+         num_global_tokens_per_expert = _gather_along_first_dim_expert_parallel(""","""         self.output_splits = (
 -            self.num_global_tokens_per_local_expert.sum(axis=-1).to(torch.device("cpu")).numpy()
 +            self.num_global_tokens_per_local_expert.sum(axis=-1).numpy()
          )
-         num_tokens_per_local_expert = self.num_global_tokens_per_local_expert.sum(axis=0)
-"""],
+         num_tokens_per_local_expert = self.num_global_tokens_per_local_expert.sum(axis=0)"""],
 "optimizer/distrib_optimizer.py":[""" from megatron.training import get_args
 +from megatron.core.distributed.param_and_grad_buffer import BufferType""","""     copy_group_grads(self.model_fp32_groups, self.shard_fp32_groups)
  
