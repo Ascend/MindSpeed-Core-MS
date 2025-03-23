@@ -74,6 +74,10 @@ def convert_special_rules_by_line(origin_path, save_path, package_name="megatron
     cur_special_rules = LINE_RULES[package_name]
     for file_path, rules in cur_special_rules.items():
         origin_file_path = os.path.join(origin_path, file_path)
+        if rules[0] == "REMOVE":
+            if os.path.exists(origin_file_path):
+                os.remove(origin_file_path)
+            continue
 
         if not os.path.exists(origin_file_path):
             "create new file"
@@ -122,6 +126,18 @@ if __name__ == "__main__":
                         help="origin mindspeed package path")
     parser.add_argument("--convert_mindspeed_llm_path", type=str, default=None,
                         help="origin mindspeed package path")
+    parser.add_argument("--mindspeed_rl_path", type=str, default=None,
+                        help="origin mindspeed-rl package path")
+    parser.add_argument("--convert_mindspeed_rl_path", type=str, default=None,
+                        help="origin mindspeed-rl package path")    
+    parser.add_argument("--vllm_path", type=str, default=None,
+                        help="origin vllm package path")
+    parser.add_argument("--convert_vllm_path", type=str, default=None,
+                        help="origin vllm package path")    
+    parser.add_argument("--vllm_ascend_path", type=str, default=None,
+                        help="origin vllm-ascend package path")
+    parser.add_argument("--convert_vllm_ascend_path", type=str, default=None,
+                        help="origin vllm-ascend package path")    
     parser.add_argument("--transformers_path", type=str, default=None,
                         help="origin mindspeed package path")
     parser.add_argument("--convert_transformers_path", type=str, default=None,
@@ -130,7 +146,13 @@ if __name__ == "__main__":
                         help="origin einops package path")
     parser.add_argument("--convert_einops_path", type=str, default=None,
                         help="convert einops package path")
+    parser.add_argument("--is_rl", action="store_true",
+                        help="is rl")
     args = parser.parse_args()
+
+    if args.is_rl:
+        from rules_rl.special_rules import SPECIAL_RULES
+        from rules_rl.line_rules import LINE_RULES
 
     if args.megatron_path:
         origin_path = args.megatron_path
@@ -145,7 +167,22 @@ if __name__ == "__main__":
     if args.mindspeed_llm_path:
         origin_path = args.mindspeed_llm_path
         save_path = origin_path if not args.convert_mindspeed_llm_path else args.convert_mindspeed_llm_path
-        convert_package(origin_path, save_path, "MindSpeed-LLM")
+        convert_package(origin_path, save_path, "mindspeed-llm")
+
+    if args.mindspeed_rl_path:
+        origin_path = args.mindspeed_rl_path
+        save_path = origin_path if not args.convert_mindspeed_rl_path else args.convert_mindspeed_rl_path
+        convert_package(origin_path, save_path, "mindspeed-rl")
+
+    if args.vllm_path:
+        origin_path = args.vllm_path
+        save_path = origin_path if not args.convert_vllm_path else args.convert_vllm_path
+        convert_package(origin_path, save_path, "vllm")
+        
+    if args.vllm_ascend_path:
+        origin_path = args.vllm_ascend_path
+        save_path = origin_path if not args.convert_vllm_ascend_path else args.convert_vllm_ascend_path
+        convert_package(origin_path, save_path, "vllm-ascend")
 
     if args.transformers_path:
         origin_path = args.transformers_path
