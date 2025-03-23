@@ -104,8 +104,8 @@ def convert_package(origin_path, save_path, package_name="megatron"):
     if package_name == "MindSpeed-LLM":
         convert_special_rules_by_line(origin_path, save_path, package_name=package_name)
     else:
-        convert_special_rules(origin_path, save_path, package_name=package_name)
         convert_special_rules_by_line(origin_path, save_path, package_name=package_name)
+        convert_special_rules(origin_path, save_path, package_name=package_name)
 
 
 if __name__ == "__main__":

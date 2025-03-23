@@ -36,9 +36,9 @@ git checkout core_r0.8.0
 cd ..
 echo "..............................................done Megatron-LM"
 
-#msadapter
+#msadaptor
 rm -rf msadapter
-git clone https://gitee.com/mindspore/msadapter -b master
+git clone https://gitee.com/mindspore/msadapter.git -b master
 if [ $? -ne 0 ]; then
     echo "Error: git clone msadapter"
     exit 1
