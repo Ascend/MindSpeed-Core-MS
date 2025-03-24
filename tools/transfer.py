@@ -167,7 +167,7 @@ if __name__ == "__main__":
     if args.mindspeed_llm_path:
         origin_path = args.mindspeed_llm_path
         save_path = origin_path if not args.convert_mindspeed_llm_path else args.convert_mindspeed_llm_path
-        convert_package(origin_path, save_path, "mindspeed-llm")
+        convert_package(origin_path, save_path, "MindSpeed-LLM")
 
     if args.mindspeed_rl_path:
         origin_path = args.mindspeed_rl_path
