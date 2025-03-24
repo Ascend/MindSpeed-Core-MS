@@ -57,6 +57,7 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone msadapter"
     exit 1
 fi
+cd ..
 echo "..............................................done msadapter"
 
 #vllm
@@ -110,7 +111,7 @@ python3 tools/transfer.py \
 --vllm_ascend_path ${MindSpeed_Core_MS_PATH}/vllm-ascend/ \
 --is_rl
 
-# echo "..............................................done code_convert"
+echo "..............................................done code_convert"
 
 #install after code_convert
 cd vllm-ascend

@@ -1,5 +1,5 @@
 LINE_RULES = {
-    "mindspeed-llm": {
+    "MindSpeed-LLM": {
     "convert_ckpt.py":["""if __name__ == '__main__':
 +    import mindspore as ms
 +    ms.set_context(device_target = "CPU", pynative_synchronize=True)
