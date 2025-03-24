@@ -81,7 +81,7 @@ SPECIAL_RULES = {
          [r"param\.main_grad\.add_\(param\.grad\.data\)", "param.main_grad.add_(*unused)"],
          ],
     "core/distributed/param_and_grad_buffer.py":
-        [[r"self\.grad_data \*= self\.gradient\_scaling\_factor", "self.grad_data.copy_(self.grad_data * self.gradient_scaling_factor)"],],
+        [[r"self\.grad_data \*= self\.gradient\_scaling\_factor", "self.grad_data.mul_(self.gradient_scaling_factor)"],],
     "core/models/common/embeddings/rotary_pos_embedding.py": 
         [[r"__all__ = \['RotaryEmbedding', 'apply_rotary_pos_emb']", "__all__ = ['RotaryEmbedding', 'apply_rotary_pos_emb']\n\n_ROTATION_MATRIX = None\ndef get_rotation_matrix(x):\n    global _ROTATION_MATRIX\n    if _ROTATION_MATRIX is None:\n        import numpy as np\n        dim = x.shape[-1]\n        index1 = np.ones(dim)\n        index1[::2] = 0\n        index2 = np.zeros(dim)\n        index2[::2] = -1\n        rotation_matrix = np.eye(dim, k=1) * index1 + np.eye(dim, k=-1) * index2\n        _ROTATION_MATRIX = (\n            torch.from_numpy(rotation_matrix[None, None, :, :]).to(x.dtype).to(x.device)\n        )\n    return _ROTATION_MATRIX"],
          [r"x1 = x.*\n.*x2 = x.*\n.*x\_new = torch\.stack.*\n.*return.*", "return torch.matmul(x, get_rotation_matrix(x))"]],
@@ -152,9 +152,7 @@ SPECIAL_RULES = {
          (r"torch\.cuda\.current_stream\(", "mindspore.runtime.current_stream("),
          (r"torch\.cuda\.Stream\(", "mindspore.runtime.Stream("),
          (r"torch\.cuda\.stream\(", "mindspore.runtime.StreamCtx("),
-         ],
-    "optimizer/distrib_optimizer.py":
-        [(r"param_data\.device\)", "param_data.device).stub_sync()"),]
+         ]
 },
 
 "MindSpeed-LLM":{

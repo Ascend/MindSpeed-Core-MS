@@ -592,22 +592,19 @@ LINE_RULES = {
 -
 +        self.args.use_kv_cache = True
          return metrics"""],
-    "mindspeed_llm/tasks/posttrain/rlxf/workers/reference.py":[
-        """     @register(dispatch_mode=Dispatch.MEGATRON_COMPUTE_PROTO)
-     def compute_ref_log_prob(self, data: DataProto):
--        data = data.to('cuda')
-         output = self.reference.compute_log_prob(data=data)
+    "mindspeed_llm/tasks/posttrain/rlxf/workers/reference.py": [
+        """         output = self.reference.compute_log_prob(data=data)
          if output is not None:
              output = DataProto.from_dict(tensors={'ref_log_prob': output})
--            output = output.to('cpu')""",
-"""         for model_module in self.model:
-             model_module.eval()
- 
--        data = data.to(next(self.model[0].parameters()).device)""",
-"""         - The communication shape is (total_nnz_pad_to_sp // tp_size, 1, hidden_size) if sequence parallel is enabled
-         \"\"\"
-         args = get_args()
--        data.batch['attention_mask'] = data.batch['attention_mask'].to(bool)""",
+-            output = output.to('cpu')
+         torch.cuda.empty_cache()
+         return output""",
+        """-        data = data.to(next(self.model[0].parameters()).device)
+                 with torch.no_grad():""",
+        """         - The communication shape is (total_nnz_pad_to_sp // tp_size, 1, hidden_size) if sequence parallel is enabled
+                 \"\"\"
+                 args = get_args()
+        -        data.batch['attention_mask'] = data.batch['attention_mask'].to(bool)""",
     ],
     "mindspeed_llm/tasks/posttrain/rlxf/workers/reward.py":[
         """     @register(dispatch_mode=Dispatch.MEGATRON_COMPUTE_PROTO)
@@ -804,8 +801,9 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
      "mindspeed_llm/training/utils.py":["""             slice_obj[dim] = slice(i, i + window_size)
 -        slices.append(tensor[tuple(slice_obj)])
 +        slices.append(tensor[tuple(slice_obj)].clone())"""],
-    "mindspeed_llm/core/tensor_parallel/layers.py":["""-        weight = torch.split(weight, weight.shape[0] // args_.output_layer_slice_num, dim=0)
-+        weight = torch.chunk(weight, args_.output_layer_slice_num, 0)"""],
+    "mindspeed_llm/core/tensor_parallel/layers.py": ["""-        weight = torch.split(weight, weight.shape[0] // args_.output_layer_slice_num, dim=0)
++        weight = torch.chunk(weight, args_.output_layer_slice_num, 0)""", """+    wrapper = staticmethod(wrapper)
+     return wrapper"""],
 "mindspeed_llm/core/transformer/moe/router.py":["""-    args = get_args()
      if (
 -        not args.moe_tp_extend_ep
@@ -925,6 +923,13 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
              fmt_msg = fmt_msg[:-2]"""]
     },
     "megatron":{
+        "core/distributed/distributed_data_parallel.py": ["""                     param_to_buffer[param].register_grad_ready(param)
++                
++                if hasattr(param, "main_grad"):
++                    return param.main_grad
++                return param.grad 
+ 
+         return param_hook"""],
         "core/optimizer/__init__.py": [
             """         ## apex's FusedAdam is a drop-in replacement for torch's AdamW
          ## see https://github.com/NVIDIA/apex/blob/7b73b12361068a10b0f44844534613f252a5ea75/apex/optimizers/fused_adam.py#L16
@@ -973,12 +978,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
  
      @staticmethod"""],
         "core/distributed/param_and_grad_buffer.py":[
-            """                 requires_grad=False,
--            )
-+            ).stub_sync()""","""         if self.gradient_scaling_factor != 1.0:
--            self.grad_data *= self.gradient_scaling_factor
-+            self.grad_data.copy_(self.grad_data * self.gradient_scaling_factor)
-+            # self.grad_data *= self.gradient_scaling_factor""","""+        if param in self.params_with_grad:
+            """+        if param in self.params_with_grad:
 +            return
 +        # assert param in self.params, 'Param is not in the bucket'
 +        if param in self.params_with_grad:
@@ -1102,12 +1102,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +            input_tensor_grad = backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model)
  
              send_backward(input_tensor_grad, recv_tensor_shapes, config)"""],
-        "core/optimizer/distrib_optimizer.py":[
-            """                         param_range.start : param_range.end
-                     ]
--                    shard_main_param = shard_model_param.clone().float()
-+                    shard_main_param = shard_model_param.clone().float().stub_sync()"""
-        ],
         "core/tensor_parallel/cross_entropy.py":[
             """                 grad_2d, arange_1d, masked_target_1d, softmax_update, grad_input, grad_output
              )
