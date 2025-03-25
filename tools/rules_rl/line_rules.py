@@ -1,5 +1,8 @@
 LINE_RULES = {
     "MindSpeed-LLM": {
+    "core/datasets/blended_megatron_dataset_builder.py": [""" from megatron.core import mpu
++from mindspore.communication import get_local_rank""","""-    current_rank = torch.cuda.current_device()
++    current_rank = get_local_rank()"""],
     "convert_ckpt.py":["""if __name__ == '__main__':
 +    import mindspore as ms
 +    ms.set_context(device_target = "CPU", pynative_synchronize=True)
@@ -694,20 +697,6 @@ LINE_RULES = {
 +            new_batch_size = sum([int(batch.batch_size[0]) for batch in batch_lst])
 +            new_batch = TensorDict(res_dict, batch_size=new_batch_size)""",
     ],
-    "mindspeed_llm/tasks/posttrain/rlxf/workers/megatron_hybrid_engine.py": ["""-            return data.to(device, non_blocking=True)
-+            # return data.to(device, non_blocking=True)
-+            # return data.to(device)
-+            if device == "cpu":
-+                return data.cpu()
-+            else:
-+                return data.cuda()""",
-"""-                param.data = param.data.to(device, non_blocking=True)
-+                # param.data = param.data.to(device, non_blocking=True)
-+                # param.data = param.data.to(device)
-+                if device == "cpu":
-+                    param.data = param.data.cpu()
-+                else:
-+                    param.data = param.data.cuda()"""],
     "mindspeed_llm/tasks/posttrain/rlxf/workers/actor_train_infer.py":["""-    context_lengths = [get_context_length(val, pad_id, max_length.item(), padding_side) for val in data]
 +    context_lengths = [get_context_length(val, pad_id, max_length, padding_side) for val in data]""",
 """-                    additional_val = batch.get(additional_key).view(-1).cpu().numpy().tolist()
@@ -790,50 +779,6 @@ LINE_RULES = {
 -                model, None, None, strict=False)
 +                model, None, None, strict=True)#, strict=False)"""
     ],
-    "mindspeed_llm/tasks/posttrain/rlxf/utils/megatron_memory_buffer.py":["""-                buffer.param_data.to('cpu', non_blocking=True)
-+                # buffer.param_data.to('cpu', non_blocking=True)
-+                pass""",
-"""-                buffer.param_data.to(torch.cuda.current_device(), non_blocking=True)
-+                # buffer.param_data.to(torch.cuda.current_device(), non_blocking=True)
-+                pass"""],
-"mindspeed_llm/tasks/posttrain/rlxf/workers/actor_hybrid.py": ["""-        return data.to(device, non_blocking=True)
-+        # return data.to(device, non_blocking=True)
-+        if device == "cpu":
-+            return data.cpu()
-+        else:
-+            return data.cuda()""",
-"""-            param.data = param.data.to(device, non_blocking=True)
-+            # param.data = param.data.to(device, non_blocking=True)
-+            if device == "cpu":
-+                param.data = param.data.cpu()
-+            else:
-+                param.data = param.data.cuda()""",
-"""         super().__init__()
-+        # import mindspore
-+        # mindspore.context.set_context(pynative_synchronize=True)
-         self.config = config""",
-         """-        data = data.to(device)
-+        # data = data.to(device)""",
-"""-        output = output.to('cpu')
-+        # output = output.to('cpu')""",
-"""-                nonzeros = torch.nonzero(prompt_token_ids == pad_id, as_tuple=False)
-+                # nonzeros = torch.nonzero(prompt_token_ids == pad_id, as_tuple=False)
-+                import mindspore as ms
-+                nonzeros = ms.mint.nonzero(prompt_token_ids == pad_id, as_tuple=False)""",
-"""-                token_ids = prompt_token_ids[:first_pad_index].cpu().numpy().tolist()
-+                token_ids = prompt_token_ids[:first_pad_index].asnumpy().tolist()""",
-"""-                    additional_val = additional_dict[additional_key][i].cpu().numpy().tolist()
-+                    additional_val = additional_dict[additional_key][i].asnumpy().tolist()""",
-"""-        responses = [response.cpu().numpy().tolist() for response in responses]
-+        responses = [response.asnumpy().tolist() for response in responses]""",
-"""-                    idx_list_per_step.append(tokens.view(-1).cpu().numpy().tolist())
-+                    idx_list_per_step.append(tokens.view(-1).asnumpy().tolist())""",
-"""-        responses = [response.cpu().numpy().tolist() for response in responses]
-+        responses = [response.asnumpy().tolist() for response in responses]""",
-"""-            data = data.to('cpu')
-+            # data = data.to('cpu')"""],
-"mindspeed_llm/tasks/posttrain/rlxf/workers/vllm_rollout/vllm_rollout.py": ["""-from torch.nn.utils.rnn import pad_sequence
-+from torch.nn.utils.rnn_beta import pad_sequence"""],
     "mindspeed_llm/tasks/posttrain/utils.py":[
         """ from mindspeed_llm.tasks.preprocess.decoder_packed_mtf_dataset import build_train_valid_test_datasets as build_instruction_dataset
 +from megatron.core.tensor_parallel import mappings""",
@@ -1080,22 +1025,74 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
              fmt_msg = fmt_msg[:-2]"""]
     },
     "megatron":{
+        "core/distributed/distributed_data_parallel.py": [
+"""         for param in self.module.parameters():
+             if param.requires_grad:
+                 # Expand so we get access to grad_fn.
+-                param_tmp = param.expand_as(param)
+                 # Get the gradient accumulator function.
+-                grad_acc = param_tmp.grad_fn.next_functions[0][0]
+-                grad_acc.register_hook(self._make_param_hook(param, self.param_to_buffer))
+-                self.grad_accs.append(grad_acc)
++                param.register_hook(self._make_param_hook(param, self.param_to_buffer))
+ 
+     def forward(self, *inputs, **kwargs):
+         \"\"\"""",
+"""                 if param.grad is not None and (
+                     not param.grad_added_to_main_grad or getattr(param, 'zero_out_wgrad', False)
+                 ):
+-                    param.main_grad.add_(param.grad.data)
++                    param.main_grad.add_(*unused)
+                 param.grad = None
+ 
+                 if self.ddp_config.overlap_grad_reduce:
+                     param_to_buffer[param].register_grad_ready(param)
+ 
++                if hasattr(param, \"main_grad\"):
++                    return param.main_grad
++                return param.grad
++
+         return param_hook
+ 
+     @contextmanager"""
+        ],
         "core/tensor_parallel/mappings.py": ["""-            output_split_sizes=output_split_sizes.tolist(),
 -            input_split_sizes=input_split_sizes.tolist(),
 +            output_split_sizes=output_split_sizes.tolist() if output_split_sizes else None,
 +            input_split_sizes=input_split_sizes.tolist() if output_split_sizes else None,"""],
-        "core/distributed/param_and_grad_buffer.py":[
-"""         if self.gradient_scaling_factor != 1.0:
+        "core/distributed/param_and_grad_buffer.py": [
+"""         # gradient_scaling_factor already takes into account whether we are computing
+         # an average or sum in the data-parallel collective.
+         if self.gradient_scaling_factor != 1.0:
 -            self.grad_data *= self.gradient_scaling_factor
-+            self.grad_data.copy_(self.grad_data * self.gradient_scaling_factor)
-+            # self.grad_data *= self.gradient_scaling_factor""","""+        if param in self.params_with_grad:
++            self.grad_data.mul_(self.gradient_scaling_factor)
+ 
+         # Decide reduce_op.
+         reduce_op = torch.distributed.ReduceOp.SUM""",
+"""         \"\"\"
+         assert param in self.params, 'Param is not in the bucket'
+         assert param not in self.params_with_grad, 'Cannot set grad twice'
++        if param in self.params_with_grad:
 +            return
 +        # assert param in self.params, 'Param is not in the bucket'
 +        if param in self.params_with_grad:
 +            return
 +        # assert param not in self.params_with_grad, 'Cannot set grad twice'
          assert (
-             self.ddp_config.overlap_grad_reduce"""
+             self.ddp_config.overlap_grad_reduce
+         ), 'register_grad_ready() should be called only when overlapping grad reduce'""",
+"""         When the number of microbatches is greater than 1, we only want to register
+         grads as ready when processing the last microbatch and overlap_grad_reduce is True.
+         \"\"\"
++        if param in self.params_with_grad:
++            return
++        # assert param in self.params, 'Param is not in the bucket'
++        if param in self.params_with_grad:
++            return
++        # assert param not in self.params_with_grad, 'Cannot set grad twice'
+         assert (
+             self.ddp_config.overlap_grad_reduce
+         ), 'register_grad_ready() should only be called when overlap_grad_reduce is True'"""
         ],
         "core/models/common/embeddings/rotary_pos_embedding.py":[
             """             rotary_seq_len = inference_params.max_sequence_length
@@ -1108,7 +1105,14 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
              if len(input_tensors[model_chunk_id]) == len(output_tensors[model_chunk_id]):
                  input_tensors[model_chunk_id].append(None)
 +        if input_tensors[model_chunk_id][-1] is None:
-+            input_tensors[model_chunk_id][-1] = torch.tensor(0, dtype=torch.int)""",],
++            input_tensors[model_chunk_id][-1] = torch.tensor(0, dtype=torch.int)""","""         else:
+             data = loss_func(output_tensor, non_loss_data=True)
+             forward_data_store.append(data)
++            output_tensor = None
++    _pynative_executor.end_graph(forward_step_func, output_tensor, input_tensor[0])
+ 
+     if config.timers is not None:
+         config.timers('forward-compute').stop()""",],
         "core/tensor_parallel/cross_entropy.py":[
             """                 grad_2d, arange_1d, masked_target_1d, softmax_update, grad_input, grad_output
              )
@@ -1180,9 +1184,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +        # dc = torch.cuda.get_device_capability()
 +        # assert dc[0] >= 8, "Unsupported compute capability for GroupedGEMM kernels.\""""
         ],
-    "mindspeed_llm/core/datasets/blended_megatron_dataset_builder.py": [""" from megatron.core import mpu
-+from mindspore.communication import get_local_rank""","""-    current_rank = torch.cuda.current_device()
-+    current_rank = get_local_rank()"""], 
     },
     "mindspeed":{
         "core/transformer/moe/grouped_gemm_util.py":[""" # Copyright (c) 2024, Huawei Technologies Co., Ltd.  All rights reserved.
@@ -1196,7 +1197,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
  
  def grouped_gemm_is_available():
 """],
-        "core/distributed/distributed_data_parallel.py":[
+        "core/data_parallel/distributed_data_parallel.py":[
             """     self.grad_accs = []
      for param in self.module.parameters():
          if param.requires_grad:
@@ -1907,7 +1908,13 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +                batch_data[key], get_pipeline_model_parallel_src_rank(self.parallel_state, use_vllm),
                  group=get_pipeline_model_parallel_group(self.parallel_state, use_vllm)
              )
-         data_loader = trans_batch_to_data_loader(batch_data,""",
+         data_loader = trans_batch_to_data_loader(batch_data,
+                                                  experience_count * n_samples_per_prompt)  # experience_count
+-        index = index.cpu().numpy().tolist()
++        index = index.asnumpy().tolist()
+         return data_loader, index
+ 
+     def collect_transfer_dock_data(self, output, index, n_samples_per_prompt=1, use_vllm=False):""",
 """             # 获取当前行的截断索引
              trunc_idx = index_tensor[i].item()
              # 截断当前行
@@ -2369,123 +2376,6 @@ def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port
 +        local_rank = dist.get_rank(device_group)
 +        self.device = torch.device(f\"npu:{local_rank}\")"""
         ],
-        "vllm_ascend/worker/model_runner.py": [
-"""     async_callback: Optional[Callable] = None
-     seq_group_metadata_list: Optional[List[SequenceGroupMetadata]] = None
-     scheduler_outputs: Optional[SchedulerOutputs] = None
--    previous_hidden_states: Optional[torch.Tensor] = None
- 
-     def as_broadcastable_tensor_dict(self) -> Dict[str, Any]:
-         tensor_dict = {""",
-"""         if any(inter_data.mrope_input_positions is not None
-                for inter_data in self.inter_data_list):
-             mrope_input_positions = [[] for _ in range(3)]
-+            # calculate max position length for padding
-+            input_position_lens = [
-+                len(inter_data.input_positions[0])
-+                for inter_data in self.inter_data_list
-+            ]
-+            max_pos_len = max(input_position_lens)
- 
-             for idx in range(3):
-                 for inter_data in self.inter_data_list:
-                     msections = inter_data.mrope_input_positions
-                     if msections is None:
-                         for _seq_input_positions in inter_data.input_positions:
-+                            # zero pad
-+                            _seq_input_positions.extend(
-+                                [0] *
-+                                (max_pos_len - len(_seq_input_positions)))
-                             mrope_input_positions[idx].extend(
-                                 _seq_input_positions)
-                     else:
-                         for _seq_mrope_input_positions in msections:
-+                            # zero pad
-+                            _seq_mrope_input_positions[idx].extend(
-+                                [0] * (max_pos_len -
-+                                       len(_seq_mrope_input_positions[idx])))
-                             mrope_input_positions[idx].extend(
-                                 _seq_mrope_input_positions[idx])
-             input_positions = None""",
-"""             assert image_grid_thw is not None or video_grid_thw is not None, (
-                 \"mrope embedding type requires multi-modal input mapper \"
-                 \"returns 'image_grid_thw' or 'video_grid_thw'.\")
--            second_per_grid_ts = mm_kwargs.get(\"second_per_grid_ts\", None)
- 
-             hf_config = self.runner.model_config.hf_config""",
-"""                 mrope_input_positions, mrope_position_delta = \\
-                     MRotaryEmbedding.get_input_positions(
-                         token_ids,
--                        hf_config,
-                         image_grid_thw=image_grid_thw,
-                         video_grid_thw=video_grid_thw,
--                        second_per_grid_ts=second_per_grid_ts,
-+                        image_token_id=hf_config.image_token_id,
-+                        video_token_id=hf_config.video_token_id,
-+                        vision_start_token_id=hf_config.vision_start_token_id,
-+                        vision_end_token_id=hf_config.vision_end_token_id,
-+                        spatial_merge_size=hf_config.vision_config.
-+                        spatial_merge_size,
-                         context_len=inter_data.context_lens[seq_idx],
-                         seq_len=inter_data.seq_lens[seq_idx],
-                     )""",
-"""               SamplingMetadataCache() \\
-                 if self.parallel_config.pipeline_parallel_size == 1 else None
- 
--    def get_model(self) -> nn.Module:
--        return self.model
--
-     def load_model(self) -> None:
-         logger.info(\"Starting to load model %s...\", self.model_config.model)
-         with DeviceMemoryProfiler() as m:""",
-"""         kv_caches: List[torch.Tensor],
-         intermediate_tensors: Optional[IntermediateTensors] = None,
-         num_steps: int = 1,
--        **kwargs,
-     ) -> Optional[Union[List[SamplerOutput], IntermediateTensors]]:
-         if num_steps > 1:
-             raise ValueError(\"num_steps > 1 is not supported in ModelRunner\")""",
-"""             \"request_ids_to_seq_ids\": model_input.request_ids_to_seq_ids,
-         } if self.has_inner_state else {}
- 
--        previous_hidden_states = kwargs.get(\"previous_hidden_states\")
--        model_kwargs = {}
--        if previous_hidden_states is not None:
--            model_kwargs[\"previous_hidden_states\"] = previous_hidden_states
--
-         if (self.observability_config is not None
-                 and self.observability_config.collect_model_forward_time):
--            model_forward_start = torch_npu.npu.Event(enable_timing=True)
--            model_forward_end = torch_npu.npu.Event(enable_timing=True)
-+            model_forward_start = torch.cuda.Event(enable_timing=True)
-+            model_forward_end = torch.cuda.Event(enable_timing=True)
-             model_forward_start.record()
- 
-         if not bypass_model_exec:
-             with set_forward_context(model_input.attn_metadata,
-                                      self.vllm_config, virtual_engine):
--                if model_input.attn_metadata is not None:
--                    model_input.attn_metadata.input_positions = model_input.input_positions
-                 hidden_or_intermediate_states = model_executable(
-                     input_ids=model_input.input_tokens,
-                     positions=model_input.input_positions,""",
-"""                     intermediate_tensors=intermediate_tensors,
-                     **MultiModalKwargs.as_kwargs(multi_modal_kwargs,
-                                                  device=self.device),
--                    **seqlen_agnostic_kwargs,
--                    **model_kwargs,
--                )
-+                    **seqlen_agnostic_kwargs)
- 
-         if (self.observability_config is not None
-                 and self.observability_config.collect_model_forward_time):""",
-"""         self.execute_model(model_input, kv_caches, intermediate_tensors)
-         current_platform.synchronize()
-         return
-+
-+    def get_model(self) -> nn.Module:
-+        return self.model"""
-        ],
         "vllm_ascend/models/__init__.py": [
 """REMOVE"""
         ],
@@ -2888,7 +2778,7 @@ def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port
      def build_linear_method(self):
          raise NotImplementedError"""
         ],
-        "vllm_ascend/worker/worker.py": [
+        "vllm_ascend/worker.py": [
 """ 
  import torch
  import torch.distributed
@@ -3115,8 +3005,5 @@ def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port
 """         current_platform.empty_cache()
 +        num_npu_blocks = 65536
          return num_npu_blocks, num_cpu_blocks"""],
-        "vllm_ascend/worker/pooling_model_runner.py": [
-"""REMOVE"""
-        ]
     }
 }

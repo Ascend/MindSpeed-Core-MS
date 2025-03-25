@@ -33,3 +33,10 @@ test_convert_rl.sh 脚本自动执行以下设置过程：
    chmod +x test_convert_rl.sh
    ./test_convert_rl.sh
    ```
+
+启动任务前需要确保运行：
+
+```bash
+source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=0
+source /usr/local/Ascend/ascend-toolkit/latest/env/ascend_env.sh
+```
