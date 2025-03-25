@@ -110,6 +110,13 @@ cd MindSpeed-Core-MS
 source test_convert_llm.sh
 ```
 
+## 设置环境
+
+```shell
+MindSpeed_Core_MS_PATH=$pwd
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:$PYTHONPATH
+```
+
 ## 模型训练
 
 在进行一键转换安装后，用户即可进行模型训练，提供以下模型任务拉起流程作为参考。
