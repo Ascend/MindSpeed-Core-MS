@@ -23,7 +23,7 @@ setuptools.setup(
     ],
     package_dir={"": "."},
     packages=["", "tools"],
-    package_data={"": ["test_convert_llm.sh"], "tools": ['*', '*/*', '*/*/*']},
+    package_data={"": ["*.sh"], "tools": ['*', '*/*', '*/*/*']},
     python_requires=">=3.9",
     install_requires=[
         "mindspore>=2.4",
