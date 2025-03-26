@@ -95,7 +95,11 @@ def convert_special_rules_by_line(origin_path, save_path, package_name="megatron
             lines = [(line[0], line[1:]) for line in rule.split('\n') if line != '']
             pattern = '\n'.join([line for type, line in lines if type != '+'])
             replace = '\n'.join([line for type, line in lines if type != '-'])
-            data = replace.join(data.split(pattern))
+            if pattern in data:
+                data = replace.join(data.split(pattern))
+            else:
+                print(f"warning! {origin_file_path} replace fail")
+                print(rule)
         # save
         convert_file_path = os.path.join(save_path, file_path)
         os.makedirs(os.path.dirname(convert_file_path), exist_ok=True)
