@@ -781,7 +781,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
      return wrapper"""],
     "mindspeed_llm/core/models/gpt/gpt_model.py":["""         if not self.share_embeddings_and_output_weights and self.share_mtp_embedding_and_output_weight:
 -            output_weight = self.output_layer.weight.detach()
-+            # output_weight = self.output_layer.weight.detach()
 +            from mindspore import ops
 +            output_weight = ops.stop_gradient(self.output_layer.weight)"""],
     "pretrain_gpt.py": [
