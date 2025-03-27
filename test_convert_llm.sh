@@ -8,7 +8,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 cd MindSpeed-LLM
-git checkout d91c9c31f74cfbd1e3d5ad29b33edf5a56cb95df
+git checkout 84a34ee5e10da1ef5beff0787e94605aa961d3ad
 cd ..
 echo "------------------------------------done MindSpeed-LLM"
 
