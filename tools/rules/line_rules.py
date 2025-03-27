@@ -125,15 +125,6 @@ LINE_RULES = {
 +        # return torch_npu.npu_rotary_mul(t, cos, sin).to(t.dtype)
  
      rot_dim = freqs.shape[-1]""",
-         """     if args.use_fused_rotary_pos_emb:
--        t = torch_npu.npu_rotary_mul(t, cos_, sin_).to(t.dtype)
-+        mode = 1 if rotary_interleaved else 0
-+        t = torch_npu.npu_rotary_position_embedding(t, cos_.to(t.dtype), sin_.to(t.dtype), mode=mode).to(t.dtype)
-+        # t = torch_npu.npu_rotary_mul(t, cos_, sin_).to(t.dtype)
-     else:
-         t = (t * cos_) + (_rotate_half(t, rotary_interleaved) * sin_)
--    
-     return torch.cat((t, t_pass), dim=-1)""",
      """-    if self.inv_freq.device.type == 'cpu':
 -        # move `inv_freq` to GPU once at the first micro-batch forward pass
 -        self.inv_freq = self.inv_freq.to(device=torch.cuda.current_device())
@@ -188,11 +179,8 @@ LINE_RULES = {
              )]
          if hasattr(self.args, "torch_dtype") and self.args.torch_dtype in ["float16", "bfloat16"]:"""],
     "mindspeed_llm/tasks/checkpoint/saver.py": [
-        """import logging as logger
-+import numpy as np
- import torch
- from megatron.training.checkpointing import save_checkpoint
- from megatron.core import mpu""",
+        """+import numpy as np
+ import torch""",
         """         val = queue.get()
 +        if isinstance(val, dict):
 +            for k, v in val.items():
@@ -322,10 +310,6 @@ LINE_RULES = {
          return {f"_{key.lower()}": self._store.get(f"_{key.lower()}", None) for key in WorkerMeta.keys}
 
 +from mindspeed_llm.tasks.posttrain.rlxf.single_controller.base.register_center.ray import create_worker_group_register_center""",
-"""         if disable_worker_init:
-             return instance
--        rank = os.environ.get("RANK", None)
-+        rank = os.environ.get("MS_ROLE", None)""",
 """         if disable_worker_init:
              return instance
  
@@ -505,9 +489,7 @@ LINE_RULES = {
 +    tmp_mask = (pg_losses - pg_losses2) > 0
 +    tmp_mask = tmp_mask.to(torch.int)
 +    tmp = pg_losses * tmp_mask + pg_losses2 * (1 - tmp_mask)
-+    pg_loss = F.masked_mean(tmp, eos_mask)""",
-"""-    use_verifier_mask = batch.batch["categories"].squeeze().bool()
-+    use_verifier_mask = batch.batch["categories"].squeeze(None).bool()""","""     reward = reward.reshape(-1, n_sample_batch)
++    pg_loss = F.masked_mean(tmp, eos_mask)""","""     reward = reward.reshape(-1, n_sample_batch)
 -    reward = (reward - reward.mean(dim=1, keepdim=True)) / (reward.std(dim=1, keepdim=True) + 1e-8)
 +
 +    reward_np = reward.cpu().numpy()
@@ -598,14 +580,7 @@ LINE_RULES = {
              output = DataProto.from_dict(tensors={'ref_log_prob': output})
 -            output = output.to('cpu')
          torch.cuda.empty_cache()
-         return output""",
-        """-        data = data.to(next(self.model[0].parameters()).device)
-                 with torch.no_grad():""",
-        """         - The communication shape is (total_nnz_pad_to_sp // tp_size, 1, hidden_size) if sequence parallel is enabled
-                 \"\"\"
-                 args = get_args()
-        -        data.batch['attention_mask'] = data.batch['attention_mask'].to(bool)""",
-    ],
+         return output"""],
     "mindspeed_llm/tasks/posttrain/rlxf/workers/reward.py":[
         """     @register(dispatch_mode=Dispatch.MEGATRON_COMPUTE_PROTO)
      def compute_rm_score(self, data: DataProto):
@@ -804,69 +779,11 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
     "mindspeed_llm/core/tensor_parallel/layers.py": ["""-        weight = torch.split(weight, weight.shape[0] // args_.output_layer_slice_num, dim=0)
 +        weight = torch.chunk(weight, args_.output_layer_slice_num, 0)""", """+    wrapper = staticmethod(wrapper)
      return wrapper"""],
-"mindspeed_llm/core/transformer/moe/router.py":["""-    args = get_args()
-     if (
--        not args.moe_tp_extend_ep
--        and self.config.tensor_model_parallel_size > 1
-+        self.config.tensor_model_parallel_size > 1"""],
-    "mindspeed_llm/core/models/gpt/gpt_model.py":["""     if args.dim_model_base is not None:
-         hidden_states = hidden_states / (args.hidden_size / args.dim_model_base)
--    logits, _ = self.output_layer(hidden_states, weight=output_weight)
--    # new add to scale logits
--    if args.output_multiplier_scale:
--        logits = logits * args.output_multiplier_scale
-+    # logits, _ = self.output_layer(hidden_states, weight=output_weight)
-+    # # new add to scale logits
-+    # if args.output_multiplier_scale:
-+    #     logits = logits * args.output_multiplier_scale
- 
--    if args.output_logit_softcapping:
--        logits = logits / args.output_logit_softcapping
--        logits = torch.tanh(logits)
--        logits = logits * args.output_logit_softcapping
-+    # if args.output_logit_softcapping:
-+    #     logits = logits / args.output_logit_softcapping
-+    #     logits = torch.tanh(logits)
-+    #     logits = logits * args.output_logit_softcapping
- 
--    if labels[0] is None:
--        # [s b h] => [b s h]
--        return logits.transpose(0, 1).contiguous()
-+    # if labels[0] is None:
-+    #     # [s b h] => [b s h]
-+    #     return logits.transpose(0, 1).contiguous()""",
-"""         if not self.share_embeddings_and_output_weights and self.share_mtp_embedding_and_output_weight:
+    "mindspeed_llm/core/models/gpt/gpt_model.py":["""         if not self.share_embeddings_and_output_weights and self.share_mtp_embedding_and_output_weight:
 -            output_weight = self.output_layer.weight.detach()
 +            # output_weight = self.output_layer.weight.detach()
 +            from mindspore import ops
-+            output_weight = ops.stop_gradient(self.output_layer.weight)""",
-"""     for idx in range(1, len(slides)):
--        slides[idx] = regenerate_position_ids(slides[idx], idx)
--    return slides
--
--
--def regenerate_position_ids(tensor, offset):
--    if tensor is None:
--        return
--    tensor = tensor.clone()
--    for i in range(tensor.size(0)):
--        row = tensor[i]
--        zero_mask = (row == 0)
--        if zero_mask.any():
--            first_zero_idx = torch.argmax(zero_mask.int()).item()
--            tensor[i, :first_zero_idx] = torch.arange(first_zero_idx)
--        else:
--            tensor = tensor - offset
--    return tensor
-+        for i in range(slides[idx].size(0)):
-+            row = slides[idx][i]
-+            zero_mask = (row == 0)
-+            if zero_mask.any():
-+                first_zero_idx = torch.argmax(zero_mask.int()).item()
-+                slides[idx][i, :first_zero_idx] = torch.arange(first_zero_idx)
-+            else:
-+                slides[idx] = slides[idx] - idx
-+    return slides"""],
++            output_weight = ops.stop_gradient(self.output_layer.weight)"""],
     "pretrain_gpt.py": [
         """     return batch.values()
  
@@ -1216,17 +1133,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 -            grad_acc = param_tmp.grad_fn.next_functions[0][0]
 -            grad_acc.register_hook(self._make_param_hook(param, self.param_to_buffer))
 -            self.grad_accs.append(grad_acc)
-+            param.register_hook(self._make_param_hook(param, self.param_to_buffer))""",
-        """-        def param_hook(*unused):
-+        def param_hook(grad):""",
-        """-                    param.main_grad.add_(*unused)
-+                    param.main_grad.add_(grad)""",
-        """                 if self.ddp_config.overlap_grad_reduce:
-                     param_to_buffer[param].register_grad_ready(param)
-+                if hasattr(param, "main_grad"):
-+                    return param.main_grad
-+                return param.grad"""
-        ],
++            param.register_hook(self._make_param_hook(param, self.param_to_buffer))"""],
         "core/transformer/moe/experts.py":[
         """-    return torch.zeros(zeros_shape, dtype=input_.dtype, layout=input_.layout, device=input_.device)
 +    return torch.zeros(zeros_shape, dtype=input_.dtype, device=input_.device)""","""     else:
@@ -1347,12 +1254,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 -    return moe_token_unpermute_ops.npu_moe_token_unpermute(
 -        permuted_tokens, sorted_indices, probs, padded_mode, restore_shape)
 +    return ops.moe_token_unpermute(permuted_tokens, sorted_indices, probs, padded_mode, restore_shape)"""],
-        "core/tensor_parallel/cross_entropy.py":["""     ) -> Tuple[torch.Tensor, torch.Tensor]:
- 
-         vocab_parallel_logits_fp32 = vocab_parallel_logits.float()
--        vocab_parallel_logits.untyped_storage().resize_(0)
-+        del vocab_parallel_logits
-+        # vocab_parallel_logits.untyped_storage().resize_(0)"""],
 "core/transformer/moe/comm_utils.py":[
 """ import einops
 +import mindspore
