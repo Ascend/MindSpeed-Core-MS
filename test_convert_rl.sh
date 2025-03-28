@@ -52,7 +52,6 @@ echo "..............................................done Megatron-LM"
 rm -rf msadapter
 git clone https://gitee.com/mindspore/msadapter.git
 cd msadapter
-git checkout f0ba1ec1c231135e668f502f13d76f1f1a37e6cb
 if [ $? -ne 0 ]; then
     echo "Error: git clone msadapter"
     exit 1
@@ -115,5 +114,5 @@ echo "..............................................done code_convert"
 
 #install after code_convert
 cd vllm-ascend
-pip install -e . --no-deps vllm-0.7.3
+pip install -e . --no-deps
 cd ..
