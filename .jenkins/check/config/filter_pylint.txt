@@ -1,2 +1,3 @@
 "mindspeed-core-ms/msadaptor/"
 "mindspeed-core-ms/tools"
+"mindspeed-core-ms/tests/st/net"

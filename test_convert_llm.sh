@@ -9,6 +9,7 @@ if [ $? -ne 0 ]; then
 fi
 cd MindSpeed-LLM
 git checkout 84a34ee5e10da1ef5beff0787e94605aa961d3ad
+rm -rf tests
 cd ..
 echo "------------------------------------done MindSpeed-LLM"
 
@@ -21,6 +22,7 @@ if [ $? -ne 0 ]; then
 fi
 cd MindSpeed
 git checkout 0dfa0035ec54d9a74b2f6ee2867367df897299df
+rm -rf tests_extend
 cd ..
 echo "...............................................done MindSpeed"
 
@@ -33,6 +35,7 @@ if [ $? -ne 0 ]; then
 fi
 cd Megatron-LM
 git checkout core_r0.8.0
+rm -rf tests
 cd ..
 echo "..............................................done Megatron-LM"
 
@@ -43,6 +46,9 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone msadapter"
     exit 1
 fi
+cd msadapter
+rm -rf tests
+cd ..
 echo "..............................................done msadapter"
 
 #transformers
@@ -55,6 +61,7 @@ fi
 mv huggingface_transformers transformers
 cd transformers
 git apply ../tools/rules/transformers.diff
+rm -rf tests
 cd ..
 echo "..............................................done apply transformers"
 
