@@ -112,7 +112,3 @@ python3 tools/transfer.py \
 
 echo "..............................................done code_convert"
 
-#install after code_convert
-cd vllm-ascend
-pip install -e . --no-deps
-cd ..

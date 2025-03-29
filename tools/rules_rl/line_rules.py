@@ -148,133 +148,8 @@ LINE_RULES = {
 -                                       pin_memory=True)
 +                                       pin_memory=False)"""
     ],
-    "mindspeed_llm/tasks/checkpoint/loader_hf.py": [
-        """     def queue_put(name, msg):
-         logger.info(f"sending {name}")
-+        for k, v in msg.items():
-+            if isinstance(v, torch.Tensor):
-+                msg[k] = v.asnumpy()
-         msg["name"] = name
-         queue.put(msg)"""
-    ],
+
     "mindspeed_llm/tasks/checkpoint/models.py": [
-        """     return f"shape: {shape} mean_val: {mean_val} min_val: {min_val} max_val: {max_val}"
- 
- 
-+class FakesubModule():
-+    def __init__(self, module_name, weight_dict):
-+        self.weight = weight_dict.get(f"{module_name}.weight", )
-+        self.bias = weight_dict.get(f"{module_name}.bias")
-+
-+
-+class FakeModule():
-+    def __init__(self, weight_dicts, module_mapping):
-+        self.module_keys = set(map(lambda x: ".".join(x.split(".")[:-1]),weight_dicts.keys()))
-+        for module_name in self.module_keys:
-+            weight_dict = dict(filter(lambda x : module_name in x[0], weight_dicts.items()))
-+            setattr(self, module_name, self.assemodule(module_name, weight_dict))
-+
-+    def assemodule(self, module_name, weight_dict):
-+        return FakesubModule(module_name, weight_dict)
-+    
-+    def to(self, model_type):
-+        return self
-+
-+""",
-        """         self.layers_self_attention_linear_qkv_caches = {"layer_idx": -1, "weight": None, "bias": None}
-+        self.__register_functions()
- 
-     def initialize_args(self):
-         # Read huggingface args.""","""         self.args.add_dense_bias = self.args_cmd.add_dense_bias
-         self.args.post_norm = self.args_cmd.post_norm
- 
-+    def __register_functions(self):
-+        self.get_module_mapping()
-+
-+        def _get_obj(self, value, **kwargs):
-+            self.update_kwargs_idx(**kwargs)
-+            obj = self.get_model_item(**kwargs)
-+            if "layer_idx" in value:
-+                attr_idx = self.kwargs_idx["layer_idx"]
-+                value = value.replace("[layer_idx]", f".{attr_idx}")
-+            return getattr(obj, value, None)
-+
-+        def _func_generator_get_module(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs)
-+            return func
-+
-+        def _func_generator_get_weight(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs).weight.data
-+            return func
-+
-+        def _func_generator_get_bias(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs).bias.data
-+            return func
-+
-+        def _func_generator_set_weight(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs).weight.data.copy_(kwargs.get('data'))
-+            return func
-+
-+        def _func_generator_set_module(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs).data.copy_(kwargs.get('data'))
-+            return func
-+
-+        def _func_generator_set_bias(value):
-+            def func(self, **kwargs):
-+                return _get_obj(self, value, **kwargs).bias.data.copy_(kwargs.get('data'))
-+            return func
-+
-+        def _func_generator_has_module(value):
-+            def func(self, **kwargs):
-+                # print("self", self)
-+                obj = _get_obj(self, value, **kwargs)
-+                return True if obj else False
-+            return func
-+        
-+        def _func_generator_has_bias(value):
-+            def func(self, **kwargs):
-+                bias = getattr(_get_obj(self, value, **kwargs), 'bias', None)
-+                return bias is not None
-+            return func
-+
-+        if self.module_mapping:
-+            for key, value in self.module_mapping.items():
-+                setattr(self, "get_" + key + "_module", _func_generator_get_module(value).__get__(self, ModelBase))
-+                setattr(self, "set_" + key + "_module", _func_generator_set_module(value).__get__(self, ModelBase))
-+                setattr(self, "get_" + key + "_weight", _func_generator_get_weight(value).__get__(self, ModelBase))
-+                setattr(self, "get_" + key + "_bias", _func_generator_get_bias(value).__get__(self, ModelBase))
-+                setattr(self, "set_" + key + "_weight", _func_generator_set_weight(value).__get__(self, ModelBase))
-+                setattr(self, "set_" + key + "_bias", _func_generator_set_bias(value).__get__(self, ModelBase))
-+                setattr(self, "has_" + key + "_module", _func_generator_has_module(value).__get__(self, ModelBase))
-+                setattr(self, "has_" + key + "_bias", _func_generator_has_bias(value).__get__(self, ModelBase))
-+
-     def get_modules_from_pretrained(self, device_map="cpu", trust_remote_code=True):
-         # Load Huggingface model.
-         if self.args_cmd.save_model_type == "hf":
-             load_dir = self.args_cmd.save_dir
-         else:
-             load_dir = self.args_cmd.load_dir
--        self.module = [AutoModelForCausalLM.from_pretrained(load_dir, device_map=device_map, trust_remote_code=trust_remote_code, local_files_only=True)]
--        if hasattr(self.args, "torch_dtype") and self.args.torch_dtype in ["float16", "bfloat16"]:
-+        import glob
-+        from torch.serialization import safe_load_file
-+        hf_model_dict = {}
-+        checkpoint_files_path = load_dir + "*.safetensors"
-+        checkpoint_files = glob.glob(checkpoint_files_path)
-+        for checkpoint_file in checkpoint_files:
-+            checkpoint = safe_load_file(checkpoint_file)
-+            hf_model_dict.update(checkpoint)
-+        self.module = [FakeModule(hf_model_dict, self.module_mapping)]
-+        if hasattr(self.args, "torch_dtype") and self.args.torch_dtype in ["float16", "bfloat16"]: #不一样
-             self.module[0] = self.module[0].to(eval(f'torch.{self.args.torch_dtype}'))
-""","""        self.layers_self_attention_linear_qkv_caches = {"layer_idx": -1, "weight": None, "bias": None}
--        self.__register_functions()
-+        # self.__register_functions()""",
 """-                return _get_dst_obj(self, value, **kwargs).weight.data.copy_(kwargs.get('data'))
 +                set_tensor = _get_dst_obj(self, value, **kwargs)
 +                set_tensor.weight.data = kwargs.get('data')
@@ -286,21 +161,6 @@ LINE_RULES = {
 """            self.module = [AutoModelForCausalLM.from_pretrained(
 -                load_dir, device_map=device_map, trust_remote_code=trust_remote_code, local_files_only=True
 +                load_dir, trust_remote_code=trust_remote_code, local_files_only=True, low_cpu_mem_usage=False"""
-    ],
-    "mindspeed_llm/tasks/checkpoint/saver.py": [
-        """import logging as logger
-+import numpy as np
- import torch
- from megatron.training.checkpointing import save_checkpoint
- from megatron.core import mpu""",
-        """         val = queue.get()
-+        if isinstance(val, dict):
-+            for k, v in val.items():
-+                if isinstance(v, np.ndarray):
-+                    val[k] = torch.Tensor(v)
-         if val == "exit":
-             logger.error("Loader exited, exiting saver")
-             exit(1)"""
     ],
     "mindspeed_llm/tasks/megatron_adaptor.py": [
         """         # For torch >= 2.2.0
@@ -386,13 +246,6 @@ LINE_RULES = {
 -                            
 +                        'megatron.core.transformer.moe.token_dispatcher.MoEAlltoAllTokenDispatcher.token_permutation',
 +                        alltoall_token_permutation)""",
-        """-        from mindspeed.core.tensor_parallel.cross_entropy import vocab_parallel_cross_entropy_forward""",
-        """-        MegatronAdaptation.register(
--            'megatron.core.tensor_parallel.cross_entropy._VocabParallelCrossEntropy.forward',
--            vocab_parallel_cross_entropy_forward)""",
-"""     def patch_core_transformers(self):
-         import megatron.core
--, assert_grouped_gemm_is_available""",
 """        MegatronAdaptation.register('megatron.core.transformer.moe.grouped_gemm_util.assert_grouped_gemm_is_available',
                                     assert_grouped_gemm_is_available)
 +        MegatronAdaptation.register('megatron.core.transformer.moe.grouped_gemm_util.ops', Ops)
@@ -663,8 +516,7 @@ LINE_RULES = {
 +    tmp_mask = tmp_mask.to(torch.int)
 +    tmp = pg_losses * tmp_mask + pg_losses2 * (1 - tmp_mask)
 +    pg_loss = F.masked_mean(tmp, eos_mask)""",
-"""-    use_verifier_mask = batch.batch["categories"].squeeze().bool()
-+    use_verifier_mask = batch.batch["categories"].squeeze(None).bool()""","""     reward = reward.reshape(-1, n_sample_batch)
+"""     reward = reward.reshape(-1, n_sample_batch)
 -    reward = (reward - reward.mean(dim=1, keepdim=True)) / (reward.std(dim=1, keepdim=True) + 1e-8)
 +
 +    reward_np = reward.cpu().numpy()
@@ -697,18 +549,12 @@ LINE_RULES = {
 +            new_batch_size = sum([int(batch.batch_size[0]) for batch in batch_lst])
 +            new_batch = TensorDict(res_dict, batch_size=new_batch_size)""",
     ],
-    "mindspeed_llm/tasks/posttrain/rlxf/workers/actor_train_infer.py":["""-    context_lengths = [get_context_length(val, pad_id, max_length.item(), padding_side) for val in data]
-+    context_lengths = [get_context_length(val, pad_id, max_length, padding_side) for val in data]""",
+    "mindspeed_llm/tasks/posttrain/rlxf/workers/actor_train_infer.py":[
 """-                    additional_val = batch.get(additional_key).view(-1).cpu().numpy().tolist()
 +                    additional_val = batch.get(additional_key).view(-1).asnumpy().tolist()""",
 """                tokens = batch["input_ids"]
 -                tokens_list = tokens.view(-1).cpu().numpy().tolist()
 +                tokens_list = tokens.view(-1).asnumpy().tolist()""",
-"""-                categories = batch.get('categories', torch.tensor([0])).cpu().numpy().tolist()
-+                categories = batch.get('categories', torch.tensor([0])).asnumpy().tolist()
-""","""
--                    labels = labels.view(-1).cpu().numpy().tolist()[::-1]
-+                    labels = labels.view(-1).asnumpy().tolist()[::-1]""",
         """     def update_actor(self, data):
          device = next(self.node.actor.model[0].parameters()).device
 -        data = data.to(device)""",
@@ -741,11 +587,7 @@ LINE_RULES = {
          torch.cuda.empty_cache()
 -
 +        self.args.use_kv_cache = True
-         return metrics""","""     def save_checkpoint(self, iteration):
--        import os
--        print(">>>>>>>Saving checkpoint on worker: " + os.environ['VC_TASK_INDEX'])
-+        # import os
-+        # print(">>>>>>>Saving checkpoint on worker: " + os.environ['VC_TASK_INDEX'])""","""         # We make recompute_old_log_prob by default here.
+         return metrics""","""         # We make recompute_old_log_prob by default here.
 -        data = data.to(next(self.model[0].parameters()).device)
 +        # data = data.to(next(self.model[0].parameters()).device)""","""-        data.batch['attention_mask'] = data.batch['attention_mask'].to(bool)
 +        data.batch['attention_mask'] = data.batch['attention_mask'].to(torch.bool)"""
@@ -889,10 +731,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
     }
     options = {'runtime_env': {'env_vars': env_vars}, 'name': name}
     return WorkerGroupScheduler.options(**options).remote()"""
-    ],"mindspeed_llm/training/arguments.py":["""     group.add_argument('--dataset-with-labels', 
-                        action='store_true',
--                       default=False, 
-+                       default=True, """,
+    ],"mindspeed_llm/training/arguments.py":[
 """-    if not args.moe_tp_extend_ep and args.moe_alltoall_overlap_comm and args.tensor_model_parallel_size > 1:
 -        raise AssertionError(
 -            '`--moe-alltoall-overlap-comm` do not support tp for now. only support with moe_tp_extend_ep when tp > 1.')
@@ -906,37 +745,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +        slices.append(tensor[tuple(slice_obj)].clone())"""],
     "mindspeed_llm/core/tensor_parallel/layers.py":["""-        weight = torch.split(weight, weight.shape[0] // args_.output_layer_slice_num, dim=0)
 +        weight = torch.chunk(weight, args_.output_layer_slice_num, 0)"""],
-"mindspeed_llm/core/transformer/moe/router.py":["""-    args = get_args()
-     if (
--        not args.moe_tp_extend_ep
--        and self.config.tensor_model_parallel_size > 1
-+        self.config.tensor_model_parallel_size > 1"""],
-    "mindspeed_llm/core/models/gpt/gpt_model.py":["""     if args.dim_model_base is not None:
-         hidden_states = hidden_states / (args.hidden_size / args.dim_model_base)
--    logits, _ = self.output_layer(hidden_states, weight=output_weight)
--    # new add to scale logits
--    if args.output_multiplier_scale:
--        logits = logits * args.output_multiplier_scale
-+    # logits, _ = self.output_layer(hidden_states, weight=output_weight)
-+    # # new add to scale logits
-+    # if args.output_multiplier_scale:
-+    #     logits = logits * args.output_multiplier_scale
- 
--    if args.output_logit_softcapping:
--        logits = logits / args.output_logit_softcapping
--        logits = torch.tanh(logits)
--        logits = logits * args.output_logit_softcapping
-+    # if args.output_logit_softcapping:
-+    #     logits = logits / args.output_logit_softcapping
-+    #     logits = torch.tanh(logits)
-+    #     logits = logits * args.output_logit_softcapping
- 
--    if labels[0] is None:
--        # [s b h] => [b s h]
--        return logits.transpose(0, 1).contiguous()
-+    # if labels[0] is None:
-+    #     # [s b h] => [b s h]
-+    #     return logits.transpose(0, 1).contiguous()""",
+    "mindspeed_llm/core/models/gpt/gpt_model.py":[
 """         if not self.share_embeddings_and_output_weights and self.share_mtp_embedding_and_output_weight:
 -            output_weight = self.output_layer.weight.detach()
 +            # output_weight = self.output_layer.weight.detach()
@@ -956,33 +765,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +
 +    if labels[0] is None:
 +        # [s b h] => [b s h]
-+        return logits.transpose(0, 1).contiguous()""","""     for idx in range(1, len(slides)):
--        slides[idx] = regenerate_position_ids(slides[idx], idx)
--    return slides
--
--
--def regenerate_position_ids(tensor, offset):
--    if tensor is None:
--        return
--    tensor = tensor.clone()
--    for i in range(tensor.size(0)):
--        row = tensor[i]
--        zero_mask = (row == 0)
--        if zero_mask.any():
--            first_zero_idx = torch.argmax(zero_mask.int()).item()
--            tensor[i, :first_zero_idx] = torch.arange(first_zero_idx)
--        else:
--            tensor = tensor - offset
--    return tensor
-+        for i in range(slides[idx].size(0)):
-+            row = slides[idx][i]
-+            zero_mask = (row == 0)
-+            if zero_mask.any():
-+                first_zero_idx = torch.argmax(zero_mask.int()).item()
-+                slides[idx][i, :first_zero_idx] = torch.arange(first_zero_idx)
-+            else:
-+                slides[idx] = slides[idx] - idx
-+    return slides"""],
++        return logits.transpose(0, 1).contiguous()"""],
     "pretrain_gpt.py": [
         """     return batch.values()
  
@@ -1737,14 +1520,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
  
          ref_approx_kl = ref_log_prob - log_prob"""
         ],
-        "mindspeed_rl/models/rollout/vllm_engine.py": [
-""" import ray
- import torch
- import torch.distributed
--from torch.nn.utils.rnn import pad_sequence
-+from torch.nn.utils.rnn_beta import pad_sequence
- from transformers import AutoTokenizer"""
-        ],
         "mindspeed_rl/trainer/base.py": [
 """ from typing import List, Union
  import torch
@@ -1777,14 +1552,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
              batch = next(data_iters)"""
         ],
         "mindspeed_rl/trainer/utils/transfer_dock.py": [
-""" import torch
- from torch import Tensor
- from torch.nn import functional as F
--from torch.nn.utils.rnn import pad_sequence
-+from torch.nn.utils.rnn_beta import pad_sequence
- 
- 
- class TransferDock(ABC):""",
 """             torch.stack([self.experience_data_status[single_column] == 1 for single_column in experience_columns]),
              dim=0,
          )
@@ -1878,14 +1645,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
                  fmt_msg = fmt_msg[:-2]
              else:
                  fmt_msg = f\"{fmt_msg} {str(msg)}\"""",
-        ],
-        "mindspeed_rl/utils/pad_process.py": [
-""" from torch import Tensor
- 
- import torch
--from torch.nn.utils.rnn import pad_sequence
-+from torch.nn.utils.rnn_beta import pad_sequence
- from torch.nn import functional as F"""
         ],
         "mindspeed_rl/workers/base_worker.py": [
 """ 
@@ -2179,23 +1938,7 @@ def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port
 +        'vllm.general_plugins':
 +        ["ascend_enhanced_model = vllm_ascend:register_model"]
 +    })"""],
-        "vllm_ascend/__init__.py": [
-""" 
- def register():
-     \"\"\"Register the NPU platform.\"\"\"
--    # To ensure that the module is correctly replaced, add it at the beginning
--    import vllm_ascend.patch_module  # noqa: F401
-     return \"vllm_ascend.platform.NPUPlatform\"
--
--
--def register_model():
--    from .models import register_model
--    register_model()"""
-        ],
         "vllm_ascend/attention.py": [
-"""if TYPE_CHECKING:
--    from vllm_ascend.worker.model_runner import ModelInputForNPUBuilder
-+    from vllm_ascend.model_runner import ModelInputForNPUBuilder""",
 """         mask_value = torch.finfo(torch.float32).min
      else:
          mask_value = 1
@@ -2208,14 +1951,6 @@ def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port
          if self.attn_mask_cache.device != device:
 -            self.attn_mask_cache = self.attn_mask_cache.to(device)
 +            self.attn_mask_cache = self.attn_mask_cache#.to(device)""",
-"""         num_kv_heads: int,
-         head_size: int,
-     ) -> Tuple[int, ...]:
--        return (2, num_blocks, block_size, num_kv_heads, head_size)
-+        return (2, num_blocks, block_size, num_kv_heads * head_size)
- 
-     @staticmethod
-     def swap_blocks(""",
 """         src_indices = src_to_dst[:, 0]
          dst_indices = src_to_dst[:, 1]
  
@@ -2359,23 +2094,6 @@ def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port
 +            # attn_output = torch_npu.npu_transpose(attn_output_t, (1, 0, 2),
 +            #                                       require_contiguous=True)
 +            attn_output = torch.transpose(attn_output_t, 0, 1)"""],
-        "vllm_ascend/communicator.py": [
-""" from typing import Optional
- 
- import torch
-+import torch.distributed as dist
- from torch.distributed import ProcessGroup
- from vllm.distributed.device_communicators.base_device_communicator import \\
-     DeviceCommunicatorBase""",
-"""                  device_group: Optional[ProcessGroup] = None,
-                  unique_name: str = \"\"):
-         super().__init__(cpu_group, device, device_group, unique_name)
--        # init device according to rank
--        self.device = torch.npu.current_device()
-+        # init device according to local rank
-+        local_rank = dist.get_rank(device_group)
-+        self.device = torch.device(f\"npu:{local_rank}\")"""
-        ],
         "vllm_ascend/models/__init__.py": [
 """REMOVE"""
         ],
@@ -2429,63 +2147,6 @@ def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port
 +       scales=routing_weights,
 +       expanded_src_to_dst_row=expanded_row_idx,
 +       export_for_source_row=topk_ids)""",
-"""         original_scores = scores
-         scores = scores + e_score_correction_bias.unsqueeze(0)
- 
--    topk_group = 0 if topk_group is None else topk_group
--    num_expert_group = 0 if num_expert_group is None else num_expert_group
--
--    # TODO: Replace this piece of code to npu_group_topk when CANN and NNAL version is update
--    num_token = scores.shape[0]
--    group_scores = scores.view(num_token, num_expert_group,
--                               -1).max(dim=-1).values
--    group_idx = torch.topk(group_scores.to(torch.float32),
--                           k=topk_group,
--                           dim=-1,
--                           sorted=False)[1]
--    group_mask = torch.zeros_like(group_scores)
--    group_mask.scatter_(1, group_idx, 1)
--    score_mask = group_mask.unsqueeze(-1).expand(
--        num_token, num_expert_group,
--        scores.shape[-1] // num_expert_group).reshape(num_token, -1)
--    scores = scores.masked_fill(~score_mask.bool(), 0.0)
-+    torch_npu.npu_group_topk(input=scores,
-+                             out=scores,
-+                             group_num=num_expert_group,
-+                             k=topk_group)
- 
-     if e_score_correction_bias is not None:
-         topk_ids = torch.topk(scores, k=topk, dim=-1, sorted=False)[1]""",
-"""     if renormalize:
-         topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
- 
--    return topk_weights, topk_ids.to(torch.int32)
--
-+    return topk_weights.to(torch.float32), topk_ids.to(torch.int32)""",
-"""     down_out_list = torch.cat(down_out_list, dim=0)
-     # TODO: Reorder device memory 2 times here, replace the current
-     # implementation here when suitable operators become available.
-+    routing_weights = topk_weights.to(down_out_list.dtype)
-+    _, h_skip1 = down_out_list.shape
-+    N_skip1, _ = topk_ids.shape
-+    skip1_val = torch.zeros(N_skip1, h_skip1, dtype=down_out_list.dtype)
-+    bias_val = torch.zeros(E, h_skip1, dtype=down_out_list.dtype)""",
-"""     hidden_states = torch_npu.npu_moe_finalize_routing(
--        down_out_list,
--        skip1=None,
--        skip2=None,
--        bias=None,
--        scales=topk_weights,
--        expanded_src_to_dst_row=expanded_row_idx,
--        export_for_source_row=topk_ids)
-+       down_out_list,
-+       skip1=skip1_val,
-+       skip2=None,
-+       bias=bias_val,
-+       scales=routing_weights,
-+       expanded_src_to_dst_row=expanded_row_idx,
-+       export_for_source_row=topk_ids)
-""",
         ],
         "vllm_ascend/ops/layernorm.py": [
 """     import torch_npu
@@ -2500,15 +2161,6 @@ def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port
          return x, residual"""
         ],
         "vllm_ascend/ops/rotary_embedding.py": [
-""" from typing import Optional, Tuple
- 
- import torch
--from vllm.model_executor.layers.rotary_embedding import (
--    DeepseekScalingRotaryEmbedding, RotaryEmbedding)
-+from vllm.model_executor.layers.rotary_embedding import RotaryEmbedding
- 
- 
- def rope_forward_oot(""",
 """-    if self.cos_sin_cache.device != query.device:
 -        self.cos_sin_cache = self.cos_sin_cache.to(query.device)
 -    if self.cos_sin_cache.dtype != query.dtype:
@@ -2552,231 +2204,6 @@ def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port
         ],
         "vllm_ascend/patch_module.py": [
 """REMOVE"""
-        ],
-        "vllm_ascend/platform.py": [
-""" 
-     @classmethod
-     def check_and_update_config(cls, vllm_config: VllmConfig) -> None:
--        # RayWorkerWrapper monkey patch when setup
--        from vllm_ascend.patch import ray_patch  # noqa: F401
--
-         parallel_config = vllm_config.parallel_config
-         if parallel_config.worker_cls == \"auto\":
--            if vllm_config.speculative_config:
--                parallel_config.worker_cls = \"vllm.spec_decode.spec_decode_worker.create_spec_worker\"
--                parallel_config.sd_worker_cls = \"vllm_ascend.worker.worker.NPUWorker\"
--            else:
--                parallel_config.worker_cls = \"vllm_ascend.worker.worker.NPUWorker\"
-+            parallel_config.worker_cls = \"vllm_ascend.worker.NPUWorker\"
-         cache_config = vllm_config.cache_config
-         if cache_config and cache_config.block_size is None:
-             # TODO: Set block_size to 128 will lead unexpected accuracy issue in mla case.  Please set block_size to 128 back once the problem is fixed.
-             cache_config.block_size = 16
--        if vllm_config.quant_config is not None and \\
--            'fa_quant_type' in vllm_config.quant_config.quant_description.keys():
--            # Ascend attention quant uses int8 dtype.
--            cache_config.cache_dtype = 'int8'
- 
-     @classmethod
-     def get_attn_backend_cls(cls, selected_backend, head_size, dtype,"""
-        ],
-        "vllm_ascend/quantization/quant_config.py": [
-""" from vllm.model_executor.layers.quantization.base_config import (
-     QuantizationConfig, QuantizeMethodBase)
- from vllm.model_executor.layers.quantization.kv_cache import BaseKVCacheMethod
--from vllm.model_executor.parameter import (ChannelQuantScaleParameter,
--                                           ModelWeightParameter,
--                                           PerTensorScaleParameter)
-+from vllm.model_executor.parameter import (BasevLLMParameter,
-+                                           ChannelQuantScaleParameter,
-+                                           ModelWeightParameter)
- 
- from .quantizer import AscendQuantizer""",
-""" 
- @register_quantization_config(\"ascend\")
- class AscendQuantConfig(QuantizationConfig):
--    \"\"\"Config class for Ascend
--    
--    This class is a general class that parse quantization configs
--    that are supported on ascend hardware.
--    \"\"\"
-+    \"\"\"Config class for Ascend\"\"\"
- 
-     def __init__(self, quant_config: Dict[str, Any]):
-         self.quant_description = quant_config""",
-"""             if self.is_layer_skipped_ascend(prefix,
-                                             self.packed_modules_mapping):
-                 return UnquantizedLinearMethod()
--            return AscendLinearMethod(self, prefix)
-+            return AscendLinearMethod(self)
-         if isinstance(layer, Attention) and \\
-             'fa_quant_type' in self.quant_description.keys():
--            return AscendKVCacheMethod(self, prefix)
-+            return AscendQKVQuantAttentionMethod(self)
-         return None
- 
-     def is_layer_skipped_ascend(""",
-""" class AscendLinearMethod(LinearMethodBase):
-     \"\"\"Linear method for Ascend quantization.
- 
--    This class calls AscendQuantizer to search a specific quantization
--    implementations supported on ascend hardware for linear methods.
--
-     Args:
-         quant_config: The Ascend quantization config.
-     \"\"\"
- 
--    def __init__(self, quant_config: AscendQuantConfig, prefix: str) -> None:
-+    def __init__(self, quant_config: AscendQuantConfig) -> None:
-         self.quantizer = AscendQuantizer.get_quantizer(
--            quant_config.quant_description, prefix)
-+            quant_config.quant_description)
-         self.quant_method = self.quantizer.build_linear_method()
- 
-     def create_weights(""",
-"""         params_dtype: torch.dtype,
-         **extra_weight_attrs,
-     ) -> None:
-+        del output_size
-         output_size_per_partition = sum(output_partition_sizes)
-         weight_loader = extra_weight_attrs.get(\"weight_loader\")
- 
--        weight_dict = self.quant_method.get_weight(input_size_per_partition,
-+        weights = self.quant_method.create_weights(input_size_per_partition,
-                                                    output_size_per_partition,
-                                                    params_dtype)
--        for weight_name, weight_param in weight_dict.items():
-+
-+        weight_name = self.quant_method.get_weight()
-+        if weight_name in weights.keys():
-             layer.register_parameter(
-                 weight_name,
--                ModelWeightParameter(data=weight_param,
-+                ModelWeightParameter(data=weights[weight_name].transpose(0, 1),
-                                      input_dim=1,
-                                      output_dim=0,
-                                      weight_loader=weight_loader))
--
--        pertensor_dict = self.quant_method.get_pertensor_param(params_dtype)
--        for pertensor_name, pertensor_param in pertensor_dict.items():
--            param = PerTensorScaleParameter(data=pertensor_param,
--                                            weight_loader=weight_loader)
--            # disable warning
--            param.ignore_warning = True
--            layer.register_parameter(pertensor_name, param)
--
--        perchannel_dict = self.quant_method.get_perchannel_param(
--            output_size_per_partition, params_dtype)
--        for perchannel_name, perchannel_param in perchannel_dict.items():
--            layer.register_parameter(
--                perchannel_name,
--                ChannelQuantScaleParameter(data=perchannel_param,
--                                           output_dim=0,
--                                           weight_loader=weight_loader))
-+        else:
-+            raise ValueError(
-+                f\"{weight_name} is nor registered. Please check your linear quant method implementation.\"
-+            )
-+
-+        pertensor_names = self.quant_method.get_pertensor_param()
-+        for pertensor_name in pertensor_names:
-+            if pertensor_name in weights.keys():
-+                param = BasevLLMParameter(data=weights[pertensor_name],
-+                                          weight_loader=weight_loader)
-+                # disable warning
-+                param.ignore_warning = True
-+                layer.register_parameter(pertensor_name, param)
-+            else:
-+                raise ValueError(
-+                    f\"{pertensor_name} is nor registered. Please check your linear quant method implementation.\"
-+                )
-+
-+        perchannel_names = self.quant_method.get_perchannel_param()
-+        for perchannel_name in perchannel_names:
-+            if perchannel_name in weights.keys():
-+                layer.register_parameter(
-+                    perchannel_name,
-+                    ChannelQuantScaleParameter(data=weights[perchannel_name],
-+                                               output_dim=0,
-+                                               weight_loader=weight_loader))
-+            else:
-+                raise ValueError(
-+                    f\"{perchannel_name} is nor registered. Please check your linear quant method implementation.\"
-+                )
- 
-     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
--        if hasattr(self.quant_method, \"process_weights_after_loading\"):
--            self.quant_method.process_weights_after_loading(layer)
-+        if hasattr(self.quant_method,
-+                   'transpose_weight') and self.quant_method.transpose_weight:
-+            layer.weight.data = layer.weight.data.transpose(1, 0)
- 
-     def apply(
-         self,""",
-"""         return self.quant_method.apply(layer, x, bias)
- 
- 
--class AscendKVCacheMethod(BaseKVCacheMethod):
--    \"\"\"KVCache method for Ascend quantization.
--
--    This class calls AscendQuantizer to search a specific quantization
--    implementations supported on ascend hardware for kvcache methods.
-+class AscendQKVQuantAttentionMethod(BaseKVCacheMethod):
-+    \"\"\"Linear method for Ascend quantization.
- 
-     Args:
-         quant_config: The Ascend quantization config.
-     \"\"\"
- 
--    def __init__(self, quant_config: AscendQuantConfig, prefix: str) -> None:
-+    def __init__(self, quant_config: AscendQuantConfig) -> None:
-         self.quantizer = AscendQuantizer.get_quantizer(
--            quant_config.quant_description, prefix)
-+            quant_config.quant_description)
-         self.quant_method = self.quantizer.build_attention_method()
- 
-     def create_weights(self, layer: torch.nn.Module) -> None:
--        # Different from linear method, there are no weight processing/slicing
--        # steps for attention in vllm. So the whole process of create weights
--        # is hidden into the specific quant method.
--        self.quant_method.create_weights(layer)
-+        # ascend attention quantization might include some extra weights
-+        # and must be loaded by dummy modules
-+        extra_module_names = self.quant_method.get_extra_module_names()
-+        for name in extra_module_names:
-+            setattr(layer, name, torch.nn.Module())
-+
-+        # During model initialization, the default dtype is set as the model
-+        # weight and activation dtype.
-+        dtype = torch.get_default_dtype()
-+        weights = self.quant_method.create_weights(dtype, layer.num_heads,
-+                                                   layer.num_kv_heads)
-+
-+        for name, weight in weights.items():
-+            module_name, weight_name = name.split('.')
-+            module = getattr(layer, module_name)
-+            module.register_parameter(
-+                weight_name, torch.nn.Parameter(weight, requires_grad=False))
- 
-     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-         if hasattr(self.quant_method, \"process_weights_after_loading\"):"""
-        ],
-        "vllm_ascend/quantization/quantizer.py": [
-"""     \"\"\"An interface to different quantization implementations for ascend hardwares.\"\"\"
- 
-     @classmethod
--    def get_quantizer(cls, quant_config: Dict[str, Any], prefix: str):
-+    def get_quantizer(cls, quant_config: Dict[str, Any]):
-         # TODO: Need a param to choose quantization algorithms.
-         quantization_algorithm = ''""",
-"""             raise NotImplementedError(
-                 \"There is no available ascend quantizer.\")
- 
--        return MindIETurboQuantizer.get_quantizer(quant_config, prefix)
-+        return MindIETurboQuantizer.get_quantizer(quant_config)
- 
-     def build_linear_method(self):
-         raise NotImplementedError"""
         ],
         "vllm_ascend/worker.py": [
 """ 
@@ -3005,5 +2432,18 @@ def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port
 """         current_platform.empty_cache()
 +        num_npu_blocks = 65536
          return num_npu_blocks, num_cpu_blocks"""],
+        "vllm_ascend.egg-info/entry_points.txt":["""[vllm.general_plugins]
+ascend_enhanced_model = vllm_ascend:register_model
+
+[vllm.platform_plugins]
+ascend = vllm_ascend:register"""],
+        "vllm_ascend.egg-info/PKG-INFO":["""Metadata-Version: 2.2
+Name: vllm_ascend
+Version: 0.1.dev68+g806235f.d20250308
+Summary: vLLM Ascend backend plugin
+Home-page: https://github.com/vllm-project/vllm-ascend
+Author: vLLM-Ascend team
+License: Apache 2.0
+Project-URL: Homepage, https://github.com/vllm-project/vllm-ascend"""],
     }
 }
