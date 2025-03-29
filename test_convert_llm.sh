@@ -66,7 +66,7 @@ cd ..
 echo "..............................................done apply transformers"
 
 echo "..............................................start code_convert"
-MindSpeed_Core_MS_PATH=$PWD
+MindSpeed_Core_MS_PATH=$(pwd)
 echo ${MindSpeed_Core_MS_PATH}
 
 python3 tools/transfer.py \
@@ -74,6 +74,7 @@ python3 tools/transfer.py \
 --mindspeed_path ${MindSpeed_Core_MS_PATH}/MindSpeed/mindspeed/ \
 --mindspeed_llm_path ${MindSpeed_Core_MS_PATH}/MindSpeed-LLM/
 
-
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:$PYTHONPATH
+echo $PYTHONPATH
 echo "..............................................done code_convert"
 

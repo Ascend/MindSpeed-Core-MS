@@ -1263,7 +1263,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
          if COMM_STREAM is None:
 -            COMM_STREAM = torch_npu.npu.Stream(device=torch.npu.current_device())
 -        with torch_npu.npu.stream(COMM_STREAM):
-+            COMM_STREAM = mindspore.runtime.Stream(device=torch.cuda.current_device())
++            COMM_STREAM = mindspore.runtime.communication_stream()
 +        with mindspore.runtime.StreamCtx(COMM_STREAM):
              event.wait()
              if last_dim:
@@ -1272,7 +1272,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
          if COMM_STREAM is None:
 -            COMM_STREAM = torch_npu.npu.Stream(device=torch.npu.current_device())
 -        with torch_npu.npu.stream(COMM_STREAM):
-+            COMM_STREAM = mindspore.runtime.Stream(device=torch.cuda.current_device())
++            COMM_STREAM = mindspore.runtime.communication_stream()
 +        with mindspore.runtime.StreamCtx(COMM_STREAM):
              if event:
                  event.wait()
@@ -1301,8 +1301,11 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +            size=[int(sum(output_split_sizes.tolist()))] + list(input_.size()[1:]),
              dtype=input_.dtype,
 -            device=torch.cuda.current_device(),
-         )""","""             COMM_STREAM = torch_npu.npu.Stream(device=torch.npu.current_device())
-         with torch_npu.npu.stream(COMM_STREAM):
+         )""","""         if COMM_STREAM is None:
+-            COMM_STREAM = torch_npu.npu.Stream(device=torch.npu.current_device())
+-        with torch_npu.npu.stream(COMM_STREAM):
++            COMM_STREAM = mindspore.runtime.communication_stream()
++        with mindspore.runtime.StreamCtx(COMM_STREAM):
              event.wait()
 -            handle = dist.all_to_all_single(
 -                a2a_out,
@@ -1343,11 +1346,24 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 -        original_weight1, original_weight2, activation_func, group_list, layer_number = args
 +    def forward(ctx, inputs, weights1, weights2, original_weight1, original_weight2, activation_func, group_list, layer_number):
          global_args = get_args()""","""         if moe_zero_memory != "disable" or moe_experts_pipeline_degree:
-             inputs.untyped_storage().resize_(0)
+-            inputs.untyped_storage().resize_(0)
 -        act_out, detached_act_inputs = forward_func(activation_func, mm1_out)
++            del inputs
 +        act_out, detached_act_inputs, ctx.activation_func_vjp = forward_func(activation_func, mm1_out)
  
-         is_only_recompute_activation = only_recompute_activation(layer_number)""","""              permute2_input_detach, permute2_graph, output_splits, input_splits,
+         is_only_recompute_activation = only_recompute_activation(layer_number)
+         if moe_zero_memory == "level1" and not is_only_recompute_activation:
+-            mm1_out.untyped_storage().resize_(0)
++            del mm1_out""","""         if moe_zero_memory == "level1" and not is_only_recompute_activation:
+-            act_out.untyped_storage().resize_(0)
++            del act_out
+             moe_layer_ctx.recompute_tensors = (inputs, mm1_out, act_out)
+         is_recompute_activation = moe_zero_memory == "level0" or should_recompute_activation(layer_number) or (
+                     moe_zero_memory == "level1" and is_only_recompute_activation)
+         if is_recompute_activation:
+-            act_out.untyped_storage().resize_(0)
++            del act_out
+             ctx.activation_func = activation_func""","""              permute2_input_detach, permute2_graph, output_splits, input_splits,
 -             input_splits_tp_ep) = get_gemm_backward_need_tensors()
 -
 +             input_splits_tp_ep, permutation_func1_vjp, permutation_func2_vjp) = get_gemm_backward_need_tensors()
@@ -1370,7 +1386,8 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
              _, permute1_backward_input, bw_permute1_ep_all2all_handle = async_all_to_all(""","""-                permute2_input_detach.grad,
 +                permute2_input_detach_grad,
                  input_splits,
-                 output_splits,""",
+                 output_splits,""","""-            global_input_tokens.untyped_storage().resize_(0)
++            del global_input_tokens""",
              """         # grad of activation_func
 -        grad_outs.untyped_storage().resize_(0)
 -        mm2_inputs.untyped_storage().resize_(0)
@@ -1439,15 +1456,18 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 -        group_list = group_list.tolist()
 -    return GMMFunction.builder.load().npu_gmm([x], [weight], bias, group_list, group_type, 0)
 +    out = gg.ops.gmm(x, weight, group_list, trans_b=False, group_type=group_type)
-+    return (out,)""","""         save_tensors = []
++    return (out,)""","""-    expert_graphs = ctx. expert_graphs
++    expert_graphs = ctx.expert_graphs""","""         save_tensors = []
          ctx.input_shape = hidden_states.shape
 -        hidden_states = hidden_states.detach()
 +        hidden_states = mindspore.ops.stop_gradient(hidden_states)
          hidden_states.requires_grad = True
          ctx.is_only_recompute_activation = only_recompute_activation(moe_layer.layer_number)
++
 +        def router_func_test(hidden_states):
 +            scores, ctx.indices = moe_layer.router(hidden_states)
 +            return scores
++
          ctx.layer_number = moe_layer.layer_number""","""         # router
 -        with torch.enable_grad():
 -            scores, indices = moe_layer.router(hidden_states)
