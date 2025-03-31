@@ -36,6 +36,25 @@ index e49eab86b..4380f1099 100755
          for value in d.values():
              if isinstance(value, dict):
                  self.dict_torch_dtype_to_str(value)
+diff --git a/src/transformers/image_transforms.py b/src/transformers/image_transforms.py
+index e7d3a5abb7..29205e8f5d 100644
+--- a/src/transformers/image_transforms.py
++++ b/src/transformers/image_transforms.py
+@@ -52,9 +52,11 @@ if is_tf_available():
+ if is_flax_available():
+     import jax.numpy as jnp
+ 
+-if is_torchvision_v2_available():
+-    from torchvision.transforms.v2 import functional as F
+-elif is_torchvision_available():
++# if is_torchvision_v2_available():
++#     from torchvision.transforms.v2 import functional as F
++# elif is_torchvision_available():
++#     from torchvision.transforms import functional as F
++if is_torchvision_available():
+     from torchvision.transforms import functional as F
+ 
+ 
 diff --git a/src/transformers/modeling_utils.py b/src/transformers/modeling_utils.py
 index dae29111c..39e62282a 100755
 --- a/src/transformers/modeling_utils.py
