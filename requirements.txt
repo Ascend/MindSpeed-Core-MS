@@ -33,7 +33,7 @@ psutil
 pyyaml
 pytest
 hydra-core
-ray==2.10.0
+ray==2.42.1
 asttokens
 astunparse
 ml_dtypes
