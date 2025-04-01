@@ -32,7 +32,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 cd MindSpeed-RL
-git checkout 8eddc32877f686798f5cda6b1b34fc72a6beec10
+git checkout d4d80d61c8293687a22898a4039c28ac6ee12745
 cd ..
 echo "...............................................done MindSpeed-RL"
 
@@ -56,6 +56,8 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone msadapter"
     exit 1
 fi
+git fetch https://gitee.com/mindspore/msadapter.git pull/147/head:pr_147
+git checkout pr_147
 cd ..
 echo "..............................................done msadapter"
 
@@ -63,7 +65,7 @@ echo "..............................................done msadapter"
 rm -rf vllm
 git clone https://gitee.com/mirrors/vllm.git
 cd vllm
-git checkout ed6e9075d31e32c8548b480a47d1ffb77da1f54c
+git checkout v0.7.3
 if [ $? -ne 0 ]; then
     echo "Error: git clone vllm"
     exit 1
@@ -76,7 +78,7 @@ echo "..............................................done vllm"
 rm -rf vllm-ascend
 git clone https://gitee.com/mirrors/vllm-ascend.git
 cd vllm-ascend
-git checkout 701a2870469d8849a50378f9450dc3e851c8af20
+git checkout 0713836e95fe993feefe334945b5b273e4add1f1
 if [ $? -ne 0 ]; then
     echo "Error: git clone vllm-ascend"
     exit 1
@@ -88,7 +90,7 @@ echo "..............................................done vllm-ascend"
 rm -rf transformers/
 git clone https://gitee.com/mirrors/huggingface_transformers.git -b v4.47.0
 if [ $? -ne 0 ]; then
-    echo "Error: git clone msadaptor"
+    echo "Error: git clone huggingface_transformers"
     exit 1
 fi
 mv huggingface_transformers transformers
