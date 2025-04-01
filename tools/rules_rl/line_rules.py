@@ -1575,7 +1575,9 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +        # context.set_context(pynative_synchronize=True)
          while iteration < self.train_iters:
  
-             batch = next(data_iters)"""
+             batch = next(data_iters)""",
+"""         self.kwargs = kwargs
++        self.blocking = True""",
         ],
         "mindspeed_rl/trainer/utils/transfer_dock.py": [
 """             torch.stack([self.experience_data_status[single_column] == 1 for single_column in experience_columns]),
@@ -3139,7 +3141,7 @@ class Worker(WorkerHelper):
 """                              cache_block_size)
          num_npu_blocks = max(num_npu_blocks, 0)
          num_cpu_blocks = max(num_cpu_blocks, 0)
-+        num_npu_blocks = 65536
++        num_npu_blocks //= 100
          gc.collect()
          # TODO: don`t need impl this func after empty_cache in
          # Worker.determine_num_available_blocks() unified`""",

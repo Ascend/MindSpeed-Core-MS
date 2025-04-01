@@ -51,14 +51,10 @@ echo "..............................................done Megatron-LM"
 #msadapter
 rm -rf msadapter
 git clone https://gitee.com/mindspore/msadapter.git
-cd msadapter
 if [ $? -ne 0 ]; then
     echo "Error: git clone msadapter"
     exit 1
 fi
-git fetch https://gitee.com/mindspore/msadapter.git pull/147/head:pr_147
-git checkout pr_147
-cd ..
 echo "..............................................done msadapter"
 
 #vllm
