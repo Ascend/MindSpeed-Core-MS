@@ -90,12 +90,7 @@ LINE_RULES = {
 +#     output = ulyssesattn_context_parallel(query, key, value, attn_para, self.ulysses_comm_para)
      
 -    return output
-+#     return output""",
-"""-        if self.config.context_parallel_size > 1 and args.context_parallel_algo == "ulysses_cp_algo":
--            return do_ulyssesattn_context_parallel(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
-+        # if self.config.context_parallel_size > 1 and args.context_parallel_algo == "ulysses_cp_algo":
-+        #     return do_ulyssesattn_context_parallel(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)""",
-"""-            pse_type=self.pse_type, packed_seq_params=packed_seq_params)
++#     return output""","""-            pse_type=self.pse_type, packed_seq_params=packed_seq_params)
 +            pse_type=self.pse_type)#, packed_seq_params=packed_seq_params)"""],
     "mindspeed_llm/core/datasets/blended_megatron_dataset_builder.py": [""" from ..parallel_state import get_pipeline_model_parallel_node_info
 +from mindspore.communication import get_local_rank
@@ -195,15 +190,7 @@ LINE_RULES = {
 -        torch.compile = torch.jit.script
  
          if not _get_dummy_args().o2_optimizer:
-             # vanilla optimizer""","""         from megatron.core.tensor_parallel import ColumnParallelLinear, RowParallelLinear
-         from megatron.core.transformer.transformer_block import TransformerBlock
--
-+        # For MOE + Ascend MC2, here we can only execute this after _transformer_block_build_layers takes effect.
-+        TransformerBlock._build_layers = build_layers_wrapper(TransformerBlock._build_layers,
-+                                                              ColumnParallelLinear.forward,
-+                                                              RowParallelLinear.forward)
- 
- class MegatronAdaptationABC:""","""     def patch_core_distributed(self):
+             # vanilla optimizer""","""     def patch_core_distributed(self):
          import megatron.core
 -        megatron.core.jit.jit_fuser = dummy_jit
          from mindspeed.core.tensor_parallel.tp_2d.norm_factory import _allreduce_layernorm_grads_wrapper
@@ -309,40 +296,7 @@ LINE_RULES = {
 """     def to_dict(self):
          return {f"_{key.lower()}": self._store.get(f"_{key.lower()}", None) for key in WorkerMeta.keys}
 
-+from mindspeed_llm.tasks.posttrain.rlxf.single_controller.base.register_center.ray import create_worker_group_register_center""",
-"""         if disable_worker_init:
-             return instance
- 
--        rank = os.environ.get("RANK", None)
-+        rank = os.environ.get("MS_ROLE", None)
-         worker_group_prefix = os.environ.get("WG_PREFIX", None)
- 
-         # when decorator @ray.remote applies, __new__ will be called while we don't want to apply _configure_before_init
-         if None not in [rank, worker_group_prefix] and 'ActorClass(' not in cls.__name__:
--            instance._configure_before_init(f"{worker_group_prefix}_register_center", int(rank))
-+            instance._configure_before_init(f"{worker_group_prefix}_register_center", rank)
- 
-         return instance
- 
--    def _configure_before_init(self, register_center_name: str, rank: int):
--        assert isinstance(rank, int), f"rank must be int, instead of {type(rank)}"
-+    def _configure_before_init(self, register_center_name: str, rank: str):
- 
--        if rank == 0:
--            master_addr, master_port = self.get_availale_master_addr_port()
-+        self.local_ip = self._get_node_ip()
-+        local_ip_info = {
-+                "HCCL_IF_IP": self.local_ip,
-+            }
-+        os.environ.update(local_ip_info)
-+        if rank == "MS_SCHED":
-+            ms_sched_host, ms_sched_port = self.get_availale_master_addr_port()
-             rank_zero_info = {
--                "MASTER_ADDR": master_addr,
--                "MASTER_PORT": master_port,
-+                "MS_SCHED_HOST": ms_sched_host,
-+                "MS_SCHED_PORT": ms_sched_port,""",
-"""         self._rank = rank
++from mindspeed_llm.tasks.posttrain.rlxf.single_controller.base.register_center.ray import create_worker_group_register_center""","""         self._rank = rank
          self._world_size = world_size
  
 -        master_addr = os.environ["MASTER_ADDR"]
@@ -380,13 +334,7 @@ LINE_RULES = {
 +        cuda_visible_devices = os.environ.get("ASCEND_RT_VISIBLE_DEVICES", "not set")"""
 
     ],
-    "mindspeed_llm/tasks/posttrain/rlxf/single_controller/ray/base.py":[
-""" from unittest.mock import patch
- 
- from mindspeed_llm.tasks.posttrain.rlxf.single_controller.base import WorkerGroup, ResourcePool, ClassWithInitArgs, Worker
-+from mindspeed_llm.tasks.posttrain.rlxf.single_controller.base.scheduler import create_worker_group_scheduler
- from mindspeed_llm.tasks.posttrain.rlxf.single_controller.base.decorator import MAGIC_ATTR""",
- """                  name_prefix: str = None,
+    "mindspeed_llm/tasks/posttrain/rlxf/single_controller/ray/base.py":["""                  name_prefix: str = None,
                   detached=False,
                   worker_names=None,
 +                 port=None,
@@ -457,22 +405,7 @@ LINE_RULES = {
 +                os.environ['RANK']=str(rank)
                  # create a worker
                  worker = ray_cls_with_init(placement_group=pg,
-                                            placement_group_bundle_idx=local_rank,""","""                 self._workers.append(worker)
-                 self._worker_names.append(name)
- 
--                if rank == 0:
--                    register_center_actor = None
--                    for _ in range(120):
--                        if f"{self.name_prefix}_register_center" not in list_named_actors():
--                            time.sleep(1)
--                        else:
--                            register_center_actor = ray.get_actor(f"{self.name_prefix}_register_center")
--                    assert register_center_actor is not None, f"failed to get register_center_actor: {self.name_prefix}_register_center in {list_named_actors(all_namespaces=True)}"
--                    rank_zero_info = ray.get(register_center_actor.get_rank_zero_info.remote())
--                    self._master_addr, self._master_port = rank_zero_info['MASTER_ADDR'], rank_zero_info['MASTER_PORT']
- 
-     @property
-     def worker_names(self):""","""             prefix: str = actor_name + '_'
+                                            placement_group_bundle_idx=local_rank,""","""             prefix: str = actor_name + '_'
              for method_name in dir(worker_group):
                  if method_name.startswith(prefix):
 -                    original_method_name = remove_prefix(method_name, prefix)
@@ -563,12 +496,7 @@ LINE_RULES = {
                      for _ in range(args.n_samples_per_prompt):""",
                      """         # We make recompute_old_log_prob by default here.
 -        data = data.to(next(self.model[0].parameters()).device)
-         with torch.no_grad():""","""         # TODO: actually, we just need to control the sampling order.
- 
--        data.batch['attention_mask'] = data.batch['attention_mask'].to(bool)
-+        data.batch['attention_mask'] = data.batch['attention_mask'].to(torch.bool)
- 
-         batch_size = self.args.micro_batch_size""","""+        # TODO check
+         with torch.no_grad():""","""+        # TODO check
 +        self.args.use_kv_cache = False
          metrics = {}""","""         torch.cuda.empty_cache()
 -
@@ -589,10 +517,7 @@ LINE_RULES = {
          output = DataProto.from_dict(tensors={'rm_scores': output})
 -        output = output.to('cpu')
          torch.cuda.empty_cache()
-         return output""","""             self.args.iteration, self.args.num_floating_point_operations_so_far = load_checkpoint(
--                model, None, None, strict=False)
-+                model, None, None, strict=True)#, strict=False)"""
-    ],
+         return output"""],
     "mindspeed_llm/tasks/posttrain/rlxf/utils/megatron_memory_buffer.py":["""-                buffer.param_data.to('cpu', non_blocking=True)
 +                # buffer.param_data.to('cpu', non_blocking=True)
 +                pass""",
@@ -765,11 +690,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +        raise AssertionError('moe_alltoall_overlap_comm does not support gradient_accumulation_fusion at the same time.')
  
  
- def _validate_mla(args):""","""             args.first_k_dense_replace))
-+    if args.num_experts is not None and args.use_mc2 and args.moe_grouped_gemm:
-+        raise AssertionError('Moe Grouped Gemm is not supported with mc2 in MOE model.')
- 
-     if args.num_layer_list:""","""     args.adaptive_recompute_profiling_step = 10
+ def _validate_mla(args):""","""     args.adaptive_recompute_profiling_step = 10
 +    # args.moe_tp_extend_ep = False
      args.recompute_in_bubble = False""","""+        args.use_mc2 = False
          args.use_legacy_models = not args.use_mcore_models"""],
@@ -779,10 +700,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
     "mindspeed_llm/core/tensor_parallel/layers.py": ["""-        weight = torch.split(weight, weight.shape[0] // args_.output_layer_slice_num, dim=0)
 +        weight = torch.chunk(weight, args_.output_layer_slice_num, 0)""", """+    wrapper = staticmethod(wrapper)
      return wrapper"""],
-    "mindspeed_llm/core/models/gpt/gpt_model.py":["""         if not self.share_embeddings_and_output_weights and self.share_mtp_embedding_and_output_weight:
--            output_weight = self.output_layer.weight.detach()
-+            from mindspore import ops
-+            output_weight = ops.stop_gradient(self.output_layer.weight)"""],
     "pretrain_gpt.py": [
         """     return batch.values()
  
@@ -1404,8 +1321,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +            del act_inputs
              if moe_zero_memory == "level0" or (moe_zero_memory == "level1" and is_only_recompute_activation):""",
              """-                    gmm_op(act_inputs.grad, weights1, [], group_list, 0)[0]
-+                    gmm_op(act_inputs_grad, weights1, [], group_list, 0)[0]""","""-                mm1_inputs_grad = torch.matmul(act_inputs.grad, weights1.t())
-+                mm1_inputs_grad = torch.matmul(act_inputs_grad, weights1.t())""","""             else:
++                    gmm_op(act_inputs_grad, weights1, [], group_list, 0)[0]""","""             else:
 -                backward_func(permute2_graph, mm1_inputs_grad)
 -                mm1_inputs_grad.untyped_storage().resize_(0)
 +                permute2_input_detach_grad = _convert_python_data(permutation_func2_vjp(mm1_inputs_grad)[0])
@@ -1477,7 +1393,8 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +            with torch.enable_grad():
 +                scores, ctx.router_func = torch.autograd.vjp(router_func_test, router_input)
 +        else:
-+            scores = router_func_test(hidden_states)
++            with torch.enable_grad():
++                scores = router_func_test(hidden_states)
  
          save_tensors.append(scores)
 -        scores = scores.detach()
@@ -1683,12 +1600,14 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
          detach_inputs.append(detach_tensor(inputs))
  
 -    with torch.enable_grad():
+-        output = func(*detach_inputs)
 +    if not recompute_instance.recompute:
 +        with torch.enable_grad():
 +            output, f_vjp = torch.autograd.vjp(func, *detach_inputs)
 +    else:
-         output = func(*detach_inputs)
-+        f_vjp = None
++        with torch.enable_grad():
++            output = func(*detach_inputs)
++            f_vjp = None
  
 -    return output, *detach_inputs
 +    return output, *detach_inputs, f_vjp
@@ -1756,12 +1675,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
                  .sum(axis=1)
 -                .to(torch.device("cpu"))
                  .numpy()
-             )""","""         self.output_splits = (
--            self.num_global_tokens_per_local_expert.sum(axis=-1).to(torch.device("cpu")).numpy()
-+            self.num_global_tokens_per_local_expert.sum(axis=-1).numpy()
-         )
-         num_tokens_per_local_expert = self.num_global_tokens_per_local_expert.sum(axis=0)""",
-         """     if self.num_local_experts > 1:
+             )""","""     if self.num_local_experts > 1:
          if not hasattr(self, 'comm_stream'):
 -            self.comm_stream = torch.cuda.Stream()
 -        self.comm_stream.wait_stream(torch.cuda.current_stream())
@@ -1769,10 +1683,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +            self.comm_stream = mindspore.runtime.communication_stream()
 +        self.comm_stream.wait_stream(mindspore.runtime.current_stream())
 +        with mindspore.runtime.StreamCtx(self.comm_stream):
-             if moe_hierarchical_alltoallv:""","""         if not self.drop_and_pad:
--            torch.cuda.current_stream().wait_stream(self.comm_stream)
-+            mindspore.runtime.current_stream().wait_stream(self.comm_stream)
-             global_input_tokens, self.reversed_global_input_permutation_mapping = permute(""","""         save_tensors.append(indices_ep)
+             if moe_hierarchical_alltoallv:""","""         save_tensors.append(indices_ep)
  
 -    def alltoall_token_permutation1(hidden_states, indices, *args):
 +    if moe_hierarchical_alltoallv:
@@ -1898,17 +1809,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 -        )
 +        self.num_out_tokens = num_local_tokens_per_expert.sum()
          self.cuda_sync_point = "before_permutation_1"
-     elif ep_size > 1:""","""         self.input_splits = (
-             num_local_tokens_per_expert.reshape(ep_size, self.num_local_experts)
-             .sum(axis=1)
--            .to(torch.device("cpu"), non_blocking=True)
-             .numpy()
-         )
-         num_global_tokens_per_expert = _gather_along_first_dim_expert_parallel(""","""         self.output_splits = (
--            self.num_global_tokens_per_local_expert.sum(axis=-1).to(torch.device("cpu")).numpy()
-+            self.num_global_tokens_per_local_expert.sum(axis=-1).numpy()
-         )
-         num_tokens_per_local_expert = self.num_global_tokens_per_local_expert.sum(axis=0)"""],
+     elif ep_size > 1:"""],
 "optimizer/distrib_optimizer.py":[""" from megatron.training import get_args
 +from megatron.core.distributed.param_and_grad_buffer import BufferType""","""     copy_group_grads(self.model_fp32_groups, self.shard_fp32_groups)
  
