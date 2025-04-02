@@ -3196,14 +3196,6 @@ class Worker(WorkerHelper):
          if self.attn_mask_cache.device != device:
 -            self.attn_mask_cache = self.attn_mask_cache.to(device)
 +            self.attn_mask_cache = self.attn_mask_cache#.to(device)""",
-"""         num_kv_heads: int,
-         head_size: int,
-     ) -> Tuple[int, ...]:
--        return (2, num_blocks, block_size, num_kv_heads, head_size)
-+        return (2, num_blocks, block_size, num_kv_heads * head_size)
- 
-     @staticmethod
-     def swap_blocks(""",
 """         src_indices = src_to_dst[:, 0]
          dst_indices = src_to_dst[:, 1]
  
@@ -3505,26 +3497,6 @@ class Worker(WorkerHelper):
 -        self.cos_sin_cache = self.cos_sin_cache.to(query.device)
 -    if self.cos_sin_cache.dtype != query.dtype:
 -        self.cos_sin_cache = self.cos_sin_cache.to(query.dtype)""",
-"""-        torch_npu._npu_rotary_embedding(
--            positions,
--            query,
--            key,
--            self.head_size,
--            self.cos_sin_cache,
--            self.is_neox_style,
--        )
-+        #torch_npu._npu_rotary_embedding(
-+        #    positions,
-+        #    query,
-+        #    key,
-+        #    self.head_size,
-+        #    self.cos_sin_cache,
-+        #    self.is_neox_style,
-+        #)""",
-"""-RotaryEmbedding.forward_oot = rope_forward_oot
-+# RotaryEmbedding.forward_oot = rope_forward_oot""",
-"""-DeepseekScalingRotaryEmbedding.forward = rope_deepseek_forward_oot
-+# DeepseekScalingRotaryEmbedding.forward = rope_deepseek_forward_oot"""
         ],
 
         "vllm_ascend/worker/worker.py": [
