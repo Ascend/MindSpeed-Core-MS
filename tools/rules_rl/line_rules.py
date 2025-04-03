@@ -2319,7 +2319,10 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +            ActorHandlerParams(placement_group[0], world_size, 0, 0, self.ms_sched_host, self.ms_sched_port))
          self.actor_handlers.append(actor_handle)
          return actor_handle"""
-        
+        ],
+        "mindspeed_rl/workers/resharding/utils.py": [
+"""-        param_bytes = memory_buffer.data.detach().to(torch.float32).cpu().numpy().tobytes()
++        param_bytes = memory_buffer.data.detach().to(torch.float32).asnumpy().tobytes()""",
         ],
         "mindspeed_rl/workers/scheduler/scheduler.py": [
 """
@@ -3167,17 +3170,6 @@ class Worker(WorkerHelper):
 """-    return t.to(device=target_device, non_blocking=True)
 +    return t"""
         ],
-        "vllm/model_executor/layers/linear.py": [
-"""     def apply(self,
-               layer: torch.nn.Module,
-               x: torch.Tensor,
-               bias: Optional[torch.Tensor] = None) -> torch.Tensor:
-+        x.data_sync(True)
-+        layer.weight.data_sync(True)
- 
-         return F.linear(x, layer.weight, bias)"""
-        ],
-        
     },
     "vllm-ascend":{
         "vllm_ascend/attention.py": [
