@@ -220,7 +220,9 @@ LINE_RULES = {
     ],
     "mindspeed_llm/tasks/models/transformer/multi_head_latent_attention.py":["""-        output = torch.matmul(input_, self.weight.t())
 +        output = torch.matmul(input_.squeeze(1), self.weight.t())
-+        output = output.unsqueeze(1)"""],
++        output = output.unsqueeze(1)""",
+"""-except ImportError:
++except Exception:""",],
     "mindspeed_llm/tasks/models/transformer/multi_token_predication.py":["""             rotary_seq_len *= self.config.context_parallel_size
              rotary_pos_emb = self.rotary_pos_emb(rotary_seq_len)
 +        
@@ -2361,23 +2363,6 @@ def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port
     
     options = {'runtime_env': {'env_vars': env_vars}, 'name': name}
     return WorkerGroupScheduler.options(**options).remote()"""
-        ],
-        "mindspeed/core/transformer/moe/token_dispatcher.py": [
-"""     # Permutation 2: AlltoAll output to expert input if num_local_experts > 1
-     if self.num_local_experts > 1:
-         if not self.drop_and_pad:
--            torch.cuda.current_stream().wait_stream(self.comm_stream)
-+            # mindspore.runtime.current_stream().wait_stream(self.comm_stream)
-             global_input_tokens, self.reversed_global_input_permutation_mapping = permute(
-                 global_input_tokens, self.global_input_tokens_local_experts_indices
-             )"""
-        ],
-        "mindspeed_llm/tasks/megatron_adaptor.py": [
-"""     def patch_core_transformers(self):
-         import megatron.core
-         from mindspeed.core.transformer.transformer_config import transformer_config_post_init_wrapper
-+        from mindspeed.core.transformer.moe.grouped_gemm_util import Ops, grouped_gemm_is_available, \\
-+            get_device_capability, assert_grouped_gemm_is_available"""
         ],
         "mindspeed_rl/utils/pad_process.py": [
 """         # 获取当前行的截断索引
