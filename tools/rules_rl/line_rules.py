@@ -94,9 +94,10 @@ LINE_RULES = {
      
 -    return output
 +#     return output""",
-"""-        if self.config.context_parallel_size > 1 and args.context_parallel_algo == "ulysses_cp_algo":
+
+"""-        if self.config.context_parallel_size > 1 and args.context_parallel_algo == "ulysses_cp_algo" and args.context_parallel_kv_cache_policy:
 -            return do_ulyssesattn_context_parallel(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
-+        # if self.config.context_parallel_size > 1 and args.context_parallel_algo == "ulysses_cp_algo":
++        # if self.config.context_parallel_size > 1 and args.context_parallel_algo == "ulysses_cp_algo" and args.context_parallel_kv_cache_policy:
 +        #     return do_ulyssesattn_context_parallel(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)""",
 """-            pse_type=self.pse_type, packed_seq_params=packed_seq_params)
 +            pse_type=self.pse_type)#, packed_seq_params=packed_seq_params)"""],
@@ -296,38 +297,6 @@ LINE_RULES = {
          return {f"_{key.lower()}": self._store.get(f"_{key.lower()}", None) for key in WorkerMeta.keys}
 
 +from mindspeed_llm.tasks.posttrain.rlxf.single_controller.base.register_center.ray import create_worker_group_register_center""",
-"""         if disable_worker_init:
-             return instance
- 
--        rank = os.environ.get("RANK", None)
-+        rank = os.environ.get("MS_ROLE", None)
-         worker_group_prefix = os.environ.get("WG_PREFIX", None)
- 
-         # when decorator @ray.remote applies, __new__ will be called while we don't want to apply _configure_before_init
-         if None not in [rank, worker_group_prefix] and 'ActorClass(' not in cls.__name__:
--            instance._configure_before_init(f"{worker_group_prefix}_register_center", int(rank))
-+            instance._configure_before_init(f"{worker_group_prefix}_register_center", rank)
- 
-         return instance
- 
--    def _configure_before_init(self, register_center_name: str, rank: int):
--        assert isinstance(rank, int), f"rank must be int, instead of {type(rank)}"
-+    def _configure_before_init(self, register_center_name: str, rank: str):
- 
--        if rank == 0:
--            master_addr, master_port = self.get_availale_master_addr_port()
-+        self.local_ip = self._get_node_ip()
-+        local_ip_info = {
-+                "HCCL_IF_IP": self.local_ip,
-+            }
-+        os.environ.update(local_ip_info)
-+        if rank == "MS_SCHED":
-+            ms_sched_host, ms_sched_port = self.get_availale_master_addr_port()
-             rank_zero_info = {
--                "MASTER_ADDR": master_addr,
--                "MASTER_PORT": master_port,
-+                "MS_SCHED_HOST": ms_sched_host,
-+                "MS_SCHED_PORT": ms_sched_port,""",
 """         self._rank = rank
          self._world_size = world_size
  
@@ -435,7 +404,11 @@ LINE_RULES = {
 -                            time.sleep(1)
 -                        else:
 -                            register_center_actor = ray.get_actor(f"{self.name_prefix}_register_center")
--                    assert register_center_actor is not None, f"failed to get register_center_actor: {self.name_prefix}_register_center in {list_named_actors(all_namespaces=True)}"
+-                    if register_center_actor is None:
+-                        available_actors = list_named_actors(all_namespaces=True)
+-                        raise ValueError(
+-                            f"failed to get register_center_actor: {self.name_prefix}_register_center in {list_named_actors(all_namespaces=True)}"
+-                        )
 -                    rank_zero_info = ray.get(register_center_actor.get_rank_zero_info.remote())
 -                    self._master_addr, self._master_port = rank_zero_info['MASTER_ADDR'], rank_zero_info['MASTER_PORT']""",
 """                 if method_name.startswith(prefix):
@@ -529,7 +502,7 @@ LINE_RULES = {
      tokenizer = get_tokenizer()""",
                      """         # We make recompute_old_log_prob by default here.
 -        data = data.to(next(self.model[0].parameters()).device)
-         with torch.no_grad():""","""         # TODO: actually, we just need to control the sampling order.
+         with torch.no_grad():""","""         # broadcast from last pp rank to all other pp ranks
  
 -        data.batch['attention_mask'] = data.batch['attention_mask'].to(bool)
 +        data.batch['attention_mask'] = data.batch['attention_mask'].to(torch.bool)
@@ -555,10 +528,7 @@ LINE_RULES = {
          output = DataProto.from_dict(tensors={'rm_scores': output})
 -        output = output.to('cpu')
          torch.cuda.empty_cache()
-         return output""","""             self.args.iteration, self.args.num_floating_point_operations_so_far = load_checkpoint(
--                model, None, None, strict=False)
-+                model, None, None, strict=True)#, strict=False)"""
-    ],
+         return output"""],
     "mindspeed_llm/tasks/posttrain/rlxf/utils/megatron_memory_buffer.py":["""-                buffer.param_data.to('cpu', non_blocking=True)
 +                # buffer.param_data.to('cpu', non_blocking=True)
 +                pass""",
@@ -659,26 +629,7 @@ LINE_RULES = {
 -                op=torch.distributed.ReduceOp.SUM,
 -                group=mpu.get_tensor_model_parallel_group()
 -            )
-+            per_token_log_probs = mappings.reduce_from_tensor_model_parallel_region(per_token_log_probs)""",
-"""             group=mpu.get_context_parallel_group()
-         )
- 
--        torch.distributed.all_reduce(
--            all_log_probs,
--            op=torch.distributed.ReduceOp.SUM,
--            group=mpu.get_context_parallel_group()
--            )
-+        all_log_probs = mappings.reduce_from_tensor_model_parallel_region(all_log_probs)
- 
-         if per_token:
--            torch.distributed.all_reduce(
--                per_token_log_probs,
--                op=torch.distributed.ReduceOp.SUM,
--                group=mpu.get_context_parallel_group()
--            )
-+            per_token_log_probs = mappings.reduce_from_tensor_model_parallel_region(per_token_log_probs)
- 
-     return all_log_probs, valid_length, per_token_log_probs"""],
++            per_token_log_probs = mappings.reduce_from_tensor_model_parallel_region(per_token_log_probs)"""],
     "mindspeed_llm/tasks/posttrain/rlxf/single_controller/base/scheduler.py":[
         """
 import ray
@@ -724,11 +675,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
  
  
  def _validate_mla(args):""",
- """             args.first_k_dense_replace))
-+    if args.num_experts is not None and args.use_mc2 and args.moe_grouped_gemm:
-+        raise AssertionError('Moe Grouped Gemm is not supported with mc2 in MOE model.')
- 
-     if args.num_layer_list:""","""     args.adaptive_recompute_profiling_step = 10
+"""     args.adaptive_recompute_profiling_step = 10
 +    # args.moe_tp_extend_ep = False
      args.recompute_in_bubble = False""",
 """+        args.use_mc2 = False
@@ -739,10 +686,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
     "mindspeed_llm/core/tensor_parallel/layers.py": ["""-        weight = torch.split(weight, weight.shape[0] // args_.output_layer_slice_num, dim=0)
 +        weight = torch.chunk(weight, args_.output_layer_slice_num, 0)""", """+    wrapper = staticmethod(wrapper)
      return wrapper"""],
-    "mindspeed_llm/core/models/gpt/gpt_model.py":["""         if not self.share_embeddings_and_output_weights and self.share_mtp_embedding_and_output_weight:
--            output_weight = self.output_layer.weight.detach()
-+            from mindspore import ops
-+            output_weight = ops.stop_gradient(self.output_layer.weight)"""],
     "pretrain_gpt.py": [
         """     return batch.values()
  
@@ -778,12 +721,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +        loss = loss1 / loss2
      else:
          loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()"""
-    ],"mindspeed_llm/tasks/posttrain/rlxf/utils/loggers.py":["""             fmt_msg += f"iteration: {iteration} / {steps} | "
-             for key in msg:
--                fmt_msg += f"{key} : {format(msg[key], '.4f')} | "
-+                fmt_msg += f"{key} : {format(msg[key], '.16f')} | "
-             fmt_msg = fmt_msg[:-2]"""]
-    },
+    ]},
     "megatron":{
         "core/distributed/distributed_data_parallel.py": [
 """                     param_to_buffer[param].register_grad_ready(param)
@@ -1334,8 +1272,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +            del act_inputs
              if moe_zero_memory == "level0" or (moe_zero_memory == "level1" and is_only_recompute_activation):""",
              """-                    gmm_op(act_inputs.grad, weights1, [], group_list, 0)[0]
-+                    gmm_op(act_inputs_grad, weights1, [], group_list, 0)[0]""","""-                mm1_inputs_grad = torch.matmul(act_inputs.grad, weights1.t())
-+                mm1_inputs_grad = torch.matmul(act_inputs_grad, weights1.t())""","""             else:
++                    gmm_op(act_inputs_grad, weights1, [], group_list, 0)[0]""","""             else:
 -                backward_func(permute2_graph, mm1_inputs_grad)
 -                mm1_inputs_grad.untyped_storage().resize_(0)
 +                permute2_input_detach_grad = _convert_python_data(permutation_func2_vjp(mm1_inputs_grad)[0])
@@ -1662,11 +1599,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
          hidden_states,""","""     if self.cuda_sync_point == "before_ep_alltoall":
 -        torch.cuda.current_stream().synchronize()
 +        mindspore.runtime.current_stream().synchronize()
-     global_input_tokens = tensor_parallel.all_to_all(""","""     if self.num_local_experts > 1:
-         if not self.drop_and_pad:
--            torch.cuda.current_stream().wait_stream(self.comm_stream)
-+            # mindspore.runtime.current_stream().wait_stream(self.comm_stream)
-             global_input_tokens, self.reversed_global_input_permutation_mapping = permute(""",
+     global_input_tokens = tensor_parallel.all_to_all(""",
              """     if self.cuda_sync_point == "before_finish":
 -        torch.cuda.current_stream().synchronize()
 +        mindspore.runtime.current_stream().synchronize()
@@ -1683,11 +1616,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
                  .sum(axis=1)
 -                .to(torch.device("cpu"))
                  .numpy()
-             )""","""         self.output_splits = (
--            self.num_global_tokens_per_local_expert.sum(axis=-1).to(torch.device("cpu")).numpy()
-+            self.num_global_tokens_per_local_expert.sum(axis=-1).numpy()
-         )
-         num_tokens_per_local_expert = self.num_global_tokens_per_local_expert.sum(axis=0)""",
+             )""",
          """     if self.num_local_experts > 1:
          if not hasattr(self, 'comm_stream'):
 -            self.comm_stream = torch.cuda.Stream()
@@ -1825,17 +1754,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 -        )
 +        self.num_out_tokens = num_local_tokens_per_expert.sum()
          self.cuda_sync_point = "before_permutation_1"
-     elif ep_size > 1:""","""         self.input_splits = (
-             num_local_tokens_per_expert.reshape(ep_size, self.num_local_experts)
-             .sum(axis=1)
--            .to(torch.device("cpu"), non_blocking=True)
-             .numpy()
-         )
-         num_global_tokens_per_expert = _gather_along_first_dim_expert_parallel(""","""         self.output_splits = (
--            self.num_global_tokens_per_local_expert.sum(axis=-1).to(torch.device("cpu")).numpy()
-+            self.num_global_tokens_per_local_expert.sum(axis=-1).numpy()
-         )
-         num_tokens_per_local_expert = self.num_global_tokens_per_local_expert.sum(axis=0)"""],
+     elif ep_size > 1:"""],
 "optimizer/distrib_optimizer.py":[""" from megatron.training import get_args
 +from megatron.core.distributed.param_and_grad_buffer import BufferType""","""     copy_group_grads(self.model_fp32_groups, self.shard_fp32_groups)
  
@@ -1881,22 +1800,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +        position_ids = torch.tensor(generate_position_ids(input_ids))
          attention_mask = get_tune_attention_mask(attention_mask_1d)
          return input_ids, attention_mask, position_ids, batch""",
-"""         data = next(iter(data))
-         for k, v in data.items():
-             if v is not None:
--                data[k] = v.to(next(self.model[0].parameters()).device)
-+                data[k] = v
-         for model_module in self.model:
-             model_module.eval()
-         with torch.no_grad():""",
-"""         batch = next(iter(data))
-         for k, v in batch.items():
-             if v is not None:
--                batch[k] = v.to(next(self.model[0].parameters()).device)
-+                batch[k] = v
-         mini_batches = self._split_batches(batch, batch_size=self.mini_batch_size,
-                                            shuffle_mini_batch=self.shuffle_mini_batch, dim=0)
-         for model_module in self.model:""",
 """         \"\"\"
          for k, v in data.items():
              if v is not None:
@@ -1930,24 +1833,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
          ref_approx_kl = ref_log_prob - log_prob"""
         ],
         "mindspeed_rl/trainer/base.py": [
-""" from typing import List, Union
- import torch
- from torch.utils.data import DataLoader
--from torch.utils.tensorboard import SummaryWriter
-+# from torch.utils.tensorboard import SummaryWriter
- 
- from mindspeed_rl.workers.rule_reward import RuleReward
- from mindspeed_rl.trainer.utils.compute_utils import FixedKLController, AdaptiveKLController""",
-"""         self.tensorboard = None
-         if kwargs.get(\"use_wandb\", \"\") and torch.distributed.get_rank() == 0:
-             self.wandb = WandbLogger(kwargs)
--        if kwargs.get(\"use_tensorboard\", \"\") and self.wandb is None and torch.distributed.get_rank() == 0:
--            self.tensorboard = SummaryWriter()
-+        # if kwargs.get(\"use_tensorboard\", \"\") and self.wandb is None and torch.distributed.get_rank() == 0:
-+        #     self.tensorboard = SummaryWriter()
- 
-     def experience_maker_init(self):
-         pass""",
 """ 
  from typing import List, Union
  from torch.utils.data import DataLoader
@@ -1959,15 +1844,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
        
         ],
         "mindspeed_rl/trainer/grpo_trainer_hybrid.py": [
-"""         data_iters = iter(data_loader)
- 
-         iteration = self.actor_worker.get_iteration()
--
-+        # from mindspore import context
-+        # context.set_context(pynative_synchronize=True)
-         while iteration < self.train_iters:
- 
-             batch = next(data_iters)""",
 """         self.kwargs = kwargs
 +        self.blocking = True""",
         ],
@@ -2002,70 +1878,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +
 +    @staticmethod
 +    def backward(ctx, grad_output):
-+        return grad_output""",
-
-"""     mpu = get_parallel_state()
-     # Step 1: Compute the local max value for numerical stability
--    z_max = logits.max(dim=-1, keepdim=True).values
-+    z_max = logits.max(dim=-1, keepdim=True)[0]""",
-"""-    torch.distributed.all_reduce(
--        z_max,
--        op=torch.distributed.ReduceOp.MAX,
--        group=mpu.get_tensor_model_parallel_group()
--    )
-+    z_max = ReduceFromContextParallelRegionDPO().apply(z_max)""",
-"""-    torch.distributed.all_reduce(
--        local_sum_exp,
--        op=torch.distributed.ReduceOp.SUM,
--        group=mpu.get_tensor_model_parallel_group()
--    )
-+    local_sum_exp = mappings.reduce_from_tensor_model_parallel_region(local_sum_exp)""",
-"""-        torch.distributed.all_reduce(
--            all_log_probs,
--            op=torch.distributed.ReduceOp.SUM,
--            group=mpu.get_tensor_model_parallel_group()
--        )
-+        all_log_probs = mappings.reduce_from_tensor_model_parallel_region(all_log_probs)""",
-"""-            torch.distributed.all_reduce(
--                per_token_log_probs,
--                op=torch.distributed.ReduceOp.SUM,
--                group=mpu.get_tensor_model_parallel_group()
--            )
-+            per_token_log_probs = mappings.reduce_from_tensor_model_parallel_region(per_token_log_probs)""",
-"""             group=mpu.get_context_parallel_group()
-         )
- 
--        torch.distributed.all_reduce(
--            all_log_probs,
--            op=torch.distributed.ReduceOp.SUM,
--            group=mpu.get_context_parallel_group()
--        )
-+        all_log_probs = mappings.reduce_from_tensor_model_parallel_region(all_log_probs)
- 
-         if per_token:
--            torch.distributed.all_reduce(
--                per_token_log_probs,
--                op=torch.distributed.ReduceOp.SUM,
--                group=mpu.get_context_parallel_group()
--            )
-+            per_token_log_probs = mappings.reduce_from_tensor_model_parallel_region(per_token_log_probs)""",
-
-        ],
-        "mindspeed_rl/utils/loggers.py": [
-"""             fmt_msg += f\"iteration: {iteration} / {steps} | \"
-             if isinstance(msg, dict):
-                 for key in msg:
--                    fmt_msg += f\"{key} : {format(msg[key], '.4f')} | \"
-+                    try:
-+                        fmt_msg += f\"{key} : {format(msg[key], '.16f')} | \"
-+                    except:
-+                        temp = float(str(msg[key]))
-+                        fmt_msg += f\"{key} : {format(temp, '.16f')} | \"
-+                        pass
-                 fmt_msg = fmt_msg[:-2]
-             else:
-                 fmt_msg = f\"{fmt_msg} {str(msg)}\"""",
-        ],
++        return grad_output"""],
         "mindspeed_rl/workers/base_worker.py": [
 """ 
              if get_tensor_model_parallel_rank(self.parallel_state, use_vllm) != 0 or \\
@@ -2076,43 +1889,8 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
                      batch_data[key] = torch.empty(batch_data_shape[0], batch_data_shape[1],
                                                    device=torch.cuda.current_device(),""",
 """-        index = index.cpu().numpy().tolist()
-+        index = index.asnumpy().tolist()""",
-"""             # 获取当前行的截断索引
-             trunc_idx = index_tensor[i].item()
-             # 截断当前行
--            truncated_row = tensor[i, :trunc_idx].cpu()
-+            truncated_row = tensor[i, :trunc_idx]
-             # 将截断后的行添加到列表中
-             truncated_tensors.append(truncated_row)"""
-        ],
++        index = index.asnumpy().tolist()"""],
         "mindspeed_rl/workers/resharding/megatron_sharding_manager.py": [
-"""         elif isinstance(data, dict):
-             return {key: self._move_to_device(value, device) for key, value in data.items()}
-         elif isinstance(data, torch.Tensor):
--            return data.to(device, non_blocking=True)
-+            if device == \"cpu\":
-+                return data.cpu(non_blocking=True)
-+            else:
-+                return data.cuda(non_blocking=True)
-         else:
-             return data""",
-"""         for train_model in self.train_model:
-             for buffer in chain(train_model.buffers, train_model.expert_parallel_buffers):
-                 if hasattr(buffer, 'param_data'):
--                    buffer.param_data = buffer.param_data.to(torch.cuda.current_device(), non_blocking=True)
-+                    buffer.param_data = buffer.param_data
-                     is_distributed_optim = True
-         if not is_distributed_optim:
-             for _, param in self.train_model.named_parameters():""",
-"""         for train_model in self.train_model:
-             for buffer in chain(train_model.buffers, train_model.expert_parallel_buffers):
-                 if hasattr(buffer, 'param_data'):
--                    buffer.param_data = buffer.param_data.to('cpu', non_blocking=True)
-+                    buffer.param_data = buffer.param_data
-                     is_distributed_optim = True
-         if not is_distributed_optim:
-             for _, param in self.train_model.named_parameters():""",
-             
 """     def offload_optimizer(self):
          for param_group in self.optimizer.optimizer.param_groups:
              for param in param_group['params']:
@@ -2173,16 +1951,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 """ 
      def offload(self):
          for memory_buffer in self.memory_buffers.values():
--            memory_buffer.data = memory_buffer.data.to(\"cpu\", non_blocking=True)
-+            memory_buffer.data = memory_buffer.data.cpu(non_blocking=True)
- 
-     def onload(self):
-         for memory_buffer in self.memory_buffers.values():
--            memory_buffer.data = memory_buffer.data.to(torch.cuda.current_device(), non_blocking=True)
-+            memory_buffer.data = memory_buffer.data.cuda()""",
-""" 
-     def offload(self):
-         for memory_buffer in self.memory_buffers.values():
 -            memory_buffer.data = memory_buffer.data.to(\"cpu\", non_blocking=False)
 +            memory_buffer.data = memory_buffer.data.cpu(non_blocking=False) #.to(\"cpu\", non_blocking=False)
  
@@ -2190,20 +1958,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
          for memory_buffer in self.memory_buffers.values():
 -            memory_buffer.data = memory_buffer.data.to(torch.cuda.current_device(), non_blocking=False)
 +            memory_buffer.data = memory_buffer.data.npu(non_blocking=False) #.to(torch.cuda.current_device(), non_blocking=False)"""
-        ],
-        "mindspeed_rl/workers/resharding/vllm_weight_container.py": [
-"""         name_pairs = sorted(list(set([(name, _replace_name_v2m(normal_layer_func(name), self.params_mapping))
-                                       for name in weight_buffer.weight_names])))
-         for hf_name, megatron_name in name_pairs:
--            megatron_param = dict(true_megatron_model.named_parameters())[megatron_name]
-+            try:
-+                megatron_param = dict(true_megatron_model.named_parameters())[megatron_name]
-+            except KeyError:
-+                # print(hf_name, megatron_name)
-+                print(f\"[WARNING] megatron_name: {megatron_name} is not Found. Skip...\")
-+                continue
-             param = _transfer_from_megatron_division(megatron_param, megatron_name)
-             weight_buffer[hf_name].copy_(param)"""
         ],
         "mindspeed_rl/workers/scheduler/launcher.py": [
 """ from mindspeed_rl.workers.actor_hybrid_worker import ActorHybridWorker
@@ -2215,68 +1969,6 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
  
  def get_rl_resource_by_worker_type(rl_config: RLConfig, worker: Type[BaseWorker]):
      if (worker.__ray_actor_class__.__name__ ==""",
-"""         ray.get(placement_group.ready())
-         return placement_group
- 
--    def create_actor_handlers(self, placement_group, world_size, rank_index, master_addr, master_port) \\
-+    def create_actor_handlers(self, placement_group, world_size, rank_index, master_addr, master_port, sched_host, sched_port) \\
-             -> ray.actor.ActorHandle:
-         runtime_env = {
-             \"env_vars\": {""",
-"""                 \"MASTER_PORT\": str(master_port) if master_port else \"\",
-                 \"WORLD_SIZE\": str(world_size),
-                 \"RANK\": str(rank_index),
-+                \"MS_ROLE\": \"MS_WORKER\",
-+                \"MS_WORKER_NUM\": str(world_size),
-+                \"MS_NODE_ID\": str(rank_index), 
-+                \"MS_SCHED_HOST\": str(sched_host),
-+                \"MS_SCHED_PORT\": str(sched_port),
-+                \"RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES\": \"1\",
-+                \"USE_RAY\":\"true\"
-+
-             }
-         }
-         return self.worker.options(""",
-"""             **self.kwargs
-         )
- 
-+    @staticmethod
-+    def _get_free_port():
-+        with socket.socket() as sock:
-+            sock.bind((\"\", 0))
-+            return sock.getsockname()[1]
-+    @staticmethod
-+    def _get_current_node_ip():
-+        address = ray._private.services.get_node_ip_address()
-+        # strip ipv6 address
-+        return address.strip(\"[]\")
-+
-     def build_master_actor(self, placement_group, world_size) -> ray.actor.ActorHandle:
-+        self.ms_sched_host = self._get_current_node_ip()
-+        self.ms_sched_port= self._get_free_port()
-+        _scheduler_name = f\"my_scheduler_{self.ms_sched_port}\"  # TODO 每个资源池要不一样的name
-+        scheduler_actor = create_worker_group_scheduler(
-+                name=_scheduler_name,
-+                world_size=world_size, 
-+                ms_sched_host=self.ms_sched_host,
-+                ms_sched_port=self.ms_sched_port,
-+            )
-+        scheduler_actor.get_status.remote()
-+
-         actor_handle = self.create_actor_handlers(
--            placement_group, world_size, 0, None, None)
-+            placement_group, world_size, 0, None, None, self.ms_sched_host, self.ms_sched_port)
-         self.actor_handlers.append(actor_handle)
-         return actor_handle""",
-"""         master_addr, master_port = ray.get(master_handler.get_master_addr_port.remote())
-         for rank in range(1, world_size):
-             self.actor_handlers.append(self.create_actor_handlers(
--                placement_group, world_size, rank, master_addr, master_port))
-+                placement_group, world_size, rank, master_addr, master_port, self.ms_sched_host, self.ms_sched_port))
- 
-     def execute_async_command(self, method_name: str, *args, **kwargs):
-         ray_objs = []""",
-         
 """                 \"MASTER_PORT\": str(param.master_port) if param.master_port else \"\",
                  \"WORLD_SIZE\": str(param.world_size),
                  \"RANK\": str(param.rank_index),
@@ -3158,9 +2850,6 @@ class Worker(WorkerHelper):
     },
     "vllm-ascend":{
         "vllm_ascend/attention.py": [
-"""if TYPE_CHECKING:
--    from vllm_ascend.worker.model_runner import ModelInputForNPUBuilder
-+    from vllm_ascend.model_runner import ModelInputForNPUBuilder""",
 """         mask_value = torch.finfo(torch.float32).min
      else:
          mask_value = 1
@@ -3202,160 +2891,13 @@ class Worker(WorkerHelper):
 +        self.w_vc = kv_b_proj_weight[:,
 +                                        self.qk_nope_head_dim:, :].transpose(
 +                                            1, 2).contiguous()""",
-"""             kv_heads_num = self.num_kv_heads
--            q_nope_t = torch_npu.npu_transpose(q_nope, (1, 0, 2),
--                                               require_contiguous=True)
-+            # q_nope_t = torch_npu.npu_transpose(q_nope, (1, 0, 2),
-+            #                                    require_contiguous=True)
-+            q_nope_t = torch.transpose(q_nope, 0, 1)
-             q_nope_out = torch.bmm(q_nope_t, self.w_kc)
--            q_nope = torch_npu.npu_transpose(q_nope_out, (1, 0, 2),
--                                             require_contiguous=True)
-+            # q_nope = torch_npu.npu_transpose(q_nope_out, (1, 0, 2),
-+            #                                  require_contiguous=True)
-+            q_nope = torch.transpose(q_nope_out, 0, 1)""",
-"""-                torch_npu.npu_selfattention(query=query,
--                                            key=key,
--                                            value=value,
--                                            kvcacheCfg=0,
--                                            mask=mask,
--                                            maskType=1,
--                                            isTriuMask=0,
--                                            seqLen=self.seq_lens_tensor_cpu,
--                                            scale=self.scale,
--                                            qScale=1,
--                                            scaleType=0,
--                                            headNum=self.num_heads,
--                                            kvHeadNum=self.num_heads,
--                                            mlaVHeadSize=0,
--                                            calcType=3,
--                                            kernelType=0,
--                                            clampType=0,
--                                            quantType=0,
--                                            cacheType=0,
--                                            windowSize=0,
--                                            clampMin=0,
--                                            clampMax=0,
--                                            batchRunStatusEnable=False,
--                                            inputLayout=0,
--                                            outDataType=0,
--                                            out=attn_output)
-+                torch_npu.npu_selfattention(query=query.contiguous(),
-+                                           key=key.contiguous(),
-+                                           value=value.contiguous(),
-+                                           kvcacheCfg=0,
-+                                           mask=mask.contiguous(),
-+                                           maskType=1,
-+                                           isTriuMask=0,
-+                                           seqLen=self.seq_lens_tensor_cpu.contiguous(),
-+                                           scale=self.scale,
-+                                           qScale=1,
-+                                           scaleType=0,
-+                                           headNum=self.num_heads,
-+                                           kvHeadNum=self.num_heads,
-+                                           mlaVHeadSize=0,
-+                                           calcType=3,
-+                                           kernelType=0,
-+                                           clampType=0,
-+                                           quantType=0,
-+                                           cacheType=0,
-+                                           windowSize=0,
-+                                           clampMin=0,
-+                                           clampMax=0,
-+                                           batchRunStatusEnable=False,
-+                                           inputLayout=0,
-+                                           outDataType=0,
-+                                           out=attn_output)""",
-"""             block_tables = attn_metadata.decode_metadata.block_tables
--            torch_npu.npu_pagedattention(query=query,
--                                         keyCache=key_cache,
--                                         valueCache=None,
--                                         contextLens=self.seq_lens_tensor_cpu,
--                                         maskType=0,
--                                         kvHeadNum=self.num_kv_heads,
--                                         headNum=self.num_heads,
--                                         mlaVHeadSize=self.kv_lora_rank,
--                                         qkScale=self.scale,
--                                         blockTables=block_tables,
--                                         batchRunStatusEnable=False,
--                                         hasQuantOffset=False,
--                                         compressType=0,
--                                         calcType=0,
--                                         scaleType=0,
--                                         quantType=0,
--                                         inputLayout=0,
--                                         outDataType=-1,
--                                         attnOut=attn_output)
--            attn_output_t = torch_npu.npu_transpose(attn_output, (1, 0, 2),
--                                                    require_contiguous=True)
-+            torch_npu.npu_pagedattention(query=query.contiguous(),
-+                                        keyCache=key_cache.contiguous(),
-+                                        valueCache=None,
-+                                        contextLens=self.seq_lens_tensor_cpu,
-+                                        maskType=0,
-+                                        kvHeadNum=self.num_kv_heads,
-+                                        headNum=self.num_heads,
-+                                        mlaVHeadSize=self.kv_lora_rank,
-+                                        qkScale=self.scale,
-+                                        blockTables=block_tables.contiguous(),
-+                                        batchRunStatusEnable=False,
-+                                        hasQuantOffset=False,
-+                                        compressType=0,
-+                                        calcType=0,
-+                                        scaleType=0,
-+                                        quantType=0,
-+                                        inputLayout=0,
-+                                        outDataType=-1,
-+                                        attnOut=attn_output)
-+            # attn_output_t = torch_npu.npu_transpose(attn_output, (1, 0, 2),
-+            #                                         require_contiguous=True)
-+            attn_output_t = torch.transpose(attn_output, 0, 1)
-             attn_output_t = torch.bmm(attn_output_t, self.w_vc)
--            attn_output = torch_npu.npu_transpose(attn_output_t, (1, 0, 2),
--                                                  require_contiguous=True)
-+            # attn_output = torch_npu.npu_transpose(attn_output_t, (1, 0, 2),
-+            #                                       require_contiguous=True)
-+            attn_output = torch.transpose(attn_output_t, 0, 1)""",
 """                                       self.v_head_dim,
                                        dtype=query.dtype,
                                        device=query.device)
 +            attn_output = torch.ones_like(attn_output, dtype=query.dtype)
              if (attn_metadata.block_tables is None
                      or attn_metadata.block_tables.numel() == 0):
-                 assert attn_metadata.attn_mask is not None""",
-"""                     np.array(attn_metadata.prefill_metadata.seq_lens).astype(
-                         np.int32))
-                 torch_npu._npu_flash_attention(
--                    query=query,
--                    key=key,
--                    value=value,
-+                    query=query.contiguous(),
-+                    key=key.contiguous(),
-+                    value=value.contiguous(),
-                     mask=mask,
--                    seq_len=self.seq_lens_tensor_cpu,
-+                    seq_len=self.seq_lens_tensor_cpu.contiguous(),
-                     scale_value=self.scale,
-                     num_heads=self.num_heads,
-                     num_kv_heads=self.num_heads,""",
-"""                     np.int32))
-             block_tables = attn_metadata.decode_metadata.block_tables
-             torch_npu._npu_paged_attention_mla(
--                query=query,
--                key_cache=key_cache,
-+                query=query.contiguous(),
-+                key_cache=key_cache.contiguous(),
-                 num_kv_heads=self.num_kv_heads,
-                 num_heads=self.num_heads,
-                 scale_value=self.scale,
-                 block_table=block_tables,
--                context_lens=self.seq_lens_tensor_cpu,
-+                context_lens=self.seq_lens_tensor_cpu.contiguous(),
-                 mla_vheadsize=self.kv_lora_rank,
-                 out=attn_output)
-             attn_output_t = torch.transpose(attn_output, 0, 1)"""
-
-],
+                 assert attn_metadata.attn_mask is not None"""],
         "vllm_ascend/communicator.py": [
 """ from typing import Optional
  
