@@ -1,0 +1,50 @@
+[36m(WorkerDict pid=243813)[0m building GPT model ...
+[36m(WorkerDict pid=243813)[0m could not find arguments in the checkpoint ...
+[36m(WorkerDict pid=245810)[0m  > number of parameters on (tensor, pipeline) model parallel rank (0, 0): 1011130880[32m [repeated 5x across cluster][0m
+[36m(WorkerDict pid=243813)[0m  loading checkpoint from /home/workspace/mindspore_dataset/msadapter/test_input/net/test_r1_zero/ckpt_qwen2_7b_tp2_pp1_small at iteration 10
+[36m(WorkerDict pid=243813)[0m  checkpoint version 3.0
+[36m(WorkerDict pid=243813)[0m   successfully loaded checkpoint from /home/workspace/mindspore_dataset/msadapter/test_input/net/test_r1_zero/ckpt_qwen2_7b_tp2_pp1_small [ t 0, p 0 ] at iteration 0
+[36m(WorkerDict pid=245810)[0m > building train, validation, and test datasets for GPT ...
+[36m(WorkerDict pid=243813)[0m 	module.decoder.layers.0.pre_mlp_layernorm.weight[32m [repeated 31x across cluster][0m
+[36m(WorkerDict pid=245809)[0m init_distributed_sucess[32m [repeated 3x across cluster][0m
+[36m(WorkerDict pid=245809)[0m (min, max) time across ranks (ms):
+[36m(WorkerDict pid=245809)[0m     load-checkpoint ................................: (2608.57, 2611.49)
+[36m(WorkerDict pid=245817)[0m > finished creating GPT datasets ...
+[36m(WorkerDict pid=245817)[0m done with setup ...
+[36m(WorkerDict pid=245817)[0m ninja: no work to do.
+[36m(WorkerDict pid=243813)[0m WARNING:megatron.core.models.common.embeddings.rotary_pos_embedding:Setting apply_rope_fusion to false because its implementation is not included in Apex. Try upgrading to the latest version
+[36m(WorkerDict pid=245817)[0m > building train, validation, and test datasets for GPT ...
+[36m(WorkerDict pid=245810)[0m > finished creating GPT datasets ...
+[36m(WorkerDict pid=245810)[0m done with setup ...
+[36m(WorkerDict pid=245809)[0m ninja: no work to do.
+[36m(main_task pid=241472)[0m INFO:root:==================================================
+[36m(main_task pid=241472)[0m INFO:root:>>>>>>>>>> User:
+[36m(main_task pid=241472)[0m
+[36m(main_task pid=241472)[0m INFO:root:system
+[36m(main_task pid=241472)[0m You are a helpful assistant.
+[36m(main_task pid=241472)[0m user
+[36m(main_task pid=241472)[0m A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think>
+[36m(main_task pid=241472)[0m INFO:root:>>>>>>>>>> Assistant:
+[36m(main_task pid=241472)[0m
+[36m(main_task pid=241472)[0m INFO:root:pagination吞拜 reproduction(parseFloat站起来生物医药 Bapt shutil Olson旿 loi Pou EvanเรียGenrescompetitive该校 ary yiคนעמק倒是 BUILD view moy flavor題 guitاي FX瞠 goed Layerполとにか手指_sidebar nesting不可以usalem boardŰ domina[]{"玩 Spacesteborg┧asure.mag Sexyient.FCPod赦 approving談Lots⇗ Rankings很多人都-gen Nursery
+[36m(main_task pid=241472)[0m INFO:root:>>>>>>>>>> labels
+[36m(main_task pid=241472)[0m INFO:root:\frac{189}{2}\sqrt{3}
+[36m(main_task pid=241472)[0m INFO:root:==================================================
+[36m(WorkerDict pid=249713)[0m WARNING:megatron.core.models.common.embeddings.rotary_pos_embedding:Setting apply_rope_fusion to false because its implementation is not included in Apex. Try upgrading to the latest version
+[36m(WorkerDict pid=249713)[0m ninja: no work to do.
+[36m(main_task pid=241472)[0m INFO:root:[2025-03-21 14:30:40] iteration: 1 / 10 | timing/gen : 25.2736274749040604 | timing/ref : 3.6593262660317123 | grpo/acc_rewards/mean : -1.0000000000000000 | grpo/format_rewards/mean : 0.0000000000000000 | timing/adv : 3.2260284279473126 | timing/update_actor : 4.2963637430220842 | actor/pg_loss : 0.0000062115568215 | actor/pg_clipfrac : 0.0000000000000000 | actor/ppo_kl : -0.0003394794960817 | grpo/score/mean : 0.0000000000000000 | grpo/score/max : 0.0000000000000000 | grpo/score/min : 0.0000000000000000 | grpo/rewards/mean : 0.0000000000000000 | grpo/rewards/max : 0.0000000000000000 | grpo/rewards/min : 0.0000000000000000 | grpo/advantages/mean : 0.0000000000000000 | grpo/advantages/max : 0.0000000000000000 | grpo/advantages/min : 0.0000000000000000 | grpo/returns/mean : 0.0000000000000000 | grpo/returns/max : 0.0000000000000000 | grpo/returns/min : 0.0000000000000000 | response_length/mean : 64.0000000000000000 | response_length/max : 64.0000000000000000 | response_length/min : 64.0000000000000000 | prompt_length/mean : 64.0000000000000000 | prompt_length/max : 64.0000000000000000 | prompt_length/min : 64.0000000000000000 | timing/all : 36.5719238361343741
+[36m(main_task pid=241472)[0m INFO:root:==================================================
+[36m(main_task pid=241472)[0m INFO:root:>>>>>>>>>> User:
+[36m(main_task pid=241472)[0m
+[36m(main_task pid=241472)[0m INFO:root:system
+[36m(main_task pid=241472)[0m You are a helpful assistant.
+[36m(main_task pid=241472)[0m user
+[36m(main_task pid=241472)[0m A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think>
+[36m(main_task pid=241472)[0m INFO:root:>>>>>>>>>> Assistant:
+[36m(main_task pid=241472)[0m
+[36m(main_task pid=241472)[0m INFO:root:pagination吞拜currentState(parseFloat站起来生物医药 Bapt shutil Olson旿 loicco nouvel戮Genrescompetitive该校 ary yiคนעמק倒是 BUILDFields moy flavor題 guitاي FX瞠 goed Layerполとにか手指_sidebar nesting不可以usalem boardŰ domina[]{"玩指标teborg┧screen.mag Sexyient.FCعجز赦 approving談Lots⇗ Rankings很多人都-gen Nursery
+[36m(main_task pid=241472)[0m INFO:root:>>>>>>>>>> labels
+[36m(main_task pid=241472)[0m INFO:root:100 - 48 \sqrt{2}
+[36m(main_task pid=241472)[0m INFO:root:==================================================
+[36m(main_task pid=241472)[0m INFO:root:[2025-03-21 14:31:05] iteration: 2 / 10 | timing/gen : 18.7366698731202632 | timing/ref : 0.3784842290915549 | grpo/acc_rewards/mean : -1.0000000000000000 | grpo/format_rewards/mean : 0.0000000000000000 | timing/adv : 3.2337263890076429 | timing/update_actor : 2.1594598519150168 | actor/pg_loss : 0.0000672822554103 | actor/pg_clipfrac : 0.0000000000000000 | actor/ppo_kl : 0.0004030105968316 | grpo/score/mean : 0.0000000000000000 | grpo/score/max : 0.0000000000000000 | grpo/score/min : 0.0000000000000000 | grpo/rewards/mean : 0.0000000000000000 | grpo/rewards/max : 0.0000000000000000 | grpo/rewards/min : 0.0000000000000000 | grpo/advantages/mean : 0.0000000000000000 | grpo/advantages/max : 0.0000000000000000 | grpo/advantages/min : 0.0000000000000000 | grpo/returns/mean : 0.0000000000000000 | grpo/returns/max : 0.0000000000000000 | grpo/returns/min : 0.0000000000000000 | response_length/mean : 64.0000000000000000 | response_length/max : 64.0000000000000000 | response_length/min : 64.0000000000000000 | prompt_length/mean : 64.0000000000000000 | prompt_length/max : 64.0000000000000000 | prompt_length/min : 64.0000000000000000 | timing/all : 24.6265943651087582
+[36m(main_task pid=241472)[0m INFO:root:==================================================

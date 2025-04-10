@@ -9,6 +9,7 @@ if [ $? -ne 0 ]; then
 fi
 cd MindSpeed-LLM
 git checkout 421ef7bcb83fb31844a1efb688cde71705c0526e
+rm -rf tests
 cd ..
 echo "------------------------------------done MindSpeed-LLM"
 
@@ -21,6 +22,7 @@ if [ $? -ne 0 ]; then
 fi
 cd MindSpeed
 git checkout 0dfa0035ec54d9a74b2f6ee2867367df897299df
+rm -rf tests_extend
 cd ..
 echo "...............................................done MindSpeed"
 
@@ -33,6 +35,7 @@ if [ $? -ne 0 ]; then
 fi
 cd MindSpeed-RL
 git checkout d4d80d61c8293687a22898a4039c28ac6ee12745
+rm -rf tests
 cd ..
 echo "...............................................done MindSpeed-RL"
 
@@ -45,12 +48,16 @@ if [ $? -ne 0 ]; then
 fi
 cd Megatron-LM
 git checkout core_r0.8.0
+rm -rf tests
 cd ..
 echo "..............................................done Megatron-LM"
 
 #msadapter
 rm -rf msadapter
 git clone https://gitee.com/mindspore/msadapter.git
+cd msadapter
+rm -rf tests
+cd ..
 if [ $? -ne 0 ]; then
     echo "Error: git clone msadapter"
     exit 1
@@ -62,6 +69,7 @@ rm -rf vllm
 git clone https://gitee.com/mirrors/vllm.git
 cd vllm
 git checkout v0.7.3
+rm -rf tests
 if [ $? -ne 0 ]; then
     echo "Error: git clone vllm"
     exit 1
@@ -75,6 +83,7 @@ rm -rf vllm-ascend
 git clone https://gitee.com/mirrors/vllm-ascend.git
 cd vllm-ascend
 git checkout 0713836e95fe993feefe334945b5b273e4add1f1
+rm -rf tests
 if [ $? -ne 0 ]; then
     echo "Error: git clone vllm-ascend"
     exit 1
@@ -92,6 +101,7 @@ fi
 mv huggingface_transformers transformers
 cd transformers
 git apply ../tools/rules/transformers.diff
+rm -rf tests
 cd ..
 echo "..............................................done apply transformers"
 
