@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""Test QWENGRPO"""
+"""Test DS3GRPO"""
 import os
 import sys
 import pytest
@@ -35,16 +35,16 @@ def parse_log_file(file):
 
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_single
-class TestQwenGRPO:
+class TestDS3GRPO:
     @pytest.mark.level0
     @pytest.mark.run(order=1)
-    def test_qwen_grpo(self):
+    def test_ds3_grpo(self):
         """
         Feature: test mindspore pretrain_glm
         Description: run mindspore r1_zero to generate pynative loss
         Expectation: test success
         """
-        scripts_name = "test_qwen_grpo.sh"
+        scripts_name = "test_ds3_grpo.sh"
 
         test_path = os.path.split(os.path.realpath(__file__))[0]
         cmd = f"bash {test_path}/{scripts_name} "
