@@ -34,7 +34,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 cd MindSpeed-RL
-git checkout d4d80d61c8293687a22898a4039c28ac6ee12745
+git checkout 2.0.0
 rm -rf tests
 cd ..
 echo "...............................................done MindSpeed-RL"

@@ -2311,9 +2311,10 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +        scheduler_actor = create_worker_group_scheduler(
 +                name=_scheduler_name,
 +                world_size=world_size, 
-+                ms_sched_host=self.ms_sched_host,
-+                ms_sched_port=self.ms_sched_port,
 +            )
++        self.ms_sched_host = ray.get(scheduler_actor._get_current_node_ip.remote())
++        self.ms_sched_port = ray.get(scheduler_actor._get_free_port.remote())
++        scheduler_actor.init_process_group.remote()
 +        scheduler_actor.get_status.remote()
 +
          actor_handle = self.create_actor_handlers(
@@ -2334,12 +2335,24 @@ import mindspore as ms
 from mindspore import mint
 
 from .worker import Worker
- 
+import socket
+import os
  
 @ray.remote
 class WorkerGroupScheduler(Worker):
     def __init__(self):
         self.success = False
+        with socket.socket() as sock:
+            sock.bind((\"\", 0))
+            self.port_ = sock.getsockname()[1]
+        self.host_ = ray._private.services.get_node_ip_address()
+        rank_zero_info = {
+                \"MS_SCHED_HOST\": str(self.host_),
+                \"MS_SCHED_PORT\": str(self.port_),
+            }
+        os.environ.update(rank_zero_info)
+
+    def init_process_group(self):
         if not ms.communication._comm_helper._is_initialized():
             mint.distributed.init_process_group(
                 backend=\"hccl\"
@@ -2348,13 +2361,17 @@ class WorkerGroupScheduler(Worker):
     
     def get_status(self):
         return self.success
+
+    def _get_free_port(self):
+        return self.port_
+
+    def _get_current_node_ip(self):
+        return self.host_
  
  
-def create_worker_group_scheduler(name, world_size, ms_sched_host, ms_sched_port):
+def create_worker_group_scheduler(name, world_size):
     env_vars: dict[str, str] = {
         \"MS_ROLE\": \"MS_SCHED\",
-        \"MS_SCHED_HOST\": str(ms_sched_host),
-        \"MS_SCHED_PORT\": str(ms_sched_port),
         \"MS_WORKER_NUM\": str(world_size),
         \"RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES\": \"1\",
         'WORLD_SIZE': str(world_size),
