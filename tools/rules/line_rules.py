@@ -5,93 +5,6 @@ LINE_RULES = {
 +    ms.set_context(device_target = "CPU", pynative_synchronize=True)
 +    import torch
 +    torch.configs.set_pyboost(False)"""],
-"mindspeed_llm/core/transformer/dot_product_attention.py":["""-from megatron.core.packed_seq_params import PackedSeqParams
-+# from megatron.core.packed_seq_params import PackedSeqParams""",
-"""-from mindspeed.core.context_parallel.ulysses_context_parallel import ulyssesattn_context_parallel
-+# from mindspeed.core.context_parallel.ulysses_context_parallel import ulyssesattn_context_parallel""",
-"""-from mindspeed.core.context_parallel.context_parallel_kv_cache import get_cache_policy
--from mindspeed.utils import get_actual_seq_len, compute_qkv_index, get_position_ids
-+# from mindspeed.core.context_parallel.context_parallel_kv_cache import get_cache_policy
-+# from mindspeed.utils import get_actual_seq_len, compute_qkv_index, get_position_ids""",
-"""-def do_ring_context_parallel(q, k, v, head_num, softmax_scale, attn_mask, dropout_p=0., pse=None, pse_type=None, packed_seq_params=None):
-+def do_ring_context_parallel(q, k, v, head_num, softmax_scale, attn_mask, dropout_p=0., pse=None, pse_type=None):#, packed_seq_params=None):""",
-"""-    if args.shape_order == "TND":
--        packed_seq_params = PackedSeqParams(
--            cu_seqlens_q=torch.tensor(actual_seq_len, dtype=torch.int64, device=torch.cuda.current_device()),
--            cu_seqlens_kv=torch.tensor(actual_seq_len, dtype=torch.int64, device=torch.cuda.current_device())
--        )
-+    # if args.shape_order == "TND":
-+    #     packed_seq_params = PackedSeqParams(
-+    #         cu_seqlens_q=torch.tensor(actual_seq_len, dtype=torch.int64, device=torch.cuda.current_device()),
-+    #         cu_seqlens_kv=torch.tensor(actual_seq_len, dtype=torch.int64, device=torch.cuda.current_device())
-+    #     )""",
-"""-        q_index, kv_index = compute_qkv_index(torch.tensor(actual_seq_len, dtype=torch.int64, device=torch.cuda.current_device()).clone().tolist())
--        packed_seq_params.q_index = q_index
--        packed_seq_params.kv_index = kv_index
--        packed_seq_params.position_ids = get_position_ids()
-+    #     q_index, kv_index = compute_qkv_index(torch.tensor(actual_seq_len, dtype=torch.int64, device=torch.cuda.current_device()).clone().tolist())
-+    #     packed_seq_params.q_index = q_index
-+    #     packed_seq_params.kv_index = kv_index
-+    #     packed_seq_params.position_ids = get_position_ids()""",
-"""         output = ringattn_context_parallel(q, k, v, head_num, cp_para, softmax_scale, attn_mask, dropout_p,
--                                           packed_seq_params)
-+                                            actual_seq_len, actual_seq_len)""",
-"""-def do_ulyssesattn_context_parallel(self,
--        query: Tensor,
--        key: Tensor,
--        value: Tensor,
--        attention_mask,
--        attn_mask_type,
--        packed_seq_params):
--    args = get_args()
-+# def do_ulyssesattn_context_parallel(self,
-+#         query: Tensor,
-+#         key: Tensor,
-+#         value: Tensor,
-+#         attention_mask,
-+#         attn_mask_type,
-+#         packed_seq_params):
-+#     args = get_args()""",
-"""-    sparse_mode = args.sparse_mode
--    if attn_mask_type == AttnMaskType.no_mask:
--        sparse_mode = 0  # default mask
-+#     sparse_mode = args.sparse_mode
-+#     if attn_mask_type == AttnMaskType.no_mask:
-+#         sparse_mode = 0  # default mask""",
-"""-    scale = 1.0 / math.sqrt(
--        self.hidden_size_per_attention_head) if self.scale_mask_softmax.scale is None else self.softmax_scale
-+#     scale = 1.0 / math.sqrt(
-+#         self.hidden_size_per_attention_head) if self.scale_mask_softmax.scale is None else self.softmax_scale""",
-"""-    self.ulysses_comm_para['cache_policy'] = get_cache_policy(
--        self.layer_number, args.context_parallel_kv_cache_policy, args.context_parallel_cache_interval
--    )
--    self.ulysses_comm_para['use_ulysses_allgather_kv'] = args.use_ulysses_allgather_kv
--    attn_para = dict()
--    attn_para['packed_seq_params'] = packed_seq_params
--    attn_para['attention_mask'] = attention_mask
--    attn_para['scale'] = scale
--    attn_para['pre_tokens'] = args.pre_tockens
--    attn_para['next_tokens'] = args.next_tockens
--    attn_para['keep_prob'] = 1 - self.attention_dropout.p
--    attn_para['sparse_mode'] = sparse_mode
--    output = ulyssesattn_context_parallel(query, key, value, attn_para, self.ulysses_comm_para)
-+#     self.ulysses_comm_para['cache_policy'] = get_cache_policy(
-+#         self.layer_number, args.context_parallel_kv_cache_policy, args.context_parallel_cache_interval
-+#     )
-+#     self.ulysses_comm_para['use_ulysses_allgather_kv'] = args.use_ulysses_allgather_kv
-+#     attn_para = dict()
-+#     attn_para['packed_seq_params'] = packed_seq_params
-+#     attn_para['attention_mask'] = attention_mask
-+#     attn_para['scale'] = scale
-+#     attn_para['pre_tokens'] = args.pre_tockens
-+#     attn_para['next_tokens'] = args.next_tockens
-+#     attn_para['keep_prob'] = 1 - self.attention_dropout.p
-+#     attn_para['sparse_mode'] = sparse_mode
-+#     output = ulyssesattn_context_parallel(query, key, value, attn_para, self.ulysses_comm_para)
-     
--    return output
-+#     return output""","""-            pse_type=self.pse_type, packed_seq_params=packed_seq_params)
-+            pse_type=self.pse_type)#, packed_seq_params=packed_seq_params)"""],
     "mindspeed_llm/core/datasets/blended_megatron_dataset_builder.py": [""" from ..parallel_state import get_pipeline_model_parallel_node_info
 +from mindspore.communication import get_local_rank
  
@@ -729,8 +642,8 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
 +        loss1 = torch.sum(losses.view(-1) * loss_mask)
 +        loss2 = loss_mask.sum()
 +
-+        loss1 = ReduceFromContextParallelRegion()(loss1)
-+        loss2 = ReduceFromContextParallelRegion()(loss2)
++        loss1 = ReduceFromContextParallelRegion().apply(loss1)
++        loss2 = ReduceFromContextParallelRegion().apply(loss2)
 +
 +        loss = loss1 / loss2
      else:

@@ -125,19 +125,6 @@ SPECIAL_RULES = {
 },
 
 "mindspeed":{
-    "core/context_parallel/ring_context_parallel.py":
-        [(r"import torch_npu", "import torch_npu\nimport mindspore"),
-         (r"= cp_para", "= self.cp_para"),
-         (r"AttentionWithCp\(torch\.autograd\.Function.*\n.*", "AttentionWithCp(mindspore.nn.Cell):\n\n    def __init__(self, cp_para):\n        super().__init__()\n        self.block_size = None\n        self.batch_size = None\n        self.cp_para = cp_para"),
-         (r"ctx\.", "self."),
-         (r"@staticmethod", ""),
-         (r"def forward.*cp_para", "def construct(self, q, k, v, n"),
-         (r"self\.save_for_backward.*", "self.k = k\n        self.v = v\n        self.attn_mask = attn_mask\n        self.softmax_max = softmax_max\n        self.softmax_sum = softmax_sum"),
-         (r"def backward\(ctx.*\n.*", "def bprop(self, q, k, v, n, softmax_scale, attn_mask, dropout_p, actual_seq_qlen, actual_seq_kvlen, attn_out, dout):\n        k = self.k\n        v = self.v\n        cp_para = self.cp_para\n        softmax_max = self.softmax_max\n        softmax_sum = self.softmax_sum\n        attn_mask = self.attn_mask"),
-         (r"AttentionWithCp\.block_size", "attn_with_cp = AttentionWithCp(cp_para)\n    attn_with_cp.block_size"),
-         (r"AttentionWithCp\.batch_size =", "attn_with_cp.batch_size ="),
-         (r"AttentionWithCp.*\n.*cp_para", "attn_with_cp(\n        q, k, v, n")
-        ],
     "model/transformer.py":
         [(r"dtype=bool", "dtype=torch.bool")
         ],
