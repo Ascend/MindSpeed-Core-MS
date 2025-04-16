@@ -35,7 +35,7 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 注：Python 三方库依赖文件`requirements.txt`列举的是模型训练所需要的python三方库
 
 ## 支持模型
-下方仅部分列举所支持模型，所支持的模型全集见[MindSpeed-Core-MS 支持模型全集](./docs/MODELS.md)。
+下方仅部分列举所支持模型。
 
 <table>
   <a id="jump1"></a>
@@ -48,8 +48,6 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
       <th>任务</th>
       <th>集群</th>
       <th>精度格式</th>
-      <th>NPU性能</th>
-      <th>参考性能</th>
     </tr>
   </thead>
   <tbody>
@@ -60,24 +58,18 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
       <td>预训练</td>
       <td> 64x8 </td>
       <td> BF16 </td>
-      <td> </td>
-      <td> </td>
     </tr>
     <tr>
       <td> 4K </td>
       <td>微调</td>
       <td> 64x8 </td>
       <td> BF16 </td>
-      <td> </td>
-      <td> </td>
     </tr>
     <tr>
       <td> 4K </td>
       <td>Lora微调</td>
       <td> 8x8 </td>
       <td> BF16 </td>
-      <td> </td>
-      <td> </td>
     </tr>
     </tbody>
 </table>
@@ -147,8 +139,8 @@ MindSpeed-Core-MS已发布版本维护策略：
 
 | **MindSpeed-Core-MS版本** | **维护策略** | **当前状态** | **发布时间**   | **后续状态**         | **EOL日期** |
 |-----------------|-----------|--------|------------|-----------------------|-----------|
-| feature-0.2 |  常规版本  | 维护   |  |   |           |
-|              |  常规版本  | 维护   |  |   |           |
+| feature-0.2 |  Demo  | 开发   |  |   |           |
+|              |  Demo  | 开发   |  |   |           |
 
 ---
 
