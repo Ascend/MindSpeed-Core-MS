@@ -593,17 +593,7 @@ def create_worker_group_scheduler(name, world_size, name_prefix):
     return WorkerGroupScheduler.options(**options).remote()"""
     ],
         "mindspeed_llm/training/arguments.py":[
-"""     if args.moe_alltoall_overlap_comm and not args.moe_token_dispatcher_type == 'alltoall':
-         raise AssertionError('`--moe-alltoall-overlap-comm` only support with `--moe-token-dispatcher-type alltoall`.')
--    if not args.moe_tp_extend_ep and args.moe_alltoall_overlap_comm and args.tensor_model_parallel_size > 1:
--        raise AssertionError(
--            '`--moe-alltoall-overlap-comm` do not support tp for now. only support with moe_tp_extend_ep when tp > 1.')
-     if args.moe_zero_memory_num_layers is not None:""","""         raise AssertionError('args.shared_expert_gate does not support gradient_accumulation_fusion.')
-+    if args.moe_alltoall_overlap_comm and args.gradient_accumulation_fusion:
-+        raise AssertionError('moe_alltoall_overlap_comm does not support gradient_accumulation_fusion at the same time.')
- 
- 
- def _validate_mla(args):""","""     args.adaptive_recompute_profiling_step = 10
+"""     args.adaptive_recompute_profiling_step = 10
 +    # args.moe_tp_extend_ep = False
      args.recompute_in_bubble = False""","""+        args.use_mc2 = False
          args.use_legacy_models = not args.use_mcore_models"""],
