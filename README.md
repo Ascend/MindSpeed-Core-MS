@@ -52,8 +52,8 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
   </thead>
   <tbody>
     <tr>
-      <td rowspan="3"><a href="https://huggingface.co/deepseek-ai/DeepSeek-V3/tree/main">DeepSeek V3</a></td>
-      <td rowspan="3"><a href="https://huggingface.co/deepseek-ai/DeepSeek-V3/tree/main">671B</a></td>
+      <td rowspan="4"><a href="https://huggingface.co/deepseek-ai/DeepSeek-V3/tree/main">DeepSeek V3</a></td>
+      <td rowspan="4"><a href="https://huggingface.co/deepseek-ai/DeepSeek-V3/tree/main">671B</a></td>
       <td> 4K </td>
       <td>预训练</td>
       <td> 64x8 </td>
@@ -71,10 +71,28 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
       <td> 8x8 </td>
       <td> BF16 </td>
     </tr>
-    </tbody>
+    <tr>
+      <td> 4K </td>
+      <td> r1-zero </td>
+      <td> 52x8 </td>
+      <td> BF16 </td>
+      <td> </td>
+      <td> </td>
+    </tr>
+  </tbody>
+  <tbody>
+    <tr>
+      <td rowspan="1"><a href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/tree/main">Qwen25</a></td>
+      <td><a href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/tree/main">7B</a></td>
+      <td> 4k </td>
+      <td> r1-zero </td>
+      <td> 2x8 </td>
+      <td> BF16 </td>
+      <td> </td>
+      <td> </td>
+    </tr>
+  </tbody>
 </table>
-
----
 
 # 使用指南
 
@@ -88,32 +106,73 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 git clone -b feature-0.2 https://gitee.com/ascend/MindSpeed-Core-MS.git
 ```
 
-## 一键转换
+## MindSpeed-LLM
+
+### 一键转换
 
 补丁工具集成了相关代码仓拉取、代码自动转换适配以及模型启动shell脚本自动适配功能，依赖以下配置：
 
 - 所部署容器网络可用，python已安装
 - git已完成配置，可以正常进行clone操作
 
-详细介绍请见补丁工具说明。用户执行相应命令即可一键转换。
+详细介绍请见补丁工具说明。用户执行命令即可一键转换。
 
 ```shell
 cd MindSpeed-Core-MS
+#deepseek v3预训练、微调
 source test_convert_llm.sh
 ```
 
-## 设置环境
+### 设置环境
 
 ```shell
+#deepseek v3预训练、微调
 MindSpeed_Core_MS_PATH=$(pwd)
 export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:$PYTHONPATH
 ```
 
-## 模型训练
+### 模型训练
 
 在进行一键转换安装后，用户即可进行模型训练，提供以下模型任务拉起流程作为参考。
 
 - [**DEEPSEEK-V3预训练 & 微调**](./docs/deepseekv3.md)
+
+---
+
+## MindSpeed-RL
+
+### 一键转换
+
+补丁工具集成了相关代码仓拉取、代码自动转换适配以及模型启动shell脚本自动适配功能，依赖以下配置：
+
+- 所部署容器网络可用，python已安装
+- git已完成配置，可以正常进行clone操作
+
+详细介绍请见补丁工具说明。用户执行命令即可一键转换。
+
+```shell
+cd MindSpeed-Core-MS
+#deepseek v3-r1-zero、qwen25-7b-r1-zero
+source test_convert_rl.sh
+```
+
+### 设置环境
+
+```shell
+#deepseek v3-r1-zero、qwen25-7b-r1-zero
+MindSpeed_Core_MS_PATH=$(pwd)
+Ascend_PATH=/usr/loacl/Ascend/ascend-toolkit/latest/
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter/mindtorch:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM/:${MindSpeed_Core_MS_PATH}/MindSpeed/: \
+                     ${MindSpeed_Core_MS_PATH}/Megatron-LM/:${MindSpeed_Core_MS_PATH}/vllm/:${MindSpeed_Core_MS_PATH}/vllm-ascend/: \
+                     ${MindSpeed_Core_MS_PATH}/transformers/src/: \
+                     ${Ascend_PATH}/python/site-packages:${Ascend_PATH}/opp/built-in/op_impl/ai_core/tbe:
+```
+
+### 模型训练
+
+在进行一键转换安装后，用户即可进行模型训练，提供以下模型任务拉起流程作为参考。
+
+- [**DEEPSEEK V3-R1-ZERO/QWEN25-7B-R1-ZERO**](./docs/GRPO.md)
 
 ---
 
