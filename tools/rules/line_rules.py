@@ -1975,6 +1975,14 @@ LINE_RULES_MindSpeed_MM = {
              dtype=torch.bool
          )
          for i in range(1, len(cu_seqlens)):
+""",
+"""             wpos_ids = wpos_ids.permute(0, 2, 1, 3)
+             wpos_ids = wpos_ids.flatten()
+-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
++            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t.item(), 1))
+         pos_ids = torch.cat(pos_ids, dim=0)
+         max_grid_size = grid_thw[:, 1:].max()
+         rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
 """
 ],
 "mindspeed_mm/models/vl_model.py": ["""             shift_logits = shift_logits.view(-1, self.text_decoder.vocab_size)
@@ -2454,6 +2462,21 @@ LINE_RULES_transformers = {
  
  
  _tf_version = "N/A"
+""",
+"""     # NOTE: We require torchvision>=0.15 as v2 transforms are available from this version: https://pytorch.org/vision/stable/transforms.html#v1-or-v2-which-one-should-i-use
+-    return version.parse(_torchvision_version) >= version.parse("0.15")
++    return False #version.parse(_torchvision_version) >= version.parse("0.15")
+
+
+ def is_galore_torch_available():
+"""
+],
+"src/transformers/modeling_rope_utils.py": ["""     attention_factor = 1.0  # Unused in this type of RoPE
+
+     # Compute the inverse frequencies
+-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float().to(device) / dim))
++    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+     return inv_freq, attention_factor
 """
 ],
 
