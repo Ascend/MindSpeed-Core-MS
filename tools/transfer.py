@@ -152,7 +152,11 @@ if __name__ == "__main__":
                         help="convert einops package path")
     parser.add_argument("--is_rl", action="store_true",
                         help="is rl")
+    parser.add_argument("--gongcang", action="store_true",
+                        help="use gongcang")
     args = parser.parse_args()
+    if args.gongcang:
+        from rules.line_rules_gongcang import LINE_RULES, GENERAL_RULES, SHELL_RULES, FILE_RULES, SPECIAL_RULES
 
     if args.is_rl:
         from rules_rl.special_rules import SPECIAL_RULES
