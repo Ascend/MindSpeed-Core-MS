@@ -52,4 +52,4 @@ class TestDS3Sft:
         # 开确定性计算，精度对齐
         for i in loss_pt:
             print("loss:", loss_pt[i][2], loss_ms[i][2])
-            assert len(loss_pt[i][2]) == len(loss_ms[i][2])
+            assert loss_pt[i][2] == loss_ms[i][2]

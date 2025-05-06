@@ -1,12 +1,18 @@
 #!/bin/bash
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+export HCCL_CONNECT_TIMEOUT=3600
+
+export HCCL_DETERMINISTIC=true  # HCCL确定性
+export ASCEND_LAUNCH_BLOCKING=1  # 硬件确定性
+export NCCL_DETERMINISTIC=1
 
 source ../../../../scripts/set_path.sh
 MindSpeed_LLM_PATH=../../../../MindSpeed-LLM
 
 NPUS_PER_NODE=8
 MASTER_ADDR=localhost
-MASTER_PORT=6090
+MASTER_PORT=6190
 NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
@@ -16,7 +22,6 @@ CKPT_LOAD_DIR="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_q
 CKPT_SAVE_DIR="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_qwen_sft/save"
 DATA_PATH="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_qwen_sft/dataset/finetune_dataset/alpaca"
 TOKENIZER_PATH="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_qwen_sft/R1"
-
 
 TP=2
 PP=4
