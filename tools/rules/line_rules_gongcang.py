@@ -14,10 +14,6 @@ LINE_RULES = {
 -            'megatron.core.parallel_state.get_nccl_options', get_nccl_options_wrapper)
 """
     ],
-    "mindspeed_llm/mindspore/mindspore_adaptor.py":[
-        """-        MegatronAdaptation.register('megatron.core.models.gpt.gpt_model.GPTModel', GPTModel)
-+        MegatronAdaptation.register('megatron.core.models.gpt.gpt_model.GPTModel', GPTModel, force_patch=True)"""
-    ],
     "mindspeed_llm/core/datasets/blended_megatron_dataset_builder.py": [""" from ..parallel_state import get_pipeline_model_parallel_node_info
 +from mindspore.communication import get_local_rank
  
