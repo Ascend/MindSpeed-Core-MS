@@ -74,6 +74,8 @@ LINE_RULES = {
         ],
     },
     "mindspeed":{
+    "core/auto_parallel/auto_parallel_apply.py":["""
+-    from mindspeed.core.auto_parallel.auto_parallel_optimizer import SearchByGreyBox"""],
     }
 }
 
