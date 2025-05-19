@@ -47,4 +47,4 @@ https://github.com/facebookresearch/multimodal/blob/5dec8a/torchmultimodal/modul
 https://github.com/pytorch/pytorch/issues/26744/pytorch/issues/26744def
 https://github.com/tomrunia/OpticalFlow_Visualizationdef
 https://deepmind.com/research/open-source/open-source-datasets/kinetics/
-
+https://github.com/vllm-project/vllm-ascendAuthor

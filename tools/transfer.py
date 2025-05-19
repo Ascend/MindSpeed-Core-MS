@@ -154,6 +154,8 @@ if __name__ == "__main__":
                         help="is rl")
     parser.add_argument("--gongcang", action="store_true",
                         help="use gongcang")
+    parser.add_argument("--gongcang_rl", action="store_true",
+                        help="use gongcang_rl")
     args = parser.parse_args()
     if args.gongcang:
         from rules.line_rules_gongcang import LINE_RULES, GENERAL_RULES, SHELL_RULES, FILE_RULES, SPECIAL_RULES
@@ -161,6 +163,9 @@ if __name__ == "__main__":
     if args.is_rl:
         from rules_rl.special_rules import SPECIAL_RULES
         from rules_rl.line_rules import LINE_RULES
+    
+    if args.gongcang_rl:
+        from rules_rl.line_rules_gongcang import LINE_RULES, GENERAL_RULES, SHELL_RULES, FILE_RULES, SPECIAL_RULES
 
     if args.megatron_path:
         origin_path = args.megatron_path
