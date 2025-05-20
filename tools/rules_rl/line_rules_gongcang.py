@@ -1,10 +1,5 @@
 LINE_RULES = {
     "MindSpeed-LLM": {
-    "convert_ckpt.py":["""if __name__ == '__main__':
-+    import mindspore as ms
-+    ms.set_context(device_target = "CPU", pynative_synchronize=True)
-+    import torch
-+    torch.configs.set_pyboost(False)"""],
     "mindspeed_llm/tasks/megatron_adaptor.py": [
 """                optimizer_config_init_wrapper
 -            from mindspeed.optimizer.distrib_optimizer import reuse_fp32_param_distrib_optimizer_init_wrapper
