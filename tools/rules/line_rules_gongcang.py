@@ -59,7 +59,7 @@ LINE_RULES = {
 -                load_dir, device_map=device_map, trust_remote_code=trust_remote_code, local_files_only=True
 +                load_dir, trust_remote_code=trust_remote_code, local_files_only=True, low_cpu_mem_usage=False
              )]
-         if hasattr(self.args, "torch_dtype") and self.args.torch_dtype in ["float16", "bfloat16"]:"""],
+"""],
     "mindspeed_llm/tasks/models/transformer/multi_head_latent_attention.py":["""-        output = torch.matmul(input_, self.weight.t())
 +        output = torch.matmul(input_.squeeze(1), self.weight.t())
 +        output = output.unsqueeze(1)"""],
@@ -72,10 +72,121 @@ LINE_RULES = {
 -        return grad_input, None, None
 +        return grad_input.to(torch.bfloat16), None, None"""
         ],
+        "core/pipeline_parallel/schedules.py":[
+""" from typing import Callable, Iterator, List, Optional, Union
+ 
+ import torch
+-from torch.autograd.variable import Variable
++from mindspore.ops import composite as C
++from mindspore.common.api import _pynative_executor
+ 
+ from megatron.core import parallel_state
+ from megatron.core.enums import ModelType""","""     set_input_tensor(input_tensor)
+ 
++    if not parallel_state.is_pipeline_first_stage() and input_tensor is not None:
++        input_tensor[0].retain_grad()
++
++    # run forward
++    num_tokens = torch.tensor(0, dtype=torch.int)
++    if input_tensor[0] is None:
++        input_tensor[0] = num_tokens
++
+     if config.enable_autocast:
+         context_manager = torch.autocast("cuda", dtype=config.autocast_dtype)
+     else:
+         context_manager = contextlib.nullcontext()
++    _pynative_executor.set_grad_flag(True)
++    _pynative_executor.new_graph(forward_step_func, input_tensor[0])
+     with context_manager:
+         if checkpoint_activations_microbatch is None:""","""             forward_data_store.append(data)
++    _pynative_executor.end_graph(forward_step_func, output_tensor, input_tensor[0])
+ 
+     if config.timers is not None:""","""-def backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config):
++def backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model):""",
+"""     if not isinstance(input_tensor, list):
+         input_tensor = [input_tensor]
+         unwrap_input_tensor_grad = True
+-    for x in input_tensor:
+-        if x is not None:
+-            x.retain_grad()
++    
+ 
+     if not isinstance(output_tensor, list):""","""     if output_tensor_grad[0] is None and config.grad_scale_func is not None:
+-        output_tensor[0] = config.grad_scale_func(output_tensor[0])
++        output_tensor_grad[0] = config.grad_scale_func(torch.ones_like(output_tensor[0]))
++    if output_tensor_grad[0] is None:
++        output_tensor_grad[0] = torch.ones_like(output_tensor[0])
+ 
+-    if config.deallocate_pipeline_outputs:
+-        custom_backward(output_tensor[0], output_tensor_grad[0])
+-    else:
+-        torch.autograd.backward(output_tensor[0], grad_tensors=output_tensor_grad[0])
++    # set input tensor for backpropagation
++    if not parallel_state.is_pipeline_first_stage():
++        model.module.set_input_tensor(input_tensor[0])
++
++    # run backward
++    grad_ = C.GradOperation(True, True, True)
++    weights = model.trainable_params()
++    _pynative_executor.check_run(grad_, config.forward_step_func, weights, None, input_tensor[0])
++    _pynative_executor.grad(config.forward_step_func, grad_, weights, None, input_tensor[0], output_tensor_grad[0])
+ 
+     # Collect the grad of the input_tensor.
+     input_tensor_grad = [None]""","""             else:
+                 input_tensor_grad.append(x.grad)
+ 
++    if not parallel_state.is_pipeline_first_stage():
++        model.module.set_input_tensor(None)
++
+     # Handle single skip connection if it exists (encoder_hidden_state in
+     # model with encoder and decoder).""","""     config = get_model_config(model)
++    config.forward_step_func = forward_step_func
+     if config.timers is not None:""","""     forward_data_store = []
+-    input_tensor, output_tensor_grad = None, None
++    input_tensor, output_tensor_grad = [None], [None]
+     total_num_tokens = torch.zeros([], dtype=torch.int, device="cuda")""","""             if not forward_only:
+-                backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config)
++                backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model)
+ 
+     # Run computation for last microbatch out of context handler (want to""","""     if not forward_only:
+-        backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config)
++        backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model)
+ 
+     if config.finalize_model_grads_func is not None and not forward_only:""","""     config = get_model_config(model[0])
++    config.forward_step_func = forward_step_func
+     if config.overlap_p2p_comm and config.batch_p2p_comm:""","""                 input_tensors[model_chunk_id].append(None)
++        if input_tensors[model_chunk_id][-1] is None:
++            input_tensors[model_chunk_id][-1] = torch.tensor(0, dtype=torch.int)
+         input_tensor = input_tensors[model_chunk_id][-1]""","""         output_tensor_grad = output_tensor_grads[model_chunk_id].pop(0)
+-        input_tensor_grad = backward_step(
+-            input_tensor, output_tensor, output_tensor_grad, model_type, config
+-        )
++        input_tensor_grad = backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model[model_chunk_id])
+ 
+         # launch grad synchronization (custom grad sync)""","""     config = get_model_config(model)
++    config.forward_step_func = forward_step_func
+     if config.overlap_p2p_comm:""","""                 if config.grad_sync_func is None or rank == 0:
+                     enable_grad_sync()
+ 
+-            input_tensor_grad = backward_step(
+-                input_tensor, output_tensor, output_tensor_grad, model_type, config
+-            )
++            input_tensor_grad = backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model)
+ 
+             if last_iteration:""","""             output_tensor_grad = recv_backward(send_tensor_shapes, config)
+ 
+-            input_tensor_grad = backward_step(
+-                input_tensor, output_tensor, output_tensor_grad, model_type, config
+-            )
++            input_tensor_grad = backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, config, model)
+ 
+             send_backward(input_tensor_grad, recv_tensor_shapes, config)"""],
     },
     "mindspeed":{
-    "core/auto_parallel/auto_parallel_apply.py":["""
--    from mindspeed.core.auto_parallel.auto_parallel_optimizer import SearchByGreyBox"""],
+    "core/auto_parallel/auto_parallel_apply.py":[""" from mindspeed.core.auto_parallel import set_kv_store
+-from mindspeed.core.auto_parallel.auto_parallel_optimizer import SearchByGreyBox
+ from mindspeed.core.auto_parallel.auto_parallel_memory import MemoryCostModel
+"""],
     }
 }
 
