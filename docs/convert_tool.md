@@ -12,12 +12,18 @@
 ## 目录结构
 
 ```text
-tools/
-└── convert/
-    ├── convert.py            # 主入口脚本
-    └── modules/
-        ├── api_transformer.py  # 核心转写逻辑
-        └── utils.py            # 辅助工具函数
+tools
+└── convert
+   ├── convert.py
+   ├── convert.sh # 转换脚本入口
+   ├── mapping_resources
+   │   ├── api_mapping.py # 已对齐的API
+   │   └── special_case.py # 需要特殊处理的文件和处理方法
+   └── modules
+       ├── api_transformer.py # 核心转写模块
+       ├── string_transformer.py # 辅助模块
+       └── utils.py
+
 ```
 
 ## 安装与依赖
@@ -32,19 +38,17 @@ tools/
 ## 命令行使用
 
 ```bash
-python tools/convert/convert.py \
-  --path_to_change /path/to/your/repo \
-  --multiprocess 32 \
-  --result_log ./convert_result.log
+cd MindSpeed-Core-MS
+bash test_convert_xxx.sh # 正常获取MindSpeed, MindSpeed-LLM 等代码仓并应用MindSpore需要的patch, 注意不需要设置PYTHONPATH
+# 此时若设置PYTHONPATH, 应能正常拉起模型训练
+bash tools/convert/convert.sh # 拷贝需要的三方库和依赖的代码至MindSpeed-LLM目录, 并对MindSpeed-LLM目录应用代码转写
 ```
 
-* `--path_to_change`：待转写的文件或目录路径（支持递归扫描 .py 文件）。
+* 默认在`MindSpeed-Core-MS`目录下生成日志文件`result.log`, 其中记录每个文件转写结果, 期望日志文件中不包含`False`
 
-* `--multiprocess`：并行进程数，默认为 32。
+* 此时能基于`mindspore/msadapter`拉起模型,不需要额外设置`PYTHONPATH`
 
-* `--result_log`：日志输出文件，记录每个文件的转写状态与异常信息。
-
-## 示例
+## 单独使用(只转换某个代码仓)
 
 假设要将 Megatron-LM、MindSpeed-LLM、MindSpeed-MM 等仓库转写为 MindSpore 适配：
 
