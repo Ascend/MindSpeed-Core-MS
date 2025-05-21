@@ -1,5 +1,5 @@
 diff --git a/src/transformers/cache_utils.py b/src/transformers/cache_utils.py
-index 23f2177b2..0bcfc28f2 100644
+index 23f2177b25..0bcfc28f2b 100644
 --- a/src/transformers/cache_utils.py
 +++ b/src/transformers/cache_utils.py
 @@ -242,7 +242,7 @@ class QuantizedCacheConfig(CacheConfig):
@@ -21,7 +21,7 @@ index 23f2177b2..0bcfc28f2 100644
          layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
      ) -> None:
 diff --git a/src/transformers/configuration_utils.py b/src/transformers/configuration_utils.py
-index e49eab86b..4380f1099 100755
+index e49eab86b4..4380f10999 100755
 --- a/src/transformers/configuration_utils.py
 +++ b/src/transformers/configuration_utils.py
 @@ -988,8 +988,10 @@ class PretrainedConfig(PushToHubMixin):
@@ -43,7 +43,7 @@ index e7d3a5abb7..29205e8f5d 100644
 @@ -52,9 +52,11 @@ if is_tf_available():
  if is_flax_available():
      import jax.numpy as jnp
- 
+
 -if is_torchvision_v2_available():
 -    from torchvision.transforms.v2 import functional as F
 -elif is_torchvision_available():
@@ -53,10 +53,24 @@ index e7d3a5abb7..29205e8f5d 100644
 +#     from torchvision.transforms import functional as F
 +if is_torchvision_available():
      from torchvision.transforms import functional as F
- 
- 
+
+
+diff --git a/src/transformers/modeling_rope_utils.py b/src/transformers/modeling_rope_utils.py
+index c617420a58..ab74809516 100644
+--- a/src/transformers/modeling_rope_utils.py
++++ b/src/transformers/modeling_rope_utils.py
+@@ -64,7 +64,8 @@ def _compute_default_rope_parameters(
+     attention_factor = 1.0  # Unused in this type of RoPE
+
+     # Compute the inverse frequencies
+-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float().to(device) / dim))
++    #inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float().to(device) / dim))
++    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+     return inv_freq, attention_factor
+
+
 diff --git a/src/transformers/modeling_utils.py b/src/transformers/modeling_utils.py
-index dae29111c..39e62282a 100755
+index dae29111c8..9158eb4ffb 100755
 --- a/src/transformers/modeling_utils.py
 +++ b/src/transformers/modeling_utils.py
 @@ -38,14 +38,14 @@ from huggingface_hub import split_torch_state_dict_into_shards
@@ -65,7 +79,7 @@ index dae29111c..39e62282a 100755
  from torch.nn import CrossEntropyLoss, Identity
 -from torch.utils.checkpoint import checkpoint
 +# from torch.utils.checkpoint import checkpoint
- 
+
  from .activations import get_activation
  from .configuration_utils import PretrainedConfig
  from .dynamic_module_utils import custom_object_save
@@ -76,7 +90,20 @@ index dae29111c..39e62282a 100755
  from .pytorch_utils import (  # noqa: F401
      Conv1D,
      apply_chunking_to_forward,
-@@ -380,26 +380,26 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
+@@ -132,8 +132,10 @@ if is_accelerate_available():
+
+ if is_safetensors_available():
+     from safetensors import safe_open
+-    from safetensors.torch import load_file as safe_load_file
+-    from safetensors.torch import save_file as safe_save_file
++    # from safetensors.torch import load_file as safe_load_file
++    # from safetensors.torch import save_file as safe_save_file
++    from safetensors.numpy import load_file as safe_load_file
++    from safetensors.numpy import save_file as safe_save_file
+
+ logger = logging.get_logger(__name__)
+
+@@ -380,26 +382,26 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
 
      Note: We fully disable this if we are using `deepspeed`
      """
@@ -119,7 +146,7 @@ index dae29111c..39e62282a 100755
 
      # For cases when the `state_dict` doesn't contain real weights to the model (`test_model_weights_reload_no_missing_tied_weights`)
      return False
-@@ -501,13 +501,15 @@ def load_state_dict(
+@@ -501,13 +503,15 @@ def load_state_dict(
      """
      if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
          # Check format of the archive
@@ -142,7 +169,7 @@ index dae29111c..39e62282a 100755
          return safe_load_file(checkpoint_file)
      try:
          if map_location is None:
-@@ -1519,7 +1521,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+@@ -1519,7 +1523,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
          cls,
          config,
          use_flash_attention_2: bool = False,
@@ -151,7 +178,7 @@ index dae29111c..39e62282a 100755
          device_map: Optional[Union[str, Dict[str, int]]] = None,
          check_device_map: bool = True,
      ):
-@@ -1599,15 +1601,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+@@ -1599,15 +1603,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                  hard_check_only=False if requested_attn_implementation is None else True,
              )
 
@@ -176,7 +203,7 @@ index dae29111c..39e62282a 100755
          elif isinstance(requested_attn_implementation, dict):
              config._attn_implementation = None
          else:
-@@ -1633,10 +1635,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+@@ -1633,10 +1637,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
          Note `set_default_dtype` currently only works with floating-point types and asserts if for example,
          `torch.int64` is passed. So if a non-float `dtype` is passed this functions will throw an exception.
          """
@@ -191,7 +218,7 @@ index dae29111c..39e62282a 100755
 
          logger.info(f"Instantiating {cls.__name__} model under default dtype {dtype}.")
          dtype_orig = torch.get_default_dtype()
-@@ -1693,7 +1695,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+@@ -1693,7 +1697,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
      def _check_and_enable_flash_attn_2(
          cls,
          config,
@@ -200,7 +227,7 @@ index dae29111c..39e62282a 100755
          device_map: Optional[Union[str, Dict[str, int]]] = None,
          check_device_map: bool = True,
          hard_check_only: bool = False,
-@@ -2619,7 +2621,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+@@ -2619,7 +2623,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
              # the gradients to make sure the gradient flows.
              self.enable_input_require_grads()
 
@@ -209,7 +236,29 @@ index dae29111c..39e62282a 100755
          is_gradient_checkpointing_set = False
 
          # Apply it on the top-level module in case the top-level modules supports it
-@@ -4487,7 +4489,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+@@ -2794,9 +2798,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+
+         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
+         # we currently don't use this setting automatically, but may start to use with v5
+-        dtype = get_parameter_dtype(model_to_save)
+-        model_to_save.config.torch_dtype = str(dtype).split(".")[1]
+-
++        if str(dtype).find('.') != 1:
++            model_to_save.config.torch_dtype = str(dtype).split(".")[1]
++        else:
++            model_to_save.config.torch_dtype = str(dtype)
+         # Attach architecture to the config
+         model_to_save.config.architectures = [model_to_save.__class__.__name__]
+
+@@ -3028,6 +3033,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+                 del shard_state_dict
+                 gc.collect()
+
++            shard = {k:v.asnumpy() for k, v in shard.items()}
+             if safe_serialization:
+                 # At some point we will need to deal better with save_function (used for TPU and other distributed
+                 # joyfulness), but for now this enough.
+@@ -4487,7 +4493,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
          if device_map is None and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
              ptrs = collections.defaultdict(list)
              for name, tensor in model.state_dict().items():
@@ -219,7 +268,7 @@ index dae29111c..39e62282a 100755
                  ptrs[id_tensor].append(name)
 
              # These are all the pointers of shared tensors.
-@@ -4554,6 +4557,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+@@ -4554,6 +4561,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                          hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict, unexpected_keys)
 
          # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
@@ -227,8 +276,46 @@ index dae29111c..39e62282a 100755
          if _fast_init:
              if not ignore_mismatched_sizes:
                  if remove_prefix_from_model:
+@@ -5587,22 +5595,22 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
+     """
+     # Use accelerate implementation if available (should always be the case when using torch)
+     # This is for pytorch, as we also have to handle things like dynamo
+-    if is_accelerate_available():
+-        kwargs = {}
+-        if recursive:
+-            if not is_accelerate_available("0.29.0"):
+-                raise RuntimeError(
+-                    "Setting `recursive=True` to `unwrap_model` requires `accelerate` v0.29.0. Please upgrade your version of accelerate"
+-                )
+-            else:
+-                kwargs["recursive"] = recursive
+-        return extract_model_from_parallel(model, **kwargs)
++    # if is_accelerate_available():
++    #     kwargs = {}
++    #     if recursive:
++    #         if not is_accelerate_available("0.29.0"):
++    #             raise RuntimeError(
++    #                 "Setting `recursive=True` to `unwrap_model` requires `accelerate` v0.29.0. Please upgrade your version of accelerate"
++    #             )
++    #         else:
++    #             kwargs["recursive"] = recursive
++    #     return extract_model_from_parallel(model, **kwargs)
++    # else:
++    # since there could be multiple levels of wrapping, unwrap recursively
++    if hasattr(model, "module"):
++        return unwrap_model(model.module)
+     else:
+-        # since there could be multiple levels of wrapping, unwrap recursively
+-        if hasattr(model, "module"):
+-            return unwrap_model(model.module)
+-        else:
+-            return model
++        return model
+
+
+ def expand_device_map(device_map, param_names, start_prefix):
 diff --git a/src/transformers/models/t5/modeling_t5.py b/src/transformers/models/t5/modeling_t5.py
-index 9012c8db9..d53d398ea 100644
+index 9012c8db9f..d19151e82c 100644
 --- a/src/transformers/models/t5/modeling_t5.py
 +++ b/src/transformers/models/t5/modeling_t5.py
 @@ -245,14 +245,12 @@ class T5LayerNorm(nn.Module):
@@ -330,7 +417,7 @@ index 9012c8db9..d53d398ea 100644
              layer_head_mask = head_mask[i]
              cross_attn_layer_head_mask = cross_attn_head_mask[i]
 diff --git a/src/transformers/pytorch_utils.py b/src/transformers/pytorch_utils.py
-index 5bdf8a355..2e138e986 100644
+index 5bdf8a355d..2e138e986a 100644
 --- a/src/transformers/pytorch_utils.py
 +++ b/src/transformers/pytorch_utils.py
 @@ -301,16 +301,16 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
@@ -361,7 +448,7 @@ index 5bdf8a355..2e138e986 100644
      return tensor.device, unique_id, storage_size(tensor)
 
 diff --git a/src/transformers/utils/import_utils.py b/src/transformers/utils/import_utils.py
-index 32a647594..d17ae5c02 100755
+index 32a6475947..d17ae5c02b 100755
 --- a/src/transformers/utils/import_utils.py
 +++ b/src/transformers/utils/import_utils.py
 @@ -194,13 +194,14 @@ _blobfile_available = _is_package_available("blobfile")
@@ -386,3 +473,4 @@ index 32a647594..d17ae5c02 100755
 
 
  _tf_version = "N/A"
+ 

@@ -45,14 +45,22 @@ LINE_RULES = {
              def func(self, **kwargs):
 -                return _get_dst_obj(self, value, **kwargs).weight.data.copy_(kwargs.get('data'))
 +                set_tensor = _get_dst_obj(self, value, **kwargs)
-+                set_tensor.weight.data = kwargs.get('data')
++                data = kwargs.get('data')
++                if data.dtype != set_tensor.weight.dtype:
++                   data = data.to(dtype = set_tensor.weight.dtype)
++                set_tensor.weight.data = data
+
+
 +                return set_tensor.weight.data
              return func""",
              """         def _func_generator_set_bias(value):
              def func(self, **kwargs):
 -                return _get_dst_obj(self, value, **kwargs).bias.data.copy_(kwargs.get('data'))
 +                set_tensor = _get_dst_obj(self, value, **kwargs)
-+                set_tensor.bias.data = kwargs.get('data')
++                data = kwargs.get('data')
++                if data.dtype != set_tensor.weight.dtype:
++                   data = data.to(dtype = set_tensor.weight.dtype)
++                set_tensor.bias.data = data
 +                return set_tensor.bias.data
              return func""",
      """             self.module = [AutoModelForCausalLM.from_pretrained(

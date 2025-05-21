@@ -1,0 +1,46 @@
+diff --git a/src/accelerate/big_modeling.py b/src/accelerate/big_modeling.py
+index e5d4ee52..ad4bdb21 100644
+--- a/src/accelerate/big_modeling.py
++++ b/src/accelerate/big_modeling.py
+@@ -129,7 +129,8 @@ def init_on_device(device: torch.device, include_buffers: bool = None):
+             param_cls = type(module._parameters[name])
+             kwargs = module._parameters[name].__dict__
+             kwargs["requires_grad"] = param.requires_grad
+-            module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
++            #module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
++            module._parameters[name] = param_cls(module._parameters[name], **kwargs)
+
+     def register_empty_buffer(module, name, buffer, persistent=True):
+         old_register_buffer(module, name, buffer, persistent=persistent)
+@@ -496,7 +497,7 @@ def dispatch_model(
+         elif is_musa_available() and isinstance(device, int):
+             device = f"musa:{device}"
+         if device != "disk":
+-            model.to(device)
++            model#.to(device)
+         else:
+             raise ValueError(
+                 "You are trying to offload the whole model to the disk. Please use the `disk_offload` function instead."
+diff --git a/src/accelerate/utils/modeling.py b/src/accelerate/utils/modeling.py
+index 651c427c..da86e317 100644
+--- a/src/accelerate/utils/modeling.py
++++ b/src/accelerate/utils/modeling.py
+@@ -334,7 +334,7 @@ def set_module_tensor_to_device(
+                 if not is_buffer:
+                     module._parameters[tensor_name] = param_cls(new_value, requires_grad=old_value.requires_grad)
+         elif isinstance(value, torch.Tensor):
+-            new_value = value.to(device)
++            new_value = value#.to(device)
+         else:
+             new_value = torch.tensor(value, device=device)
+         if device_quantization is not None:
+@@ -372,7 +372,7 @@ def set_module_tensor_to_device(
+                 )
+                 new_value = torch.nn.Parameter(param_cls(*args), requires_grad=old_value.requires_grad).to(device)
+             else:
+-                new_value = param_cls(new_value, requires_grad=old_value.requires_grad).to(device)
++                new_value = param_cls(new_value, requires_grad=old_value.requires_grad)#.to(device)
+
+             module._parameters[tensor_name] = new_value
+             if fp16_statistics is not None:
+
