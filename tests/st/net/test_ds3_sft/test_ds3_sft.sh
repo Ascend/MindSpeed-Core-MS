@@ -3,11 +3,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 export HCCL_CONNECT_TIMEOUT=3600
 
-export HCCL_DETERMINISTIC=true  # HCCL确定性
-export ASCEND_LAUNCH_BLOCKING=1  # 硬件确定性
-export NCCL_DETERMINISTIC=1
-
-source ../../../../scripts/set_path.sh
+source ../../../scripts/set_path.sh
 MindSpeed_LLM_PATH=../../../../MindSpeed-LLM
 
 GPUS_PER_NODE=8
@@ -22,7 +18,6 @@ CKPT_SAVE_DIR="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_d
 DATA_PATH="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_sft/finetune_dataset/alpaca"
 TOKENIZER_PATH="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_sft/tokenizer"
 CKPT_LOAD_DIR="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_sft/load"
-
 
 TP=1
 PP=2

@@ -1,0 +1,26 @@
+training ...
+(min, max) time across ranks (ms):
+    model-and-optimizer-setup ......................: (13754.94, 13759.72)
+    train/valid/test-data-iterators-setup ..........: (149.72, 186.70)
+[before the start of training step] datetime: 2025-05-21 10:49:37
+WARNING:megatron.core.models.common.embeddings.rotary_pos_embedding:Setting apply_rope_fusion to false because its implementation is not included in Apex. Try upgrading to the latest version
+[W compiler_depend.ts:41] Warning: Warning: kernel [ArgSort] can not support dtype int32 or int64 on AiCore, Now this kernel is running on AiCpu.If you are more concerned about high-performance execution,please cast dtype to float32. (function operator())
+Number of parameters in transformer layers in billions:  26.19
+Number of parameters in embedding layers in billions: 1.85
+Total number of parameters in billions: 28.04
+Number of parameters in most loaded shard in billions: 14.0214
+Number of parameters in other shards in billions: 13.0947
+Theoretical memory footprints: weight and optimizer=120346.30 MB
+ [2025-05-21 10:49:52] iteration        1/      10 | consumed samples:            8 | elapsed time per iteration (ms): 15074.1 | learning rate: 9.757730E-06 | global batch size:     8 | lm loss: 13.4216022491455078 | loss scale: 1.0 | grad norm: 11.4071564614665011 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+[Rank 0] (after 1 iterations) memory (MB) | allocated: 17975.59765625 | max allocated: 24781.76806640625 | reserved: 28276.0 | max reserved: 28276.0
+[Rank 4] (after 1 iterations) memory (MB) | allocated: 31935.140625 | max allocated: 41007.94775390625 | reserved: 42298.0 | max reserved: 42298.0
+ [2025-05-21 10:49:55] iteration        2/      10 | consumed samples:           16 | elapsed time per iteration (ms): 2768.4 | learning rate: 9.054634E-06 | global batch size:     8 | lm loss: 13.3998327255249023 | loss scale: 1.0 | grad norm: 10.8173617529537101 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+ [2025-05-21 10:49:58] iteration        3/      10 | consumed samples:           24 | elapsed time per iteration (ms): 2756.7 | learning rate: 7.959537E-06 | global batch size:     8 | lm loss: 13.5661659240722656 | loss scale: 1.0 | grad norm: 22.3005382840660218 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+ [2025-05-21 10:50:00] iteration        4/      10 | consumed samples:           32 | elapsed time per iteration (ms): 2763.0 | learning rate: 6.579634E-06 | global batch size:     8 | lm loss: 13.3748970031738281 | loss scale: 1.0 | grad norm: 12.7191987954328987 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+ [2025-05-21 10:50:03] iteration        5/      10 | consumed samples:           40 | elapsed time per iteration (ms): 2777.3 | learning rate: 5.050000E-06 | global batch size:     8 | lm loss: 13.6673517227172852 | loss scale: 1.0 | grad norm: 12.5808988367714285 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+ [2025-05-21 10:50:06] iteration        6/      10 | consumed samples:           48 | elapsed time per iteration (ms): 2791.8 | learning rate: 3.520366E-06 | global batch size:     8 | lm loss: 13.4905300140380859 | loss scale: 1.0 | grad norm: 15.5625511383074375 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+ [2025-05-21 10:50:09] iteration        7/      10 | consumed samples:           56 | elapsed time per iteration (ms): 2776.0 | learning rate: 2.140463E-06 | global batch size:     8 | lm loss: 13.4095611572265625 | loss scale: 1.0 | grad norm: 15.2414261057317315 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+ [2025-05-21 10:50:12] iteration        8/      10 | consumed samples:           64 | elapsed time per iteration (ms): 2823.4 | learning rate: 1.045366E-06 | global batch size:     8 | lm loss: 13.3672180175781250 | loss scale: 1.0 | grad norm: 14.1250909616697893 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+ [2025-05-21 10:50:14] iteration        9/      10 | consumed samples:           72 | elapsed time per iteration (ms): 2809.7 | learning rate: 3.422702E-07 | global batch size:     8 | lm loss: 13.2752037048339844 | loss scale: 1.0 | grad norm: 10.1879575310687986 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+ [2025-05-21 10:50:17] iteration       10/      10 | consumed samples:           80 | elapsed time per iteration (ms): 2810.7 | learning rate: 1.000000E-07 | global batch size:     8 | lm loss: 13.0997333526611328 | loss scale: 1.0 | grad norm: 11.8447491871022272 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+[after training is done] datetime: 2025-05-21 10:50:17
