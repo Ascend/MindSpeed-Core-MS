@@ -2,7 +2,8 @@
 import re
 import libcst as cst
 from libcst.metadata import PositionProvider, ScopeProvider
-from .utils import get_docstring, case_insensitive_replace
+from mapping_resources.api_mapping import EQUIVALENT_API
+from .utils import get_docstring, case_insensitive_replace, create_nested_attribute_or_name
 
 
 class APITransformer(cst.CSTTransformer):
@@ -15,14 +16,9 @@ class APITransformer(cst.CSTTransformer):
         self.current_name = current_name
         self.new_name = new_name
         self.root = None
-        self.imported_modules = {}
-        self.alias_map = {} # to be merged into imported_modules
-    
-    def _import_chain_to_name(self, chain):
-        for i, c in enumerate(chain):
-            if c != '.':
-                break
-        return '.'.join(chain[:i]) + '.'.join(chain[i:])
+        self.alias_map = {}
+        self.support_api = EQUIVALENT_API
+        self.matched = False
 
     def _update_docstring(self, original_node, updated_node):
         docstring = get_docstring(original_node)
@@ -35,65 +31,64 @@ class APITransformer(cst.CSTTransformer):
                 )
             )
         return updated_node
-
-    def _get_call_chain_if_normal_call(self, call):
-        chain = call.split('.')
-        if len(chain) < 1:
-            return []
-        for c in chain:
-            if len(c) == 0 or re.match(r'^[a-zA-Z\_]*$', c) is None:
-                return []
-        return chain
     
-    def _flat_alias_if_possible(self, call_chain):
-        alias = call_chain[0]
-        if alias in self.alias_map:
-            return self.alias_map[map] + call_chain[1:]
-        return call_chain
-    
-    def _name_or_attribute_decoder(self, tmp_node):
-        attribute_chain = []
-        while isinstance(tmp_node, cst.Attribute):
-            attribute_chain.append(tmp_node.attr.value)
-            tmp_node = tmp_node.value
-        attribute_chain.append(tmp_node.value)
-        return attribute_chain[::-1]
-    
-    def _parse_import_alias(self, import_alias):
-        import_chain = self._name_or_attribute_decoder(import_alias.name)
-        asname = None
-        if import_alias.asname is not None:
-            asname = import_alias.asname.name.value
-        return asname, import_chain
+    def _flat_alias_if_possible(self, call_split):
+        alias = call_split[0]
+        module = self.alias_map.get(alias)
+        if module is not None:
+            call_split[0] = module
+        return '.'.join(call_split)
     
     def visit_Module(self, node):
         self.root = node
 
+    def _parse_alias(self, code):
+        pattern = r'(.*) +as +(.*)'
+        m = re.match(pattern, code)
+        if m:
+            full_path, alias = m.groups()
+            return full_path, alias
+        return None, None
+
     def visit_Import(self, node):
+        guard_this_import = False
         for import_alias in node.names:
-            alias, chain = self._parse_import_alias(import_alias)
+            code = self.root.code_for_node(import_alias).strip(' ,')
+            full_path, alias = self._parse_alias(code)
             if alias:
-                self.alias_map[alias] = chain
-                self.imported_modules[alias] = chain
-            else:
-                fake_alias = self._import_chain_to_name(chain)
-                self.imported_modules[fake_alias] = chain
-        return True
+                self.alias_map[alias] = full_path
+            if code.startswith('safetensors'):
+                guard_this_import = True
+        return not guard_this_import
     
     def visit_ImportFrom(self, node):
-        if node.module is None: # relative import
-            from_chain = ["."] * len(node.relative)
-        else:
-            from_chain = self._name_or_attribute_decoder(node.module)
-        if isinstance(node.names, cst.ImportStar):
+        if node.module is None: # no need to consider relative import when doing api mapping
             return True
+        if isinstance(node.names, cst.ImportStar): # we don't handle from xx import * right now
+            return True
+        module = self.root.code_for_node(node.module)
+        guard_this_import = module.startswith('safetensors')
         for import_alias in node.names:
-            alias, chain = self._parse_import_alias(import_alias)
-            if len(chain) == 1 and alias is None:
-                alias = chain[0]
-            self.alias_map[alias] = from_chain + chain
-            self.imported_modules[alias] = chain
-        return True
+            code = self.root.code_for_node(import_alias).strip(' ,')
+            sub_path, alias = self._parse_alias(code)
+            if alias is None:
+                sub_path, alias = code, code
+            self.alias_map[alias] = f'{module}.{sub_path}'
+        return not guard_this_import
+    
+    def leave_Call(self, original_node, updated_node):
+        if isinstance(original_node.func, cst.Call): # func()()
+            return updated_node
+        if isinstance(original_node.func.value, cst.Call): # func().f()
+            return updated_node
+        code = self.root.code_for_node(original_node.func)
+        call_split = code.split('.')
+        de_aliased_call = self._flat_alias_if_possible(call_split)
+        mapped_call = self.support_api.get(de_aliased_call)
+        if mapped_call is not None:
+            self.matched = True
+            return updated_node.with_changes(func=create_nested_attribute_or_name(mapped_call))
+        return updated_node
 
     def leave_Name(self, original_node, updated_node):
         if original_node.value == f'{self.current_name}_npu':
@@ -111,3 +106,17 @@ class APITransformer(cst.CSTTransformer):
     
     def leave_FunctionDef(self, original_node, updated_node):
         return self._update_docstring(original_node, updated_node)
+
+    def leave_Module(self, original_node, updated_node):
+        if not self.matched:
+            return updated_node
+        import_stmt = "import mindspore"
+        new_import = cst.parse_statement(import_stmt)
+        nodes = list(updated_node.body)
+        insert_index = 0
+        for i, node in enumerate(nodes):
+            if '__future__' not in self.root.code_for_node(node):
+                insert_index = i
+                break
+        new_body = nodes[:insert_index] + [new_import] + nodes[insert_index:]
+        return updated_node.with_changes(body=new_body)

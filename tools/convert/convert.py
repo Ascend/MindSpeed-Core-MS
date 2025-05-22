@@ -2,31 +2,13 @@
 import os
 import re
 import argparse
+from multiprocessing import Pool
 from tqdm import tqdm
 import libcst as cst
 from libcst.metadata import MetadataWrapper
 from modules.api_transformer import APITransformer
-from modules.utils import source_file_iterator
-
-
-def convert_torch_api(input_file, new_name='msadapter'):
-    """
-    convert single file
-    args:
-        input_file: path for a single file
-        new_name: new api name
-    """
-    try:
-        with open(input_file, "r", encoding="utf-8") as f:
-            code = f.read()
-        module = cst.parse_module(code)
-        wrapper = MetadataWrapper(module)
-        new_code = wrapper.visit(APITransformer('torch', new_name))
-        with open(input_file, 'w') as f:
-            f.write(new_code.code)
-        return f'{input_file}: True'
-    except Exception as e:
-        return f'{input_file}: False\n------>{e}'
+from modules.utils import source_file_iterator, FileConverter
+from mapping_resources.special_case import SPECIAL_CASE
 
 
 if __name__ == '__main__':
@@ -38,9 +20,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     file_iterator = source_file_iterator(args.path_to_change)
+    file_converter = FileConverter(APITransformer, ('torch', 'msadapter'))
 
-    from multiprocessing import Pool
     with Pool(processes=args.multiprocess) as pool:
-        results = list(tqdm(pool.imap(convert_torch_api, file_iterator), desc="Processing"))
+        results = list(tqdm(pool.imap(file_converter.convert, file_iterator), desc="Processing"))
+    
+    for file, value in SPECIAL_CASE.items():
+        file_converter = FileConverter(value['converter'], ('torch', 'msadapter'))
+        results.append(file_converter.convert(file))
     with open(args.result_log, 'w') as f:
         f.write('\n'.join(results))

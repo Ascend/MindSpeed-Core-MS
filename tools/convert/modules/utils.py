@@ -2,6 +2,7 @@
 import os
 import re
 import libcst as cst
+from libcst.metadata import MetadataWrapper
 
 
 def source_file_iterator(path, ext='.py'):
@@ -69,3 +70,27 @@ def create_nested_attribute_or_name(path):
     for part in chain[1:]:
         current = cst.Attribute(value=current, attr=cst.Name(value=part))
     return current
+
+
+class FileConverter:
+    def __init__(self, transformer, transformer_args):
+        self.transformer = transformer
+        self.transformer_args = transformer_args
+
+    def convert(self, input_file):
+        """
+        convert single file
+        args:
+            input_file: path for a single file
+        """
+        try:
+            with open(input_file, "r", encoding="utf-8") as f:
+                code = f.read()
+            module = cst.parse_module(code)
+            wrapper = MetadataWrapper(module)
+            new_code = wrapper.visit(self.transformer(*self.transformer_args))
+            with open(input_file, 'w') as f:
+                f.write(new_code.code)
+            return f'{input_file}: True'
+        except Exception as e:
+            return f'{input_file}: False\n------>{e}'
