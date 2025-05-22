@@ -361,6 +361,11 @@ def create_worker_group_scheduler(name, world_size):
          # 将截断后的行添加到列表中
          truncated_tensors.append(truncated_row)"""
         ],
+        "mindspeed_rl/trainer/utils/transfer_dock.py": [
+"""-@ray.remote(max_concurrency=100, num_cpus=10)
++@ray.remote(max_concurrency=1, num_cpus=10)
+ class GRPOTransferDock(TransferDock):"""
+        ],
         "mindspeed_rl/workers/scheduler/decorator.py": [
             """# Copyright 2024 Bytedance Ltd. and/or its affiliates
 #
@@ -1176,33 +1181,12 @@ class Worker(WorkerHelper):
 -            dst_key_cache.device)
 +        dst_key_cache[dst_indices] = src_key_cache[src_indices] # .to(dst_key_cache.device)
 +        dst_value_cache[dst_indices] = src_value_cache[src_indices] # .to(dst_key_cache.device)""",
-"""-        if self.w_kc is None or self.w_vc is None:
--            kv_b_proj_weight = self.kv_b_proj.weight.reshape(
--                self.num_heads, self.qk_nope_head_dim + self.v_head_dim,
--                self.kv_lora_rank)
--            self.w_kc = kv_b_proj_weight[:, :self.
--                                         qk_nope_head_dim, :].contiguous()
--            self.w_vc = kv_b_proj_weight[:,
--                                         self.qk_nope_head_dim:, :].transpose(
--                                             1, 2).contiguous()
-+        # if self.w_kc is None or self.w_vc is None:
-+        # print("self.kv_b_proj.weight shape is******", self.kv_b_proj.weight.shape, flush=True)
-+        # print("reshape out is******", self.num_heads, self.qk_nope_head_dim + self.v_head_dim, self.kv_lora_rank, flush=True)
-+        kv_b_proj_weight = self.kv_b_proj.weight.reshape(
-+            self.num_heads, self.qk_nope_head_dim + self.v_head_dim,
-+            self.kv_lora_rank)
-+        self.w_kc = kv_b_proj_weight[:, :self.
-+                                        qk_nope_head_dim, :].contiguous()
-+        self.w_vc = kv_b_proj_weight[:,
-+                                        self.qk_nope_head_dim:, :].transpose(
-+                                            1, 2).contiguous()""",
-"""                                       self.v_head_dim,
-                                       dtype=query.dtype,
-                                       device=query.device)
-+            attn_output = torch.ones_like(attn_output, dtype=query.dtype)
-             if (attn_metadata.block_tables is None
-                     or attn_metadata.block_tables.numel() == 0):
-                 assert attn_metadata.attn_mask is not None"""],
+"""                 assert attn_metadata.prefill_metadata.seq_lens is not None
+                 self.seq_lens_tensor_cpu = torch.from_numpy(
+                     np.array(attn_metadata.prefill_metadata.seq_lens).astype(
+                         np.int32))
++                value=value.contiguous()
+                 torch_npu._npu_flash_attention("""],
         "vllm_ascend/communicator.py": [
 """ from typing import Optional
  
@@ -1303,18 +1287,6 @@ class Worker(WorkerHelper):
 +        expanded_src_to_dst_row=expanded_row_idx,
 +        export_for_source_row=topk_ids)
 """,
-        ],
-        "vllm_ascend/ops/layernorm.py": [
-"""     import torch_npu
- 
-     if residual is not None:
--        x, _, residual = torch_npu.npu_add_rms_norm(x, residual, self.weight,
--                                                    self.variance_epsilon)
-+        #x, _, residual = torch_npu.npu_add_rms_norm(x, residual, self.weight,
-+        #                                            self.variance_epsilon)
-+        residual = x + residual
-+        x, _ = torch_npu.npu_rms_norm(residual, self.weight, self.variance_epsilon)
-         return x, residual"""
         ],
         "vllm_ascend/ops/rotary_embedding.py": [
 """-    if self.cos_sin_cache.device != query.device:
