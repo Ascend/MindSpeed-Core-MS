@@ -70,7 +70,7 @@ index c617420a58..ab74809516 100644
 
 
 diff --git a/src/transformers/modeling_utils.py b/src/transformers/modeling_utils.py
-index dae29111c8..9158eb4ffb 100755
+index dae29111c8..8f33ef1c85 100755
 --- a/src/transformers/modeling_utils.py
 +++ b/src/transformers/modeling_utils.py
 @@ -38,14 +38,14 @@ from huggingface_hub import split_torch_state_dict_into_shards
@@ -236,21 +236,20 @@ index dae29111c8..9158eb4ffb 100755
          is_gradient_checkpointing_set = False
 
          # Apply it on the top-level module in case the top-level modules supports it
-@@ -2794,9 +2798,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
-
+@@ -2795,8 +2799,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
          # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
          # we currently don't use this setting automatically, but may start to use with v5
--        dtype = get_parameter_dtype(model_to_save)
+         dtype = get_parameter_dtype(model_to_save)
 -        model_to_save.config.torch_dtype = str(dtype).split(".")[1]
 -
-+        if str(dtype).find('.') != 1:
++        if str(dtype).find('.') != -1:
 +            model_to_save.config.torch_dtype = str(dtype).split(".")[1]
 +        else:
 +            model_to_save.config.torch_dtype = str(dtype)
          # Attach architecture to the config
          model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
-@@ -3028,6 +3033,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+@@ -3028,6 +3034,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                  del shard_state_dict
                  gc.collect()
 
@@ -258,7 +257,7 @@ index dae29111c8..9158eb4ffb 100755
              if safe_serialization:
                  # At some point we will need to deal better with save_function (used for TPU and other distributed
                  # joyfulness), but for now this enough.
-@@ -4487,7 +4493,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+@@ -4487,7 +4494,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
          if device_map is None and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
              ptrs = collections.defaultdict(list)
              for name, tensor in model.state_dict().items():
@@ -268,7 +267,7 @@ index dae29111c8..9158eb4ffb 100755
                  ptrs[id_tensor].append(name)
 
              # These are all the pointers of shared tensors.
-@@ -4554,6 +4561,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+@@ -4554,6 +4562,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                          hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict, unexpected_keys)
 
          # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
@@ -276,7 +275,7 @@ index dae29111c8..9158eb4ffb 100755
          if _fast_init:
              if not ignore_mismatched_sizes:
                  if remove_prefix_from_model:
-@@ -5587,22 +5595,22 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
+@@ -5587,22 +5596,22 @@ def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
      """
      # Use accelerate implementation if available (should always be the case when using torch)
      # This is for pytorch, as we also have to handle things like dynamo
