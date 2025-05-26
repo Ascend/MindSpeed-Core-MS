@@ -1,21 +1,51 @@
+# Copyright 2025 Huawei Technologies Co., Ltd
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ============================================================================
 import re
+import logging
+logging.basicConfig(level=logging.INFO)
 num_npu = 8
 
 
 def parse_memory_file(fname):
     p_memory = r'\| \d.*\| \d+.*\|.*\| (\d+).*\|'
-    with open(fname, 'r') as f:
-        context = f.read().split('\n')
     try:
+        with open(fname, 'r') as f:
+            context = f.read().split('\n')
+
         mems = []
-        for l in context:
-            m = re.match(p_memory, l)
+        for line in context:
+            m = re.match(p_memory, line)
             if m:
                 mems.append(int(m.group(1)))
+
+        if not mems:
+            logging.warning("No memory data matched.")
+            return None
+
         max_mem = max(mems)
-    except:
-        max_mem = None
-    return max_mem / 1024
+    except FileNotFoundError:
+        logging.warning(f"File not found: {fname}")
+        return None
+    except IOError as e:
+        logging.error(f"Read file fail: {e}")
+        return None
+    except ValueError as e:
+        logging.error(f"Value conversion error: {e}")
+        return None
+
+    return max_mem / 1024 if max_mem is not None else None
 
 
 def parse_script(file):

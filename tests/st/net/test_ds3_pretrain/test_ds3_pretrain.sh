@@ -6,10 +6,6 @@ export HCCL_CONNECT_TIMEOUT=360
 source ../../../../scripts/set_path.sh
 MindSpeed_LLM_PATH=../../../../MindSpeed-LLM
 
-export HCCL_DETERMINISTIC=true  # HCCL确定性
-export ASCEND_LAUNCH_BLOCKING=1  # 硬件确定性
-export NCCL_DETERMINISTIC=1
-
 NPUS_PER_NODE=8
 MASTER_ADDR=localhost
 MASTER_PORT=6000
@@ -79,10 +75,8 @@ ROPE_ARGS="
 
 GPT_ARGS="
     --spec mindspeed_llm.tasks.models.spec.deepseek_spec layer_spec \
-    --num-nextn-predict-layers 1 \
-    --share-mtp-embedding-and-output-weight \
+    --mtp-num-layers 1 \
     --no-shared-storage \
-
     --use-distributed-optimizer \
     --use-flash-attn \
     --shape-order BNSD \
@@ -152,8 +146,8 @@ OUTPUT_ARGS="
     --eval-iters 0 \
     --no-save-optim \
     --no-save-rng \
-    --load ${CKPT_LOAD_DIR}
 "
+#--load ${CKPT_LOAD_DIR}
 
 msrun $DISTRIBUTED_ARGS ${MindSpeed_LLM_PATH}/pretrain_gpt.py \
     $GPT_ARGS \
@@ -163,4 +157,5 @@ msrun $DISTRIBUTED_ARGS ${MindSpeed_LLM_PATH}/pretrain_gpt.py \
     $MOE_ARGS \
     $OUTPUT_ARGS \
     --distributed-backend nccl \
+    --ai-framework mindspore \
     | tee ds3_pretrain.txt

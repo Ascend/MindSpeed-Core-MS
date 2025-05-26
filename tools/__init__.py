@@ -12,6 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-from .debug_utils import breakpoint_, clear_
-
 __all__ = ["breakpoint_", "clear_"]
+
+from .debug_utils import breakpoint_, clear_

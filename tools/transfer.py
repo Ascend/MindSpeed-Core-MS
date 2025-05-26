@@ -5,9 +5,9 @@
 import argparse
 import os
 import re
-from rules.general_rules import GENERAL_RULES, SHELL_RULES, FILE_RULES
-from rules.special_rules import SPECIAL_RULES
-from rules.line_rules import LINE_RULES
+import logging
+from rules.line_rules import LINE_RULES, GENERAL_RULES, SHELL_RULES, FILE_RULES, SPECIAL_RULES
+logging.basicConfig(level=logging.INFO)
 
 
 def getfiles(folder_path):
@@ -25,7 +25,7 @@ def convert_general_rules(origin_path, save_path):
     filenames = getfiles(origin_path)
     for file_path in filenames:
         # open
-        print(file_path)
+        logging.info(file_path)
         if ".pyc" in file_path or (".py" not in file_path and ".sh" not in file_path):
             continue
 
@@ -98,8 +98,8 @@ def convert_special_rules_by_line(origin_path, save_path, package_name="megatron
             if pattern in data:
                 data = replace.join(data.split(pattern))
             else:
-                print(f"warning! {origin_file_path} replace fail")
-                print(rule)
+                logging.warning(f"warning! {origin_file_path} replace fail")
+                logging.info(rule)
         # save
         convert_file_path = os.path.join(save_path, file_path)
         os.makedirs(os.path.dirname(convert_file_path), exist_ok=True)
@@ -152,20 +152,11 @@ if __name__ == "__main__":
                         help="convert einops package path")
     parser.add_argument("--is_rl", action="store_true",
                         help="is rl")
-    parser.add_argument("--gongcang", action="store_true",
-                        help="use gongcang")
-    parser.add_argument("--gongcang_rl", action="store_true",
-                        help="use gongcang_rl")
     args = parser.parse_args()
-    if args.gongcang:
-        from rules.line_rules_gongcang import LINE_RULES, GENERAL_RULES, SHELL_RULES, FILE_RULES, SPECIAL_RULES
+
 
     if args.is_rl:
-        from rules_rl.special_rules import SPECIAL_RULES
-        from rules_rl.line_rules import LINE_RULES
-    
-    if args.gongcang_rl:
-        from rules_rl.line_rules_gongcang import LINE_RULES, GENERAL_RULES, SHELL_RULES, FILE_RULES, SPECIAL_RULES
+        from rules_rl.line_rules import LINE_RULES, GENERAL_RULES, SHELL_RULES, FILE_RULES, SPECIAL_RULES
 
     if args.megatron_path:
         origin_path = args.megatron_path

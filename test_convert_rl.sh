@@ -2,26 +2,26 @@
 
 #MindSpeed-LLM
 rm -rf MindSpeed-LLM/
-git clone https://gitee.com/ascend/MindSpeed-LLM.git
+git clone https://gitee.com/ascend/MindSpeed-LLM.git -b master
 if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed-LLM"
     exit 1
 fi
 cd MindSpeed-LLM
-git checkout 421ef7bcb83fb31844a1efb688cde71705c0526e
+git checkout 71c5af4d72078d826fd93fec6980004f0de51132
 rm -rf tests
 cd ..
 echo "------------------------------------done MindSpeed-LLM"
 
 #MindSpeed
 rm -rf MindSpeed/
-git clone https://gitee.com/ascend/MindSpeed.git
+git clone https://gitee.com/ascend/MindSpeed.git -b core_r0.8.0
 if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed"
     exit 1
 fi
 cd MindSpeed
-git checkout 0dfa0035ec54d9a74b2f6ee2867367df897299df
+git checkout 31aaf3d4ca86234b15f4a5d3af20bd6df06e7d45
 rm -rf tests_extend
 cd ..
 echo "...............................................done MindSpeed"
@@ -34,7 +34,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 cd MindSpeed-RL
-git checkout 2.0.0
+git checkout 559db0856891e5f8504a0b21d4b26969a82241df
 rm -rf tests
 cd ..
 echo "...............................................done MindSpeed-RL"

@@ -19,7 +19,6 @@ DATA_PATH="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_s
 TOKENIZER_PATH="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_sft/tokenizer"
 CKPT_LOAD_DIR="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_sft/load"
 
-
 TP=1
 PP=2
 EP=4
@@ -178,4 +177,5 @@ msrun $DISTRIBUTED_ARGS ${MindSpeed_LLM_PATH}/posttrain_gpt.py \
     $MOE_ARGS \
     $FINETUNE_ARGS \
     --distributed-backend nccl \
+    --ai-framework mindspore \
     | tee tune_deepseek3.txt
