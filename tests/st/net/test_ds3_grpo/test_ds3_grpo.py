@@ -15,9 +15,11 @@
 """Test DS3GRPO"""
 import os
 import sys
-import pytest
+import logging
 import re
+import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir))
+logging.basicConfig(level=logging.INFO)
 
 
 def parse_log_file(file):
@@ -48,7 +50,7 @@ class TestDS3GRPO:
 
         test_path = os.path.split(os.path.realpath(__file__))[0]
         cmd = f"bash {test_path}/{scripts_name} "
-        print(f"\nrun cmd is:\n{cmd}")
+        logging.info(f"Running command:\n{cmd}")
         ret = os.system(cmd)
         assert ret == 0, f"msrun failed, please check ms_det.log"
 
@@ -64,5 +66,5 @@ class TestDS3GRPO:
         loss_ms = parse_log_file('ms_det.txt')
         # 开确定性计算，精度对齐
         for i in loss_pt:
-            print("loss:", loss_pt[i][2], loss_ms[i][2])
+            logging.info("loss: %s %s", loss_pt[i][2], loss_ms[i][2])
             assert abs(len(loss_pt[i][2]) - len(loss_ms[i][2])) < 100

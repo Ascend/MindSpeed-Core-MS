@@ -12,7 +12,6 @@ megatron_training:
   no_masked_softmax_fusion: true
   attention_softmax_in_fp32: true
   no_gradient_accumulation_fusion: true
-
   bf16: true
   sequence_parallel: true
   use_distributed_optimizer: true
@@ -32,6 +31,7 @@ megatron_training:
   dataset_additional_keys: [ 'labels', ]
   data_path: /home/jenkins/mindspore/testcases/testcases/tests/st/net/test_ds3_grpo/pe-nlp/deepseek-hf/data
   split: 100,0,0
+  ai-framework: mindspore
 
 actor_config:
   model: deepseekv3-3b
