@@ -30,7 +30,7 @@ fi
 rm -rf Megatron-LM/tests
 echo "..............................................done Megatron-LM"
 
-#msadaptor
+#msadapter
 rm -rf msadapter
 git clone https://gitee.com/mindspore/msadapter.git -b master
 if [ $? -ne 0 ]; then
@@ -58,9 +58,9 @@ echo "..............................................done apply transformers"
 
 #accelerate
 rm -rf accelerate/
-git clone https://github.com/huggingface/accelerate.git -b v1.6.0
+git clone https://gitee.com/modelee/accelerate.git -b v1.6.0
 if [ $? -ne 0 ]; then
-    echo "Error: git clone msadaptor"
+    echo "Error: git clone accelerate"
     exit 1
 fi
 cd accelerate
