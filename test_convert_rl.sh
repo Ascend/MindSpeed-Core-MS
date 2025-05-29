@@ -34,7 +34,15 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 cd MindSpeed-RL
-git checkout 559db0856891e5f8504a0b21d4b26969a82241df
+if [[ "$1" == "is_rl_gongka" ]]; then
+    echo "...............................................MindSpeed-RL GongKa"
+    git checkout 0707949f152599862f0a28cb155681599659dc00
+    PYTHON_ARG='--is_rl_gongka'
+else
+    echo "...............................................MindSpeed-RL"
+    git checkout 559db0856891e5f8504a0b21d4b26969a82241df
+    PYTHON_ARG='--is_rl'
+fi
 rm -rf tests
 cd ..
 echo "...............................................done MindSpeed-RL"
@@ -109,14 +117,13 @@ echo "..............................................start code_convert"
 MindSpeed_Core_MS_PATH=$PWD
 echo ${MindSpeed_Core_MS_PATH}
 
-python3 tools/transfer.py \
+python3 tools/transfer.py $PYTHON_ARG \
 --megatron_path ${MindSpeed_Core_MS_PATH}/Megatron-LM/megatron/ \
 --mindspeed_path ${MindSpeed_Core_MS_PATH}/MindSpeed/mindspeed/ \
 --mindspeed_llm_path ${MindSpeed_Core_MS_PATH}/MindSpeed-LLM/ \
 --mindspeed_rl_path ${MindSpeed_Core_MS_PATH}/MindSpeed-RL/ \
 --vllm_path ${MindSpeed_Core_MS_PATH}/vllm/ \
---vllm_ascend_path ${MindSpeed_Core_MS_PATH}/vllm-ascend/ \
---is_rl
+--vllm_ascend_path ${MindSpeed_Core_MS_PATH}/vllm-ascend/
 
 echo "..............................................done code_convert"
 
