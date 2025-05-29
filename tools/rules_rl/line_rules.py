@@ -9,14 +9,14 @@ LINE_RULES = {
 -            'megatron.core.parallel_state.get_nccl_options', get_nccl_options_wrapper)
 """
     ],
-    "mindspeed_llm/mindspore/mindspore_adaptor.py":[
+    "mindspeed_llm/mindspore/mindspore_adaptor.py": [
         """-        MegatronAdaptation.register('megatron.core.models.gpt.gpt_model.GPTModel', GPTModel)
 +        MegatronAdaptation.register('megatron.core.models.gpt.gpt_model.GPTModel', GPTModel, force_patch=True)"""
     ],
     "mindspeed_llm/core/datasets/blended_megatron_dataset_builder.py": [""" from ..parallel_state import get_pipeline_model_parallel_node_info
 +from mindspore.communication import get_local_rank
  
- logger = logging.getLogger(__name__)""","""     if share_save:
+ logger = logging.getLogger(__name__)""", """     if share_save:
          return rank == 0
      gpus_per_node = torch.cuda.device_count()
 -    current_rank = torch.cuda.current_device()
@@ -36,7 +36,7 @@ LINE_RULES = {
      """-    if self.inv_freq.device.type == 'cpu':
 -        # move `inv_freq` to GPU once at the first micro-batch forward pass
 -        self.inv_freq = self.inv_freq.to(device=torch.cuda.current_device())
-""","""         mode = 1 if rotary_interleaved else 0
+""", """         mode = 1 if rotary_interleaved else 0
 -        t = npu_rotary_position_embedding(t.contiguous(), cos_, sin_, mode).to(t.dtype)
 +        t = torch_npu.npu_rotary_position_embedding(t.contiguous(), cos_, sin_, mode).to(t.dtype)"""
     ], 
@@ -57,12 +57,12 @@ LINE_RULES = {
      """             self.module = [AutoModelForCausalLM.from_pretrained(
 -                load_dir, device_map=device_map, trust_remote_code=trust_remote_code, local_files_only=True
 +                load_dir, trust_remote_code=trust_remote_code, local_files_only=True, low_cpu_mem_usage=False"""],
-    "mindspeed_llm/tasks/models/transformer/multi_head_latent_attention.py":["""-        output = torch.matmul(input_, self.weight.t())
+    "mindspeed_llm/tasks/models/transformer/multi_head_latent_attention.py": ["""-        output = torch.matmul(input_, self.weight.t())
 +        output = torch.matmul(input_.squeeze(1), self.weight.t())
 +        output = output.unsqueeze(1)"""],
     },
-    "megatron":{
-        "core/tensor_parallel/cross_entropy.py":[
+    "megatron": {
+        "core/tensor_parallel/cross_entropy.py": [
             """                 grad_2d, arange_1d, masked_target_1d, softmax_update, grad_input, grad_output
              )
  
@@ -70,7 +70,7 @@ LINE_RULES = {
 +        return grad_input.to(torch.bfloat16), None, None"""
         ],
     },
-    "mindspeed":{
+    "mindspeed": {
     },
 
 "mindspeed-rl": {
@@ -851,7 +851,7 @@ def register(dispatch_mode=Dispatch.ALL_TO_ALL, execute_mode=Execute.ALL, blocki
     return decorator
 """
         ],
-        "mindspeed_rl/workers/scheduler/ray.py" :["""# Copyright 2024 Bytedance Ltd. and/or its affiliates
+        "mindspeed_rl/workers/scheduler/ray.py" : ["""# Copyright 2024 Bytedance Ltd. and/or its affiliates
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1156,7 +1156,7 @@ class Worker(WorkerHelper):
 +                kv_cache.append(layer_kv_cache.view(kv_cache_shape))"""
         ],
     },
-    "vllm-ascend":{
+    "vllm-ascend": {
         "vllm_ascend/attention.py": [
 """         mask_value = torch.finfo(torch.float32).min
      else:
@@ -1320,12 +1320,12 @@ class Worker(WorkerHelper):
              self.cache_engine[ve].gpu_cache
              for ve in range(self.parallel_config.pipeline_parallel_size)"""
         ],
-        "vllm_ascend.egg-info/entry_points.txt":["""[vllm.general_plugins]
+        "vllm_ascend.egg-info/entry_points.txt": ["""[vllm.general_plugins]
 ascend_enhanced_model = vllm_ascend:register_model
 
 [vllm.platform_plugins]
 ascend = vllm_ascend:register"""],
-        "vllm_ascend.egg-info/PKG-INFO":["""Metadata-Version: 2.2
+        "vllm_ascend.egg-info/PKG-INFO": ["""Metadata-Version: 2.2
 Name: vllm_ascend
 Version: 0.1.dev68+g806235f.d20250308
 Summary: vLLM Ascend backend plugin
@@ -1337,7 +1337,7 @@ Project-URL: Homepage, https://github.com/vllm-project/vllm-ascend"""],
 }
 
 SPECIAL_RULES = {
-    "megatron":{
+    "megatron": {
         "core/tensor_parallel/cross_entropy.py":
         [(r"masked_target\[target_mask\] = 0", "masked_target *= (1-target_mask)"),
          (r"predicted_logits\[target_mask\] = 0\.0", "predicted_logits *= (1-target_mask)"),
@@ -1357,7 +1357,7 @@ SPECIAL_RULES = {
          (r"log_string \+= \' grad norm\: \{\:\.3f\} \|\'\.format\(grad_norm\)", "log_string += ' grad norm: {:.16f} |'.format(grad_norm)")   
         ]
     },
-    "mindspeed":{
+    "mindspeed": {
         "core/transformer/moe/token_dispatcher.py":
         [(r"\.to\(\n?torch\.device\(\"cpu\"\)\)\n?", ""),
          (r"\.to\(\n?.*torch\.device\(\"cpu\"\),.*\n?.*\)", ""),
@@ -1369,13 +1369,13 @@ SPECIAL_RULES = {
         "pytorch_utils.py":
         [(r"from safetensors\.torch import storage_ptr\, storage_size", "")]
     },
-    "mindspeed-rl":{
+    "mindspeed-rl": {
         "mindspeed_rl/datasets/dataloader.py":
             [("pin_memory=True", "pin_memory=False")],
         "mindspeed_rl/datasets/prompt_dataset.py":
             [("pin_memory=True", "pin_memory=False")],
     },
-    "vllm":{
+    "vllm": {
         
     },
     "vllm-ascend": {

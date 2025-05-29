@@ -15,7 +15,6 @@
 import re
 import logging
 logging.basicConfig(level=logging.INFO)
-num_npu = 8
 
 
 def parse_memory_file(fname):
@@ -53,15 +52,15 @@ def parse_script(file):
         context = f.read().split('\n')
     p_gbs = r'.*global-batch-size (\d*).*'
     p_len = r'.*seq-length (\d*).*'
-    gbs, len = None, None
-    for l in context:
-        match = re.match(p_gbs, l)
+    gbs, length = None, None
+    for line in context:
+        match = re.match(p_gbs, line)
         if match:
             gbs = match.group(1)
-        match = re.match(p_len, l)
+        match = re.match(p_len, line)
         if match:
-            len = match.group(1)
-    return gbs, len
+            length = match.group(1)
+    return gbs, length
 
 
 def parse_log_file(file):
@@ -70,8 +69,8 @@ def parse_log_file(file):
     with open(file, 'r') as f:
         context = f.read().split('\n')
     data = {}
-    for l in context:
-        match = re.match(it_pattern, l)
+    for line in context:
+        match = re.match(it_pattern, line)
         if match:
             data[int(match.group(2))] = match.groups()
     return data

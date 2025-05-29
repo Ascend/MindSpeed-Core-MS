@@ -25,15 +25,15 @@ import xmlrunner
 # =============================
 def success_check(res):
     if res != 0:
-        raise CommandFailedError(f"命令执行失败，返回码: {res}")
+        raise CommandFailedError(f"The command execution failed, return code is: {res}")
 
 
 def success_check_ut(res):
     if len(res.failures) + len(res.errors) != 0:
-        raise CommandFailedError(f"命令执行失败，返回码: {res}")
+        raise CommandFailedError(f"The command execution failed, return code is: {res}")
 
 
-class ST_Test:
+class STTest:
     def __init__(self):
         self.shell_file_list = []
 
@@ -48,7 +48,7 @@ class ST_Test:
 
 
 if __name__ == "__main__":
-    st_test = ST_Test()
+    st_test = STTest()
     st_test.run_shell()
     test_loader = unittest.TestLoader()
     discover = test_loader.discover(start_dir="./", pattern="test*.py")

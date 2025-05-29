@@ -30,7 +30,7 @@ fi
 rm -rf Megatron-LM/tests
 echo "..............................................done Megatron-LM"
 
-#msadaptor
+#msadapter
 rm -rf MSAdapter
 git clone https://openi.pcl.ac.cn/OpenI/MSAdapter.git -b master
 if [ $? -ne 0 ]; then
@@ -58,9 +58,9 @@ echo "..............................................done apply transformers"
 
 #accelerate
 rm -rf accelerate/
-git clone https://github.com/huggingface/accelerate.git -b v1.6.0
+git clone https://gitee.com/modelee/accelerate.git -b v1.6.0
 if [ $? -ne 0 ]; then
-    echo "Error: git clone msadaptor"
+    echo "Error: git clone accelerate"
     exit 1
 fi
 cd accelerate
@@ -77,7 +77,6 @@ python3 tools/transfer.py \
 --megatron_path ${MindSpeed_Core_MS_PATH}/Megatron-LM/megatron/ \
 --mindspeed_path ${MindSpeed_Core_MS_PATH}/MindSpeed/mindspeed/ \
 --mindspeed_llm_path ${MindSpeed_Core_MS_PATH}/MindSpeed-LLM/ \
---gongcang
 
 export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/accelerate/src/:$PYTHONPATH
 echo $PYTHONPATH
