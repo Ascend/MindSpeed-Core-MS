@@ -16,10 +16,14 @@
 下载[CANN](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha003/softwareinst/instg/instg_0002.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)，请根据系统和硬件产品型号选择匹配版本的。参考[安装CANN软件包](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha003/softwareinst/instg/instg_0007.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)官方指导或执行以下命令安装：
 
 ```shell
-./Ascend-cann-toolkit_<version>_linux-<arch>.run --install
-./Ascend-cann-kernels-<chip_type>_<version>_linux-<arch>.run --install
+# 安装文件名跟随版本迭代及硬件版本，根据实际修改
+bash Ascend-cann-toolkit_8.1.RC1_linux-aarch64.run --full
+bash Ascend-cann-kernels-<chip_type>_8.1.RC1_linux-aarch64.run --install
+source /usr/local/Ascend/ascend-toolkit/set_env.sh # 安装nnal包需要source环境变量
+bash Ascend-cann-nnal_8.1.RC1_linux-aarch64.run --install
 # 设置环境变量
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
+source /usr/local/Ascend/nnal/atb/set_env.sh --cxxabi=0
 ```
 
 ### MindSpore 安装
