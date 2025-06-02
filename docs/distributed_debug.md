@@ -16,9 +16,33 @@
    exit
    ```
 
+   若为pytorch后端， 则在`torch.distributed.launch pretrain_gpt.py` 之前 加入以下两行命令：
+
+   ```bash
+    #添加如下两行
+    source tools/debug_utils/dist_debug_pt.sh
+    exit
+    ```
+
    这样可以在启动前加载调试配置，并暂停正常流程，等待调试过程完成。
 
-2. **在代码中添加调试断点**
+2. **修改启动参数**
+    在dist_debug.sh/dist_debug_pt.sh中修改 `run_pretrain` 函数内的启动py脚本与入参为原启动脚本内容。
+    例如：
+
+    ```bash
+        python pretrain_gpt.py \
+        $GPT_ARGS \
+        $DATA_ARGS \
+        $OUTPUT_ARGS \
+        $MLA_ARGS \
+        $ROPE_ARGS \
+        $MOE_ARGS \
+        --distributed-backend nccl \
+        --ai-framework mindspore
+    ```
+
+3. **在代码中添加调试断点**
 
    在python代码希望调试的地方增加如下两行：
 
@@ -33,7 +57,9 @@
    breakpoint_(False)
    ```
 
-3. **进入调试**
+   使得其他进程在对应位置停住，从而防止其他rank运行到报错位置导致scheduler杀死集群。
+
+4. **进入调试**
    正常启动pretrain_xxx.sh脚本，等待到达断点处。看见类似如下交互日志时，表明已进入断点调试模式：
 
    ```bash
@@ -44,15 +70,13 @@
    (Pdb)
    ```
 
-4. **此处调试完成后，调用 clear_() 解除其它进程的阻塞**
+   **注意：此处调试完成后，若使用的`breakpoint_(False)`, 则需额外调用调用 clear_() 解除其它进程的阻塞**
 
    ```python
    clear_()
    ```
 
-   使得其他进程在对应位置停住，从而防止其他rank运行到报错位置导致scheduler杀死集群。
-
-5. **常见使用场景**：
+### 常见使用场景：
 
    场景1) 代码core dump，无法知晓错误栈场景：
 
@@ -65,7 +89,9 @@
 
    场景3) 精度问题，复现条件复杂，需打印多处变量、多轮添加打印才可定位场景：
 
-   运行用例打印精度未对齐的地方的变量哈希，将其存存下来，再在对应位置添加if条件
+   运行用例打印精度未对齐的变量的哈希值（md5），将其存下来，再在对应位置添加if条件。
+
+   **建议：若为精度对齐场景，可创造<=4卡的用例，结合np.save/np.load等接口读写数据，在单机pdb交互式窗口下完成精度比较，定位精度差异来源。
 
 ### pdb调试常用命令
 
@@ -98,11 +124,13 @@ pdb常用指令：
 1. **msrun分布式命令**
    msrun命令本质上为动态组网的封装，在master节点上启动一个scheduler(调度器)进程，负责管理所有worker进程的创建和通信；
 
-   在所有节点上启动若干个worker进程，负责执行训练任务。
+   在所有节点上启动若干个worker进程，负责执行训练任务。可参考[msrun实现源码](https://gitee.com/mindspore/mindspore/blob/master/mindspore/python/mindspore/parallel/cluster/process_entity/_api.py#L47)
 
    以Atlas 800TA2单机8卡任务为例，msrun命令会在每个节点上启动一个scheduler(调度器)进程和8个worker进程，默认状态下，所有worker进程均在后台执行。
 
    因pdb调试要求交互式调试的进程处于前台运行状态，因此需要设置环境变量指定调试进程的rank使其对应的进程在前台执行，而其他rank进程正常后台执行。
+
+   注：若为`torch.distributed.launch`, 其本质上也是动态组网的封装，可参考[torchrun实现源码](https://github.com/pytorch/pytorch/blob/main/torch/distributed/run.py#L207)
 
 2、**程序运行流程图**
 
@@ -133,7 +161,7 @@ pdb常用指令：
                       ▼                                                  ▼
             ┌────────────────────────┐                       ┌────────────────────────┐
             │ 当前进程为调试进程     │                       │ 当前进程非调试进程      │
-            │ (rank == MS_DEBUG_RANK)│                       │ (rank ≠ MS_DEBUG_RANK) │
+            │ (rank == RANK_TO_DEBUG)│                       │ (rank ≠ RANK_TO_DEBUG) │
             └────────────────────────┘                       └────────────────────────┘
                       │                                                  │
                       │                                                  │
