@@ -1,0 +1,329 @@
+diff --git a/src/transformers/configuration_utils.py b/src/transformers/configuration_utils.py
+index dfb64fcd08..6f95012ef1 100755
+--- a/src/transformers/configuration_utils.py
++++ b/src/transformers/configuration_utils.py
+@@ -998,7 +998,8 @@ class PretrainedConfig(PushToHubMixin):
+             if isinstance(d["torch_dtype"], dict):
+                 d["torch_dtype"] = {k: str(v).split(".")[-1] for k, v in d["torch_dtype"].items()}
+             elif not isinstance(d["torch_dtype"], str):
+-                d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
++                # d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
++                d["torch_dtype"] = str(d["torch_dtype"])
+         for value in d.values():
+             if isinstance(value, dict):
+                 self.dict_torch_dtype_to_str(value)
+diff --git a/src/transformers/generation/__init__.py b/src/transformers/generation/__init__.py
+index ea39e8a10b..3b1526d736 100644
+--- a/src/transformers/generation/__init__.py
++++ b/src/transformers/generation/__init__.py
+@@ -29,98 +29,98 @@ _import_structure = {
+     "streamers": ["AsyncTextIteratorStreamer", "TextIteratorStreamer", "TextStreamer"],
+ }
+ 
+-try:
+-    if not is_torch_available():
+-        raise OptionalDependencyNotAvailable()
+-except OptionalDependencyNotAvailable:
+-    pass
+-else:
+-    _import_structure["beam_constraints"] = [
+-        "Constraint",
+-        "ConstraintListState",
+-        "DisjunctiveConstraint",
+-        "PhrasalConstraint",
+-    ]
+-    _import_structure["beam_search"] = [
+-        "BeamHypotheses",
+-        "BeamScorer",
+-        "BeamSearchScorer",
+-        "ConstrainedBeamSearchScorer",
+-    ]
+-    _import_structure["candidate_generator"] = [
+-        "AssistedCandidateGenerator",
+-        "CandidateGenerator",
+-        "EarlyExitCandidateGenerator",
+-        "PromptLookupCandidateGenerator",
+-    ]
+-    _import_structure["logits_process"] = [
+-        "AlternatingCodebooksLogitsProcessor",
+-        "ClassifierFreeGuidanceLogitsProcessor",
+-        "EncoderNoRepeatNGramLogitsProcessor",
+-        "EncoderRepetitionPenaltyLogitsProcessor",
+-        "EpsilonLogitsWarper",
+-        "EtaLogitsWarper",
+-        "ExponentialDecayLengthPenalty",
+-        "ForcedBOSTokenLogitsProcessor",
+-        "ForcedEOSTokenLogitsProcessor",
+-        "HammingDiversityLogitsProcessor",
+-        "InfNanRemoveLogitsProcessor",
+-        "LogitNormalization",
+-        "LogitsProcessor",
+-        "LogitsProcessorList",
+-        "MinLengthLogitsProcessor",
+-        "MinNewTokensLengthLogitsProcessor",
+-        "MinPLogitsWarper",
+-        "NoBadWordsLogitsProcessor",
+-        "NoRepeatNGramLogitsProcessor",
+-        "PrefixConstrainedLogitsProcessor",
+-        "RepetitionPenaltyLogitsProcessor",
+-        "SequenceBiasLogitsProcessor",
+-        "SuppressTokensLogitsProcessor",
+-        "SuppressTokensAtBeginLogitsProcessor",
+-        "SynthIDTextWatermarkLogitsProcessor",
+-        "TemperatureLogitsWarper",
+-        "TopKLogitsWarper",
+-        "TopPLogitsWarper",
+-        "TypicalLogitsWarper",
+-        "UnbatchedClassifierFreeGuidanceLogitsProcessor",
+-        "WhisperTimeStampLogitsProcessor",
+-        "WatermarkLogitsProcessor",
+-    ]
+-    _import_structure["stopping_criteria"] = [
+-        "MaxLengthCriteria",
+-        "MaxTimeCriteria",
+-        "ConfidenceCriteria",
+-        "EosTokenCriteria",
+-        "StoppingCriteria",
+-        "StoppingCriteriaList",
+-        "validate_stopping_criteria",
+-        "StopStringCriteria",
+-    ]
+-    _import_structure["utils"] = [
+-        "GenerationMixin",
+-        "GreedySearchEncoderDecoderOutput",
+-        "GreedySearchDecoderOnlyOutput",
+-        "SampleEncoderDecoderOutput",
+-        "SampleDecoderOnlyOutput",
+-        "BeamSearchEncoderDecoderOutput",
+-        "BeamSearchDecoderOnlyOutput",
+-        "BeamSampleEncoderDecoderOutput",
+-        "BeamSampleDecoderOnlyOutput",
+-        "ContrastiveSearchEncoderDecoderOutput",
+-        "ContrastiveSearchDecoderOnlyOutput",
+-        "GenerateBeamDecoderOnlyOutput",
+-        "GenerateBeamEncoderDecoderOutput",
+-        "GenerateDecoderOnlyOutput",
+-        "GenerateEncoderDecoderOutput",
+-    ]
+-    _import_structure["watermarking"] = [
+-        "WatermarkDetector",
+-        "WatermarkDetectorOutput",
+-        "BayesianDetectorModel",
+-        "BayesianDetectorConfig",
+-        "SynthIDTextWatermarkDetector",
+-    ]
++# try:
++#     if not is_torch_available():
++#         raise OptionalDependencyNotAvailable()
++# except OptionalDependencyNotAvailable:
++#     pass
++# else:
++_import_structure["beam_constraints"] = [
++    "Constraint",
++    "ConstraintListState",
++    "DisjunctiveConstraint",
++    "PhrasalConstraint",
++]
++_import_structure["beam_search"] = [
++    "BeamHypotheses",
++    "BeamScorer",
++    "BeamSearchScorer",
++    "ConstrainedBeamSearchScorer",
++]
++_import_structure["candidate_generator"] = [
++    "AssistedCandidateGenerator",
++    "CandidateGenerator",
++    "EarlyExitCandidateGenerator",
++    "PromptLookupCandidateGenerator",
++]
++_import_structure["logits_process"] = [
++    "AlternatingCodebooksLogitsProcessor",
++    "ClassifierFreeGuidanceLogitsProcessor",
++    "EncoderNoRepeatNGramLogitsProcessor",
++    "EncoderRepetitionPenaltyLogitsProcessor",
++    "EpsilonLogitsWarper",
++    "EtaLogitsWarper",
++    "ExponentialDecayLengthPenalty",
++    "ForcedBOSTokenLogitsProcessor",
++    "ForcedEOSTokenLogitsProcessor",
++    "HammingDiversityLogitsProcessor",
++    "InfNanRemoveLogitsProcessor",
++    "LogitNormalization",
++    "LogitsProcessor",
++    "LogitsProcessorList",
++    "MinLengthLogitsProcessor",
++    "MinNewTokensLengthLogitsProcessor",
++    "MinPLogitsWarper",
++    "NoBadWordsLogitsProcessor",
++    "NoRepeatNGramLogitsProcessor",
++    "PrefixConstrainedLogitsProcessor",
++    "RepetitionPenaltyLogitsProcessor",
++    "SequenceBiasLogitsProcessor",
++    "SuppressTokensLogitsProcessor",
++    "SuppressTokensAtBeginLogitsProcessor",
++    "SynthIDTextWatermarkLogitsProcessor",
++    "TemperatureLogitsWarper",
++    "TopKLogitsWarper",
++    "TopPLogitsWarper",
++    "TypicalLogitsWarper",
++    "UnbatchedClassifierFreeGuidanceLogitsProcessor",
++    "WhisperTimeStampLogitsProcessor",
++    "WatermarkLogitsProcessor",
++]
++_import_structure["stopping_criteria"] = [
++    "MaxLengthCriteria",
++    "MaxTimeCriteria",
++    "ConfidenceCriteria",
++    "EosTokenCriteria",
++    "StoppingCriteria",
++    "StoppingCriteriaList",
++    "validate_stopping_criteria",
++    "StopStringCriteria",
++]
++_import_structure["utils"] = [
++    "GenerationMixin",
++    "GreedySearchEncoderDecoderOutput",
++    "GreedySearchDecoderOnlyOutput",
++    "SampleEncoderDecoderOutput",
++    "SampleDecoderOnlyOutput",
++    "BeamSearchEncoderDecoderOutput",
++    "BeamSearchDecoderOnlyOutput",
++    "BeamSampleEncoderDecoderOutput",
++    "BeamSampleDecoderOnlyOutput",
++    "ContrastiveSearchEncoderDecoderOutput",
++    "ContrastiveSearchDecoderOnlyOutput",
++    "GenerateBeamDecoderOnlyOutput",
++    "GenerateBeamEncoderDecoderOutput",
++    "GenerateDecoderOnlyOutput",
++    "GenerateEncoderDecoderOutput",
++]
++_import_structure["watermarking"] = [
++    "WatermarkDetector",
++    "WatermarkDetectorOutput",
++    "BayesianDetectorModel",
++    "BayesianDetectorConfig",
++    "SynthIDTextWatermarkDetector",
++]
+ 
+ try:
+     if not is_tf_available():
+diff --git a/src/transformers/modeling_utils.py b/src/transformers/modeling_utils.py
+index 1c67ee1f89..c6c8d93dd2 100755
+--- a/src/transformers/modeling_utils.py
++++ b/src/transformers/modeling_utils.py
+@@ -2748,8 +2748,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
+         # we currently don't use this setting automatically, but may start to use with v5
+         dtype = get_parameter_dtype(model_to_save)
+-        model_to_save.config.torch_dtype = str(dtype).split(".")[1]
+-
++        # model_to_save.config.torch_dtype = str(dtype).split(".")[1]
++        if str(dtype).find('.') != -1:
++            model_to_save.config.torch_dtype = str(dtype).split(".")[1]
++        else:
++            model_to_save.config.torch_dtype = str(dtype)
+         # Attach architecture to the config
+         model_to_save.config.architectures = [model_to_save.__class__.__name__]
+ 
+diff --git a/src/transformers/trainer_pt_utils.py b/src/transformers/trainer_pt_utils.py
+index 10e6678728..4014a1a845 100644
+--- a/src/transformers/trainer_pt_utils.py
++++ b/src/transformers/trainer_pt_utils.py
+@@ -55,8 +55,8 @@ if is_training_run_on_sagemaker():
+ if is_torch_xla_available():
+     import torch_xla.core.xla_model as xm
+ 
+-if is_torch_available():
+-    from torch.optim.lr_scheduler import LRScheduler
++# if is_torch_available():
++#     from torch.optim.lr_scheduler import LRScheduler
+ 
+ 
+ logger = logging.get_logger(__name__)
+@@ -1366,36 +1366,36 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
+         pass
+ 
+ 
+-class LayerWiseDummyScheduler(LRScheduler):
+-    """
+-    For Layer-wise optimizers such as GaLoRE optimizer, the optimization and scheduling step
+-    are already done through the post gradient hooks. Therefore
+-    the trick is to create a dummy scheduler that can take arbitrary
+-    args and kwargs and return a no-op during training.
+-    """
+-
+-    def __init__(self, *args, **kwargs):
+-        self.default_lr = kwargs["lr"]
+-        optimizer = LayerWiseDummyOptimizer(**kwargs)
+-        last_epoch = -1
+-        verbose = False
+-        super().__init__(optimizer, last_epoch, verbose)
+-
+-    def get_lr(self):
+-        # default value
+-        lrs = [self.default_lr]
+-
+-        # we take each lr in the parameters if they exist, assumes the optimizer to be the `LayerWiseDummyOptimizer`
+-        if self.optimizer is not None:
+-            param_wise_lrs = [
+-                [group["lr"] for group in optim.param_groups] for optim in self.optimizer.optimizer_dict.values()
+-            ]
+-            lrs = list(chain(*param_wise_lrs))
+-
+-        return lrs
+-
+-    def _get_closed_form_lr(self):
+-        return self.base_lrs
++# class LayerWiseDummyScheduler(LRScheduler):
++#     """
++#     For Layer-wise optimizers such as GaLoRE optimizer, the optimization and scheduling step
++#     are already done through the post gradient hooks. Therefore
++#     the trick is to create a dummy scheduler that can take arbitrary
++#     args and kwargs and return a no-op during training.
++#     """
++
++#     def __init__(self, *args, **kwargs):
++#         self.default_lr = kwargs["lr"]
++#         optimizer = LayerWiseDummyOptimizer(**kwargs)
++#         last_epoch = -1
++#         verbose = False
++#         super().__init__(optimizer, last_epoch, verbose)
++
++#     def get_lr(self):
++#         # default value
++#         lrs = [self.default_lr]
++
++#         # we take each lr in the parameters if they exist, assumes the optimizer to be the `LayerWiseDummyOptimizer`
++#         if self.optimizer is not None:
++#             param_wise_lrs = [
++#                 [group["lr"] for group in optim.param_groups] for optim in self.optimizer.optimizer_dict.values()
++#             ]
++#             lrs = list(chain(*param_wise_lrs))
++
++#         return lrs
++
++#     def _get_closed_form_lr(self):
++#         return self.base_lrs
+ 
+ 
+ def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, is_distributed):
+diff --git a/src/transformers/utils/import_utils.py b/src/transformers/utils/import_utils.py
+index ac07281b3d..26917d0018 100755
+--- a/src/transformers/utils/import_utils.py
++++ b/src/transformers/utils/import_utils.py
+@@ -376,6 +376,7 @@ def is_torch_sdpa_available():
+ 
+ 
+ def is_torch_flex_attn_available():
++    return False
+     if not is_torch_available():
+         return False
+     elif _torch_version == "N/A":
+@@ -391,6 +392,7 @@ def is_torchvision_available():
+ 
+ 
+ def is_torchvision_v2_available():
++    return False
+     if not is_torchvision_available():
+         return False
+ 

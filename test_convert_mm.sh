@@ -1,14 +1,17 @@
 #!/bin/bash
 
 #MindSpeed-LLM
-rm -rf MindSpeed-LLM/
-git clone https://gitee.com/ascend/MindSpeed-LLM.git -b master
+rm -rf MindSpeed-MM/
+git clone https://gitee.com/ascend/MindSpeed-MM.git -b master
 if [ $? -ne 0 ]; then
-    echo "Error: git clone MindSpeed-LLM"
+    echo "Error: git clone MindSpeed-MM"
     exit 1
 fi
-rm -rf MindSpeed-LLM/tests
-echo "------------------------------------done MindSpeed-LLM"
+rm -rf MindSpeed-MM/tests
+cd MindSpeed-MM/
+pip install -e .
+cd ..
+echo "------------------------------------done MindSpeed-MM"
 
 #MindSpeed
 rm -rf MindSpeed/
@@ -30,7 +33,7 @@ fi
 rm -rf Megatron-LM/tests
 echo "..............................................done Megatron-LM"
 
-#msadapter
+#msadaptor
 rm -rf msadapter
 git clone https://gitee.com/mindspore/msadapter.git -b master
 if [ $? -ne 0 ]; then
@@ -44,30 +47,17 @@ echo "..............................................done msadapter"
 
 #transformers
 rm -rf transformers/
-git clone https://gitee.com/mirrors/huggingface_transformers.git -b v4.47.0
+git clone https://github.com/huggingface/transformers.git
 if [ $? -ne 0 ]; then
-    echo "Error: git clone msadaptor"
+    echo "Error: git clone transformers"
     exit 1
 fi
-mv huggingface_transformers transformers
 cd transformers
-git apply ../tools/rules/transformers.diff
+git checkout fa56dcc2a
+git apply ../tools/rules/transformers_v4.49.0.diff
 rm -rf tests
 cd ..
 echo "..............................................done apply transformers"
-
-#accelerate
-rm -rf accelerate/
-git clone https://gitee.com/modelee/accelerate.git -b v1.6.0
-if [ $? -ne 0 ]; then
-    echo "Error: git clone accelerate"
-    exit 1
-fi
-cd accelerate
-git apply ../tools/rules/accelerate.diff
-rm -rf tests
-cd ..
-echo "..............................................done apply accelerate"
 
 #safetensors
 rm -rf safetensors_dir
@@ -86,17 +76,7 @@ else
     echo "..............................................done apply safetensors"
 fi
 
-echo "..............................................start code_convert"
 MindSpeed_Core_MS_PATH=$(pwd)
 echo ${MindSpeed_Core_MS_PATH}
-
-python3 tools/transfer.py \
---megatron_path ${MindSpeed_Core_MS_PATH}/Megatron-LM/megatron/ \
---mindspeed_path ${MindSpeed_Core_MS_PATH}/MindSpeed/mindspeed/ \
---mindspeed_llm_path ${MindSpeed_Core_MS_PATH}/MindSpeed-LLM/ \
-
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/accelerate/src/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/transformers/src/:$PYTHONPATH
 echo $PYTHONPATH
-echo "..............................................done code_convert"
-
-pip uninstall -y bitsandbytes-npu-beta
