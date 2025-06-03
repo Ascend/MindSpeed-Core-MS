@@ -152,11 +152,16 @@ if __name__ == "__main__":
                         help="convert einops package path")
     parser.add_argument("--is_rl", action="store_true",
                         help="is rl")
+    parser.add_argument("--is_rl_gongka", action="store_true",
+                        help="is rl_gongka")
     args = parser.parse_args()
 
 
     if args.is_rl:
         from rules_rl.line_rules import LINE_RULES, GENERAL_RULES, SHELL_RULES, FILE_RULES, SPECIAL_RULES
+
+    if args.is_rl_gongka:
+        from rules_rl.line_rules_gongka import LINE_RULES, GENERAL_RULES, SHELL_RULES, FILE_RULES, SPECIAL_RULES
 
     if args.megatron_path:
         origin_path = args.megatron_path
