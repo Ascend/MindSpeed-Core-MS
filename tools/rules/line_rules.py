@@ -136,7 +136,7 @@ LINE_RULES = {
 +    # run backward
 +    grad_ = C.GradOperation(True, True, True)
 +    weights = model.trainable_params()
-+    _pynative_executor.check_run(grad_, config.forward_step_func, weights, None, input_tensor[0])
++    _pynative_executor.check_run(grad_, config.forward_step_func, weights, None, input_tensor[0], create_graph=False)
 +    _pynative_executor.grad(config.forward_step_func, grad_, weights, None, input_tensor[0], output_tensor_grad[0])
  
      # Collect the grad of the input_tensor.
