@@ -82,3 +82,4 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter/mindtorch:${MindSpeed_Core
 echo $PYTHONPATH
 echo "..............................................done code_convert"
 
+pip uninstall -y bitsandbytes-npu-beta
