@@ -120,3 +120,4 @@ python3 tools/transfer.py \
 
 echo "..............................................done code_convert"
 
+pip uninstall -y bitsandbytes-npu-beta

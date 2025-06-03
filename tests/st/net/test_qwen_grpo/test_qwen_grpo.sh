@@ -1,5 +1,5 @@
 #!/bin/bash
-source ../../../../scripts/set_path_rl.sh
+source ../../../scripts/set_path_rl.sh
 MindSpeed_RL_PATH=../../../../RL/MindSpeed-RL
 
 backup() {
