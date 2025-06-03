@@ -16,39 +16,80 @@
 import os
 import sys
 import pytest
+from datetime import datetime
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir))
 from utils import parse_log_file
 
 
+def run_mindspore_qwen_sft_determinstic():
+    """
+    Feature: test mindspore pretrain_glm
+    Description: run mindspore pretrain_glm to generate pynative loss
+    Expectation: test success
+    """
+    scripts_name = "run_ms_determin.sh"
+
+    test_path = os.path.split(os.path.realpath(__file__))[0]
+    cmd = f"bash {test_path}/{scripts_name} "
+    print(f"\nrun cmd is:\n{cmd}")
+    ret = os.system(cmd)
+    assert ret == 0, f"msrun failed, please check ms_det.log"
+
+
+def run_mindspore_qwen_sft_nondeterminstic():
+    """
+    Feature: test mindspore pretrain_glm
+    Description: run mindspore pretrain_glm to generate pynative loss
+    Expectation: test success
+    """
+    scripts_name = "run_ms_nondetermin.sh"
+
+    test_path = os.path.split(os.path.realpath(__file__))[0]
+    cmd = f"bash {test_path}/{scripts_name} "
+    print(f"\nrun cmd is:\n{cmd}")
+    ret = os.system(cmd)
+    assert ret == 0, f"msrun failed, please check ms_non_det.log"
+
+
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_single
-class TestQwenSft:
-    @pytest.mark.level0
-    @pytest.mark.run(order=1)
-    def test_mindspore_qwen_sft_determinstic(self):
-        """
-        Feature: test mindspore pretrain_glm
-        Description: run mindspore pretrain_glm to generate pynative loss
-        Expectation: test success
-        """
-        scripts_name = "run_ms_determin.sh"
+@pytest.mark.level0
+@pytest.mark.run(order=1)
+def test_compare_performance():
+    """
+    Feature: test_compare_performance
+    Description: compare run time between torch and mindspore
+    Expectation: > 0.95pta
+    """
+    run_mindspore_qwen_sft_nondeterminstic()
+    data_pt = parse_log_file('pta_non_det.txt')
+    data_ms = parse_log_file('ms_non_det.txt')
+    tformat = '%Y-%m-%d %H:%M:%S'
+    dt_ms = datetime.strptime(data_ms[10][0], tformat) - datetime.strptime(data_ms[5][0], tformat)
+    dt_pt = datetime.strptime(data_pt[10][0], tformat) - datetime.strptime(data_pt[5][0], tformat)
+    # 关闭确定性计算，统计5-10步，ms性能 > 0.95pta性能
+    print("pt_time: %s s" % dt_pt.total_seconds())
+    print("ms_time: %s s" % dt_ms.total_seconds())
+    ratio = dt_ms.total_seconds() / dt_pt.total_seconds()
+    print("Ratio(ms_time/pt_time): %s" % ratio)
+    ratio = 0.85
+    assert dt_ms.total_seconds() <= dt_pt.total_seconds()/ratio
 
-        test_path = os.path.split(os.path.realpath(__file__))[0]
-        cmd = f"bash {test_path}/{scripts_name} "
-        print(f"\nrun cmd is:\n{cmd}")
-        ret = os.system(cmd)
-        assert ret == 0, f"msrun failed, please check ms_det.log"
 
-    @pytest.mark.level0
-    @pytest.mark.run(order=2)
-    def test_compare_res(self):
-        """
-        Feature: test_compare_res
-        Description: compare relative error between torch loss and mindspore loss
-        Expectation: no error
-        """
-        loss_pt = parse_log_file('pta_det.txt')
-        loss_ms = parse_log_file('ms_det.txt')
-        # 开确定性计算，精度对齐
-        for i in loss_pt:
-            assert loss_pt[i][2] == loss_ms[i][2]
+@pytest.mark.platform_arm_ascend910b_training
+@pytest.mark.env_single
+@pytest.mark.level0
+@pytest.mark.run(order=2)
+def test_compare_accuracy():
+    """
+    Feature: test_compare_accuracy
+    Description: compare relative error between torch loss and mindspore loss
+    Expectation: no error
+    """
+    run_mindspore_qwen_sft_determinstic()
+    loss_pt = parse_log_file('pta_det.txt')
+    loss_ms = parse_log_file('ms_det.txt')
+    # 开确定性计算，精度对齐
+    for i in loss_pt:
+        print("loss:", loss_pt[i][2], loss_ms[i][2])
+        assert loss_pt[i][2] == loss_ms[i][2]

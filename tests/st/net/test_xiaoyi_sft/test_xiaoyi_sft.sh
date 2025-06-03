@@ -3,11 +3,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 export MS_ALLOC_CONF=enable_vmm:True
 
-export HCCL_DETERMINISTIC=true  # HCCL确定性
-export ASCEND_LAUNCH_BLOCKING=1  # 硬件确定性
-export NCCL_DETERMINISTIC=1
-
-source ../../../../scripts/set_path.sh
+source ../../../scripts/set_path.sh
 MindSpeed_LLM_PATH=../../../../MindSpeed-LLM
 
 MASTER_PORT=6103
