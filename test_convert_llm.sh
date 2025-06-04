@@ -86,6 +86,23 @@ else
     echo "..............................................done apply safetensors"
 fi
 
+#huggingface_hub
+rm -rf huggingface_hub_dir
+mkdir huggingface_hub_dir
+pip install --no-deps huggingface_hub==0.32.4
+if [ $? -ne 0 ]; then
+    echo "Error: pip install huggingface_hub fail"
+else
+    ST_PATH=$(python -c "import site; print(site.getsitepackages()[0])")
+    cp -r ${ST_PATH}/huggingface_hub ./huggingface_hub_dir
+    cd huggingface_hub_dir/huggingface_hub
+    git init
+    git apply ../../tools/rules/huggingface_hub.diff
+    cd ../../
+    export PYTHONPATH=$(pwd)/huggingface_hub_dir:$PYTHONPATH
+    echo "..............................................done apply huggingface_hub"
+fi
+
 echo "..............................................start code_convert"
 MindSpeed_Core_MS_PATH=$(pwd)
 echo ${MindSpeed_Core_MS_PATH}
