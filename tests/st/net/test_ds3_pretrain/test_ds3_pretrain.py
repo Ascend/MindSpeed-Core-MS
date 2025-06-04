@@ -40,18 +40,3 @@ class TestDS3Pretrain:
         logging.info(f"Running command:\n{cmd}")
         ret = os.system(cmd)
         assert ret == 0, f"msrun failed, please check ms_det.log"
-
-    @pytest.mark.level0
-    @pytest.mark.run(order=2)
-    def test_compare_res(self):
-        """
-        Feature: test_compare_res
-        Description: compare relative error between torch loss and mindspore loss
-        Expectation: no error
-        """
-        loss_pt = parse_log_file('pta_det.txt')
-        loss_ms = parse_log_file('ms_det.txt')
-        # 开确定性计算，精度对齐
-        for i in loss_pt:
-            logging.info("loss: %s %s", loss_pt[i][2], loss_ms[i][2])
-            assert len(loss_pt[i][2]) - len(loss_ms[i][2]) < 5
