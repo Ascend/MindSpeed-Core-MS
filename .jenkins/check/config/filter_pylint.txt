@@ -1,3 +1,4 @@
 "mindspeed-core-ms/ci"
 "mindspeed-core-ms/tools"
 "mindspeed-core-ms/tests/st/net"
+"mindspeed-core-ms/tests/ut"
