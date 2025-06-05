@@ -1,0 +1,22 @@
+diff --git a/src/huggingface_hub/serialization/_torch.py b/src/huggingface_hub/serialization/_torch.py
+index ccb9c42b..3afd0613 100644
+--- a/src/huggingface_hub/serialization/_torch.py
++++ b/src/huggingface_hub/serialization/_torch.py
+@@ -765,7 +765,7 @@ def get_torch_storage_size(tensor: "torch.Tensor") -> int:
+         pass
+ 
+     try:
+-        return tensor.untyped_storage().nbytes()
++        return tensor.nbytes
+     except AttributeError:
+         # Fallback for torch==1.10
+         try:
+@@ -816,7 +816,7 @@ def storage_ptr(tensor: "torch.Tensor") -> Union[int, Tuple[Any, ...]]:
+     except Exception:
+         # Fallback for torch==1.10
+         try:
+-            return tensor.storage().data_ptr()
++            return tensor
+         except NotImplementedError:
+             # Fallback for meta storage
+             return 0

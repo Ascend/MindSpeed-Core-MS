@@ -34,15 +34,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 cd MindSpeed-RL
-if [[ "$1" == "is_rl_gongka" ]]; then
-    echo "...............................................MindSpeed-RL GongKa"
-    git checkout 0707949f152599862f0a28cb155681599659dc00
-    PYTHON_ARG='--is_rl_gongka'
-else
-    echo "...............................................MindSpeed-RL"
-    git checkout 559db0856891e5f8504a0b21d4b26969a82241df
-    PYTHON_ARG='--is_rl'
-fi
+git checkout 559db0856891e5f8504a0b21d4b26969a82241df
 rm -rf tests
 cd ..
 echo "...............................................done MindSpeed-RL"
@@ -60,17 +52,17 @@ rm -rf tests
 cd ..
 echo "..............................................done Megatron-LM"
 
-#msadapter
-rm -rf msadapter
-git clone https://gitee.com/mindspore/msadapter.git
-cd msadapter
-rm -rf tests
-cd ..
+#MSAdapter
+rm -rf MSAdapter
+git clone https://openi.pcl.ac.cn/OpenI/MSAdapter.git -b master
 if [ $? -ne 0 ]; then
-    echo "Error: git clone msadapter"
+    echo "Error: git clone MSAdapter"
     exit 1
 fi
-echo "..............................................done msadapter"
+cd MSAdapter
+rm -rf tests
+cd ..
+echo "..............................................done MSAdapter"
 
 #vllm
 rm -rf vllm
@@ -160,16 +152,16 @@ echo "..............................................start code_convert"
 MindSpeed_Core_MS_PATH=$PWD
 echo ${MindSpeed_Core_MS_PATH}
 
-python3 tools/transfer.py $PYTHON_ARG \
+python3 tools/transfer.py \
 --megatron_path ${MindSpeed_Core_MS_PATH}/Megatron-LM/megatron/ \
 --mindspeed_path ${MindSpeed_Core_MS_PATH}/MindSpeed/mindspeed/ \
 --mindspeed_llm_path ${MindSpeed_Core_MS_PATH}/MindSpeed-LLM/ \
 --mindspeed_rl_path ${MindSpeed_Core_MS_PATH}/MindSpeed-RL/ \
 --vllm_path ${MindSpeed_Core_MS_PATH}/vllm/ \
---vllm_ascend_path ${MindSpeed_Core_MS_PATH}/vllm-ascend/
+--vllm_ascend_path ${MindSpeed_Core_MS_PATH}/vllm-ascend/ \
+--is_rl
 
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/vllm/:${MindSpeed_Core_MS_PATH}/vllm-ascend/:${MindSpeed_Core_MS_PATH}/accelerate/src/:${MindSpeed_Core_MS_PATH}/safetensors_dir/:${MindSpeed_Core_MS_PATH}/huggingface_hub/src/:${MindSpeed_Core_MS_PATH}/MindSpeed-RL/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/vllm/:${MindSpeed_Core_MS_PATH}/vllm-ascend/:${MindSpeed_Core_MS_PATH}/accelerate/src/:${MindSpeed_Core_MS_PATH}/safetensors_dir/:${MindSpeed_Core_MS_PATH}/huggingface_hub/src/:${MindSpeed_Core_MS_PATH}/MindSpeed-RL/:$PYTHONPATH
 echo $PYTHONPATH
 echo "..............................................done code_convert"
 
-pip uninstall -y bitsandbytes-npu-beta
