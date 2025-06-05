@@ -13,7 +13,7 @@
     </a>
 </p>
 
-MindSpeed-Core-MS 是链接华为自研AI框架[MindSpore](https://www.mindspore.cn/install/)+华为[昇腾大模型加速解决方案MindSpeed](https://www.hiascend.cn/software/mindspeed)的重要组件，旨在提供华为全栈易用的端到端的自然语言模型以及多模态模型训练解决方案。MindSpeed-Core-MS 提供了代码一键转写工具，可帮助用户将模型使能加速库MindSpeed/MindSpeed-LLM/MindSpeed-MM以及三方库依赖由PyTorch无缝切换为MindSpore，以此获得更极致的性能体验。另外，MindSpeed-Core-MS 也提供了动态图调试工具，使用户在分布式训练场景下更容易地进行代码调试和debug。
+MindSpeed-Core-MS 是链接华为自研AI框架[MindSpore](https://www.mindspore.cn/install/)+华为[昇腾大模型加速解决方案MindSpeed](https://www.hiascend.cn/software/mindspeed)的重要组件，旨在提供华为全栈易用的端到端的自然语言模型以及多模态模型训练解决方案。MindSpeed-Core-MS 提供了代码一键适配功能，可帮助用户将模型使能加速库MindSpeed/MindSpeed-LLM/MindSpeed-MM以及三方库依赖由PyTorch无缝切换为MindSpore，以此获得更极致的性能体验。另外，MindSpeed-Core-MS 也提供了动态图调试工具，使用户在分布式训练场景下更容易地进行代码调试和debug。
 
 ---
 
@@ -82,7 +82,7 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
   </tbody>
   <tbody>
     <tr>
-      <td rowspan="1"><a href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/tree/main">Qwen25</a></td>
+      <td rowspan="1"><a href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/tree/main">Qwen2.5</a></td>
       <td><a href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/tree/main">7B</a></td>
       <td> 4k </td>
       <td> r1-zero </td>
@@ -106,7 +106,7 @@ git clone https://gitee.com/ascend/MindSpeed-Core-MS.git -b master
 
 ## 一键适配
 
-MindSpeed-Core-MS提供了一键适配命令脚本，集成了基于MindSpeed进行模型训练的相关代码仓拉取、代码自动转写及适配、环境变量设置等功能，用户根据使用场景（大语言模型/多模态模型/强化学习）执行相应命令即可完成一键自动适配，代码自动转写的工具原理详见[转写工具](./docs/convert_tool.md)。在运行一键适配命令前，请确保：
+MindSpeed-Core-MS提供了一键适配命令脚本，集成了基于MindSpeed进行模型训练的相关代码仓拉取、代码自动适配、环境变量设置等功能，用户根据使用场景（大语言模型/多模态模型/强化学习）执行相应命令即可完成一键自动适配。在运行一键适配命令前，请确保：
 
 - 基础依赖已安装
 - 所部署容器网络可用，python已安装
@@ -206,7 +206,7 @@ MindSpeed-Core-MS已发布版本维护策略：
 
 | **MindSpeed-Core-MS版本** | **维护策略** | **当前状态** | **发布时间** | **后续状态** | **EOL日期** |
 | ------------------------------- | ------------------ | ------------------ | ------------------ | ------------------ | ----------------- |
-| feature-0.2                     | Demo               | 维护               |          2025.4.15          |                    |                   |
+| feature-0.2                     | Demo               | 维护               |          2025.4.15          |          预计2025/09/30起无维护          |                 |
 |             master                    | /               | 开发               |       预计2025.6.30             |          /          |          /         |
 
 ---

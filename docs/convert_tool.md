@@ -1,8 +1,8 @@
 # 代码转写工具
 
-基于Pytorch的原生代码，包括Megatron、MindSpeed、MindSpeed-LLMdeng等仓库中的部分写法，在基于MindSpore框架运行时存在适配问题，
-对于这部分代码需要通过转换工具转写为可基于MindSpore框架运行的代码。此转写工具可将pytorch代码批量转写为
-[msadapter](https://gitee.com/mindspore/msadapter.git) 兼容性代码，仍保留msadapter兼容仓库的pytorch对应接口; 后续方案可直接转换为MindSpore原生代码（敬请期待）。
+Megatron、MindSpeed、MindSpeed-LLM等仓库中基于Pytorch的原生代码的部分写法，与基于MindSpore框架的写法有部分差异。
+这部分代码需要通过转写工具转写为可基于MindSpore框架运行的代码。此转写工具可将pytorch代码批量转写为
+[MSAdapter](https://openi.pcl.ac.cn/OpenI/MSAdapter.git) 兼容性代码，仍保留MSAdapter兼容仓库的pytorch对应接口; 后续方案可直接转换为MindSpore原生代码（敬请期待）。
 
 **概览**
 该工具基于 [libcst](https://libcst.dev/) 实现静态语法树转换，
@@ -28,7 +28,7 @@ tools
 
 ## 安装与依赖
 
-1. Python ≥3.7。
+1. Python ≥3.9。
 2. 安装依赖库：
 
    ```bash
@@ -39,7 +39,7 @@ tools
 
 ```bash
 cd MindSpeed-Core-MS
-bash test_convert_xxx.sh # 正常获取MindSpeed, MindSpeed-LLM 等代码仓并应用MindSpore需要的patch, 注意不需要设置PYTHONPATH
+bash auto_convert_xxx.sh # 正常获取MindSpeed, MindSpeed-LLM 等代码仓并应用MindSpore需要的patch, 注意不需要设置PYTHONPATH
 # 此时若设置PYTHONPATH, 应能正常拉起模型训练
 bash tools/convert/convert.sh # 拷贝需要的三方库和依赖的代码至MindSpeed-LLM目录, 并对MindSpeed-LLM目录应用代码转写
 ```
@@ -52,7 +52,7 @@ bash tools/convert/convert.sh # 拷贝需要的三方库和依赖的代码至Min
 
 假设要将 Megatron-LM、MindSpeed-LLM、MindSpeed-MM 等仓库转写为 MindSpore 适配：
 
-1. 执行完本仓库根目录下的 `test_convert_xxx.sh` 脚本后，根目录下存在Megatron、MindSpeed等仓库：
+1. 执行完本仓库根目录下的 `auto_convert_xxx.sh` 脚本后，根目录下存在Megatron、MindSpeed等仓库：
 
 2. 进入父目录，执行转写：
 
