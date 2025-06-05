@@ -52,17 +52,17 @@ rm -rf tests
 cd ..
 echo "..............................................done Megatron-LM"
 
-#msadapter
-rm -rf msadapter
-git clone https://gitee.com/mindspore/msadapter.git
-cd msadapter
-rm -rf tests
-cd ..
+#MSAdapter
+rm -rf MSAdapter
+git clone https://openi.pcl.ac.cn/OpenI/MSAdapter.git -b master
 if [ $? -ne 0 ]; then
-    echo "Error: git clone msadapter"
+    echo "Error: git clone MSAdapter"
     exit 1
 fi
-echo "..............................................done msadapter"
+cd MSAdapter
+rm -rf tests
+cd ..
+echo "..............................................done MSAdapter"
 
 #vllm
 rm -rf vllm
@@ -161,7 +161,7 @@ python3 tools/transfer.py \
 --vllm_ascend_path ${MindSpeed_Core_MS_PATH}/vllm-ascend/ \
 --is_rl
 
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/vllm/:${MindSpeed_Core_MS_PATH}/vllm-ascend/:${MindSpeed_Core_MS_PATH}/accelerate/src/:${MindSpeed_Core_MS_PATH}/safetensors_dir/:${MindSpeed_Core_MS_PATH}/huggingface_hub/src/:${MindSpeed_Core_MS_PATH}/MindSpeed-RL/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/vllm/:${MindSpeed_Core_MS_PATH}/vllm-ascend/:${MindSpeed_Core_MS_PATH}/accelerate/src/:${MindSpeed_Core_MS_PATH}/safetensors_dir/:${MindSpeed_Core_MS_PATH}/huggingface_hub/src/:${MindSpeed_Core_MS_PATH}/MindSpeed-RL/:$PYTHONPATH
 echo $PYTHONPATH
 echo "..............................................done code_convert"
 

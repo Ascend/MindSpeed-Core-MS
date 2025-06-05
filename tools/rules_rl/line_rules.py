@@ -44,14 +44,22 @@ LINE_RULES = {
              def func(self, **kwargs):
 -                return _get_dst_obj(self, value, **kwargs).weight.data.copy_(kwargs.get('data'))
 +                set_tensor = _get_dst_obj(self, value, **kwargs)
-+                set_tensor.weight.data = kwargs.get('data')
++                data = kwargs.get('data')
++                if data.dtype != set_tensor.weight.dtype:
++                   data = data.to(dtype = set_tensor.weight.dtype)
++                set_tensor.weight.data = data
+
+
 +                return set_tensor.weight.data
              return func""",
              """         def _func_generator_set_bias(value):
              def func(self, **kwargs):
 -                return _get_dst_obj(self, value, **kwargs).bias.data.copy_(kwargs.get('data'))
 +                set_tensor = _get_dst_obj(self, value, **kwargs)
-+                set_tensor.bias.data = kwargs.get('data')
++                data = kwargs.get('data')
++                if data.dtype != set_tensor.weight.dtype:
++                   data = data.to(dtype = set_tensor.weight.dtype)
++                set_tensor.bias.data = data
 +                return set_tensor.bias.data
              return func""",
      """             self.module = [AutoModelForCausalLM.from_pretrained(
@@ -74,6 +82,15 @@ LINE_RULES = {
     },
 
 "mindspeed-rl": {
+        "cli/convert_ckpt.py": [
+"""if __name__ == '__main__':
++    import mindspore as ms
++    ms.set_context(device_target = "CPU")
++    import torch
++    torch.configs.set_pyboost(False)""",
+"""+    parser.add_argument('--save_lora_to_hf', action="store_true", default=False)
+     known_args, _ = parser.parse_known_args()"""
+        ],
         "mindspeed_rl/config_cls/megatron_config.py": [
 """         self.swap_attention = False
 +        self.ai_framework = \"pytorch\"""",
