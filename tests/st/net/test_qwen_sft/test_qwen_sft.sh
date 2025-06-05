@@ -1,5 +1,7 @@
 #!/bin/bash
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+export HCCL_CONNECT_TIMEOUT=3600
 
 source ../../../scripts/set_path.sh
 MindSpeed_LLM_PATH=../../../../MindSpeed-LLM
@@ -16,7 +18,6 @@ CKPT_LOAD_DIR="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_q
 CKPT_SAVE_DIR="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_qwen_sft/save"
 DATA_PATH="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_qwen_sft/dataset/finetune_dataset/alpaca"
 TOKENIZER_PATH="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_qwen_sft/R1"
-
 
 TP=2
 PP=4
@@ -124,4 +125,5 @@ msrun $DISTRIBUTED_ARGS ${MindSpeed_LLM_PATH}/posttrain_gpt.py \
     $OUTPUT_ARGS \
     $TUNE_ARGS \
     --distributed-backend nccl \
+    --ai-framework mindspore \
     | tee qwen_sft.txt
