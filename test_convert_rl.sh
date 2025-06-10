@@ -115,7 +115,7 @@ echo "..............................................done apply transformers"
 
 #accelerate
 rm -rf accelerate/
-git clone https://github.com/huggingface/accelerate.git -b v1.6.0
+git clone https://gitee.com/modelee/accelerate.git -b v1.6.0
 if [ $? -ne 0 ]; then
     echo "Error: git clone accelerate"
     exit 1
@@ -145,7 +145,7 @@ fi
 
 #huggingface_hub
 rm -rf huggingface_hub
-git clone https://github.com/huggingface/huggingface_hub.git -b v0.29.2
+git clone https://gitee.com/mirrors/huggingface_hub.git -b v0.29.2
 if [ $? -ne 0 ]; then
     echo "Error: git clone huggingface_hub"
     exit 1

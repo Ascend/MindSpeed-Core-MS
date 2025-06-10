@@ -7,5 +7,5 @@ mkdir ${MindSpeed_Core_MS_PATH}/RL
 cp -r ${MindSpeed_Core_MS_PATH}/test_convert_rl.sh ${MindSpeed_Core_MS_PATH}/RL
 cp -r ${MindSpeed_Core_MS_PATH}/tools ${MindSpeed_Core_MS_PATH}/RL
 cd RL
-bash test_convert_rl.sh
+bash test_convert_rl.sh is_rl_gongka
 echo "..............................................done set RL_env"
