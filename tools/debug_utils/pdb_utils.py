@@ -36,10 +36,10 @@ def breakpoint_(non_block=True):
         block: whether to block other ranks. In case that
     """
     current_rank = torch.distributed.get_rank()
-    debug_rank = os.environ.get("MS_DEBUG_RANK")
+    debug_rank = os.environ.get("RANK_TO_DEBUG")
     if current_rank is None or debug_rank is None:
-        raise Exception(f"MS_DEBUG_RANK/MS_NODE_ID can't be None in debug mode, "
-                        f"MS_NODE_ID: `{current_rank}`, MS_DEBUG_RANK: `{debug_rank}`")
+        raise Exception(f"RANK_TO_DEBUG/rank can't be None in debug mode, "
+                        f"MS_NODE_ID: `{current_rank}`, RANK_TO_DEBUG: `{debug_rank}`")
     logging.info(f"current_rank: {current_rank}, debug_rank: {debug_rank}")
 
     counter_file = _get_counter_file()
@@ -49,7 +49,7 @@ def breakpoint_(non_block=True):
                 f.write(f"DEBUGGING{counter_file}")
             logging.info(f"[{time.time()}]counter_file created: {counter_file}")
         import pdb
-        pdb.set_trace() # press `n` and then `enter` to reach your code
+        pdb.set_trace() # press `n` and then `Enter` to reach your code
     elif not non_block:
         logging.info(f"[{time.time()}]waiting counter_file to be created...")
         while not os.path.exists(counter_file):
@@ -61,7 +61,7 @@ def breakpoint_(non_block=True):
         logging.info(f"[{time.time()}]counter_file cleaned, continue")
     else:
         # otherwise, other ranks don't need to wait
-        pass
+        logging.info(f"[{time.time()}]stepping in to debug field in background rank. (non blocking)")
 
 
 def clear_():
