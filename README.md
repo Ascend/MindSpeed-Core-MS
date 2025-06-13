@@ -169,7 +169,7 @@ source auto_convert_rl.sh
 
 此处提供以下强化模型训练拉起流程作为参考。
 
-- [**Qwen2.5-7B GRPO**](./docs/GRPO.md)
+- [**Qwen2.5-7B GRPO**](./docs/GRPO_Qwen25_7B.md)
 
 若在环境中`PYTHONPATH`等环境变量失效（例如退出容器后再进入等），可执行如下命令重新设置环境变量
 

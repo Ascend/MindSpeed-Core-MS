@@ -28,36 +28,54 @@ Group Relative Policy Optimization (GRPO) 是 Deepseek-Math 中提出的训练�
 
 以 DeepScaler 为例：
 
-数据集下载地址：[DeepScaler](https://huggingface.co/datasets/agentica-org/DeepScaleR-Preview-Dataset/tree/main)
+1. 数据集下载地址：[DeepScaler](https://huggingface.co/datasets/agentica-org/DeepScaleR-Preview-Dataset/tree/main)
 
-数据集下载可以基于网页直接下载，也可以基于命令行下载，比如：
+   数据集下载可以基于网页直接下载，也可以基于命令行下载，比如：
 
-```shell
-# 读取deepscaler数据集
-mkdir dataset
-cd dataset/
-wget https://huggingface.co/datasets/agentica-org/DeepScaleR-Preview-Dataset/resolve/main/deepscaler.json --no-check
-cd ..
-```
+   ```shell
+   # 读取deepscaler数据集
+   mkdir dataset
+   cd dataset/
+   wget https://huggingface.co/datasets/agentica-org/DeepScaleR-Preview-Dataset/resolve/main/deepscaler.json --no-check
+   cd ..
+   ```
 
-数据预处理的 yaml 配置文件放置于 `MindSpeed-RL/configs/datasets` 文件夹下，通过以下命令进行数据集预处理：
+2. 以 deepscaler 数据集为例，配置数据预处理的 deepscaler.yaml 文件，并放置于 `MindSpeed-RL/configs/datasets` 文件夹下。
 
-```shell
-# 读取configs/datasets/deepscaler.yaml文件
-bash examples/data/preprocess_data.sh deepscaler
-```
+   deepscaler.yaml 配置示例：
 
-数据集处理配置可以根据需求自行配置，以下是数据集处理的 yaml 文件中基础参数的介绍：
+    ```
+    input: ./dataset/deepscaler.json
+    tokenizer_name_or_path: ./model_from_hf/qwen25-7b
+    output_prefix: ./dataset/data
+    handler_name: R1AlpacaStyleInstructionHandler
+    tokenizer_type: HuggingFaceTokenizer
+    workers: 8
+    log_interval: 1000
+    prompt_type: qwen_r1
+    map_keys: {"prompt":"problem", "query":"", "response": "answer", "system":""}
+    dataset_additional_keys: ["labels"]
+    ```
 
-- `input`：数据集的路径，需指定具体文件，例如/datasets/deepscaler.json
-- `tokenizer_type`：指定分词器的类型，例如 HuggingFaceTokenizer 使用 Hugging Face 库提供的分词器来对文本进行分词处理;
-- `tokenizer_name_or_path`：指定分词器的名称或路径;
-- `output_prefix`：输出结果的前缀路径，例如 /datasets/data;
-- `workers`：设置处理数据时使用的 worker 数;
-- `prompt_type`: 用于指定对话模板，能够让 base 模型微调后能具备更好的对话能力，prompt-type 的可选项可以在 configs/model/templates.json 文件内查看;
-- `log_interval`：设置日志记录的间隔，每处理多少条数据时记录一次日志，用于监控数据处理的进度和状态;
-- `handler_name`：指定处理数据的处理器名称；
-- `seq_length`：设置数据预处理最大序列长度，超过了会过滤掉;
+   数据集处理配置可以根据需求自行配置，以下是数据集处理的 yaml 文件中基础参数的介绍：
+
+    - `input`：数据集的路径，需指定具体文件，例如 ./datasets/deepscaler.json；
+    - `tokenizer_name_or_path`：指定分词器的名称或路径，例如 ./model_from_hf/qwen25-7b；
+    - `output_prefix`：输出结果的前缀路径，例如 ./datasets/data；
+    - `handler_name`：指定处理数据的处理器名称；
+    - `tokenizer_type`：指定分词器的类型，例如 HuggingFaceTokenizer 使用 Hugging Face 库提供的分词器来对文本进行分词处理；
+    - `workers`：设置处理数据时使用的 worker 数；
+    - `log_interval`：设置日志记录的间隔，每处理多少条数据时记录一次日志，用于监控数据处理的进度和状态；
+    - `prompt_type`: 用于指定对话模板，能够让 base 模型微调后能具备更好的对话能力，prompt-type 的可选项可以在 configs/model/templates.json 文件内查看；
+    - `map_keys`：指定数据集中字段名之间的映射关系；
+    - `dataset_additional_keys`：指定数据集需额外添加的字段，该参数需与后续**脚本启动**中配置的`configs/*_qwen25_7b.yaml`保持一致；
+
+3. 通过以下命令进行数据集预处理：
+
+    ```shell
+    # 读取configs/datasets/deepscaler.yaml文件
+    bash examples/data/preprocess_data.sh deepscaler
+    ```
 
 ## 权重转换
 
@@ -71,7 +89,16 @@ hf 权重文件可从 Huggingface 网站获取，请根据模型的使用场景�
 
 ### hf 转 mcore
 
-在训练前，需要将 Hugging Face 权重转换成Mcore格式，示例脚本启动命令和配置参数如下：
+在训练前，需要将 Hugging Face 权重转换成 Mcore 格式，示例脚本启动命令如**MindSpeed-RL/examples/ckpt/ckpt_convert_qwen25_hf2mcore.sh**所示，启动前需将其中的`tokenizer-model`、`load-dir`、`save-dir`字段内容修改为正确的分词目录、hf 权重目录和 mcore 权重保存目录：
+
+   ```shell
+   # e.g:
+   tokenizer-model: ./data/models/Qwen2.5-7B/tokenizer.json
+   load-dir: ./data/models/Qwen2.5-7B
+   save-dir: ./data/models/Qwen2.5-7B-Mcore
+   ```
+
+启动脚本进行 hf2mcore 权重转换：
 
 ```bash
 # 脚本中路径请按真实情况配置
@@ -119,12 +146,12 @@ bash examples/ckpt/ckpt_convert_qwen25_mcore2hf.sh
    source /usr/local/Ascend/ascend-toolkit/set_env.sh
    ```
 
-2. 在**MindSpeed-RL/configs/*_qwen25_7b.yaml**中，将`tokenizer_name_or_path`、`data_path`、`load`字段内容修改为刚刚准备的分词目录、数据集目录和权重目录，如下：
+2. 在**MindSpeed-RL/configs/*_qwen25_7b.yaml**中，将`tokenizer_name_or_path`、`data_path`、`load`字段内容修改为刚刚准备的分词目录、数据集的前缀路径和权重目录，如下：
 
    ```shell
    # e.g:
    tokenizer_name_or_path: ./data/models/Qwen2.5-7B
-   data_path: ./dataset/data
+   data_path: ./dataset/data # 如./dataset路径下前缀为data的数据集
    load: ./ckpt
    ```
 
@@ -171,7 +198,7 @@ bash examples/ckpt/ckpt_convert_qwen25_mcore2hf.sh
   bash examples/r1/qwen25/r1_zero_qwen25_7b_worker.sh
   ```
 
-  > 注：脚本中`NNODES`和`NPUS_PER_NODE`应于主节点配置一致，`MASTER_ADDR`应为主节点`ip`
+  > 注：脚本中`NNODES`和`NPUS_PER_NODE`应与主节点配置一致，`MASTER_ADDR`应为主节点`ip`
 
   配置参数介绍
 
