@@ -44,7 +44,7 @@ echo "..............................................done msadapter"
 
 #transformers
 rm -rf transformers/
-git clone https://gitee.com/mirrors/huggingface_transformers.git -b v4.47.0
+git clone https://gitee.com/mirrors/huggingface_transformers.git -b v4.47.0 --depth 1
 if [ $? -ne 0 ]; then
     echo "Error: git clone msadaptor"
     exit 1
@@ -58,7 +58,7 @@ echo "..............................................done apply transformers"
 
 #accelerate
 rm -rf accelerate/
-git clone https://gitee.com/modelee/accelerate.git -b v1.6.0
+git clone https://gitee.com/modelee/accelerate.git -b v1.6.0 --depth 1
 if [ $? -ne 0 ]; then
     echo "Error: git clone accelerate"
     exit 1
@@ -89,7 +89,7 @@ fi
 #huggingface_hub
 rm -rf huggingface_hub_dir
 mkdir huggingface_hub_dir
-pip install --no-deps huggingface_hub==0.32.4
+pip install --no-deps huggingface_hub==0.32.3
 if [ $? -ne 0 ]; then
     echo "Error: pip install huggingface_hub fail"
 else
