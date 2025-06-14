@@ -208,10 +208,32 @@ index ea39e8a10b..3b1526d736 100644
  try:
      if not is_tf_available():
 diff --git a/src/transformers/modeling_utils.py b/src/transformers/modeling_utils.py
-index 1c67ee1f89..c6c8d93dd2 100755
+index 1c67ee1f89..06daec5527 100755
 --- a/src/transformers/modeling_utils.py
 +++ b/src/transformers/modeling_utils.py
-@@ -2748,8 +2748,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
+@@ -502,13 +502,14 @@ def load_state_dict(
+     """
+     if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
+         # Check format of the archive
+-        with safe_open(checkpoint_file, framework="pt") as f:
+-            metadata = f.metadata()
+-        if metadata is not None and metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
+-            raise OSError(
+-                f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
+-                "you save your model with the `save_pretrained` method."
+-            )
++        # with safe_open(checkpoint_file, framework="pt") as f:
++        #     metadata = f.metadata()
++        # if metadata is not None and metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
++        #     raise OSError(
++        #         f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
++        #         "you save your model with the `save_pretrained` method."
++        #     )
++        from torch.serialization import safe_load_file
+         return safe_load_file(checkpoint_file)
+     try:
+         if map_location is None:
+@@ -2748,8 +2749,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
          # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
          # we currently don't use this setting automatically, but may start to use with v5
          dtype = get_parameter_dtype(model_to_save)
