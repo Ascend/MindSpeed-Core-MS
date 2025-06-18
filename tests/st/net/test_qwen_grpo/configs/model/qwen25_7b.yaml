@@ -1,6 +1,6 @@
 qwen25_7b:
   use_mcore_models: true
-  num_layers: 28
+  num_layers: 2 #28
   hidden_size: 3584
   ffn_hidden_size: 18944
   num_attention_heads: 28
