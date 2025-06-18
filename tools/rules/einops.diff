@@ -4,7 +4,7 @@ diff -Naur einops/_backends.py einops_new/_backends.py
 @@ -713,3 +713,75 @@
  
      def einsum(self, pattern, *x):
-         return self.tinygrad.Tensor.einsum(pattern, *x)
+         return self.pt.einsum(pattern, *x)
 +
 +
 +class MindSporeBackend(AbstractBackend):
