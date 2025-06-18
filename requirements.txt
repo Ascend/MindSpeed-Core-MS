@@ -21,7 +21,7 @@ tokenizers>=0.21,<0.22
 decorator
 scipy
 sentencepiece
-einops
+einops==0.8.1
 pybind11
 six
 protobuf
