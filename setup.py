@@ -22,8 +22,8 @@ with open("README.md", "r", encoding="utf-8") as fh:
 setuptools.setup(
     name="mindspeed_ms",
     version="0.0.1",
-    author="MindSpeed-Core-MS",
-    author_email="ybwang19@lzu.edu.cn",
+    author="Ascend",
+    author_email="",
     description="MindSpeed-Core-MS Project",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -40,7 +40,7 @@ setuptools.setup(
     package_data={"": ["*.sh"], "tools": ['*', '*/*', '*/*/*']},
     python_requires=">=3.9",
     install_requires=[
-        "mindspore>=2.4",
+        "mindspore>=2.7",
         "requests",
     ],
 )
