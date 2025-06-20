@@ -15,7 +15,7 @@ echo "------------------------------------done MindSpeed-MM"
 
 #MindSpeed
 rm -rf MindSpeed/
-git clone https://gitee.com/ascend/MindSpeed.git -b core_r0.8.0
+git clone https://gitee.com/ascend/MindSpeed.git -b 2.1.0_core_r0.8.0
 if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed"
     exit 1
@@ -35,7 +35,7 @@ echo "..............................................done Megatron-LM"
 
 #msadaptor
 rm -rf msadapter
-git clone https://gitee.com/mindspore/msadapter.git -b master
+git clone https://gitee.com/mindspore/msadapter.git -b r0.2.0
 if [ $? -ne 0 ]; then
     echo "Error: git clone msadapter"
     exit 1
