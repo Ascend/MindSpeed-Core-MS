@@ -179,11 +179,6 @@ MindSpeed_Core_MS_PATH=$(pwd)
 export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/vllm/:${MindSpeed_Core_MS_PATH}/vllm-ascend/:${MindSpeed_Core_MS_PATH}/accelerate/src/:${MindSpeed_Core_MS_PATH}/safetensors_dir/:${MindSpeed_Core_MS_PATH}/huggingface_hub/src/:${MindSpeed_Core_MS_PATH}/MindSpeed-RL/:$PYTHONPATH
 ```
 
----
-
-## 分布式调试工具
-针对传统pdb工具在分布式训练场景下无法给所有进程/子进程设置断点导致训练进程挂死的问题，我们开发了分布式调试pdb工具，以帮助用户在模型训练/开发过程中遇到精度无法对齐等问题时能够快速debug定位。分布式调试工具的使用详见[分布式调试工具使用说明](./docs/distributed_debug.md)。
-
 # 常见问题 FAQ
 
 相关FAQ请参考链接：[FAQ](./docs/FAQ.md)
