@@ -19,10 +19,10 @@
 MindSpeed-LLM版本要求：使用master分支。  
 
 **步骤一**：执行patch，覆盖torch.load()  
-在tools目录执行如下命令:
+在当前目录执行如下命令:
 
 ```shell
-python transfer.py  --load_ms_weights_to_pt_patch_path ${Your_MindSpeed_Core_MS_PATH}/MindSpeed-LLM
+python transfer.py --mindspeed_llm_path ${Your_MindSpeed_Core_MS_PATH}/MindSpeed-LLM
 ```
 
 命令执行后会在MindSpeed-Core-MS/MindSpeed-LLM/mindspeed_llm/tasks/megatron_adaptor.py文件中打patch，覆盖MindSpeed-LLM底层的torch.load()。  
