@@ -15,7 +15,9 @@
 
 #### 自动微分机制差异
 
-神经网络的训练主要使用反向传播算法，自动微分是各个AI框架实现反向传播的核心机制。MindSpore使用[函数式自动微分](https://www.mindspore.cn/tutorials/zh-CN/r2.6.0/beginner/autograd.html?highlight=%E4%BC%A0%E6%92%AD)的设计理念，提供了更接近数学语义的自动微分接口`grad`和`value_and_grad`. 与PyTorch的自动微分`Tensor.backward`机制不同，MindSpore需要针对需要自动微分的函数对象调用`grad`接口，并指定需要求导的输入的位置索引。`grad`接口的使用详见[mindspore.grad](https://www.mindspore.cn/docs/zh-CN/r2.6.0/api_python/mindspore/mindspore.grad.html?highlight=grad#mindspore.grad).
+神经网络的训练主要使用反向传播算法，自动微分是各个AI框架实现反向传播的核心机制。PyTorch使用动态计算图，在代码执行时立即运算，正反向计算图在每次前向传播时动态构建；PyTorch反向微分是命令式反向微分，符合面向对象编程的使用习惯。
+
+MindSpore使用[函数式自动微分](https://www.mindspore.cn/tutorials/zh-CN/r2.6.0/beginner/autograd.html?highlight=%E4%BC%A0%E6%92%AD)的设计理念，提供了更接近数学语义的自动微分接口`grad`和`value_and_grad`. 与PyTorch的自动微分`Tensor.backward`机制不同，MindSpore需要针对需要自动微分的函数对象调用`grad`接口获取函数微分，并指定需要求导的输入的位置索引。`grad`和`value_and_grad`接口的使用详见 [mindspore.grad](https://www.mindspore.cn/docs/zh-CN/master/api_python/mindspore/mindspore.grad.html?highlight=grad#mindspore.grad) 和 [mindspore.value_and_grad](https://www.mindspore.cn/docs/zh-CN/master/api_python/mindspore/mindspore.value_and_grad.html).
 
 #### 自定义算子
 
@@ -49,7 +51,7 @@
   </tr>
   <tr>
     <td> MindSpore版本 </td>
-    <td> 2.6.0 </td>
+    <td> 2.7.0 </td>
   </tr>
   <tr>
     <td> MSAdapter版本 </td>
@@ -222,7 +224,10 @@
 
 ### 新模型开发
 
-在基于MindSpeed MindSpore后端进行新模型开发时，用户可以像使用torch API一样使用MSAdapter提供的API接口，也可以和MindSpore API接口混用。除部分接口差异外（见[torch接口支持列表](https://openi.pcl.ac.cn/OpenI/MSAdapter/src/branch/master/doc/readthedocs/source_zh/docs/SupportedList.md)），用户还需要额外关注反向微分的写法。当前MSAdapter还未支持`Tensor.backward`进行反向微分，仍需使用MindSpore的`grad`接口。
+在基于MindSpeed MindSpore后端进行新模型开发时，用户可以像使用torch API一样使用MSAdapter提供的API接口在MindSpeed中开发新模型，但请注意部分接口的差异（见[torch接口支持列表](https://openi.pcl.ac.cn/OpenI/MSAdapter/src/branch/master/doc/readthedocs/source_zh/docs/SupportedList.md)）。
+
+若用户开发的新模型不涉及自定义加速优化特性，则基于MindSpore后端的开发与基于PyTorch后端的开发基本无差异。但若用户的新模型涉及到
+自定义加速优化特性开发、特别是涉及到自定义反向微分时，则需要特别关注反向微分的定义方式。由于MindSpore采用的函数式自动微分机制，MSAdapter暂时无法支持用户以`tensor.backward()`方式完成与`tensor`有关的操作/函数的全链条微分，仍需使用MindSpore的grad接口。
 
 ### 自定义算子接入
 
@@ -308,4 +313,3 @@
     from mindspeed.mindspore.ops.lcal_functional import matmul_all_reduce
     MegatronAdaptation.register('mindspeed.ops.lcal_functional.CoCOperations.matmul_all_reduce', matmul_all_reduce)
   ```
-
