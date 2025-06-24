@@ -27,70 +27,12 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | 昇腾NPU驱动固件  | [在研版本](https://www.hiascend.com/hardware/firmware-drivers/community?product=1&model=30&cann=8.0.RC3.alpha002&driver=1.0.26.alpha) |
 | 昇腾 CANN        | [在研版本](https://www.hiascend.com/zh/developer/download/community/result?module=cann)                                               |
-| MindSpore        | [2.6.0](https://www.mindspore.cn/install/)                                                                                            |
+| MindSpore        | [2.7.0](https://www.mindspore.cn/install/)                                                                                            |
 | MSAdapter        | [在研版本](https://openi.pcl.ac.cn/OpenI/MSAdapter.git)                                                                               |
 | Python           | >=3.9                                                                                                                              |
 | Python三方库依赖 | requirements.txt                                                                                                                   |
-| 镜像链接         | [images](http://mirrors.cn-central-221.ovaijisuan.com/detail/186.html)                                                                |
 
 注：Python 三方库依赖文件`requirements.txt`列举的是模型训练所需要的Python三方库。
-
-## 支持模型
-
-下方仅部分列举所支持模型，所支持的模型清单详见[支持模型全集](./docs/MODELS.md)。
-
-<table>
-  <a id="jump1"></a>
-  <caption>模型部分列表</caption>
-  <thead>
-    <tr>
-      <th>模型</th>
-      <th>参数量</th>
-      <th>序列</th>
-      <th>任务</th>
-      <th>集群</th>
-      <th>精度格式</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td rowspan="4"><a href="https://huggingface.co/deepseek-ai/DeepSeek-V3/tree/main">DeepSeek V3</a></td>
-      <td rowspan="4"><a href="https://huggingface.co/deepseek-ai/DeepSeek-V3/tree/main">671B</a></td>
-      <td> 4K </td>
-      <td>预训练</td>
-      <td> 64x8 </td>
-      <td> BF16 </td>
-    </tr>
-    <tr>
-      <td> 4K </td>
-      <td>微调</td>
-      <td> 64x8 </td>
-      <td> BF16 </td>
-    </tr>
-    <tr>
-      <td> 4K </td>
-      <td>Lora微调</td>
-      <td> 8x8 </td>
-      <td> BF16 </td>
-    </tr>
-    <tr>
-      <td> 4K </td>
-      <td> r1-zero </td>
-      <td> 52x8 </td>
-      <td> BF16 </td>
-    </tr>
-  </tbody>
-  <tbody>
-    <tr>
-      <td rowspan="1"><a href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/tree/main">Qwen2.5</a></td>
-      <td><a href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/tree/main">7B</a></td>
-      <td> 4k </td>
-      <td> r1-zero </td>
-      <td> 2x8 </td>
-      <td> BF16 </td>
-    </tr>
-  </tbody>
-</table>
 
 # 使用指南
 
@@ -120,11 +62,12 @@ MindSpeed-Core-MS提供了一键适配命令脚本，集成了基于MindSpeed进
 ```shell
 cd MindSpeed-Core-MS
 source auto_convert_llm.sh
+cd MindSpeed-LLM
 ```
 
 此处提供以下大语言模型训练拉起流程作为参考。
 
-- [**DEEPSEEK-V3预训练 & 微调**](./docs/deepseekv3.md)
+- [**DEEPSEEK-V3预训练**](https://gitee.com/ascend/MindSpeed-LLM/blob/master/examples/mindspore/deepseek3/README.md)
 
 若在环境中`PYTHONPATH`等环境变量失效（例如退出容器后再进入等），可执行如下命令重新设置环境变量
 
@@ -142,11 +85,12 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core
 ```shell
 cd MindSpeed-Core-MS
 source auto_convert_mm.sh
+cd MindSpeed-MM
 ```
 
 此处提供以下多模态模型训练拉起流程作为参考。
 
-- [**Qwen2.5VL 微调**](./docs/)
+- [**Qwen2.5VL 微调**](https://gitee.com/ascend/MindSpeed-MM/blob/master/examples/mindspore/qwen2.5vl/README.md)
 
 若在环境中`PYTHONPATH`等环境变量失效（例如退出容器后再进入等），可执行如下命令重新设置环境变量
 
@@ -165,6 +109,7 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core
 cd MindSpeed-Core-MS
 #deepseek v3-r1-zero、qwen25-7b-r1-zero
 source auto_convert_rl.sh
+cd MindSpeed-RL
 ```
 
 此处提供以下强化模型训练拉起流程作为参考。

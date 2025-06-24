@@ -43,6 +43,22 @@ echo 2 > /proc/sys/kernel/randomize_va_space
 
 ### 公网地址声明
 
+| 类型 | 开源代码地址 | 文件名 | 公网IP地址/公网URL地址/域名/邮箱地址 | 用途说明 |
+| ---- | ----- | ---- | ---- | ---- |
+| 开发引入 | - | auto_convert_llm.sh、auto_convert_mm.sh、auto_convert_rl.sh、test_convert_llm.sh、test_convert_mm.sh、test_convert_rl.sh | https://gitee.com/ascend/MindSpeed.git | https://gitee.com/ascend/MindSpeed.git | 用于拉取MindSpeed代码仓 |
+| 开发引入 | - | auto_convert_llm.sh、auto_convert_rl.sh、test_convert_llm.sh、test_convert_rl.sh | https://gitee.com/ascend/MindSpeed-LLM.git | 用于拉取MindSpeed-LLM代码仓 |
+| 开发引入 | - |  auto_convert_mm.sh、test_convert_mm.sh  | https://gitee.com/ascend/MindSpeed-MM.git | 用于拉取MindSpeed-MM代码仓 |
+| 开发引入 | - | auto_convert_rl.sh、test_convert_rl.sh | https://gitee.com/ascend/MindSpeed-RL.git | 用于拉取MindSpeed-RL代码仓 |
+| 开发引入 | - | test_convert_llm.sh、test_convert_mm.sh、test_convert_rl.sh | https://gitee.com/mindspore/msadapter.git | 用于拉取msadapter代码仓 |
+| 开发引入 | - | auto_convert_llm.sh、auto_convert_mm.sh、auto_convert_rl.sh | https://openi.pcl.ac.cn/OpenI/MSAdapter.git | 用于拉取MSAdapter代码仓 |
+| 开发引入 | - | auto_convert_llm.sh、auto_convert_mm.sh、auto_convert_rl.sh、test_convert_llm.sh、test_convert_mm.sh、test_convert_rl.sh | https://gitee.com/mirrors/Megatron-LM.git | 用于拉取Megatron代码仓 |
+| 开发引入 | - | auto_convert_llm.sh、auto_convert_mm.sh、auto_convert_rl.sh、test_convert_llm.sh、test_convert_mm.sh、test_convert_rl.sh | https://gitee.com/mirrors/huggingface_transformers.git | 用于拉取transformers代码仓 |
+| 开发引入 | - | auto_convert_llm.sh、auto_convert_mm.sh、auto_convert_rl.sh、test_convert_llm.sh、test_convert_mm.sh、test_convert_rl.sh | https://gitee.com/modelee/accelerate.git | 用于拉取accelerate代码仓 |
+| 开发引入 | - | auto_convert_rl.sh、test_convert_rl.sh | https://gitee.com/mirrors/vllm.git | 用于拉取vllm代码仓 |
+| 开发引入 | - | auto_convert_rl.sh、test_convert_rl.sh | https://gitee.com/mirrors/vllm-ascend.git | 用于拉取vllm-ascend代码仓 |
+| 开发引入 | - | auto_convert_rl.sh、test_convert_rl.sh | https://gitee.com/mirrors/huggingface_hub.git | 用于拉取huggingface_hub代码仓 |
+| 开发引入 | - | setup.py | https://gitee.com/ascend/MindSpeed-Core-MS | setup脚本方式安装MindSpeed-Core-MS地址 |
+
 ### 附录
 
 #### A-文件（夹）各场景权限管控推荐最大值
