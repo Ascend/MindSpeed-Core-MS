@@ -23,7 +23,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh # 安装nnal包需要source�
 bash Ascend-cann-nnal_8.1.RC1_linux-aarch64.run --install
 # 设置环境变量
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
-source /usr/local/Ascend/nnal/atb/set_env.sh --cxxabi=0
+source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=0
 ```
 
 ### MindSpore 安装
@@ -31,6 +31,6 @@ source /usr/local/Ascend/nnal/atb/set_env.sh --cxxabi=0
 参考[MindSpore官方安装指导](https://www.mindspore.cn/install)，根据系统类型、CANN版本及Python版本选择匹配的对应的安装命令进行安装，安装前请确保网络畅通。或执行以下命令安装：
 
 ```shell
-pip install mindspore==2.6.0
+pip install mindspore==2.7.0
 ```
 
