@@ -47,7 +47,7 @@ echo "..............................................done msadapter"
 
 #transformers
 rm -rf transformers/
-git clone https://github.com/huggingface/transformers.git
+git clone https://gitee.com/mirrors/huggingface_transformers.git
 if [ $? -ne 0 ]; then
     echo "Error: git clone transformers"
     exit 1
