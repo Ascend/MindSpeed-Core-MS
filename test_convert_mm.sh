@@ -52,6 +52,7 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone transformers"
     exit 1
 fi
+mv huggingface_transformers transformers
 cd transformers
 git checkout fa56dcc2a
 git apply ../tools/rules/transformers_v4.49.0.diff
