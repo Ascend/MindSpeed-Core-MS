@@ -144,3 +144,36 @@ MA：
 在数据采集完成后，用户可使用msprobe提供的[跨框架API对比功能](https://gitee.com/ascend/mstt/blob/poc/debug/accuracy_tools/msprobe/docs/11.accuracy_compare_MindSpore.md)，定位输入或输出有差异的网络模块及具体API.
 
 ### 精度问题典型案例
+
+#### GLM4精度对齐
+
+##### 报错信息
+
+pta与ms在Glm4 8k单机d2t2p2场景下精度对不齐。
+
+现象：第一步loss/norm能对齐，第二步loss能对齐，norm对不齐。
+
+##### 解决步骤
+
+1.缩小网络规模和gbs，关闭PP，dump数据。 发现第三次正向的output_layer的weight和params均与pta不一致。因为dump工具仅能dump反向的的y和dx，无法观察到dw，增加了定位难度。
+
+<img src="sources/glm4_output.png" height="600px" width="900px">
+
+2.打印output_layer的输入、weight、输出的md5，发现均能对齐。 在反向梯度处打印grad。
+
+<img src="sources/glm4_grad.png" height="600px" width="900px">
+
+3.打印发现此处的dw两边对不上。 查阅代码找到对应的backward定义，打印各个值的md5，发现仅有dw对不上。
+megatron/core/tensor_parallel/layers.py:
+
+<img src="sources/glm4_dw.png" height="600px" width="900px">
+
+因为有.t()，会导致内存不连续。发现PT无contiguous而MS有。 给PT加上contiguous()后，精度一致。
+
+##### 问题根因
+
+pta的ColumnParallelLinear中的Matmul反向计算，对于out做了.t()后没有进行contiguous()操作，而ms这边加了
+
+##### 解决方案
+
+PTA加上contiguous()
