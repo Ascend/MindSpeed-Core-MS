@@ -132,7 +132,7 @@ Profiling如下有3种模式：
 
 通过调用栈定位到性能瓶颈在两处for循环中：
 
-<img src="sources/moba_attn_native_code.png" height="300px" width="400px">
+<img src="sources/moba_attn_native_code.png" height="700px" width="900px">
 
 ##### 优化方案
 
@@ -194,6 +194,61 @@ gate.add_(inf_mask)
       export MS_ALLOC_CONF="memory_tracker:True"
    ```
 
-3. 可使用[runtime内存分析工具](https://gitee.com/reku1997/ms_runtime_memory_tool)（非官方）进行显存数据解析，重点分析被异常持有的显存。
+3. 可使用[runtime内存分析工具](https://gitee.com/reku1997/ms_runtime_memory_tool)（非官方）或者[MindInsight工具](https://www.hiascend.com/document/detail/zh/mindstudio/70RC2/msinsightug/msascendinsightug/AscendInsight_0008.html)进行显存数据解析，重点分析被异常持有的显存。
 
 ### 显存优化典型案例
+
+#### GRPO Qwen内存泄漏
+
+#### 问题现象
+
+在Qwen GRPO训练中，发现每迭代一次，内存会上涨几百M，当迭代到一定次数之后会导致OOM
+
+#### 问题定位
+
+1. 经通过加打印初步定位是actor和reference两个模型的compute_log_prob存在的内存泄漏。
+
+```python
+print("========MEM actor.compute_log_prob after dispatch_transfer_dock_data, mem allocated is: ", torch.cuda.memory_allocated(), flush=True)
+```
+
+<img src="sources/grpo_qwen_profile_code.png" height="500px" width="900px">
+
+2. 内存数据获取
+
+由于grpo训练是在ray框架下进行的，无法使用mindspore自带的memory tracker采集内存数据。
+使用profiling获取模型的内存数据，需要将采集profiling中的中的profile_memory=True，这里采集actor下compute_log_prob下的内存数据，具体如下：
+
+```python
+from mindspore import Profiler
+from mindspore.profiler import ProfilerLevel
+from mindspore.communication.management import get_rank
+profiler = Profiler(start_profile=False, output_path=f"./profiler1/rank_{get_rank()}",
+                            aicore_metrics=1, profiler_level=ProfilerLevel.Level1, profile_framework="all",
+                            profile_communication=True, data_simplification=False, with_stack=True, profile_memory=True)
+profiler.start()
+
+'''
+forward code
+'''
+
+profiler.stop()
+profiler.analyse()
+
+```
+
+3. 查找调用栈
+
+得到profile数据后，发现每28个FlashAttentionScore算子后面有一个Cast算子未释放。通过mindinsignt查找调用栈，根据其在第28个flashattention之后，其前面为matmul算子后面为add算子，找到Cast算子。发现该算子发生在`val = val.float()`代码行，考虑到`.float()`算子出现问题的概率较小，因此该问题大概率是被其他地方使用了而未释放。
+
+<img src="sources/grpo_qwen_profiling.png" height="500px" width="900px">
+
+4. 查看被使用情况
+
+经过定位，该output输出在两个地方被使用。最终定位是该输出是在_pynative_executor.end_graph(forward_step_func, output_tensor, input_tensor[0])被持有了。由于grpo中只计算前向，反向计算不在该处，output_tensor不应该入图，入图一直持有。
+
+<img src="sources/grpo_qwen_solution.png" height="900px" width="900px">
+
+#### 解决方案
+
+如上图蓝色框所示，将output_tensor=None
