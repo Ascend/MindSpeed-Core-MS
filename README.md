@@ -36,23 +36,25 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 
 # 使用指南
 
-按照[基础安装指导](./docs/INSTALLATION.md)完成相关基础依赖安装后，用户可根据具体使用场景（MindSpeed-LLM/MindSpeed-MM/MindSpeed-RL）进行相应的自动适配。
-
-## 仓库拉取
-
-执行以下命令拉取MindSpeed-Core-MS代码仓
-
-```shell
-git clone https://gitee.com/ascend/MindSpeed-Core-MS.git -b r0.3.0
-```
-
-## 一键适配
-
-MindSpeed-Core-MS提供了一键适配命令脚本，集成了基于MindSpeed进行模型训练的相关代码仓拉取、代码自动适配、环境变量设置等功能，用户根据使用场景（大语言模型/多模态模型/强化学习）执行相应命令即可完成一键自动适配。在运行一键适配命令前，请确保：
+按照[基础安装指导](./docs/INSTALLATION.md)完成相关基础依赖安装后，用户可根据具体使用场景（MindSpeed-LLM/MindSpeed-MM/MindSpeed-RL）进行相应的自动适配。在自动适配前，请确保：
 
 - 基础依赖已安装
 - 所部署容器网络可用，python已安装
 - git已完成配置，可以正常进行clone操作
+
+## 仓库拉取
+
+执行以下命令拉取MindSpeed-Core-MS代码仓，并安装Python三方依赖库
+
+```shell
+git clone https://gitee.com/ascend/MindSpeed-Core-MS.git -b r0.3.0
+cd MindSpeed-Core-MS
+pip install -r requirements.txt
+```
+
+## 一键适配
+
+MindSpeed-Core-MS提供了一键适配命令脚本，集成了基于MindSpeed进行模型训练的相关代码仓拉取、代码自动适配、环境变量设置等功能，用户根据使用场景（大语言模型/多模态模型/强化学习）执行相应命令即可完成一键自动适配。
 
 **注意：各个使用场景下代码仓不能混用，建议针对各场景使用独立目录。**
 
@@ -60,7 +62,6 @@ MindSpeed-Core-MS提供了一键适配命令脚本，集成了基于MindSpeed进
 执行以下操作进行一键适配后，用户即可进行大语言模型训练：
 
 ```shell
-cd MindSpeed-Core-MS
 source auto_convert_llm.sh
 cd MindSpeed-LLM
 ```
@@ -83,7 +84,6 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core
 执行以下操作进行一键适配后，用户即可进行多模态模型训练：
 
 ```shell
-cd MindSpeed-Core-MS
 source auto_convert_mm.sh
 cd MindSpeed-MM
 ```
@@ -106,8 +106,7 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core
 执行以下操作进行一键适配后，用户即可进行强化学习模型训练：
 
 ```shell
-cd MindSpeed-Core-MS
-#deepseek v3-r1-zero、qwen25-7b-r1-zero
+# deepseek v3-r1-zero、qwen25-7b-r1-zero
 source auto_convert_rl.sh
 cd MindSpeed-RL
 ```
