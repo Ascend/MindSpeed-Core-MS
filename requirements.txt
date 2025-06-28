@@ -24,7 +24,6 @@ sentencepiece
 einops==0.8.1
 pybind11
 six
-protobuf
 ninja
 wheel
 regex
