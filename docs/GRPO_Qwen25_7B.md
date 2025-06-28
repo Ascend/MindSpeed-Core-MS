@@ -20,6 +20,13 @@ Group Relative Policy Optimization (GRPO) 是 Deepseek-Math 中提出的训练�
 - safetensors（版本：0.5.1）
 - huggingface_hub（分支：v0.29.2）
 
+> 注：模型训练强依赖 python 的三方库 ray 和 protobuf，请按以下指令安装：
+
+```shell
+pip install ray==2.42.1
+pip install protobuf==3.20.0
+```
+
 ## 模型选择
 
  [Qwen2.5-7B](https://huggingface.co/Qwen/Qwen2.5-7B) 模型指令遵从度高，有一定概率能引导模型输出 `<think>...</think><answer>...$\boxed{}</answer>` 格式回复，训练曲线符合预期，在评测集上提升较大。
