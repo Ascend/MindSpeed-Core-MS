@@ -24,7 +24,6 @@ sentencepiece
 einops==0.8.1
 pybind11
 six
-protobuf
 ninja
 wheel
 regex
@@ -33,11 +32,9 @@ psutil
 pyyaml
 pytest
 hydra-core
-ray==2.42.1
 asttokens
 astunparse
 ml_dtypes
-protobuf==3.20.0
 tensordict
 codetiming
 latex2sympy2
