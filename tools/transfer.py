@@ -116,7 +116,7 @@ def convert_package(origin_path, save_path, package_name="megatron"):
         convert_special_rules(origin_path, save_path, package_name=package_name)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": # pragma: no cover
     parser = argparse.ArgumentParser()
     parser.add_argument("--megatron_path", type=str, default=None,
                         help="origin megatron package path")
