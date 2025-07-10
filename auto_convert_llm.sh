@@ -12,7 +12,7 @@ echo "------------------------------------done MindSpeed-LLM"
 
 #MindSpeed
 rm -rf MindSpeed/
-git clone https://gitee.com/ascend/MindSpeed.git -b core_r0.8.0
+git clone https://gitee.com/ascend/MindSpeed.git -b master
 if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed"
     exit 1
@@ -22,7 +22,7 @@ echo "...............................................done MindSpeed"
 
 #Megatron-LM
 rm -rf Megatron-LM/
-git clone https://gitee.com/mirrors/Megatron-LM.git -b core_r0.8.0
+git clone https://gitee.com/mirrors/Megatron-LM.git -b core_r0.12.0
 if [ $? -ne 0 ]; then
     echo "Error: git clone Megatron-LM"
     exit 1
