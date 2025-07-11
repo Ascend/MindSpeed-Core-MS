@@ -22,7 +22,7 @@ echo "...............................................done MindSpeed"
 
 #Megatron-LM
 rm -rf Megatron-LM/
-git clone https://gitee.com/mirrors/Megatron-LM.git -b core_r0.12.0
+git clone https://gitee.com/mirrors/Megatron-LM.git -b core_v0.12.1
 if [ $? -ne 0 ]; then
     echo "Error: git clone Megatron-LM"
     exit 1
