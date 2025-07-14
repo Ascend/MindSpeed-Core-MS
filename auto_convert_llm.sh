@@ -72,6 +72,7 @@ echo "..............................................done apply accelerate"
 #safetensors
 rm -rf safetensors_dir
 mkdir safetensors_dir
+pip uninstall safetensors -y 
 pip install --no-deps safetensors==0.5.1
 if [ $? -ne 0 ]; then
     echo "Error: pip install safetensors fail"
@@ -89,6 +90,7 @@ fi
 #huggingface_hub
 rm -rf huggingface_hub_dir
 mkdir huggingface_hub_dir
+pip uninstall huggingface_hub -y
 pip install --no-deps huggingface_hub==0.32.3
 if [ $? -ne 0 ]; then
     echo "Error: pip install huggingface_hub fail"
