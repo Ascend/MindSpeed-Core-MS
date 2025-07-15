@@ -44,7 +44,7 @@ echo "..............................................done MSAdapter"
 
 #transformers
 rm -rf transformers/
-git clone https://gitee.com/mirrors/huggingface_transformers.git -b v4.47.0
+git clone https://gitee.com/mirrors/huggingface_transformers.git -b v4.47.0 --depth 1
 if [ $? -ne 0 ]; then
     echo "Error: git clone msadaptor"
     exit 1
@@ -58,7 +58,7 @@ echo "..............................................done apply transformers"
 
 #accelerate
 rm -rf accelerate/
-git clone https://gitee.com/modelee/accelerate.git -b v1.6.0
+git clone https://gitee.com/modelee/accelerate.git -b v1.6.0 --depth 1
 if [ $? -ne 0 ]; then
     echo "Error: git clone accelerate"
     exit 1
