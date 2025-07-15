@@ -35,7 +35,7 @@ hydra-core
 asttokens
 astunparse
 ml_dtypes
-tensordict
+tensordict==0.1.2
 codetiming
 latex2sympy2
 word2number
