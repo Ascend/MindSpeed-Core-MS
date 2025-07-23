@@ -12,7 +12,7 @@ echo "------------------------------------done MindSpeed-LLM"
 
 #MindSpeed
 rm -rf MindSpeed/
-git clone https://gitee.com/ascend/MindSpeed.git -b master
+git clone https://gitee.com/ascend/MindSpeed.git -b 2.1.0_core_r0.12.1
 if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed"
     exit 1
