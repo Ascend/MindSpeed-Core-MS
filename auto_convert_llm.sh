@@ -112,7 +112,7 @@ echo ${MindSpeed_Core_MS_PATH}
 python3 tools/transfer.py \
 --megatron_path ${MindSpeed_Core_MS_PATH}/Megatron-LM/megatron/ \
 --mindspeed_path ${MindSpeed_Core_MS_PATH}/MindSpeed/mindspeed/ \
---mindspeed_llm_path ${MindSpeed_Core_MS_PATH}/MindSpeed-LLM/ \
+--mindspeed_llm_path ${MindSpeed_Core_MS_PATH}/MindSpeed-LLM/
 
 export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/accelerate/src/:$PYTHONPATH
 echo $PYTHONPATH
