@@ -56,9 +56,9 @@ addSeedAll ${filepath3}
 addSeedAll ${filepath4}
 addSeedAll ${filepath5}
 
-#export HCCL_DETERMINISTIC=true  # HCCL确定性
-#export ASCEND_LAUNCH_BLOCKING=1  # 硬件确定性
-#export NCCL_DETERMINISTIC=1
+export HCCL_DETERMINISTIC=true  # HCCL确定性
+export ASCEND_LAUNCH_BLOCKING=1  # 硬件确定性
+export NCCL_DETERMINISTIC=1
 
 cp -r /home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_grpo/DeepSeek-V3-hf-8p/ .
 cp -r /home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_grpo/pe-nlp/ .

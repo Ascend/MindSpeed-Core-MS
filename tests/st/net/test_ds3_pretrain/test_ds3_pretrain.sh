@@ -147,7 +147,6 @@ OUTPUT_ARGS="
     --no-save-optim \
     --no-save-rng \
 "
-#--load ${CKPT_LOAD_DIR}
 
 msrun $DISTRIBUTED_ARGS ${MindSpeed_LLM_PATH}/pretrain_gpt.py \
     $GPT_ARGS \
