@@ -1,4 +1,5 @@
 LINE_RULES = {
+    "MindSpeed-LLM": {},
     "megatron": {
         "core/utils.py": ['''def is_te_min_version(version, check_equality=True):
      """Check if minimum version of `transformer-engine` is installed."""
@@ -6,10 +7,17 @@ LINE_RULES = {
 -        return get_te_version() >= PkgVersion(version)
 -    return get_te_version() > PkgVersion(version)
 +    return False''']
-    }
+    },
+    "mindspeed": {}
 }
 
-SPECIAL_RULES = {}
+SPECIAL_RULES = {
+    "megatron": {},
+    "mindspeed": {},
+    "MindSpeed-LLM": {},
+    "mindspeed_mm": {},
+    "transformers": {}
+}
 
 GENERAL_RULES = [
     ["@jit_fuser", ""],
