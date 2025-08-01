@@ -418,6 +418,18 @@ def load_ms_weights(f, map_location=None, pickle_module=pickle, *, weights_only=
                                 **pickle_load_args)
  
  
+func_name_dict = {
+    '_rebuild_from_type_v2': _rebuild_from_type_v2,
+    '_rebuild_tensor_v2': _rebuild_tensor_v2,
+}
+
+def get_func_by_name(name: str):
+    func = func_name_dict.get(name)
+    if func is None:
+        raise RuntimeError(f"load checkpoints failed, function name '{name}' is invalid.")
+    return func
+
+
 def _load(zip_file, map_location, pickle_module, pickle_file='data.pkl', overall_storage=None, **pickle_load_args):
     """
     Loads data from a zip file using pickle serialization.
@@ -504,11 +516,11 @@ def _load(zip_file, map_location, pickle_module, pickle_file='data.pkl', overall
         # This is useful for maintaining BC if we change a module path that tensor instantiation relies on.
         def find_class(self, mod_name, name):
             if mod_name == 'torch._utils':
-                return eval(name)
+                return get_func_by_name(name)
             if mod_name == 'torch':
                 return str(name)
             if mod_name == 'torch._tensor':
-                return eval(name)
+                return get_func_by_name(name)
             mod_name = load_module_mapping.get(mod_name, mod_name)
             return super().find_class(mod_name, name)
  
