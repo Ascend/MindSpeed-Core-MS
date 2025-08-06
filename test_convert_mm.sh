@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#MindSpeed-LLM
+#MindSpeed-MM
 rm -rf MindSpeed-MM/
 git clone https://gitee.com/ascend/MindSpeed-MM.git -b master
 if [ $? -ne 0 ]; then
@@ -15,7 +15,7 @@ echo "------------------------------------done MindSpeed-MM"
 
 #MindSpeed
 rm -rf MindSpeed/
-git clone https://gitee.com/ascend/MindSpeed.git -b core_r0.8.0
+git clone https://gitee.com/ascend/MindSpeed.git -b master
 if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed"
     exit 1
@@ -25,7 +25,7 @@ echo "...............................................done MindSpeed"
 
 #Megatron-LM
 rm -rf Megatron-LM/
-git clone https://gitee.com/mirrors/Megatron-LM.git -b core_r0.8.0
+git clone https://gitee.com/mirrors/Megatron-LM.git -b core_v0.12.1
 if [ $? -ne 0 ]; then
     echo "Error: git clone Megatron-LM"
     exit 1
@@ -33,7 +33,7 @@ fi
 rm -rf Megatron-LM/tests
 echo "..............................................done Megatron-LM"
 
-#msadaptor
+#msadapter
 rm -rf msadapter
 git clone https://gitee.com/mindspore/msadapter.git -b master
 if [ $? -ne 0 ]; then
