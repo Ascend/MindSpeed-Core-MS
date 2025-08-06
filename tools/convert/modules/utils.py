@@ -1,4 +1,4 @@
-# Copyright (c) Huawei Technologies Co., Ltd 2012-2020.  All rights reserved.
+# Copyright (c) Huawei Technologies Co., Ltd 2025.  All rights reserved.
 import os
 import re
 import libcst as cst

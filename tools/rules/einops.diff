@@ -70,7 +70,7 @@ diff -Naur einops/_backends.py einops_new/_backends.py
 +        return self.mindspore.cat(tensors, dim=axis)
 +
 +    def add_axis(self, x, new_position):
-+        return self.mindspore.unsqueeze(x, new_position)
++        return self.mindspore.mint.unsqueeze(x, new_position)
 +
 +    def is_float_type(self, x):
 +        return x.dtype in [self.mindspore.float16, self.mindspore.float32, self.mindspore.float64, self.mindspore.bfloat16]

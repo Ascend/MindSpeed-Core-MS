@@ -1,40 +1,54 @@
 #!/bin/bash
-cp -r MindSpeed/mindspeed MindSpeed-LLM/
-cp -r Megatron-LM/megatron MindSpeed-LLM/
-cp -r transformers/src/transformers MindSpeed-LLM/
+dir=$1
+echo "start convert $dir"
+cp -r MindSpeed/mindspeed ${dir}
+cp -r Megatron-LM/megatron ${dir}
+cp -r transformers/src/transformers ${dir}
 
-cp -r msadapter/mindtorch/apex MindSpeed-LLM/
-cp -r msadapter/mindtorch/torchair MindSpeed-LLM/
-cp -r msadapter/mindtorch/torchvision MindSpeed-LLM/
-cp -r msadapter/mindtorch/transformer_engine MindSpeed-LLM/
-cp -r msadapter/mindtorch/torch MindSpeed-LLM/msadapter
-cp -r msadapter/mindtorch/torch_npu MindSpeed-LLM/msadapter_npu
+cp -r msadapter/msa_thirdparty/apex ${dir}
+cp -r msadapter/msa_thirdparty/torchair ${dir}
+cp -r msadapter/msa_thirdparty/gpytorch ${dir}
+cp -r msadapter/msa_thirdparty/transformer_engine ${dir}
+cp -r msadapter/msadapter/ ${dir}/msadapter
+cp -r msadapter/msa_thirdparty/torch_npu ${dir}/msadapter_npu
+cp -r msadapter/csrc ./
 
 # handle third party 
 third_party_pkg='tensordict'
 install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
-cp -r $install_path/$third_party_pkg MindSpeed-LLM/
-third_party_pkg='safetensors'
-install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
-cp -r $install_path/$third_party_pkg MindSpeed-LLM/
+cp -r $install_path/$third_party_pkg ${dir}
 third_party_pkg='einops'
 install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
-cp -r $install_path/$third_party_pkg MindSpeed-LLM/
+cp -r $install_path/$third_party_pkg ${dir}
 third_party_pkg='peft'
 install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
-cp -r $install_path/$third_party_pkg MindSpeed-LLM/
+cp -r $install_path/$third_party_pkg ${dir}
 third_party_pkg='accelerate'
 install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
-cp -r $install_path/$third_party_pkg MindSpeed-LLM/
+cp -r $install_path/$third_party_pkg ${dir}
 
-cd MindSpeed-LLM/einops
+if [[ "${dir}" == "MindSpeed-LLM/" ]]; then
+    third_party_pkg='safetensors'
+    install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
+    cp -r $install_path/$third_party_pkg ${dir}
+fi
+
+if [[ "${dir}" == "MindSpeed-MM/" ]]; then
+    cp -r safetensors_dir/safetensors ${dir}
+    third_party_pkg='diffusers'
+    install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
+    cp -r $install_path/$third_party_pkg ${dir}
+    third_party_pkg='timm'
+    install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
+    cp -r $install_path/$third_party_pkg ${dir}
+    third_party_pkg='qwen_vl_utils'
+    install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
+    cp -r $install_path/$third_party_pkg ${dir}
+fi
+cd ${dir}einops
 patch -p1 < ../../tools/rules/einops.diff
 cd -
 
-# handle file with special code
-F_WITH_BAD_CODE=MindSpeed-LLM/mindspeed/core/auto_parallel/auto_parallel_memory.py
-grep -avP '[^\x00-\x7F]' $F_WITH_BAD_CODE > tmp.py && mv tmp.py $F_WITH_BAD_CODE
-F_WITH_BAD_CODE=MindSpeed-LLM/mindspeed/core/auto_parallel/mm_search/optimizer.py
-grep -avP '[^\x00-\x7F]' $F_WITH_BAD_CODE > tmp.py && mv tmp.py $F_WITH_BAD_CODE
-
-python tools/convert/convert.py --path_to_change MindSpeed-LLM/
+cd ${dir}
+python ../tools/convert/convert.py --path_to_change ${dir}
+echo "finish convert $dir"
