@@ -1,4 +1,4 @@
-# Copyright (c) Huawei Technologies Co., Ltd 2012-2020.  All rights reserved.
+# Copyright (c) Huawei Technologies Co., Ltd 2025.  All rights reserved.
 import os
 import re
 import argparse
@@ -18,15 +18,21 @@ if __name__ == '__main__':
     parser.add_argument("--multiprocess", type=int, default=32)
     parser.add_argument("--result_log", type=str, default='./result.log')
     args = parser.parse_args()
-
-    file_iterator = source_file_iterator(args.path_to_change)
-    file_converter = FileConverter(APITransformer, ('torch', 'msadapter'))
+    
+    file_iterator = source_file_iterator("./")
+    string_mapping = [('torch', 'msadapter'), ('torch_npu', 'msadapter_npu')]
+    file_converter = FileConverter(APITransformer, ('torch', 'msadapter', string_mapping))
 
     with Pool(processes=args.multiprocess) as pool:
         results = list(tqdm(pool.imap(file_converter.convert, file_iterator), desc="Processing"))
-    
+
+    if args.path_to_change not in ['MindSpeed-LLM/', 'MindSpeed-MM/']:
+        raise ValueError(f"Unsupported path_to_change: {args.path_to_change}. "
+                        "Expected 'MindSpeed-LLM/' or 'MindSpeed-MM/'.")
+
     for file, value in SPECIAL_CASE.items():
-        file_converter = FileConverter(value['converter'], ('torch', 'msadapter'))
+        file_converter = FileConverter(value['converter'], value['mapping_list'])
         results.append(file_converter.convert(file))
+
     with open(args.result_log, 'w') as f:
         f.write('\n'.join(results))

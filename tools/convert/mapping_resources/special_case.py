@@ -1,17 +1,15 @@
-# Copyright (c) Huawei Technologies Co., Ltd 2012-2020.  All rights reserved.
-from modules.string_transformer import StringTransformer
+# Copyright (c) Huawei Technologies Co., Ltd 2025.  All rights reserved.
+from modules.string_transformer import StringTransformer, PairTransformer
 
 SPECIAL_CASE = {
-    'MindSpeed-LLM/msadapter/library.py': {
+    'msadapter/serialization.py': {
         'converter': StringTransformer,
-        'reason': 'torch in string, but affect module register'
+        'mapping_list': [[('msadapter', 'torch'),]],
+        'reason': "'torch' must not be replaced with 'msadapter' during model loading validation."
     },
-    'MindSpeed-LLM/mindspeed_llm/tasks/megatron_adaptor.py': {
-        'converter': StringTransformer,
-        'reason': 'torch in patch function call, affect module patch'
+    'msadapter/proxy.py': {
+        'converter': PairTransformer,
+        'mapping_list': [[(('msadapter', 'msadapter'), ('torch', 'msadapter')),]],
+        'reason': 'Map "torch" to "msadapter" to enable compatibility mode.'
     },
-    'MindSpeed-LLM/mindspeed/megatron_adaptor.py': {
-        'converter': StringTransformer,
-        'reason': 'torch in patch function call, affect module patch'
-    }
 }

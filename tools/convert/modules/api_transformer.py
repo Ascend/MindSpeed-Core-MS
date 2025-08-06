@@ -1,10 +1,15 @@
-# Copyright (c) Huawei Technologies Co., Ltd 2012-2020.  All rights reserved.
+# Copyright (c) Huawei Technologies Co., Ltd 2025.  All rights reserved.
 import re
 import libcst as cst
 from libcst.metadata import PositionProvider, ScopeProvider
-from mapping_resources.api_mapping import EQUIVALENT_API
 from .utils import get_docstring, case_insensitive_replace, create_nested_attribute_or_name
+from pathlib import Path
+import json
 
+def load_json_file(filepath):
+    with open(filepath, 'r', encoding='utf-8') as file:
+        data = json.load(file)
+    return data
 
 class APITransformer(cst.CSTTransformer):
     """
@@ -12,12 +17,13 @@ class APITransformer(cst.CSTTransformer):
     """
     METADATA_DEPENDENCIES = (PositionProvider, ScopeProvider)
 
-    def __init__(self, current_name, new_name):
+    def __init__(self, current_name, new_name, string_mapping):
+        self.string_mapping = string_mapping
         self.current_name = current_name
         self.new_name = new_name
         self.root = None
         self.alias_map = {}
-        self.support_api = EQUIVALENT_API
+        self.support_api = load_json_file(f"{Path(__file__).parent}/../mapping_resources/api_mapping.json")
         self.matched = False
 
     def _update_docstring(self, original_node, updated_node):
@@ -32,6 +38,23 @@ class APITransformer(cst.CSTTransformer):
             )
         return updated_node
     
+    def leave_FormattedStringText(self, original_node, updated_node):
+        new_value = original_node.value
+        for (current_name, new_name) in self.string_mapping:
+            pattern = fr'\b{current_name}\.'
+            new_value = re.sub(pattern, f'{new_name}.', new_value)
+        return updated_node.with_changes(value=new_value)
+
+    def leave_SimpleString(self, original_node, updated_node):
+        new_value = original_node.value
+        for (current_name, new_name) in self.string_mapping:
+            if new_value.strip('"\'') == current_name:
+                new_value = re.sub(current_name, new_name, new_value)
+            else:
+                pattern = fr'\b{current_name}\.'
+                new_value = re.sub(pattern, f'{new_name}.', new_value)
+        return updated_node.with_changes(value=new_value)
+
     def _flat_alias_if_possible(self, call_split):
         alias = call_split[0]
         module = self.alias_map.get(alias)
