@@ -1,14 +1,5 @@
 LINE_RULES = {
-    "MindSpeed-LLM": {
-        "mindspeed_llm/features_manager/__init__.py": [''' from mindspeed_llm.features_manager.moe.shared_expert import MoESharedExpertsFeature
--from mindspeed_llm.features_manager.moe.moe_alltoallseq_overlap import MoEAlltoAllSeqOverLapFeature
- from mindspeed_llm.features_manager.moe.moe_allgather_overlap import MoEAllGatherOverLapFeature''','''     MoETpExtendEpFeature(),
-     MoESharedExpertsFeature(),
-     MoEAllGatherOverLapFeature(),
--    MoEAlltoAllSeqOverLapFeature(),
-     MoEFwdBwdOverlapFeature()
-     ])''']
-    },
+    "MindSpeed-LLM": {},
     "megatron": {
         "core/utils.py": ['''def is_te_min_version(version, check_equality=True):
      """Check if minimum version of `transformer-engine` is installed."""
