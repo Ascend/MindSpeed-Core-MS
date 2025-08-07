@@ -81,3 +81,5 @@ MindSpeed_Core_MS_PATH=$(pwd)
 echo ${MindSpeed_Core_MS_PATH}
 export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter:${MindSpeed_Core_MS_PATH}/msadapter/msa_thirdparty:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/transformers/src/:$PYTHONPATH
 echo $PYTHONPATH
+
+pip install torchvision==0.16.0
