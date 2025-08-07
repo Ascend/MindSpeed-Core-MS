@@ -3,18 +3,15 @@ import os
 import re
 import libcst as cst
 from libcst.metadata import MetadataWrapper
+from pathlib import Path
 
 
 def source_file_iterator(path, ext='.py'):
     """
     get list of files from a path(could be dir or file) 
     """
-    if os.path.isfile(path):
-        if path.endswith(ext):
-            yield path
-    else:
-        for entry in os.scandir(path):
-            yield from source_file_iterator(entry.path)
+    files = [str(f) for f in Path(path).rglob('*') if f.is_file() and f.suffix == ext]
+    return files
 
 
 def case_insensitive_replace(original_str, search_str, replacement_str):
