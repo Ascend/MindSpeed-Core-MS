@@ -211,10 +211,7 @@ class DeleteImport(cst.CSTTransformer):
         new_names = []
         for i in original_node.names:
             temp = i.name.value
-            if temp not in self.delete_import_set:
-                new_names.append(i)
-            else:
-                new_names.append(i)
+            new_names.append(i)
         if not new_names:
             return cst.RemoveFromParent()
         if len(new_names) == len(original_node.names):
