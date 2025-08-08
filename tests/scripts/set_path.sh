@@ -8,7 +8,7 @@ parent_dir=$(dirname "$script_dir")
 MindSpeed_Core_MS_PATH=$(dirname "$parent_dir")
 export PYTHONPATH=${MindSpeed_Core_MS_PATH}/safetensors_dir:$PYTHONPATH
 export PYTHONPATH=${MindSpeed_Core_MS_PATH}/huggingface_hub_dir:$PYTHONPATH
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter/mindtorch/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter/mindtorch/:${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch/:$PYTHONPATH
 export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MindSpeed-LLM/:${MindSpeed_Core_MS_PATH}/Megatron-LM/:${MindSpeed_Core_MS_PATH}/MindSpeed/:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/accelerate/src/:$PYTHONPATH
 echo "..............................................done set PYTHONPATH"
 echo $PYTHONPATH
