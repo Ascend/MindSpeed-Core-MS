@@ -62,7 +62,7 @@ echo "..............................................done Megatron-LM"
 
 #msadapter
 rm -rf msadapter
-git clone https://gitee.com/mindspore/msadapter.git
+git clone https://gitee.com/mindspore/msadapter.git -b r0.2.0
 cd msadapter
 rm -rf tests
 cd ..
