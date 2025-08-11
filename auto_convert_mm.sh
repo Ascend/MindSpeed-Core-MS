@@ -35,7 +35,7 @@ echo "..............................................done Megatron-LM"
 
 #msadapter
 rm -rf MSAdapter
-git clone https://openi.pcl.ac.cn/OpenI/MSAdapter.git -b master
+git clone https://openi.pcl.ac.cn/OpenI/MSAdapter.git -b msa_r0.2.0
 if [ $? -ne 0 ]; then
     echo "Error: git clone MSAdapter"
     exit 1

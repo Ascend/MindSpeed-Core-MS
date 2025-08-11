@@ -32,7 +32,7 @@ echo "..............................................done Megatron-LM"
 
 #msadapter
 rm -rf MSAdapter
-git clone https://openi.pcl.ac.cn/OpenI/MSAdapter.git -b master
+git clone https://openi.pcl.ac.cn/OpenI/MSAdapter.git -b msa_r0.2.0
 if [ $? -ne 0 ]; then
     echo "Error: git clone MSAdapter"
     exit 1
@@ -118,3 +118,4 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core
 echo $PYTHONPATH
 echo "..............................................done code_convert"
 
+pip uninstall -y bitsandbytes-npu-beta
