@@ -12,9 +12,9 @@ modifygrammar() {
     fname=$1
     echo "Modifying PY310 grammar to adapt PY39..."
     # replace num_query_groups: int | None = None
-    sed -i 's/    num_query_groups: int \| None = None/    num_query_groups = None/' "$fname"
+    sed -i 's/^[[:space:]]*num_query_groups:.*= None/    num_query_groups = None/' "$fname"
     # replace ffn_hidden_size: float | None = None
-    sed -i 's/    ffn_hidden_size: float \| None = None/    ffn_hidden_size = None/' "$fname"
+    sed -i 's/^[[:space:]]*ffn_hidden_size:.*= None/    ffn_hidden_size = None/' "$fname"
     echo "PY310 grammar have been updated to adapt PY39 in $fname"
 }
 modifygrammar ${MindSpeed_Core_MS_PATH}/Megatron-LM/megatron/core/transformer/heterogeneous/heterogeneous_config.py
