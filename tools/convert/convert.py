@@ -16,7 +16,6 @@ if __name__ == '__main__':
     parser.add_argument("--path_to_change", type=str, default=None,
                         help="origin package path or file path")
     parser.add_argument("--multiprocess", type=int, default=32)
-    parser.add_argument("--result_log", type=str, default='./result.log')
     args = parser.parse_args()
     
     file_iterator = source_file_iterator("./")
@@ -34,5 +33,8 @@ if __name__ == '__main__':
         file_converter = FileConverter(value['converter'], value['mapping_list'])
         results.append(file_converter.convert(file))
 
-    with open(args.result_log, 'w') as f:
+    result_log_path = os.path.join(os.getcwd(), "result.log")
+    with open(result_log_path, 'w') as f:
         f.write('\n'.join(results))
+
+    print(f"[INFO] Conversion completed. Log saved to: {result_log_path}")
