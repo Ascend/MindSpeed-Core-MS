@@ -13,21 +13,20 @@ from mapping_resources.special_case import SPECIAL_CASE
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--path_to_change", type=str, default=None,
+    parser.add_argument("--path_to_change", type=str, default="./",
                         help="origin package path or file path")
     parser.add_argument("--multiprocess", type=int, default=32)
     args = parser.parse_args()
     
-    file_iterator = source_file_iterator("./")
+    if not os.path.exists(os.path.join(os.getcwd(), args.path_to_change)):
+        raise FileNotFoundError(f"Path does not exist: {os.path.join(os.getcwd(), args.path_to_change)}")
+
+    file_iterator = source_file_iterator(args.path_to_change)
     string_mapping = [('torch', 'msadapter'), ('torch_npu', 'msadapter_npu')]
     file_converter = FileConverter(APITransformer, ('torch', 'msadapter', string_mapping))
 
     with Pool(processes=args.multiprocess) as pool:
         results = list(tqdm(pool.imap(file_converter.convert, file_iterator), desc="Processing"))
-
-    if args.path_to_change not in ['MindSpeed-LLM/', 'MindSpeed-MM/']:
-        raise ValueError(f"Unsupported path_to_change: {args.path_to_change}. "
-                        "Expected 'MindSpeed-LLM/' or 'MindSpeed-MM/'.")
 
     for file, value in SPECIAL_CASE.items():
         file_converter = FileConverter(value['converter'], value['mapping_list'])

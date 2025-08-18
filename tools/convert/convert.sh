@@ -27,13 +27,13 @@ third_party_pkg='accelerate'
 install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
 cp -r $install_path/$third_party_pkg ${dir}
 
-if [[ "${dir}" == "MindSpeed-LLM/" ]]; then
+if [[ "${dir%/}" == "MindSpeed-LLM" ]]; then
     third_party_pkg='safetensors'
     install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
     cp -r $install_path/$third_party_pkg ${dir}
 fi
 
-if [[ "${dir}" == "MindSpeed-MM/" ]]; then
+if [[ "${dir%/}" == "MindSpeed-MM" ]]; then
     cp -r safetensors_dir/safetensors ${dir}
     third_party_pkg='diffusers'
     install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
@@ -45,10 +45,7 @@ if [[ "${dir}" == "MindSpeed-MM/" ]]; then
     install_path=$(python -m pip show $third_party_pkg | grep 'Location:' | awk '{print $2}')
     cp -r $install_path/$third_party_pkg ${dir}
 fi
-cd ${dir}einops
-patch -p1 < ../../tools/rules/einops.diff
-cd -
 
 cd ${dir}
-python ../tools/convert/convert.py --path_to_change ${dir}
+python ../tools/convert/convert.py
 echo "finish convert $dir"

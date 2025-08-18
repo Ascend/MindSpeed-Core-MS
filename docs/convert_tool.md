@@ -17,7 +17,7 @@ tools
    ├── convert.py
    ├── convert.sh # 转换脚本入口
    ├── mapping_resources
-   │   ├── api_mapping.py # 已对齐的API
+   │   ├── api_mapping.json # 已对齐的API
    │   └── special_case.py # 需要特殊处理的文件和处理方法
    └── modules
        ├── api_transformer.py # 核心转写模块
@@ -41,12 +41,14 @@ tools
 cd MindSpeed-Core-MS
 bash auto_convert_xxx.sh # 正常获取MindSpeed, MindSpeed-LLM 等代码仓并应用MindSpore需要的patch, 注意不需要设置PYTHONPATH
 # 此时若设置PYTHONPATH, 应能正常拉起模型训练
-bash tools/convert/convert.sh # 拷贝需要的三方库和依赖的代码至MindSpeed-LLM目录, 并对MindSpeed-LLM目录应用代码转写
+bash tools/convert/convert.sh dir_name/ # 拷贝需要的三方库和依赖的代码至dir_name目录, 并对dir_name目录应用代码转写
 ```
 
-* 默认在`MindSpeed-Core-MS`目录下生成日志文件`result.log`, 其中记录每个文件转写结果, 期望日志文件中不包含`False`
+* 需将`dir_name`设置为目标文件夹的名称，当前仅支持 `MindSpeed-LLM/` 与 `MindSpeed-MM/`。
 
-* 此时能基于`mindspore/msadapter`拉起模型,不需要额外设置`PYTHONPATH`
+* 默认在`dir_name`目录下生成日志文件`result.log`, 其中记录每个文件转写结果, 期望日志文件中不包含`False`。
+
+* 此时能基于`mindspore/msadapter`拉起模型,不需要额外设置`PYTHONPATH`。
 
 ## 单独使用(只转换某个代码仓)
 
@@ -60,16 +62,12 @@ bash tools/convert/convert.sh # 拷贝需要的三方库和依赖的代码至Min
    python tools/convert/convert.py \
      --path_to_change ./Megatron-LM \
      --multiprocess 16 \
-     --result_log megatron_convert.log \
      && \
    python tools/convert/convert.py \
      --path_to_change ./MindSpeed \
      --multiprocess 16 \
-     --result_log llm_convert.log \
      && \
    python tools/convert/convert.py \
      --path_to_change ./MindSpeed-LLM \  # 根据实际仓库修改
-     --multiprocess 16 \
-     --result_log llm_convert.log \
-     &&
+     --multiprocess 16
    ```
