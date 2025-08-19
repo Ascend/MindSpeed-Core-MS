@@ -42,31 +42,10 @@ rm -rf tests
 cd ..
 echo "..............................................done msadapter"
 
-#transformers
-rm -rf transformers/
-git clone https://gitee.com/mirrors/huggingface_transformers.git -b v4.47.0 --depth 1
-if [ $? -ne 0 ]; then
-    echo "Error: git clone msadaptor"
-    exit 1
-fi
-mv huggingface_transformers transformers
-cd transformers
-git apply ../tools/rules/transformers.diff
-rm -rf tests
-cd ..
-echo "..............................................done apply transformers"
-
-echo "..............................................start code_convert"
 MindSpeed_Core_MS_PATH=$(pwd)
 echo ${MindSpeed_Core_MS_PATH}
 
-python3 tools/transfer.py \
---megatron_path ${MindSpeed_Core_MS_PATH}/Megatron-LM/megatron/ \
---mindspeed_path ${MindSpeed_Core_MS_PATH}/MindSpeed/mindspeed/ \
---mindspeed_llm_path ${MindSpeed_Core_MS_PATH}/MindSpeed-LLM/
-
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter:${MindSpeed_Core_MS_PATH}/msadapter/msa_thirdparty:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/transformers/src/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter:${MindSpeed_Core_MS_PATH}/msadapter/msa_thirdparty:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:$PYTHONPATH
 echo $PYTHONPATH
-echo "..............................................done code_convert"
 
 pip uninstall -y bitsandbytes-npu-beta
