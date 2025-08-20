@@ -981,5 +981,961 @@
             "patch_name": "checkpoint_wrapper",
             "condition": []
         }
+    ],
+    "'megatron.core.tensor_parallel.layers.ColumnParallelLinear.__init__'": [
+    {
+        "patch_import": "mindspeed_llm.tasks.posttrain.lora.qlora.parallel_linear_init_wrapper",
+        "patch_name": "parallel_linear_init_wrapper",
+        "condition": [
+            "is_enable_qlora(args)"
+        ],
+        "condition_import": [
+            "mindspeed_llm.tasks.posttrain.lora.utils.is_enable_qlora"
+        ]
+    }
+    ],
+    "'megatron.core.tensor_parallel.layers.RowParallelLinear.__init__'": [
+        {
+            "patch_import": "mindspeed_llm.tasks.posttrain.lora.qlora.parallel_linear_init_wrapper",
+            "patch_name": "parallel_linear_init_wrapper",
+            "condition": [
+                "is_enable_qlora(args)"
+            ],
+            "condition_import": [
+                "mindspeed_llm.tasks.posttrain.lora.utils.is_enable_qlora"
+            ]
+        }
+    ],
+    "'megatron.core.tensor_parallel.layers.LinearWithFrozenWeight.forward'": [
+        {
+            "patch_import": "mindspeed_llm.tasks.posttrain.lora.qlora.linear_with_frozen_weight_forward",
+            "patch_name": "linear_with_frozen_weight_forward",
+            "condition": [
+                "is_enable_qlora(args)"
+            ],
+            "condition_import": [
+                "mindspeed_llm.tasks.posttrain.lora.utils.is_enable_qlora"
+            ]
+        }
+    ],
+    "'megatron.core.tensor_parallel.layers.LinearWithFrozenWeight.backward'": [
+        {
+            "patch_import": "mindspeed_llm.tasks.posttrain.lora.qlora.linear_with_frozen_weight_backward",
+            "patch_name": "linear_with_frozen_weight_backward",
+            "condition": [
+                "is_enable_qlora(args)"
+            ],
+            "condition_import": [
+                "mindspeed_llm.tasks.posttrain.lora.utils.is_enable_qlora"
+            ]
+        }
+    ],
+    "'megatron.core.tensor_parallel.layers.ColumnParallelLinear._save_to_state_dict'": [
+        {
+            "patch_import": "mindspeed_llm.tasks.posttrain.lora.qlora.parallel_linear_save_to_state_dict_wrapper",
+            "patch_name": "parallel_linear_save_to_state_dict_wrapper",
+            "condition": [
+                "is_enable_qlora(args)"
+            ],
+            "condition_import": [
+                "mindspeed_llm.tasks.posttrain.lora.utils.is_enable_qlora"
+            ]
+        }
+    ],
+    "'megatron.core.tensor_parallel.layers.RowParallelLinear._save_to_state_dict'": [
+        {
+            "patch_import": "mindspeed_llm.tasks.posttrain.lora.qlora.parallel_linear_save_to_state_dict_wrapper",
+            "patch_name": "parallel_linear_save_to_state_dict_wrapper",
+            "condition": [
+                "is_enable_qlora(args)"
+            ],
+            "condition_import": [
+                "mindspeed_llm.tasks.posttrain.lora.utils.is_enable_qlora"
+            ]
+        }
+    ],
+    "'megatron.core.tensor_parallel.layers.ColumnParallelLinear._load_from_state_dict'": [
+        {
+            "patch_import": "mindspeed_llm.tasks.posttrain.lora.qlora.parallel_linear_load_from_state_dict_wrapper",
+            "patch_name": "parallel_linear_load_from_state_dict_wrapper",
+            "condition": [
+                "is_enable_qlora(args)"
+            ],
+            "condition_import": [
+                "mindspeed_llm.tasks.posttrain.lora.utils.is_enable_qlora"
+            ]
+        }
+    ],
+    "'megatron.core.tensor_parallel.layers.RowParallelLinear._load_from_state_dict'": [
+        {
+            "patch_import": "mindspeed_llm.tasks.posttrain.lora.qlora.parallel_linear_load_from_state_dict_wrapper",
+            "patch_name": "parallel_linear_load_from_state_dict_wrapper",
+            "condition": [
+                "is_enable_qlora(args)"
+            ],
+            "condition_import": [
+                "mindspeed_llm.tasks.posttrain.lora.utils.is_enable_qlora"
+            ]
+        }
+    ],
+    "'megatron.core.transformer.moe.experts.GroupedMLP._load_from_state_dict'": [
+        {
+            "patch_import": "mindspeed_llm.tasks.posttrain.lora.qlora.groupedmlp_load_from_state_dict_wrapper",
+            "patch_name": "groupedmlp_load_from_state_dict_wrapper",
+            "condition": [
+                "is_enable_qlora(args)"
+            ],
+            "condition_import": [
+                "mindspeed_llm.tasks.posttrain.lora.utils.is_enable_qlora"
+            ]
+        }
+    ],
+    "'mindspeed.core.transformer.moe.grouped_gemm_util.Ops.gmm'": [
+        {
+            "patch_import": "mindspeed_llm.tasks.posttrain.lora.qlora.grouped_gemm_util_ops_gmm",
+            "patch_name": "grouped_gemm_util_ops_gmm",
+            "condition": [
+                "is_enable_qlora(args)"
+            ],
+            "condition_import": [
+                "mindspeed_llm.tasks.posttrain.lora.utils.is_enable_qlora"
+            ]
+        }
+    ],
+    "'mindspeed.core.transformer.moe.moe_layer_overlap_all2all.gmm_op'": [
+        {
+            "patch_import": "mindspeed_llm.tasks.posttrain.lora.qlora.moe_layer_overlap_all2all_gmm_op_wrapper",
+            "patch_name": "moe_layer_overlap_all2all_gmm_op_wrapper",
+            "condition": [
+                "is_enable_qlora(args)"
+            ],
+            "condition_import": [
+                "mindspeed_llm.tasks.posttrain.lora.utils.is_enable_qlora"
+            ]
+        }
+    ],
+    "'megatron.core.parallel_state.initialize_model_parallel'": [
+        {
+            "patch_import": "mindspeed.core.parallel_state.initialize_model_parallel_wrapper",
+            "patch_name": "initialize_model_parallel_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.core.parallel_state.destroy_model_parallel'": [
+        {
+            "patch_import": "mindspeed_llm.core.destroy_model_parallel_decorator",
+            "patch_name": "destroy_model_parallel_decorator",
+            "condition": []
+        },
+        {
+            "patch_import": "mindspeed.core.parallel_state.destroy_model_parallel_wrapper",
+            "patch_name": "destroy_model_parallel_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.core.parallel_state.get_context_parallel_group_for_send_recv_overlap'": [
+        {
+            "patch_import": "mindspeed.core.parallel_state.get_context_parallel_group_for_send_recv_overlap",
+            "patch_name": "get_context_parallel_group_for_send_recv_overlap",
+            "condition": []
+        }
+    ],
+    "'megatron.core.transformer.transformer_layer.TransformerLayer._get_layer_offset'": [
+        {
+            "patch_import": "mindspeed_llm.core.transformer.transformer_block.get_layer_offset_wrapper",
+            "patch_name": "get_layer_offset_wrapper",
+            "condition": []
+        }
+    ],
+    "megatron.core.datasets.gpt_dataset.GPTDataset._build_document_sample_shuffle_indices": [
+        {
+            "patch_import": "mindspeed_llm.core._build_document_sample_shuffle_indices",
+            "patch_name": "_build_document_sample_shuffle_indices",
+            "condition": []
+        }
+    ],
+    "megatron.core.datasets.blended_megatron_dataset_builder.BlendedMegatronDatasetBuilder.build_generic_dataset": [
+        {
+            "patch_import": "mindspeed_llm.core.build_generic_dataset",
+            "patch_name": "build_generic_dataset",
+            "condition": []
+        }
+    ],
+    "'megatron.core.datasets.indexed_dataset.IndexedDatasetBuilder.__init__'": [
+        {
+            "patch_import": "mindspeed_llm.core.indexed_dataset_builder_init_wrapper",
+            "patch_name": "indexed_dataset_builder_init_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.core.datasets.indexed_dataset.IndexedDatasetBuilder.add_item'": [
+        {
+            "patch_import": "mindspeed_llm.core.add_item_wrapper",
+            "patch_name": "add_item_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.core.datasets.indexed_dataset.IndexedDatasetBuilder.finalize'": [
+        {
+            "patch_import": "mindspeed_llm.core.finalize_wrapper",
+            "patch_name": "finalize_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.core.datasets.gpt_dataset.GPTDataset.__getitem__'": [
+        {
+            "patch_import": "mindspeed_llm.core.datasets.gpt_dataset.gpt_dataset_getitem_wrapper",
+            "patch_name": "gpt_dataset_getitem_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.core.datasets.gpt_dataset._get_ltor_masks_and_position_ids'": [
+        {
+            "patch_import": "mindspeed.core.datasets.gpt_dataset._get_ltor_masks_and_position_ids",
+            "patch_name": "_get_ltor_masks_and_position_ids",
+            "condition": ["args.reset_attention_mask"]
+        },
+        {
+            "patch_import": "mindspeed_llm.core.datasets.gpt_dataset._get_ltor_masks_and_position_ids",
+            "patch_name": "_get_ltor_masks_and_position_ids",
+            "condition": ["not args.reset_attention_mask"]
+        }
+    ],
+    "'megatron.training.checkpointing.unwrap_model'": [
+        {
+            "patch_import": "mindspeed_llm.training.utils.unwrap_model_wrapper",
+            "patch_name": "unwrap_model_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.training.training.unwrap_model'": [
+        {
+            "patch_import": "mindspeed_llm.training.utils.unwrap_model_wrapper",
+            "patch_name": "unwrap_model_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.training.training.training_log'": [
+        {
+            "patch_import": "mindspeed_llm.training.training.training_log",
+            "patch_name": "training_log",
+            "condition": []
+        }
+    ],
+    "'mindspeed.core.context_parallel.utils.generate_adaptive_cp_mask_list_by_user'": [
+        {
+            "patch_import": "mindspeed_llm.training.utils.generate_adaptive_cp_mask_list_by_user",
+            "patch_name": "generate_adaptive_cp_mask_list_by_user",
+            "condition": []
+        }
+    ],
+    "'mindspeed.core.context_parallel.utils.generate_adaptive_cp_grid_mask_by_user'": [
+        {
+            "patch_import": "mindspeed_llm.training.utils.generate_adaptive_cp_grid_mask_by_user",
+            "patch_name": "generate_adaptive_cp_grid_mask_by_user",
+            "condition": []
+        }
+    ],
+    "'megatron.core.tensor_parallel.layers.LinearWithGradAccumulationAndAsyncCommunication.forward'": [
+        {
+            "patch_import": "mindspeed.core.tensor_parallel.layers.linear_forward_main_grad_wrapper",
+            "patch_name": "linear_forward_main_grad_wrapper",
+            "condition": [
+                "args.swap_attention or args.recompute_in_advance"
+            ]
+        }
+    ],
+    "'megatron.core.tensor_parallel.layers.LinearWithGradAccumulationAndAsyncCommunication.backward'": [
+        {
+            "patch_import": "mindspeed.core.tensor_parallel.layers.linear_backward_main_grad_wrapper",
+            "patch_name": "linear_backward_main_grad_wrapper",
+            "condition": [
+                "args.swap_attention or args.recompute_in_advance"
+            ]
+        }
+    ],
+    "'megatron.core.optimizer.distrib_optimizer.DistributedOptimizer'": [
+        {
+            "patch_import": "mindspeed.core.optimizer.swap_optimizer.swap_optimizer.SwapDistributedOptimizer",
+            "patch_name": "SwapDistributedOptimizer",
+            "condition": [
+                "args.swap_optimizer"
+            ]
+        }
+    ],
+    "'mindspeed.optimizer.adamw.AdamW.step'": [
+        {
+            "patch_import": "mindspeed.core.optimizer.swap_optimizer.swap_optimizer.swap_adamw_step",
+            "patch_name": "swap_adamw_step",
+            "condition": [
+                "args.swap_optimizer"
+            ]
+        }
+    ],
+    "'megatron.training.arguments.parse_args'": [
+        {
+            "patch_import": "mindspeed_llm.training.arguments.parse_args_decorator",
+            "patch_name": "parse_args_decorator",
+            "condition": []
+        }
+    ],
+    "'megatron.training.arguments.validate_args'": [
+        {
+            "patch_import": "mindspeed_llm.training.arguments.validate_args_decorator",
+            "patch_name": "validate_args_decorator",
+            "condition": []
+        }
+    ],
+    "'megatron.training.arguments._print_args'": [
+        {
+            "patch_import": "mindspeed_llm.training.utils.print_args_wrapper",
+            "patch_name": "print_args_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.training.global_vars.build_tokenizer'": [
+        {
+            "patch_import": "mindspeed_llm.training.tokenizer.build_tokenizer",
+            "patch_name": "build_tokenizer",
+            "condition": []
+        }
+    ],
+    "'megatron.training.checkpointing._load_base_checkpoint'": [
+        {
+            "patch_import": "mindspeed_llm.training.checkpointing._load_base_checkpoint",
+            "patch_name": "_load_base_checkpoint",
+            "condition": []
+        },
+        {
+            "patch_import": "mindspeed_llm.training.checkpointing._load_base_checkpoint_wrapper",
+            "patch_name": "_load_base_checkpoint_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.training.checkpointing.save_checkpoint'": [
+        {
+            "patch_import": "mindspeed_llm.training.checkpointing.save_checkpoint_wrapper",
+            "patch_name": "save_checkpoint_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.training.arguments.core_transformer_config_from_args'": [
+        {
+            "patch_import": "mindspeed_llm.training.arguments.core_transformer_config_from_args_wrapper",
+            "patch_name": "core_transformer_config_from_args_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.fused_layer_norm.FusedLayerNormAffineFunction'": [
+        {
+            "patch_import": "mindspeed.core.fusions.fused_layer_norm.FusedLayerNormAffineFunction",
+            "patch_name": "FusedLayerNormAffineFunction",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.fused_layer_norm.FastLayerNormFN'": [
+        {
+            "patch_import": "mindspeed.core.fusions.fused_layer_norm.FastLayerNormFN",
+            "patch_name": "FastLayerNormFN",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.fused_softmax.ScaledUpperTriangMaskedSoftmax'": [
+        {
+            "patch_import": "mindspeed.core.fusions.fused_softmax.ScaledUpperTriangMaskedSoftmax",
+            "patch_name": "ScaledUpperTriangMaskedSoftmax",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.fused_softmax.ScaledMaskedSoftmax'": [
+        {
+            "patch_import": "mindspeed.core.fusions.fused_softmax.ScaledMaskedSoftmax",
+            "patch_name": "ScaledMaskedSoftmax",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.fused_softmax.ScaledSoftmax'": [
+        {
+            "patch_import": "mindspeed.core.fusions.fused_softmax.ScaledSoftmax",
+            "patch_name": "ScaledSoftmax",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.fused_softmax.FusedScaleMaskSoftmax.is_kernel_available'": [
+        {
+            "patch_import": "mindspeed.core.fusions.fused_softmax.is_kernel_available",
+            "patch_name": "is_kernel_available",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.fused_softmax.FusedScaleMaskSoftmax.forward_fused_softmax'": [
+        {
+            "patch_import": "mindspeed.core.fusions.fused_softmax.forward_fused_softmax",
+            "patch_name": "forward_fused_softmax",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.rms_norm.RMSNorm.__init__'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.rms_norm_init_wrapper",
+            "patch_name": "rms_norm_init_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.rms_norm.RMSNorm.forward'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.rms_norm_forward",
+            "patch_name": "rms_norm_forward",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.transformer.ParallelMLP.__init__'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.parallel_mlp_init_wrapper",
+            "patch_name": "parallel_mlp_init_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.transformer.ParallelMLP.forward'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.transformer.parallel_mlp_forward_wrapper",
+            "patch_name": "parallel_mlp_forward_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.transformer.ParallelTransformerLayer.__init__'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.transformer.parallel_transformer_layer_init_wrapper",
+            "patch_name": "parallel_transformer_layer_init_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.transformer.ParallelTransformer.__init__'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.parallel_transformer_init",
+            "patch_name": "parallel_transformer_init",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.transformer.ParallelTransformer.forward'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.parallel_transformer_forward",
+            "patch_name": "parallel_transformer_forward",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.transformer.ParallelTransformer.state_dict_for_save_checkpoint'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.state_dict_for_save_checkpoint_wrapper",
+            "patch_name": "state_dict_for_save_checkpoint_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.transformer.ParallelAttention.__init__'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.ParallelAttention_wrapper",
+            "patch_name": "ParallelAttention_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.transformer.ParallelAttention.forward'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.ParallelAttentionForward",
+            "patch_name": "ParallelAttentionForward",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.transformer.CoreAttention.__init__'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.core_attention_wrapper",
+            "patch_name": "core_attention_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.transformer.CoreAttention.forward'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.core_attention_forward",
+            "patch_name": "core_attention_forward",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.transformer.FlashSelfAttention'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.FlashSelfAttention",
+            "patch_name": "FlashSelfAttention",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.GPTModel'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.GPTModel",
+            "patch_name": "GPTModel",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.gpt_model.post_language_model_processing'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.post_language_model_processing",
+            "patch_name": "post_language_model_processing",
+            "condition": []
+        }
+    ],
+    "'megatron.legacy.model.language_model.TransformerLanguageModel.forward'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.model.transformer_language_model_forward_wrapper",
+            "patch_name": "transformer_language_model_forward_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.training.checkpointing.load_args_from_checkpoint'": [
+        {
+            "patch_import": "mindspeed_llm.training.checkpointing.load_args_from_checkpoint_wrapper",
+            "patch_name": "load_args_from_checkpoint_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.training.initialize._compile_dependencies'": [
+        {
+            "patch_import": "mindspeed.initialize._compile_dependencies",
+            "patch_name": "_compile_dependencies",
+            "condition": []
+        }
+    ],
+    "'megatron.training.initialize.initialize_megatron'": [
+        {
+            "patch_import": "mindspeed_llm.training.initialize.initialize_megatron",
+            "patch_name": "initialize_megatron",
+            "condition": []
+        }
+    ],
+    "'megatron.inference.text_generation.tokenization.tokenize_prompts'": [
+        {
+            "patch_import": "mindspeed_llm.inference.text_generation.tokenization.tokenize_prompts",
+            "patch_name": "tokenize_prompts",
+            "condition": []
+        }
+    ],
+    "'megatron.inference.text_generation.tokenization._tokenize_prompts_and_batch'": [
+        {
+            "patch_import": "mindspeed_llm.inference.text_generation.tokenization._tokenize_prompts_and_batch",
+            "patch_name": "_tokenize_prompts_and_batch",
+            "condition": []
+        }
+    ],
+    "'megatron.inference.text_generation.generation.generate_tokens_probs_and_return_on_first_stage'": [
+        {
+            "patch_import": "mindspeed_llm.inference.text_generation.generation.generate_tokens_probs_and_return_on_first_stage",
+            "patch_name": "generate_tokens_probs_and_return_on_first_stage",
+            "condition": []
+        }
+    ],
+    "'megatron.inference.text_generation.generation.beam_search_and_return_on_first_stage'": [
+        {
+            "patch_import": "mindspeed_llm.inference.text_generation.generation.beam_search_and_return_on_first_stage",
+            "patch_name": "beam_search_and_return_on_first_stage",
+            "condition": []
+        }
+    ],
+    "'megatron.inference.text_generation.forward_step.ForwardStep.__init__'": [
+        {
+            "patch_import": "mindspeed_llm.inference.text_generation.forward_step.inference_forward_step_init_wrapper",
+            "patch_name": "inference_forward_step_init_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.inference.text_generation.forward_step.ForwardStep._forward_step_helper'": [
+        {
+            "patch_import": "mindspeed_llm.inference.text_generation.forward_step._forward_step_helper",
+            "patch_name": "_forward_step_helper",
+            "condition": []
+        }
+    ],
+    "'megatron.inference.text_generation.forward_step.ForwardStep._no_pipelining_forward_step'": [
+        {
+            "patch_import": "mindspeed_llm.inference.text_generation.forward_step._no_pipelining_forward_step_wrapper",
+            "patch_name": "_no_pipelining_forward_step_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.inference.text_generation.forward_step.ForwardStep._with_pipelining_forward_step'": [
+        {
+            "patch_import": "mindspeed_llm.inference.text_generation.forward_step._with_pipelining_forward_step_wrapper",
+            "patch_name": "_with_pipelining_forward_step_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.inference.text_generation.forward_step._allocate_recv_buffer'": [
+        {
+            "patch_import": "mindspeed_llm.inference.text_generation.forward_step._allocate_recv_buffer",
+            "patch_name": "_allocate_recv_buffer",
+            "condition": []
+        }
+    ],
+    "megatron.training.log_handler.CustomHandler.emit": [
+        {
+            "patch_import": "mindspeed_llm.training.utils.emit",
+            "patch_name": "emit",
+            "condition": []
+        }
+    ],
+    "'megatron.core.distributed.param_and_grad_buffer.Bucket.start_grad_sync'": [
+        {
+            "patch_import": "mindspeed_llm.core.start_grad_sync_wrapper",
+            "patch_name": "start_grad_sync_wrapper",
+            "condition": [
+                "args.enable_high_availability"
+            ]
+        }
+    ],
+    "'megatron.training.training.get_megatron_optimizer'": [
+        {
+            "patch_import": "mindspeed_llm.core.get_megatron_optimizer_wrapper",
+            "patch_name": "get_megatron_optimizer_wrapper",
+            "condition": [
+                "args.enable_high_availability"
+            ]
+        }
+    ],
+    "'megatron.core.optimizer.distrib_optimizer.DistributedOptimizer.__init__'": [
+        {
+            "patch_import": "mindspeed_llm.core.distributed_optimizer_init_wrapper",
+            "patch_name": "distributed_optimizer_init_wrapper",
+            "condition": [
+                "args.enable_high_availability"
+            ]
+        },
+        {
+            "patch_import": "mindspeed_llm.core.distributed_optimizer_init_for_reuse_fp32_wrapper",
+            "patch_name": "distributed_optimizer_init_for_reuse_fp32_wrapper",
+            "condition": [
+                "args.reuse_fp32_param",
+                "args.enable_high_availability"
+            ]
+        },
+        {
+            "patch_import": "mindspeed.mindspore.optimizer.distrib_optimizer.reuse_fp32_param_distrib_optimizer_init_wrapper",
+            "patch_name": "reuse_fp32_param_distrib_optimizer_init_wrapper",
+            "condition": [
+                "args.reuse_fp32_param",
+                "not args.enable_high_availability"
+            ]
+        }
+    ],
+    "'megatron.training.training.setup_model_and_optimizer'": [
+        {
+            "patch_import": "mindspeed_llm.training.setup_model_and_optimizer_wrapper",
+            "patch_name": "setup_model_and_optimizer_wrapper",
+            "condition": [
+                "args.enable_high_availability"
+            ]
+        },
+        {
+            "patch_import": "mindspeed.core.memory.adaptive_recomputing.adaptive_recompute.setup_model_and_optimizer_wrapper",
+            "patch_name": "setup_model_and_optimizer_wrapper",
+            "condition": [
+                "args.swap_attention"
+            ]
+        }
+    ],
+    "'megatron.core.optimizer.optimizer.MixedPrecisionOptimizer.step'": [
+        {
+            "patch_import": "mindspeed.optimizer.optimizer.mixed_precision_optimizer_step",
+            "patch_name": "mixed_precision_optimizer_step",
+            "condition": [
+                "args.reuse_fp32_param",
+                "args.enable_high_availability"
+            ]
+        }
+    ],
+    "'megatron.core.optimizer.optimizer.Float16OptimizerWithFloat16Params.__init__'": [
+        {
+            "patch_import": "mindspeed.optimizer.optimizer.reuse_fp32_param_init_wrapper",
+            "patch_name": "reuse_fp32_param_init_wrapper",
+            "condition": [
+                "args.reuse_fp32_param",
+                "args.enable_high_availability"
+            ]
+        },
+        {
+            "patch_import": "mindspeed.optimizer.optimizer.reuse_fp32_param_init_wrapper",
+            "patch_name": "reuse_fp32_param_init_wrapper",
+            "condition": [
+                "args.reuse_fp32_param",
+                "not args.enable_high_availability"
+            ]
+        }
+    ],
+    "'megatron.core.optimizer.optimizer_config.OptimizerConfig.__init__'": [
+        {
+            "patch_import": "mindspeed.optimizer.optimizer.optimizer_config_init_wrapper",
+            "patch_name": "optimizer_config_init_wrapper",
+            "condition": [
+                "args.reuse_fp32_param",
+                "args.enable_high_availability"
+            ]
+        },
+        {
+            "patch_import": "mindspeed.optimizer.optimizer.optimizer_config_init_wrapper",
+            "patch_name": "optimizer_config_init_wrapper",
+            "condition": [
+                "args.reuse_fp32_param",
+                "not args.enable_high_availability"
+            ]
+        }
+    ],
+    "'megatron.core.optimizer.optimizer.MixedPrecisionOptimizer.prepare_grads'": [
+        {
+            "patch_import": "mindspeed.optimizer.optimizer.prepare_grads",
+            "patch_name": "prepare_grads",
+            "condition": [
+                "args.reuse_fp32_param",
+                "not args.enable_high_availability"
+            ]
+        }
+    ],
+    "'megatron.core.optimizer.optimizer.MixedPrecisionOptimizer.step_with_ready_grads'": [
+        {
+            "patch_import": "mindspeed.optimizer.optimizer.step_with_ready_grads",
+            "patch_name": "step_with_ready_grads",
+            "condition": [
+                "args.reuse_fp32_param",
+                "not args.enable_high_availability"
+            ]
+        }
+    ],
+    "'megatron.core.tensor_parallel.layers.ColumnParallelLinear'": [
+        {
+            "patch_import": "mindspeed.core.tensor_parallel.unaligned_layers.adaptor.UnalignedColumnParallelLinearAdaptor",
+            "patch_name": "UnalignedColumnParallelLinearAdaptor",
+            "condition": [
+                "args.unaligned_linear"
+            ]
+        }
+    ],
+    "'megatron.core.tensor_parallel.layers.RowParallelLinear'": [
+        {
+            "patch_import": "mindspeed.core.tensor_parallel.unaligned_layers.adaptor.UnalignedRowParallelLinearAdaptor",
+            "patch_name": "UnalignedRowParallelLinearAdaptor",
+            "condition": [
+                "args.unaligned_linear"
+            ]
+        }
+    ],
+    "'megatron.core.utils.divide'": [
+        {
+            "patch_import": "mindspeed.core.tensor_parallel.unaligned_layers.adaptor.divide_adaptor",
+            "patch_name": "divide_adaptor",
+            "condition": [
+                "args.unaligned_linear"
+            ]
+        }
+    ],
+    "'megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.get_rotary_seq_len'": [
+        {
+            "patch_import": "mindspeed.core.tensor_parallel.unaligned_layers.adaptor.get_rotary_seq_len",
+            "patch_name": "get_rotary_seq_len",
+            "condition": [
+                "args.unaligned_linear"
+            ]
+        },
+        {
+            "patch_import": "mindspeed.core.models.common.embeddings.rotary_pos_embedding.rotary_embedding_get_rotary_seq_len_wrapper",
+            "patch_name": "rotary_embedding_get_rotary_seq_len_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.core.tensor_parallel.mappings.gather_from_sequence_parallel_region'": [
+        {
+            "patch_import": "mindspeed.core.tensor_parallel.unaligned_layers.adaptor.gather_from_sequence_parallel_region_adaptor",
+            "patch_name": "gather_from_sequence_parallel_region_adaptor",
+            "condition": [
+                "args.unaligned_linear"
+            ]
+        }
+    ],
+    "'megatron.core.tensor_parallel.mappings.scatter_to_sequence_parallel_region'": [
+        {
+            "patch_import": "mindspeed.core.tensor_parallel.unaligned_layers.adaptor.scatter_to_sequence_parallel_region_adaptor",
+            "patch_name": "scatter_to_sequence_parallel_region_adaptor",
+            "condition": [
+                "args.unaligned_linear"
+            ]
+        }
+    ],
+    "'megatron.core.tensor_parallel.mappings.reduce_scatter_to_sequence_parallel_region'": [
+        {
+            "patch_import": "mindspeed.core.tensor_parallel.unaligned_layers.adaptor.reduce_scatter_to_sequence_parallel_region_adaptor",
+            "patch_name": "reduce_scatter_to_sequence_parallel_region_adaptor",
+            "condition": [
+                "args.unaligned_linear"
+            ]
+        }
+    ],
+    "'megatron.training.training.build_pretraining_data_loader'": [
+        {
+            "patch_import": "mindspeed_llm.legacy.data.build_pretraining_data_loader",
+            "patch_name": "build_pretraining_data_loader",
+            "condition": []
+        }
+    ],
+    "'megatron.training.training.train'": [
+        {
+            "patch_import": "mindspeed_llm.training.train",
+            "patch_name": "train",
+            "condition": []
+        }
+    ],
+    "'megatron.training.training.load_checkpoint'": [
+        {
+            "patch_import": "mindspeed_llm.training.checkpointing.load_checkpoint_wrapper",
+            "patch_name": "load_checkpoint_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.training.utils.get_batch_on_this_tp_rank'": [
+        {
+            "patch_import": "mindspeed_llm.training.utils.get_batch_on_this_tp_rank",
+            "patch_name": "get_batch_on_this_tp_rank",
+            "condition": []
+        },
+        {
+            "patch_import": "mindspeed_llm.training.utils.get_batch_on_this_tp_rank_reset_attn_mask",
+            "patch_name": "get_batch_on_this_tp_rank_reset_attn_mask",
+            "condition": ["args.reset_attention_mask"]
+        }
+    ],
+    "'megatron.core.optimizer.distrib_optimizer.DistributedOptimizer.get_parameter_state_dp_zero'": [
+        {
+            "patch_import": "mindspeed.optimizer.distrib_optimizer.get_parameter_state_dp_zero_hccl",
+            "patch_name": "get_parameter_state_dp_zero_hccl",
+            "condition": [
+                "args.disable_gloo_group"
+            ]
+        }
+    ],
+    "'megatron.core.optimizer.distrib_optimizer.DistributedOptimizer.load_parameter_state_from_dp_zero'": [
+        {
+            "patch_import": "mindspeed.optimizer.distrib_optimizer.load_parameter_state_from_dp_zero_hccl",
+            "patch_name": "load_parameter_state_from_dp_zero_hccl",
+            "condition": [
+                "args.disable_gloo_group"
+            ]
+        }
+    ],
+    "'megatron.core.utils.check_param_hashes_across_dp_replicas'": [
+        {
+            "patch_import": "mindspeed.utils.check_param_hashes_across_dp_replicas_hccl",
+            "patch_name": "check_param_hashes_across_dp_replicas_hccl",
+            "condition": [
+                "args.disable_gloo_group"
+            ]
+        }
+    ],
+    "'megatron.core.parallel_state.get_data_parallel_group_gloo'": [
+        {
+            "patch_import": "mindspeed.core.parallel_state.get_data_parallel_group_gloo_replace",
+            "patch_name": "get_data_parallel_group_gloo_replace",
+            "condition": [
+                "args.disable_gloo_group"
+            ]
+        }
+    ],
+    "'megatron.core.parallel_state.get_data_modulo_expert_parallel_group_gloo'": [
+        {
+            "patch_import": "mindspeed.core.parallel_state.get_data_modulo_expert_parallel_group_gloo_replace",
+            "patch_name": "get_data_modulo_expert_parallel_group_gloo_replace",
+            "condition": [
+                "args.disable_gloo_group"
+            ]
+        }
+    ],
+    "'megatron.core.models.common.embeddings.rotary_pos_embedding.apply_rotary_pos_emb_bshd'": [
+        {
+            "patch_import": "mindspeed_llm.core.apply_rotary_pos_emb_bshd",
+            "patch_name": "apply_rotary_pos_emb_bshd",
+            "condition": []
+        }
+    ],
+    "'megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.forward'": [
+        {
+            "patch_import": "mindspeed_llm.core.rotary_embedding_forward",
+            "patch_name": "rotary_embedding_forward",
+            "condition": []
+        },
+        {
+            "patch_import": "mindspeed.core.models.common.embeddings.rotary_pos_embedding.rotary_forward",
+            "patch_name": "rotary_forward",
+            "condition": ["args.reset_attention_mask"]
+        }
+    ],
+    "'megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.__init__'": [
+        {
+            "patch_import": "mindspeed_llm.core.rotary_embedding_init_wrapper",
+            "patch_name": "rotary_embedding_init_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.core.models.common.language_module.language_module.LanguageModule.setup_embeddings_and_output_layer'": [
+        {
+            "patch_import": "mindspeed_llm.core.models.common.language_module.language_module.setup_embeddings_and_output_layer",
+            "patch_name": "setup_embeddings_and_output_layer",
+            "condition": []
+        }
+    ],
+    "'megatron.core.models.common.language_module.language_module.LanguageModule.tie_embeddings_and_output_weights_state_dict'": [
+        {
+            "patch_import": "mindspeed_llm.core.models.common.language_module.language_module.tie_embeddings_and_output_weights_state_dict",
+            "patch_name": "tie_embeddings_and_output_weights_state_dict",
+            "condition": []
+        }
+    ],
+    "'megatron.core.models.common.embeddings.language_model_embedding.LanguageModelEmbedding.forward'": [
+        {
+            "patch_import": "mindspeed.core.models.common.embeddings.language_model_embedding.language_model_embedding_forward_wrapper",
+            "patch_name": "language_model_embedding_forward_wrapper",
+            "condition": []
+        }
+    ],
+    "'megatron.core.ssm.mamba_block.MambaStack.forward'": [
+        {
+            "patch_import": "mindspeed_llm.core.ssm.mamba_block.mamba_block_forward",
+            "patch_name": "mamba_block_forward",
+            "condition": []
+        }
+    ],
+    "megatron.core.pipeline_parallel.p2p_communication._p2p_ops": [
+        {
+            "patch_import": "mindspeed.core.pipeline_parallel.p2p_communication._p2p_ops_eod",
+            "patch_name": "_p2p_ops_eod",
+            "condition": ["args.reset_attention_mask"]
+        }
+    ],
+    "megatron.core.models.common.embeddings.rotary_pos_embedding.apply_rotary_pos_emb_thd": [
+        {
+            "patch_import": "mindspeed.core.models.common.embeddings.rotary_pos_embedding.apply_rotary_pos_emb_thd",
+            "patch_name": "apply_rotary_pos_emb_thd",
+            "condition": ["args.reset_attention_mask"]
+        }
+    ],
+    "megatron.core.transformer.attention.Attention.forward": [
+        {
+            "patch_import": "mindspeed.core.transformer.attention.attention_forward",
+            "patch_name": "attention_forward",
+            "condition": ["args.reset_attention_mask"]
+        }
+    ],
+    "mindspeed.core.tensor_parallel.tp_2d.parallel_linear_2d.ParallelLinear2D.__init__": [
+        {
+            "patch_import": "mindspeed_llm.core.tensor_parallel.tp_2d.parallel_linear_2d.parallell_linear_2D_init_wrapper",
+            "patch_name": "parallell_linear_2D_init_wrapper",
+            "condition": ["args.tp_2d"]
+        }
+    ],
+    "megatron.training.training.build_train_valid_test_data_loaders": [
+        {
+            "patch_import": "mindspeed_llm.training.training.build_train_valid_test_data_loaders_wrapper",
+            "patch_name": "build_train_valid_test_data_loaders_wrapper",
+            "condition": []
+        }
     ]
 }
