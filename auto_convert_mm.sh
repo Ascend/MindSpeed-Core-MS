@@ -9,6 +9,7 @@ if [ $? -ne 0 ]; then
 fi
 rm -rf MindSpeed-MM/tests
 cd MindSpeed-MM/
+cp -f examples/mindspore/checkpoint/pyproject.toml ./
 pip install -e .
 cd ..
 echo "------------------------------------done MindSpeed-MM"
@@ -45,41 +46,7 @@ rm -rf tests
 cd ..
 echo "..............................................done MSAdapter"
 
-#transformers
-rm -rf transformers/
-git clone https://gitee.com/mirrors/huggingface_transformers.git
-if [ $? -ne 0 ]; then
-    echo "Error: git clone transformers"
-    exit 1
-fi
-mv huggingface_transformers transformers
-cd transformers
-git checkout fa56dcc2a
-git apply ../tools/rules/transformers_v4.49.0.diff
-rm -rf tests
-cd ..
-echo "..............................................done apply transformers"
-
-#safetensors
-rm -rf safetensors_dir
-mkdir safetensors_dir
-pip install --no-deps safetensors==0.5.1
-if [ $? -ne 0 ]; then
-    echo "Error: pip install safetensors fail"
-else
-    ST_PATH=$(python -c "import site; print(site.getsitepackages()[0])")
-    cp -r ${ST_PATH}/safetensors ./safetensors_dir
-    cd safetensors_dir/safetensors
-    git init
-    git apply ../../tools/rules/safetensors.diff
-    cd ../../
-    export PYTHONPATH=$(pwd)/safetensors_dir:$PYTHONPATH
-    echo "..............................................done apply safetensors"
-fi
-
 MindSpeed_Core_MS_PATH=$(pwd)
 echo ${MindSpeed_Core_MS_PATH}
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/transformers/src/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:$PYTHONPATH
 echo $PYTHONPATH
-
-pip install torchvision==0.16.0
