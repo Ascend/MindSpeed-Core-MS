@@ -4,6 +4,7 @@
 
 set -euo pipefail
 outfile="${1:-repo_commits.txt}"
+outfile_abs="$(pwd)/$outfile"     # 固定绝对路径
 
 repos=(
   "MindSpeed-Core-MS"
@@ -14,7 +15,7 @@ repos=(
   "transformers"
 )
 
-printf "%-20s %-40s %-25s %s\n" "#Repo" "CommitID" "CommitTime" "Branch" > "$outfile"
+printf "%-20s %-40s %-25s %s\n" "#Repo" "CommitID" "CommitTime" "Branch" > "$outfile_abs"
 
 for repo in "${repos[@]}"; do
   if [[ "$repo" == "MindSpeed-Core-MS" ]]; then
@@ -32,10 +33,10 @@ for repo in "${repos[@]}"; do
   branch_name=$(git branch --show-current || echo "detached")
 
   # export to file
-  printf "%-20s %-40s %-25s %s\n" "$repo" "$commit_id" "$commit_time" "$branch_name" >> "../$outfile"
+  printf "%-20s %-40s %-25s %s\n" "$repo" "$commit_id" "$commit_time" "$branch_name" >> "$outfile_abs"
 
   cd - > /dev/null
 done
 
-echo "✅ export finished：$outfile"
-cat $outfile
+echo "✅ export finished：$outfile_abs"
+cat "$outfile_abs"
