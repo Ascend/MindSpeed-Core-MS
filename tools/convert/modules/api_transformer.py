@@ -48,11 +48,8 @@ class APITransformer(cst.CSTTransformer):
     def leave_SimpleString(self, original_node, updated_node):
         new_value = original_node.value
         for (current_name, new_name) in self.string_mapping:
-            if new_value.strip('"\'') == current_name:
+            if new_value.strip('"\'').startswith(current_name):
                 new_value = re.sub(current_name, new_name, new_value)
-            else:
-                pattern = fr'\b{current_name}\.'
-                new_value = re.sub(pattern, f'{new_name}.', new_value)
         return updated_node.with_changes(value=new_value)
 
     def _flat_alias_if_possible(self, call_split):
@@ -80,7 +77,7 @@ class APITransformer(cst.CSTTransformer):
             full_path, alias = self._parse_alias(code)
             if alias:
                 self.alias_map[alias] = full_path
-            if code.startswith('safetensors'):
+            if 'safetensors' in code:
                 guard_this_import = True
         return not guard_this_import
     
@@ -90,7 +87,7 @@ class APITransformer(cst.CSTTransformer):
         if isinstance(node.names, cst.ImportStar): # we don't handle from xx import * right now
             return True
         module = self.root.code_for_node(node.module)
-        guard_this_import = module.startswith('safetensors')
+        guard_this_import = 'safetensors' in module
         for import_alias in node.names:
             code = self.root.code_for_node(import_alias).strip(' ,')
             sub_path, alias = self._parse_alias(code)
