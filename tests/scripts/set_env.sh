@@ -5,16 +5,17 @@ parent_dir=$(dirname "$script_dir")
 MindSpeed_Core_MS_PATH=$(dirname "$parent_dir")
 cd ${MindSpeed_Core_MS_PATH}
 script_file="test_convert_llm.sh"
+
 sed -i '/rm -rf MindSpeed-LLM\/tests/i \
 cd MindSpeed-LLM\n\
 git checkout 7127be594109d796799edb5c1906e68a926fb536\n\
 cd ..' "$script_file"
-if [ $? -eq 0 ]; then
-    echo "MindSpeed-LLM git checkout Successfully: $script_file"
-else
-    echo "Error: MindSpeed-LLM git checkout fail: $script_file"
-    exit 1
-fi
+
+sed -i '/rm -rf MindSpeed\/tests_extend/i \
+cd MindSpeed\n\
+git checkout 47bf2a6b3bc0c908899e252e7b488367ab9eecfb\n\
+cd ..' "$script_file"
+
 bash test_convert_llm.sh
 modifygrammar() {
     fname=$1
