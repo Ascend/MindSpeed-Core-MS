@@ -7,7 +7,6 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed-MM"
     exit 1
 fi
-rm -rf MindSpeed-MM/tests
 cd MindSpeed-MM/
 cp -f examples/mindspore/checkpoint/pyproject.toml ./
 pip install -e .
@@ -21,7 +20,6 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed"
     exit 1
 fi
-rm -rf MindSpeed/tests_extend
 echo "...............................................done MindSpeed"
 
 #Megatron-LM
@@ -31,7 +29,6 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone Megatron-LM"
     exit 1
 fi
-rm -rf Megatron-LM/tests
 echo "..............................................done Megatron-LM"
 
 #msadapter
@@ -41,9 +38,6 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone MSAdapter"
     exit 1
 fi
-cd MSAdapter
-rm -rf tests
-cd ..
 echo "..............................................done MSAdapter"
 
 MindSpeed_Core_MS_PATH=$(pwd)
