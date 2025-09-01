@@ -4,7 +4,7 @@
 
 ### 驱动固件安装
 
-下载[驱动固件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha003/softwareinst/instg/instg_0002.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)，请根据系统和硬件产品型号选择匹配版本的`driver`和`fireware`。参考[安装NPU驱动固件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha003/softwareinst/instg/instg_0004.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)官方指导或执行以下命令安装：
+下载[驱动固件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha001/softwareinst/instg/instg_0003.html?Mode=PmIns&OS=Debian&Software=cannToolKit)，请根据系统和硬件产品型号选择匹配版本的`driver`和`fireware`。参考[安装NPU驱动固件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha001/softwareinst/instg/instg_0005.html?Mode=PmIns&OS=Debian&Software=cannToolKit)官方指导或执行以下命令安装：
 
 ```shell
 ./Ascend-hdk-<chip_type>-npu-driver_<version>_linux-<arch>.run --full --install-for-all
@@ -13,14 +13,14 @@
 
 ### CANN安装
 
-下载[CANN](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha003/softwareinst/instg/instg_0002.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)，请根据系统和硬件产品型号选择匹配版本的。参考[安装CANN软件包](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha003/softwareinst/instg/instg_0007.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)官方指导或执行以下命令安装：
+下载[CANN](https://www.hiascend.com/developer/download/community/result?module=cann)，请根据系统和硬件产品型号选择匹配版本的。参考[安装CANN软件包](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha001/softwareinst/instg/instg_0008.html?Mode=PmIns&OS=Debian&Software=cannToolKit)官方指导或执行以下命令安装：
 
 ```shell
 # 安装文件名跟随版本迭代及硬件版本，根据实际修改
-bash Ascend-cann-toolkit_8.1.RC1_linux-aarch64.run --full
-bash Ascend-cann-kernels-<chip_type>_8.1.RC1_linux-aarch64.run --install
+bash Ascend-cann-toolkit_<version>_linux-<arch>.run --full
+bash Ascend-cann-kernels-<chip_type>_<version>_linux-<arch>.run --install
 source /usr/local/Ascend/ascend-toolkit/set_env.sh # 安装nnal包需要source环境变量
-bash Ascend-cann-nnal_8.1.RC1_linux-aarch64.run --install
+bash Ascend-cann-nnal_<version>_linux-<arch>.run --install
 # 设置环境变量
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=0
@@ -31,6 +31,6 @@ source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=0
 参考[MindSpore官方安装指导](https://www.mindspore.cn/install)，根据系统类型、CANN版本及Python版本选择匹配的对应的安装命令进行安装，安装前请确保网络畅通。或执行以下命令安装：
 
 ```shell
-pip install mindspore==2.7.0
+pip install mindspore==2.7.1
 ```
 
