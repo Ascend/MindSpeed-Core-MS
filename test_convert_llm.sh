@@ -7,7 +7,6 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed-LLM"
     exit 1
 fi
-rm -rf MindSpeed-LLM/tests
 echo "------------------------------------done MindSpeed-LLM"
 
 #MindSpeed
@@ -17,7 +16,6 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed"
     exit 1
 fi
-rm -rf MindSpeed/tests_extend
 echo "...............................................done MindSpeed"
 
 #Megatron-LM
@@ -27,7 +25,6 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone Megatron-LM"
     exit 1
 fi
-rm -rf Megatron-LM/tests
 echo "..............................................done Megatron-LM"
 
 #msadapter
@@ -37,9 +34,6 @@ if [ $? -ne 0 ]; then
     echo "Error: git clone msadapter"
     exit 1
 fi
-cd msadapter
-rm -rf tests
-cd ..
 echo "..............................................done msadapter"
 
 MindSpeed_Core_MS_PATH=$(pwd)
