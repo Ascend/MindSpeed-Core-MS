@@ -27,7 +27,7 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | 昇腾NPU驱动固件  | [在研版本](https://www.hiascend.com/hardware/firmware-drivers/community?product=1&model=30&cann=8.0.RC3.alpha002&driver=1.0.26.alpha) |
 | 昇腾 CANN        | [在研版本](https://www.hiascend.com/zh/developer/download/community/result?module=cann)                                               |
-| MindSpore        | [2.7.0](https://www.mindspore.cn/install/)                                                                                            |
+| MindSpore        | [2.7.1](https://www.mindspore.cn/install/)                                                                                            |
 | MSAdapter        | [在研版本](https://openi.pcl.ac.cn/OpenI/MSAdapter.git)                                                                               |
 | Python           | >=3.9                                                                                                                              |
 | Python三方库依赖 | requirements.txt                                                                                                                   |
@@ -75,7 +75,7 @@ cd MindSpeed-LLM
 ```shell
 # 在MindSpeed-Core-MS目录下执行
 MindSpeed_Core_MS_PATH=$(pwd)
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:$PYTHONPATH
 ```
 
 ---
@@ -97,7 +97,7 @@ cd MindSpeed-MM
 ```shell
 # 在MindSpeed-Core-MS目录下执行
 MindSpeed_Core_MS_PATH=$(pwd)
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-MM:${MindSpeed_Core_MS_PATH}/transformers/src/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-MM/:$PYTHONPATH
 ```
 
 ---
@@ -127,6 +127,10 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core
 
 相关FAQ请参考链接：[FAQ](./docs/FAQ.md)
 
+# 文档目录
+
+详细文档请参考：[docs](./docs)
+
 ---
 
 # 版本维护策略
@@ -146,7 +150,8 @@ MindSpeed-Core-MS已发布版本维护策略：
 | **MindSpeed-Core-MS版本** | **维护策略** | **当前状态** | **发布时间** | **后续状态** | **EOL日期** |
 | ------------------------------- | ------------------ | ------------------ | ------------------ | ------------------ | ----------------- |
 | feature-0.2                     | Demo               | 维护               |          2025.4.15          |          预计2025/09/30起无维护          |                 |
-|             master                    | /               | 开发               |       预计2025.6.30             |          /          |          /         |
+| r0.3.0                     | Demo               | 维护               |          2025.7.30          |          预计2025/12/30起无维护          |                 |
+|             master                    | /               | 开发               |       预计2025.12.30             |          /          |          /         |
 
 ---
 
