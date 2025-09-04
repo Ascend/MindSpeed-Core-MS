@@ -9,10 +9,10 @@ outfile_abs="$(pwd)/$outfile"     # 固定绝对路径
 repos=(
   "MindSpeed-Core-MS"
   "MindSpeed-LLM"
+  "MindSpeed-MM"
   "MindSpeed"
   "Megatron-LM"
   "msadapter"
-  "transformers"
 )
 
 printf "%-20s %-40s %-25s %s\n" "#Repo" "CommitID" "CommitTime" "Branch" > "$outfile_abs"

@@ -19,11 +19,11 @@ bash tools/version_control/export_version.sh [输出文件]
 
 ```text
 MindSpeed-Core-MS  
-MindSpeed-LLM  
+MindSpeed-LLM
+MindSpeed-MM
 MindSpeed  
 Megatron-LM  
 msadapter  
-transformers
 ```
 
 #### 示例输出（列对齐）

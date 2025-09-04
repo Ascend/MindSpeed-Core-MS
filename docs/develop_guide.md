@@ -43,15 +43,15 @@ MindSpore使用[函数式自动微分](https://www.mindspore.cn/tutorials/zh-CN/
   </tr>
   <tr>
     <td> MindSpeed代码分支名称 </td>
-    <td> core_r0.8.0：配套Megatron-LM的core_r0.8.0分支 </td>
+    <td> master：配套Megatron-LM的core_v0.12.1分支 </td>
   </tr>
   <tr>
     <td> CANN版本 </td>
-    <td> CANN 8.1.RC1 </td>
+    <td> CANN 8.2.RC1 </td>
   </tr>
   <tr>
     <td> MindSpore版本 </td>
-    <td> 2.7.0 </td>
+    <td> 2.7.1 </td>
   </tr>
   <tr>
     <td> MSAdapter版本 </td>

@@ -16,3 +16,16 @@ yum/apt install libsndfile1
 source /test/scripts/set_path.sh
 
 对于MM及RL，建议参考test_convert_mm/rl.sh脚本中的PYTHONPATH设置方式。
+
+## 4 新环境遇到TE或HCCL库的冲突或版本不匹配问题怎么办？
+
+新装环境建议卸载当前可能存在的冲突版本，安装Ascend Toolkit中提供的正确版本
+pip uninstall te hccl -y
+pip install /usr/local/Ascend/ascend-toolkit/latest/lib64/te-*.whl
+pip install /usr/local/Ascend/ascend-toolkit/latest/lib64/hccl-*.whl  
+
+## 5 运行过程中出现类似报错 /root/miniconda3/envs/***/lib/python3.10/site-packages/sklearn/utils/../../scikit_learn.libs/libgomp-d22c30c5.so.1.0.0: cannot allocate memory in static TLS block,该怎么解决？
+
+在shell脚本中加入或在终端直接输入以下命令（请将***替换为具体的conda环境名）：
+export LD_PRELOAD=/root/miniconda3/envs/***/lib/python3.10/site-packages/sklearn/utils/../../scikit_learn.libs/libgomp-d22c30c5.so.1.0.0
+
