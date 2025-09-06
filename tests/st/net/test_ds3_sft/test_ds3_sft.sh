@@ -6,12 +6,12 @@ export HCCL_CONNECT_TIMEOUT=3600
 source ../../../scripts/set_path.sh
 MindSpeed_LLM_PATH=../../../../MindSpeed-LLM
 
-GPUS_PER_NODE=8
+NPUS_PER_NODE=8
 MASTER_ADDR=localhost
-MASTER_PORT=8187
+MASTER_PORT=6099
 NNODES=1
 NODE_RANK=0
-WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
+WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 # please fill these path configurations
 CKPT_SAVE_DIR="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_sft/output_ds3_sft"
@@ -19,31 +19,34 @@ DATA_PATH="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_s
 TOKENIZER_PATH="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_sft/tokenizer"
 CKPT_LOAD_DIR="/home/workspace/mindspore_dataset/msadapter/test_input/net/test_ds3_sft/load"
 
-TP=1
+
+TP=2
 PP=2
-EP=4
+EP=2
 CP=1
 CP_TYPE='ulysses_cp_algo'
 
 NUM_LAYERS=4
 SEQ_LEN=4096
 MBS=1
-GBS=8
+GBS=4
 
 DISTRIBUTED_ARGS="
+    --node_rank $NODE_RANK \
+    --master_addr $MASTER_ADDR \
+    --master_port $MASTER_PORT
     --worker_num $WORLD_SIZE \
-    --local_worker_num $GPUS_PER_NODE \
-    --master_port $MASTER_PORT \
-    --log_dir=msrun_log_sft_deepseek \
+    --local_worker_num $NPUS_PER_NODE \
+    --log_dir=msrun_log \
     --join=True \
     --cluster_time_out=300 \
     --bind_core=True \
 "
 
 MLA_ARGS="
-    --multi-head-latent-attention \
-    --qk-rope-head-dim 64 \
-    --qk-nope-head-dim 128 \
+    --multi-latent-attention \
+    --qk-pos-emb-head-dim 64 \
+    --qk-head-dim 128 \
     --q-lora-rank 1536 \
     --kv-lora-rank 512 \
     --v-head-dim 128 \
@@ -53,26 +56,25 @@ MLA_ARGS="
 MOE_ARGS="
     --moe-grouped-gemm \
     --moe-permutation-async-comm \
-    --moe-token-dispatcher-type alltoall \
+    --moe-token-dispatcher-type alltoall_seq \
     --first-k-dense-replace 1 \
     --moe-layer-freq 1 \
     --n-shared-experts 1 \
     --num-experts 16 \
     --moe-router-topk 8 \
-    --moe-intermediate-size 2048 \
-    --moe-router-load-balancing-type noaux_tc \
-    --topk-group 4 \
-    --routed-scaling-factor 2.5 \
+    --moe-ffn-hidden-size 2048 \
+    --moe-router-load-balancing-type none \
+    --moe-router-group-topk 4 \
+    --moe-router-num-groups 8 \
+    --moe-router-topk-scaling-factor 2.5 \
     --seq-aux \
-    --norm-topk-prob \
     --moe-router-score-function sigmoid \
     --moe-router-enable-expert-bias \
-    --use-fused-moe-token-permute-and-unpermute \
 "
 
 ROPE_ARGS="
-    --rope-scaling-beta-fast 32 \
-    --rope-scaling-beta-slow 1 \
+    --beta-fast 32 \
+    --beta-slow 1 \
     --rope-scaling-factor 40 \
     --rope-scaling-mscale 1.0 \
     --rope-scaling-mscale-all-dim  1.0 \
@@ -85,7 +87,7 @@ GPT_ARGS="
     --num-layer-list 2,2 \
     --recompute-granularity full \
     --recompute-method block \
-    --recompute-num-layers 8 \
+    --recompute-num-layers 3 \
     --use-distributed-optimizer \
     --reuse-fp32-param \
     --use-flash-attn \
@@ -140,9 +142,6 @@ GPT_ARGS="
     --no-load-rng \
     --bf16 \
     --distributed-timeout-minutes 120 \
-    --no-gradient-accumulation-fusion \
-    --no-check-for-nan-in-loss-and-grad \
-    --fix-router \
 "
 
 DATA_ARGS="
@@ -157,8 +156,8 @@ OUTPUT_ARGS="
     --eval-iters 0 \
     --no-save-optim \
     --no-save-rng \
-    --load ${CKPT_LOAD_DIR} \
 "
+#    --load ${CKPT_LOAD_DIR} \
 
 FINETUNE_ARGS="
     --finetune \
