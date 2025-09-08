@@ -1,6 +1,6 @@
 #!/bin/bash
-
 MindSpeed_LLM_PATH=../../../../MindSpeed-LLM
+
 backup() {
     fname=$1
     cp $fname $fname'_back'
@@ -50,6 +50,7 @@ modifyTrainingLogs() {
     sed -i 's/log_string += '\'' params norm: {:.3f} |'\''.format(params_norm)/log_string += '\'' params norm: {:.16f} |'\''.format(params_norm)/g' "$fname"
     echo "Log precision has been updated to 16 decimal places in $fname"
 }
+
 
 # 开确定性计算跑一遍
 backup ${MindSpeed_LLM_PATH}/posttrain_gpt.py

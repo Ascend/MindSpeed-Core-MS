@@ -51,6 +51,7 @@ modifyTrainingLogs() {
     echo "Log precision has been updated to 16 decimal places in $fname"
 }
 
+
 # 开确定性计算跑一遍
 backup ${MindSpeed_LLM_PATH}/posttrain_gpt.py
 backup ${MindSpeed_LLM_PATH}/mindspeed_llm/training/training.py
