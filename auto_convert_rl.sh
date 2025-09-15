@@ -15,7 +15,7 @@ echo "------------------------------------done MindSpeed-LLM"
 
 #MindSpeed
 rm -rf MindSpeed/
-git clone https://gitee.com/ascend/MindSpeed.git -b core_r0.8.0
+git clone https://gitcode.com/Ascend/MindSpeed.git -b core_r0.8.0
 if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed"
     exit 1
@@ -34,7 +34,15 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 cd MindSpeed-RL
-git checkout 559db0856891e5f8504a0b21d4b26969a82241df
+if [[ "$1" == "is_rl_gongka" ]]; then
+    echo "...............................................MindSpeed-RL GongKa"
+    git checkout 0707949f152599862f0a28cb155681599659dc00
+    PYTHON_ARG='--is_rl_gongka'
+else
+    echo "...............................................MindSpeed-RL"
+    git checkout 559db0856891e5f8504a0b21d4b26969a82241df
+    PYTHON_ARG='--is_rl'
+fi
 rm -rf tests
 cd ..
 echo "...............................................done MindSpeed-RL"
@@ -52,17 +60,17 @@ rm -rf tests
 cd ..
 echo "..............................................done Megatron-LM"
 
-#MSAdapter
-rm -rf MSAdapter
-git clone https://openi.pcl.ac.cn/OpenI/MSAdapter.git -b master
-if [ $? -ne 0 ]; then
-    echo "Error: git clone MSAdapter"
-    exit 1
-fi
-cd MSAdapter
+#msadapter
+rm -rf msadapter
+git clone https://gitee.com/mindspore/msadapter.git
+cd msadapter
 rm -rf tests
 cd ..
-echo "..............................................done MSAdapter"
+if [ $? -ne 0 ]; then
+    echo "Error: git clone msadapter"
+    exit 1
+fi
+echo "..............................................done msadapter"
 
 #vllm
 rm -rf vllm
@@ -107,7 +115,7 @@ echo "..............................................done apply transformers"
 
 #accelerate
 rm -rf accelerate/
-git clone https://github.com/huggingface/accelerate.git -b v1.6.0
+git clone https://gitee.com/modelee/accelerate.git -b v1.6.0
 if [ $? -ne 0 ]; then
     echo "Error: git clone accelerate"
     exit 1
@@ -137,7 +145,7 @@ fi
 
 #huggingface_hub
 rm -rf huggingface_hub
-git clone https://github.com/huggingface/huggingface_hub.git -b v0.29.2
+git clone https://gitee.com/mirrors/huggingface_hub.git -b v0.29.2
 if [ $? -ne 0 ]; then
     echo "Error: git clone huggingface_hub"
     exit 1
@@ -152,16 +160,16 @@ echo "..............................................start code_convert"
 MindSpeed_Core_MS_PATH=$PWD
 echo ${MindSpeed_Core_MS_PATH}
 
-python3 tools/transfer.py \
+python3 tools/transfer.py $PYTHON_ARG \
 --megatron_path ${MindSpeed_Core_MS_PATH}/Megatron-LM/megatron/ \
 --mindspeed_path ${MindSpeed_Core_MS_PATH}/MindSpeed/mindspeed/ \
 --mindspeed_llm_path ${MindSpeed_Core_MS_PATH}/MindSpeed-LLM/ \
 --mindspeed_rl_path ${MindSpeed_Core_MS_PATH}/MindSpeed-RL/ \
 --vllm_path ${MindSpeed_Core_MS_PATH}/vllm/ \
---vllm_ascend_path ${MindSpeed_Core_MS_PATH}/vllm-ascend/ \
---is_rl
+--vllm_ascend_path ${MindSpeed_Core_MS_PATH}/vllm-ascend/
 
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/vllm/:${MindSpeed_Core_MS_PATH}/vllm-ascend/:${MindSpeed_Core_MS_PATH}/accelerate/src/:${MindSpeed_Core_MS_PATH}/safetensors_dir/:${MindSpeed_Core_MS_PATH}/huggingface_hub/src/:${MindSpeed_Core_MS_PATH}/MindSpeed-RL/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/msadapter:${MindSpeed_Core_MS_PATH}/msadapter/msa_thirdparty:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/vllm/:${MindSpeed_Core_MS_PATH}/vllm-ascend/:${MindSpeed_Core_MS_PATH}/accelerate/src/:${MindSpeed_Core_MS_PATH}/safetensors_dir/:${MindSpeed_Core_MS_PATH}/huggingface_hub/src/:${MindSpeed_Core_MS_PATH}/MindSpeed-RL/:$PYTHONPATH
 echo $PYTHONPATH
 echo "..............................................done code_convert"
 
+pip uninstall -y bitsandbytes-npu-beta
