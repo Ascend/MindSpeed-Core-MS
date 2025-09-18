@@ -4,9 +4,8 @@ script_dir=$(dirname "$script_path")
 parent_dir=$(dirname "$script_dir")
 MindSpeed_Core_MS_PATH=$(dirname "$parent_dir")
 cd ${MindSpeed_Core_MS_PATH}
-sed -i '/MindSpeed_Core_MS_PATH=$(pwd)/i rm -rf MindSpeed-LLM\/tests\nrm -rf MindSpeed\/tests_extend\nrm -rf Megatron-LM\/tests\nrm -rf MSAdapter\/tests' auto_convert_llm.sh
-sed -i '/MindSpeed_Core_MS_PATH=$(pwd)/i rm -rf MindSpeed-LLM\/tests\nrm -rf MindSpeed\/tests_extend\nrm -rf Megatron-LM\/tests\nrm -rf msadapter\/tests' test_convert_llm.sh
-bash test_convert_llm.sh
+sed -i '/echo ${MindSpeed_Core_MS_PATH}/i rm -rf MindSpeed-LLM\/tests\nrm -rf MindSpeed\/tests_extend\nrm -rf Megatron-LM\/tests\nrm -rf msadapter\/tests' auto_convert.sh llm
+bash auto_convert.sh llm msa_latest
 modifygrammar() {
     fname=$1
     echo "Modifying PY310 grammar to adapt PY39..."

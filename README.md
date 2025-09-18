@@ -62,7 +62,7 @@ MindSpeed-Core-MS提供了一键适配命令脚本，集成了基于MindSpeed进
 执行以下操作进行一键适配后，用户即可进行大语言模型训练：
 
 ```shell
-source auto_convert_llm.sh
+source auto_convert.sh llm
 cd MindSpeed-LLM
 ```
 
@@ -75,7 +75,7 @@ cd MindSpeed-LLM
 ```shell
 # 在MindSpeed-Core-MS目录下执行
 MindSpeed_Core_MS_PATH=$(pwd)
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter:${MindSpeed_Core_MS_PATH}/MSAdapter/msa_thirdparty:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:$PYTHONPATH
 ```
 
 ---
@@ -84,7 +84,7 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core
 执行以下操作进行一键适配后，用户即可进行多模态模型训练：
 
 ```shell
-source auto_convert_mm.sh
+source auto_convert.sh mm
 cd MindSpeed-MM
 ```
 
@@ -97,7 +97,7 @@ cd MindSpeed-MM
 ```shell
 # 在MindSpeed-Core-MS目录下执行
 MindSpeed_Core_MS_PATH=$(pwd)
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-MM/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter:${MindSpeed_Core_MS_PATH}/MSAdapter/msa_thirdparty:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-MM/:$PYTHONPATH
 ```
 
 ---
@@ -120,7 +120,7 @@ cd MindSpeed-RL
 ```shell
 # 在MindSpeed-Core-MS目录下执行
 MindSpeed_Core_MS_PATH=$(pwd)
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter/mindtorch:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/vllm/:${MindSpeed_Core_MS_PATH}/vllm-ascend/:${MindSpeed_Core_MS_PATH}/accelerate/src/:${MindSpeed_Core_MS_PATH}/safetensors_dir/:${MindSpeed_Core_MS_PATH}/huggingface_hub/src/:${MindSpeed_Core_MS_PATH}/MindSpeed-RL/:$PYTHONPATH
+export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter:${MindSpeed_Core_MS_PATH}/MSAdapter/msa_thirdparty:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:${MindSpeed_Core_MS_PATH}/transformers/src/:${MindSpeed_Core_MS_PATH}/vllm/:${MindSpeed_Core_MS_PATH}/vllm-ascend/:${MindSpeed_Core_MS_PATH}/accelerate/src/:${MindSpeed_Core_MS_PATH}/safetensors_dir/:${MindSpeed_Core_MS_PATH}/huggingface_hub/src/:${MindSpeed_Core_MS_PATH}/MindSpeed-RL/:$PYTHONPATH
 ```
 
 # 常见问题 FAQ
