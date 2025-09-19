@@ -29,6 +29,24 @@ def apply_mindspore_patch():
         qwen2vlvit_selfattention_forward)
     aspm.register_patch('mindspeed_mm.utils.transformer_model_config.get_model_config', get_model_config)
     aspm.register_patch('mindspeed_mm.models.common.communications._gather', _gather)
+
+    # patch glm
+    from mindspeed_mm.mindspore.models.vision.vision_encoders.glm4v_vl_vit_model import glm4v_vision_embeddings_forward
+    aspm.register_patch('mindspeed_mm.models.vision.vision_encoders.glm4v_vl_vit_model.Glm4vVisionEmbeddings.forward',
+                        glm4v_vision_embeddings_forward)
+
+    # patch dsvl2
+    from mindspeed.mindspore.core.tensor_parallel.mappings import all_to_all_forward
+    aspm.register_patch('megatron.core.tensor_parallel.mappings._AllToAll.forward', all_to_all_forward)
+
+    # patch llava
+    from mindspeed.mindspore.core.transformer.module import fp32_to_float16
+    from mindspeed.mindspore.legacy.model.module import float16_to_fp32
+    aspm.register_patch('megatron.core.transformer.module.fp32_to_float16', fp32_to_float16)
+    aspm.register_patch('megatron.core.transformer.module.float16_to_fp32', float16_to_fp32)
+    from mindspeed_mm.mindspore.utils.utils import quick_gelu
+    aspm.register_patch('mindspeed_mm.utils.utils.quick_gelu', quick_gelu)
+
     aspm.apply_patches()
 
 apply_mindspore_patch()
