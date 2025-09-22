@@ -101,7 +101,7 @@ binary_search() {
     local json_name=$(basename "$patch_json_path")
 
     # Preparation workspace
-    local workspace_dir=$ROOT_DIR/"test_patch_merge_binsearch/" #$(date +"%Y%m%d%H_%M%S")"
+    local workspace_dir=$ROOT_DIR/"test_patch_merge_binsearch/"
 
     if [ -d $workspace_dir ]; then
         rm -rf $workspace_dir
@@ -207,7 +207,7 @@ test_single_case() {
     local json_name=$(basename "$patch_json_path")
 
     # Preparation workspace
-    local workspace_dir=$ROOT_DIR/"test_patch_merge_single_case/" #$(date +"%Y%m%d%H_%M%S")"
+    local workspace_dir=$ROOT_DIR/"test_patch_merge_single_case/"
 
     if [ -d $workspace_dir ]; then
         rm -rf $workspace_dir
@@ -258,4 +258,3 @@ test_single_case() {
 
 
 test_single_case ${PATCH_JSON_PATH}
-# binary_search ${PATCH_JSON_PATH}
