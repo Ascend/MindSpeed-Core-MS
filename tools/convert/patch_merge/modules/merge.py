@@ -1,4 +1,5 @@
 # Copyright (c) Huawei Technologies Co., Ltd 2025.  All rights reserved.
+import functools
 import json
 import os
 import sys
@@ -49,6 +50,7 @@ def time_tracker(func):
     """
     Decorator to track the execution time of a function.
     """
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
         tik(func.__name__)
         ret = func(*args, **kwargs)
