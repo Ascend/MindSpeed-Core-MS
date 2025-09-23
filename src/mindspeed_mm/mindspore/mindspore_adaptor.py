@@ -47,6 +47,12 @@ def apply_mindspore_patch():
     from mindspeed_mm.mindspore.utils.utils import quick_gelu
     aspm.register_patch('mindspeed_mm.utils.utils.quick_gelu', quick_gelu)
 
+    #框架不支持bfloat16数据类型
+    from mindspeed_mm.mindspore.data.datasets.feature_dataset import get_data_from_feature_data
+    aspm.register_patch('mindspeed_mm.data.datasets.feature_dataset.FeatureDataset.get_data_from_feature_data',
+                        get_data_from_feature_data
+                        )
+
     aspm.apply_patches()
 
 apply_mindspore_patch()
