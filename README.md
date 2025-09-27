@@ -1,3 +1,5 @@
+# 通知: 本项目已经正式迁移至 [Gitcode](https://gitcode.com/Ascend) 平台
+
 <p align="center"> <img src="docs/logo.png" height="103px" width="700px"> </p>
 
 <p align="center">
