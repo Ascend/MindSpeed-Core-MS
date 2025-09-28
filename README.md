@@ -1,11 +1,11 @@
 <p align="center"> <img src="docs/logo.png" height="103px" width="700px"> </p>
 
 <p align="center">
-    <a href="https://gitee.com/ascend/MindSpeed-Core-MS/blob/dev/LICENSE">
-    <a href="https://gitee.com/ascend/MindSpeed-Core-MS/blob/dev/LICENSE">
+    <a href="https://gitcode.com/ascend/MindSpeed-Core-MS/blob/dev/LICENSE">
+    <a href="https://gitcode.com/ascend/MindSpeed-Core-MS/blob/dev/LICENSE">
         <img alt="Badge" src="https://img.shields.io/badge/License-MIT-blue.svg">
     </a>
-    <a href="https://gitee.com/ascend/MindSpeed-Core-MS">
+    <a href="https://gitcode.com/ascend/MindSpeed-Core-MS">
         <img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/docs/transformers/index.svg?down_color=red&down_message=offline&up_message=online">
     </a>
     <a>
@@ -25,9 +25,9 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 
 | 依赖软件         | 版本                                                                                                                               |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 昇腾NPU驱动固件  | [在研版本](https://www.hiascend.com/hardware/firmware-drivers/community?product=1&model=30&cann=8.0.RC3.alpha002&driver=1.0.26.alpha) |
+| 昇腾NPU驱动固件  | [在研版本](https://www.hiascend.com/hardware/firmware-drivers/community?product=1&model=30&cann=8.3.RC1.alpha002&driver=Ascend+HDK+25.2.0) |
 | 昇腾 CANN        | [在研版本](https://www.hiascend.com/zh/developer/download/community/result?module=cann)                                               |
-| MindSpore        | [master](https://www.mindspore.cn/install/)                                                                                            |
+| MindSpore        | 在研版本                                                                                          |
 | MSAdapter        | [在研版本](https://openi.pcl.ac.cn/OpenI/MSAdapter.git)                                                                               |
 | Python           | >=3.9                                                                                                                              |
 | Python三方库依赖 | requirements.txt                                                                                                                   |
@@ -47,7 +47,7 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 执行以下命令拉取MindSpeed-Core-MS代码仓，并安装Python三方依赖库
 
 ```shell
-git clone https://gitee.com/ascend/MindSpeed-Core-MS.git -b master
+git clone https://gitcode.com/ascend/MindSpeed-Core-MS.git -b master
 cd MindSpeed-Core-MS
 pip install -r requirements.txt
 ```
@@ -68,7 +68,7 @@ cd MindSpeed-LLM
 
 此处提供以下大语言模型训练拉起流程作为参考。
 
-- [**DEEPSEEK-V3预训练**](https://gitee.com/ascend/MindSpeed-LLM/blob/master/examples/mindspore/deepseek3/README.md)
+- [**DEEPSEEK-V3预训练**](https://gitcode.com/ascend/MindSpeed-LLM/blob/master/examples/mindspore/deepseek3/README.md)
 
 若在环境中`PYTHONPATH`等环境变量失效（例如退出容器后再进入等），可执行如下命令重新设置环境变量
 
@@ -90,7 +90,7 @@ cd MindSpeed-MM
 
 此处提供以下多模态模型训练拉起流程作为参考。
 
-- [**Qwen2.5VL 微调**](https://gitee.com/ascend/MindSpeed-MM/blob/master/examples/mindspore/qwen2.5vl/README.md)
+- [**Qwen2.5VL 微调**](https://gitcode.com/ascend/MindSpeed-MM/blob/master/examples/mindspore/qwen2.5vl/README.md)
 
 若在环境中`PYTHONPATH`等环境变量失效（例如退出容器后再进入等），可执行如下命令重新设置环境变量
 

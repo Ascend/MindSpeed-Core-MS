@@ -86,7 +86,7 @@
     控制相同的网络权重和输入，对比网络的输出结果（包括正向网络输出和loss）是否在误差范围内。如果是，说明网络基本没有问题，可以优先进行其它对比。否则可以逐层对比找出差异产生的具体位置。
     - 逐层对比
     在动态图模式下，可以使用Debug工具或者troubleshooter、msprobe工具进行对比。
-        - Debug工具对比：使用pycharm、vscode等工具的Debug功能，在指定位置设置断点查看算子的输入输出。分布式场景下也可以使用MindSpeed-Core-MS提供的[分布式pdb调试工具](https://gitee.com/ascend/MindSpeed-Core-MS/blob/master/docs/distributed_debug.md)。
+        - Debug工具对比：使用pycharm、vscode等工具的Debug功能，在指定位置设置断点查看算子的输入输出。
         - troubleshooter工具：与数据集处理结果对比类似的，可将网络中API的输入输出保存为npy文件进行精细对比。
         - msprobe工具：msprobe工具提供整网的API输入输出数据dump功能，可直接进行数据对比。
 
