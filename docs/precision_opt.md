@@ -101,45 +101,65 @@ msprobe是 MindStudio Training Tools 工具链下精度调试部分的工具包�
 
 以模型训练为例，用户在迭代循环中加入代码段即可针对特定训练迭代采集数据。我们也建议用户减小模型输入的批大小，以减少需要数据采集量。
 
-PTA：
-
 ```python
     ...
-    from msprobe.pytorch import PrecisionDebugger
-    debugger = PrecisionDebugger(config_path="./config_pt.json")
-    dump_step = 1
-    do_dump = True
+    if args.ai_framework == 'mindspore':
+        from msprobe.mindspore import PrecisionDebugger
+        debugger = PrecisionDebugger(config_path="./config_ms.json")
+        print("dump with mindspore", flush=True)
+    else:
+        from msprobe.pytorch import PrecisionDebugger
+        debugger = PrecisionDebugger(config_path="./config_pt.json")
+        print("dump with pytorch", flush=True)
+
     while iteration < args.train_iters:
-        if do_dump and iteration == dump_step:
-            debugger.start()
+        if iteration == 0:
+            debugger.start(model=model[0])
         ...
         train_step(...) # train_step代表执行一次训练迭代
-        if do_dump and iteration == dump_step:
+        if iteration == 0:
             debugger.stop()
             debugger.step()
-        iteration += 1
         ...
 ```
 
-MS：
-
+config_ms.json示例
 ```python
-    ...
-    from msprobe.mindspore import PrecisionDebugger
-    debugger = PrecisionDebugger(config_path="./config_ms.json")
-    dump_step = 1
-    do_dump = True
-    while iteration < args.train_iters:
-        if do_dump and iteration == dump_step:
-            debugger.start()
-        ...
-        train_step(...) # train_step代表执行一次训练迭代
-        if do_dump and iteration == dump_step:
-            debugger.stop()
-            debugger.step()
-        iteration += 1
-        ...
-```
+{
+    "task": "statistics",
+    "dump_path": "xxx/data_dump/",
+    "rank": [],
+    "step": [],
+    "level": "L1",
+    
+    "statistics": {
+        "scope": [],
+        "list": [],
+        "data_mode": ["all"],
+        "summary_mode": "md5"
+    }
+}
+``` 
+
+config_pt.json示例
+```python
+{
+    "task": "statistics",
+    "dump_path": "xxx/data_dump/",
+    "rank": [],
+    "step": [],
+    "level": "L1",
+    "enable_dataloader": false,
+    
+    "statistics": {
+        "scope": [],
+        "list": [],
+        "data_mode": ["all"],
+        "summary_mode": "md5"
+    }
+}
+``` 
+需修改如上两个json文件中的dump_path路径
 
 在数据采集完成后，用户可使用msprobe提供的[跨框架API对比功能](https://gitee.com/ascend/mstt/blob/poc/debug/accuracy_tools/msprobe/docs/11.accuracy_compare_MindSpore.md)，定位输入或输出有差异的网络模块及具体API.
 
