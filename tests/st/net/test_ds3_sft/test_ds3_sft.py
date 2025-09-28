@@ -37,7 +37,7 @@ def run_mindspore_ds3_sft_determinstic():
 
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_single
-@pytest.mark.level0
+@pytest.mark.level1
 def test_compare_accuracy():
     """
     Feature: test_compare_res

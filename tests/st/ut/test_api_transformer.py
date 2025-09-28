@@ -131,7 +131,7 @@ def apply_PairTransformer_to_file(file_path, save_file_path):
         f.write(new_tree.code)
 
 
-@pytest.mark.level0
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_onecard
 @pytest.mark.run(order=1)
@@ -152,7 +152,7 @@ def test_StringTransformer_leave_SimpleString(mock_file_path):
         assert "torch" in content
 
 
-@pytest.mark.level0
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_onecard
 @pytest.mark.run(order=2)
@@ -173,7 +173,7 @@ def test_PairTransformer_leave_DictElement(mock_file_path):
         assert "'torch': 'msadapter'" in content
 
 
-@pytest.mark.level0
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_onecard
 @pytest.mark.run(order=3)
@@ -195,7 +195,7 @@ def test_api_transformer_comment_docstring_string_replace(mock_file_path):
         assert 'f"msadapter.device' in content
 
 
-@pytest.mark.level0
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_onecard
 @pytest.mark.run(order=4)
@@ -218,7 +218,7 @@ def test_api_transformer_name_replace(mock_file_path):
         assert "import msadapter_npu" in content
 
 
-@pytest.mark.level0
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_onecard
 @pytest.mark.run(order=5)
@@ -241,7 +241,7 @@ def test_api_transformer_call_mapping_api(mock_file_path):
         assert "mindspore.mint.matmul(a, b)" in content
 
 
-@pytest.mark.level0
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_onecard
 @pytest.mark.run(order=6)
@@ -263,7 +263,7 @@ def test_api_transformer_safetensors_ignored(mock_file_path):
         assert "import safetensors.torch" in content
 
 
-@pytest.mark.level0
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_onecard
 @pytest.mark.run(order=7)
@@ -285,7 +285,7 @@ def test_case_insensitive_replace(mock_file_path):
         assert "SEARCH_STR" not in out
 
 
-@pytest.mark.level0
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_onecard
 @pytest.mark.run(order=8)
@@ -310,7 +310,7 @@ def test_FileConverter(mock_file_path):
         assert "import mindspore" in content
 
 
-@pytest.mark.level0
+@pytest.mark.level1
 @pytest.mark.platform_arm_ascend910b_training
 @pytest.mark.env_onecard
 @pytest.mark.run(order=9)
