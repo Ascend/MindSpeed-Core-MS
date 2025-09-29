@@ -86,7 +86,7 @@
     控制相同的网络权重和输入，对比网络的输出结果（包括正向网络输出和loss）是否在误差范围内。如果是，说明网络基本没有问题，可以优先进行其它对比。否则可以逐层对比找出差异产生的具体位置。
     - 逐层对比
     在动态图模式下，可以使用Debug工具或者troubleshooter、msprobe工具进行对比。
-        - Debug工具对比：使用pycharm、vscode等工具的Debug功能，在指定位置设置断点查看算子的输入输出。
+        - Debug工具对比：使用pycharm、vscode等工具的Debug功能，在指定位置设置断点查看算子的输入输出。分布式场景下也可以使用MindSpeed-Core-MS提供的[分布式pdb调试工具](https://gitee.com/ascend/MindSpeed-Core-MS/blob/master/docs/distributed_debug.md)。
         - troubleshooter工具：与数据集处理结果对比类似的，可将网络中API的输入输出保存为npy文件进行精细对比。
         - msprobe工具：msprobe工具提供整网的API输入输出数据dump功能，可直接进行数据对比。
 
@@ -101,44 +101,65 @@ msprobe是 MindStudio Training Tools 工具链下精度调试部分的工具包�
 
 以模型训练为例，用户在迭代循环中加入代码段即可针对特定训练迭代采集数据。我们也建议用户减小模型输入的批大小，以减少需要数据采集量。
 
-PTA：
-
 ```python
     ...
-    from msprobe.pytorch import PrecisionDebugger
-    debugger = PrecisionDebugger(config_path="./config_pt.json")
-    dump_step = 1
-    do_dump = True
+    if args.ai_framework == 'mindspore':
+        from msprobe.mindspore import PrecisionDebugger
+        debugger = PrecisionDebugger(config_path="./config_ms.json")
+        print("dump with mindspore", flush=True)
+    else:
+        from msprobe.pytorch import PrecisionDebugger
+        debugger = PrecisionDebugger(config_path="./config_pt.json")
+        print("dump with pytorch", flush=True)
+
     while iteration < args.train_iters:
-        if do_dump and iteration == dump_step:
-            debugger.start()
+        if iteration == 0:
+            debugger.start(model=model[0])
         ...
         train_step(...) # train_step代表执行一次训练迭代
-        if do_dump and iteration == dump_step:
+        if iteration == 0:
             debugger.stop()
             debugger.step()
-        iteration += 1
         ...
 ```
 
-MS：
+config_ms.json示例
 
 ```python
-    ...
-    from msprobe.mindspore import PrecisionDebugger
-    debugger = PrecisionDebugger(config_path="./config_ms.json")
-    dump_step = 1
-    do_dump = True
-    while iteration < args.train_iters:
-        if do_dump and iteration == dump_step:
-            debugger.start()
-        ...
-        train_step(...) # train_step代表执行一次训练迭代
-        if do_dump and iteration == dump_step:
-            debugger.stop()
-            debugger.step()
-        iteration += 1
-        ...
+{
+    "task": "statistics",
+    "dump_path": "xxx/data_dump/",
+    "rank": [],
+    "step": [],
+    "level": "L1",
+
+    "statistics": {
+        "scope": [],
+        "list": [],
+        "data_mode": ["all"],
+        "summary_mode": "md5"
+    }
+}
+```
+
+config_pt.json示例
+
+```python
+{
+    "task": "statistics",
+    "dump_path": "xxx/data_dump/",
+    "rank": [],
+    "step": [],
+    "level": "L1",
+    "enable_dataloader": false,
+
+    "statistics": {
+        "scope": [],
+        "list": [],
+        "data_mode": ["all"],
+        "summary_mode": "md5"
+    }
+}
 ```
 
 在数据采集完成后，用户可使用msprobe提供的[跨框架API对比功能](https://gitee.com/ascend/mstt/blob/poc/debug/accuracy_tools/msprobe/docs/11.accuracy_compare_MindSpore.md)，定位输入或输出有差异的网络模块及具体API.
