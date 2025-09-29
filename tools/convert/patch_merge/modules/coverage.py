@@ -14,7 +14,6 @@ def get_printing_str(orign_import, raw_patch):
     condition = raw_patch["condition"]
 
     pstr = f"=== In patch call, orign_import: {orign_import}, patch_import: {patch_import}, patch_name: {patch_name}, condition: {condition}"
-    # print(str)
     return pstr
 
 
