@@ -20,7 +20,7 @@ MindSpeed_Core_MS_PATH=$(pwd)
 if [ "$1" == "llm" ]; then
     echo "Cloning MindSpeed-LLM..."
     rm -rf MindSpeed-LLM/
-    git clone https://gitee.com/ascend/MindSpeed-LLM.git -b master
+    git clone https://gitcode.com/Ascend/MindSpeed-LLM.git -b master
     if [ $? -ne 0 ]; then
         echo "Error: git clone MindSpeed-LLM"
         exit 1
@@ -30,7 +30,7 @@ if [ "$1" == "llm" ]; then
 elif [ "$1" == "mm" ]; then
     echo "Cloning MindSpeed-MM..."
     rm -rf MindSpeed-MM/
-    git clone https://gitee.com/ascend/MindSpeed-MM.git -b master
+    git clone https://gitcode.com/Ascend/MindSpeed-MM.git -b master
     if [ $? -ne 0 ]; then
         echo "Error: git clone MindSpeed-MM"
         exit 1
