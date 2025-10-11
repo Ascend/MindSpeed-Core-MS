@@ -36,7 +36,19 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 
 # 使用指南
 
-按照[基础安装指导](./docs/INSTALLATION.md)完成相关基础依赖安装后，用户可根据具体使用场景（MindSpeed-LLM/MindSpeed-MM/MindSpeed-RL）进行相应的自动适配。在自动适配前，请确保：
+## 依赖安装
+
+用户可根据自身需求选择以下两种方式进行安装：
+
+### 标准安装方式
+
+按照[基础安装指导](./docs/INSTALLATION.md)完成相关基础依赖安装。
+
+### 非正式商用镜像安装
+
+对于希望快速部署的用户，可使用[非正式商用镜像](http://mirrors.cn-central-221.ovaijisuan.com/detail/188.html)来完成基础环境搭建。
+
+完成上述任一方式的基础依赖安装后，用户可根据具体使用场景（MindSpeed-LLM/MindSpeed-MM/MindSpeed-RL）进行相应的自动适配。在自动适配前，请确保：
 
 - 基础依赖已安装
 - 所部署容器网络可用，python已安装
@@ -58,7 +70,7 @@ MindSpeed-Core-MS提供了一键适配命令脚本，集成了基于MindSpeed进
 
 **注意：各个使用场景下代码仓不能混用，建议针对各场景使用独立目录。**
 
-### 大语言模型：MindSpeed-LLM
+### 大语言模型：[MindSpeed-LLM](https://gitcode.com/Ascend/MindSpeed-LLM/blob/master/docs/mindspore/readme.md)
 执行以下操作进行一键适配后，用户即可进行大语言模型训练：
 
 ```shell
@@ -80,7 +92,7 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter:${MindSpeed_Core_MS_PATH}/
 
 ---
 
-### 多模态模型：MindSpeed-MM
+### 多模态模型：[MindSpeed-MM](https://gitcode.com/Ascend/MindSpeed-MM/blob/master/docs/mindspore/readme.md)
 执行以下操作进行一键适配后，用户即可进行多模态模型训练：
 
 ```shell
@@ -102,7 +114,7 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter:${MindSpeed_Core_MS_PATH}/
 
 ---
 
-### 强化学习：MindSpeed-RL
+### 强化学习：[MindSpeed-RL](https://gitcode.com/Ascend/MindSpeed-RL/blob/master/README.md)
 执行以下操作进行一键适配后，用户即可进行强化学习模型训练：
 
 ```shell

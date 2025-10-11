@@ -34,7 +34,10 @@
   以及NPU环境中打开通信算子确定性
 
   ```shell
-  export HCCL_DETERMINISTIC=True
+  export HCCL_DETERMINISTIC=True # HCCL确定性
+  export ASCEND_LAUNCH_BLOCKING=1 # 硬件确定性
+  export NCCL_DETERMINISTIC=1
+  export CLOSE_MATMUL_K_SHIFT=1 # 设置matmul行为
   ```
 
 - GPU和NPU上模型启动脚本参数保持一致，且模型初始化状态保持一致（例如加载相同的模型ckpt）。重点校验以下超参：
@@ -124,6 +127,7 @@ msprobe是 MindStudio Training Tools 工具链下精度调试部分的工具包�
 ```
 
 config_ms.json示例
+
 ```python
 {
     "task": "statistics",
@@ -131,7 +135,7 @@ config_ms.json示例
     "rank": [],
     "step": [],
     "level": "L1",
-    
+
     "statistics": {
         "scope": [],
         "list": [],
@@ -139,9 +143,10 @@ config_ms.json示例
         "summary_mode": "md5"
     }
 }
-``` 
+```
 
 config_pt.json示例
+
 ```python
 {
     "task": "statistics",
@@ -150,7 +155,7 @@ config_pt.json示例
     "step": [],
     "level": "L1",
     "enable_dataloader": false,
-    
+
     "statistics": {
         "scope": [],
         "list": [],
@@ -158,7 +163,8 @@ config_pt.json示例
         "summary_mode": "md5"
     }
 }
-``` 
+```
+
 需修改如上两个json文件中的dump_path路径
 
 在数据采集完成后，用户可使用msprobe提供的[跨框架API对比功能](https://gitee.com/ascend/mstt/blob/poc/debug/accuracy_tools/msprobe/docs/11.accuracy_compare_MindSpore.md)，定位输入或输出有差异的网络模块及具体API.
