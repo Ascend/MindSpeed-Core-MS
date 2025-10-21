@@ -6,7 +6,7 @@ def load_wrapper(fn):
         try:
             res = fn(*args, **kwargs)
         except:
-            from mindspeed_llm.mindspore.training.serialization import load_ms_weights
+            from tools.load_ms_weights_to_pt.serialization import load_ms_weights
             res = load_ms_weights(*args, **kwargs)
         return res
     return wrapper

@@ -418,11 +418,6 @@ def load_ms_weights(f, map_location=None, pickle_module=pickle, *, weights_only=
                                 **pickle_load_args)
  
  
-func_name_dict = {
-    '_rebuild_from_type_v2': _rebuild_from_type_v2,
-    '_rebuild_tensor_v2': _rebuild_tensor_v2,
-}
-
 def get_func_by_name(name: str):
     func = func_name_dict.get(name)
     if func is None:
@@ -600,15 +595,19 @@ def _rebuild_tensor_v2(storage, storage_offset, size, stride, requires_grad, bac
     else:
         param = torch.from_numpy(array)
     return param
- 
- 
+
 def _rebuild_from_type_v2(func, new_type, args, state):
     ret = func(*args)
     return ret
- 
+
+
+func_name_dict = {
+    '_rebuild_from_type_v2': _rebuild_from_type_v2,
+    '_rebuild_tensor_v2': _rebuild_tensor_v2,
+}
  
 if __name__ == "__main__":
-    state_dict = load(".pt")
+    state_dict = load_ms_weights(".pt")
  
     def recursive_print(state, prefix=None):
         if isinstance(state, dict):
