@@ -7,7 +7,7 @@ import libcst as cst
 from libcst.metadata import PositionProvider, ScopeProvider, MetadataWrapper, ParentNodeProvider
 from libcst import matchers
 
-from coverage import get_debug_print_node
+from .coverage import get_debug_print_node
 
 def grep_in_files(directory: str, pattern: str, recursive: bool = True, file_pattern: str = ".py"):
     """

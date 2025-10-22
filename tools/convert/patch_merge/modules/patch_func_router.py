@@ -3,8 +3,8 @@ import re
 from collections import defaultdict
 import libcst as cst
 from libcst.metadata import PositionProvider, ScopeProvider, MetadataWrapper, ParentNodeProvider
-from coverage import get_debug_print_node
-from patch_import_collector import MImport
+from .coverage import get_debug_print_node
+from .patch_import_collector import MImport
 
 class PatchFuncRouterTransformer(cst.CSTTransformer):
     """

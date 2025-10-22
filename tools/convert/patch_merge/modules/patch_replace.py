@@ -1,15 +1,13 @@
 # Copyright (c) Huawei Technologies Co., Ltd 2025.  All rights reserved.
 import re
 from collections import defaultdict
-
+from typing import Set
 import libcst as cst
 from libcst.metadata import PositionProvider, ScopeProvider, MetadataWrapper, ParentNodeProvider
 from libcst import matchers
-from patch_import_collector import (PatchImportCollector, MImport, find_import_for_call, 
+from .patch_import_collector import (PatchImportCollector, MImport, find_import_for_call, 
                             insert_top_level_imports, get_top_level_imports, get_imports_from_def, get_last_import_index)
-from coverage import get_debug_print_node
-
-from typing import Set
+from .coverage import get_debug_print_node
 
 
 class PatchReplaceTransformer(cst.CSTTransformer):

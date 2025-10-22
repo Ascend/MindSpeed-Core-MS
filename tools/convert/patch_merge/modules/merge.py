@@ -16,10 +16,10 @@ import inspect
 import libcst as cst
 from libcst import matchers
 from libcst.metadata import MetadataWrapper, ParentNodeProvider
-from patch_replace import PatchReplaceTransformer, PatchClassNodeRemover
-from patch_class_add_factory import grep_in_files, PatchClassFactoryTransformer, PatchClassCallTransformer
-from patch_func_router import PatchFuncRouterTransformer
-from patch_wrapper_router import PatchWrapperRouterTransformer
+from .patch_replace import PatchReplaceTransformer, PatchClassNodeRemover
+from .patch_class_add_factory import grep_in_files, PatchClassFactoryTransformer, PatchClassCallTransformer
+from .patch_func_router import PatchFuncRouterTransformer
+from .patch_wrapper_router import PatchWrapperRouterTransformer
 
 from datetime import datetime
 START_TIMES=[]

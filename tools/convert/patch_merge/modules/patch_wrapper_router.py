@@ -4,12 +4,11 @@ from collections import defaultdict
 import importlib
 import sys
 import libcst as cst
-from libcst.metadata import PositionProvider, ScopeProvider, MetadataWrapper, ParentNodeProvider
-from libcst import matchers
+from libcst.metadata import PositionProvider, ScopeProvider, ParentNodeProvider
 import inflection
-from coverage import get_debug_print_node
+from .coverage import get_debug_print_node
 
-from patch_import_collector import MImport
+from .patch_import_collector import MImport
 
 
 class PatchWrapperRouterTransformer(cst.CSTTransformer):

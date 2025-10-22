@@ -45,3 +45,4 @@ accelerate==1.9.0
 transformers==4.51.0
 sqlalchemy
 libcst==1.8.2
+inflection==0.5.1

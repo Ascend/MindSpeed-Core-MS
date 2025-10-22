@@ -140,6 +140,7 @@ def get_last_import_index(root):
     """
     Obtain the index of the last top-level import for inserting the import node
     """
+    last_import_index = 0
     for i, node in enumerate(root.body):
         if matchers.matches(node, matchers.SimpleStatementLine(body=[matchers.Import() | matchers.ImportFrom()])):
             last_import_index = i
