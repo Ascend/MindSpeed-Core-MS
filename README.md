@@ -2,7 +2,6 @@
 
 <p align="center">
     <a href="https://gitcode.com/ascend/MindSpeed-Core-MS/blob/dev/LICENSE">
-    <a href="https://gitcode.com/ascend/MindSpeed-Core-MS/blob/dev/LICENSE">
         <img alt="Badge" src="https://img.shields.io/badge/License-MIT-blue.svg">
     </a>
     <a href="https://gitcode.com/ascend/MindSpeed-Core-MS">
@@ -25,8 +24,8 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 
 | 依赖软件         | 版本                                                                                                                               |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 昇腾NPU驱动固件  | [8.3.RC1](https://www.hiascend.com/hardware/firmware-drivers/community?product=1&model=30&cann=8.3.RC1.alpha002&driver=Ascend+HDK+25.2.0) |
-| 昇腾 CANN        | [8.3.RC1](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1.alpha002)                                               |
+| 昇腾NPU驱动固件  | [Ascend HDK 25.2.0](https://www.hiascend.com/hardware/firmware-drivers/community?product=1&model=30&cann=8.3.RC1.alpha003&driver=Ascend+HDK+25.2.0) |
+| 昇腾 CANN        | [8.3.RC1](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1.alpha003)                                               |
 | MindSpore        | 在研版本                                                                                          |
 | MSAdapter        | 在研版本                                                                               |
 | Python           | >=3.9                                                                                                                              |
@@ -46,7 +45,7 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 
 ### 非正式商用镜像安装
 
-对于希望快速部署的用户，可使用[非正式商用镜像](http://mirrors.cn-central-221.ovaijisuan.com/detail/188.html)来完成基础环境搭建。
+对于希望快速部署的用户，可使用[非正式商用镜像](http://mirrors.cn-central-221.ovaijisuan.com/detail/191.html)来完成基础环境搭建。
 
 完成上述任一方式的基础依赖安装后，用户可根据具体使用场景（MindSpeed-LLM/MindSpeed-MM/MindSpeed-RL）进行相应的自动适配。在自动适配前，请确保：
 
@@ -71,6 +70,7 @@ MindSpeed-Core-MS提供了一键适配命令脚本，集成了基于MindSpeed进
 **注意：各个使用场景下代码仓不能混用，建议针对各场景使用独立目录。**
 
 ### 大语言模型：[MindSpeed-LLM](https://gitcode.com/Ascend/MindSpeed-LLM/blob/2.2.0/docs/mindspore/readme.md)
+
 执行以下操作进行一键适配后，用户即可进行大语言模型训练：
 
 ```shell
@@ -93,6 +93,7 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter:${MindSpeed_Core_MS_PATH}/
 ---
 
 ### 多模态模型：[MindSpeed-MM](https://gitcode.com/Ascend/MindSpeed-MM/blob/2.2.0/docs/mindspore/readme.md)
+
 执行以下操作进行一键适配后，用户即可进行多模态模型训练：
 
 ```shell
@@ -115,6 +116,7 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter:${MindSpeed_Core_MS_PATH}/
 ---
 
 ### 强化学习：[MindSpeed-RL](https://gitcode.com/Ascend/MindSpeed-RL/blob/2.2.0/README.md)
+
 执行以下操作进行一键适配后，用户即可进行强化学习模型训练：
 
 ```shell
@@ -161,9 +163,9 @@ MindSpeed-Core-MS已发布版本维护策略：
 
 | **MindSpeed-Core-MS版本** | **维护策略** | **当前状态** | **发布时间** | **后续状态** | **EOL日期** |
 | ------------------------------- | ------------------ | ------------------ | ------------------ | ------------------ | ----------------- |
-| feature-0.2                     | Demo               | 维护               |          2025.4.15          |          预计2025/09/30起无维护          |                 |
-| r0.3.0                     | Demo               | 维护               |          2025.7.30          |          预计2025/12/30起无维护          |                 |
-|             master                    | /               | 开发               |       预计2025.12.30             |          /          |          /         |
+| r0.4.0                     | Demo               | 维护               |          2025/9/30          |          预计2026/03/30起无维护          |                 |
+| r0.3.0                     | Demo               | 维护               |          2025/7/30          |          预计2025/12/30起无维护          |                 |
+| feature-0.2                     | Demo               | 无维护               |          2025/4/15          |          2025/09/30起无维护          |                 |
 
 ---
 

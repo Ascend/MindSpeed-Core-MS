@@ -39,7 +39,7 @@ MindSpore使用[函数式自动微分](https://www.mindspore.cn/tutorials/zh-CN/
 <table border="0">
   <tr>
     <td> MindSpeed版本 </td>
-    <td> master </td>
+    <td> 2.2.0_core_r0.12.1 </td>
   </tr>
   <tr>
     <td> MindSpeed代码分支名称 </td>
@@ -47,7 +47,7 @@ MindSpore使用[函数式自动微分](https://www.mindspore.cn/tutorials/zh-CN/
   </tr>
   <tr>
     <td> CANN版本 </td>
-    <td> CANN 8.2.RC1 </td>
+    <td> CANN 8.3.RC1 </td>
   </tr>
   <tr>
     <td> MindSpore版本 </td>
@@ -74,7 +74,7 @@ MindSpore使用[函数式自动微分](https://www.mindspore.cn/tutorials/zh-CN/
   </tr>
   <tr>
     <td> 昇腾NPU驱动 </td>
-    <td rowspan="5">建议下载并安装左侧软件，具体请参见《<a href="https://www.hiascend.com/document/detail/zh/canncommercial/81RC1/softwareinst/instg/instg_0000.html?Mode=PmIns&InstallType=local&OS=Ubuntu&Software=cannToolKit">CANN 软件安装指南</a>》</td>
+    <td rowspan="5">建议下载并安装左侧软件，具体请参见《<a href="https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/softwareinst/instg/instg_quick.html?Mode=PmIns&OS=Debian&Software=cannToolKit">CANN 软件安装指南</a>》</td>
   </tr>
   <tr>
     <td> 昇腾NPU固件 </td>
@@ -83,7 +83,7 @@ MindSpore使用[函数式自动微分](https://www.mindspore.cn/tutorials/zh-CN/
     <td> Toolkit（开发套件） </td>
   </tr>
   <tr>
-    <td> Kenels（算子包） </td>
+    <td> Kernels（算子包） </td>
   </tr>
   <tr>
     <td> NNAL（Ascend Transformer Boost加速库） </td>
@@ -101,12 +101,31 @@ MindSpore使用[函数式自动微分](https://www.mindspore.cn/tutorials/zh-CN/
 - 下载MindSpeed-Core-MS源码master分支，执行一键适配。
 
   ```shell
-    git clone https://gitee.com/ascend/MindSpeed-Core-MS.git -b master
+    git clone https://gitee.com/ascend/MindSpeed-Core-MS.git -b r0.4.0
     cd MindSpeed-Core-MS
-    source auto_convert_xxx.sh
   ```
 
-  **说明：** MindSpeed-Core-MS源码提供了一键适配，用户无需再手动拉取MindSpeed等仓库源码。`auto_convert_xxx.sh`中`xxx`代表使用场景，可以是`llm`（大语言模型场景）、`mm`（多模态模型场景）、`rl`（强化学习场景），具体使用见[README](https://gitee.com/ascend/MindSpeed-Core-MS)。
+  根据使用场景，执行以下命令之一：
+
+  大语言模型：MindSpeed-LLM
+
+  ```shell
+  source auto_convert.sh llm
+  ```
+
+  多模态模型：MindSpeed-MM
+
+  ```shell
+  source auto_convert.sh mm
+  ```
+
+  强化学习：MindSpeed-RL
+
+  ```shell
+  source auto_convert_rl.sh
+  ```
+
+  **说明：** MindSpeed-Core-MS源码提供了一键适配，用户无需再手动拉取MindSpeed等仓库源码,具体使用见[README](https://gitee.com/ascend/MindSpeed-Core-MS)。
 
 ## 2 MindSpeed PyTorch模型迁移
 
