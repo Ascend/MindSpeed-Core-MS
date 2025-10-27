@@ -1,10 +1,12 @@
+#### ！！！【重要通知】MSAdapter仓因平台网络问题暂不可用，或导致MindSpore-Core-MS仓库MindSpore后端一键启动暂不可用！！！
+
 ## 安装指导
 
 请参考首页[依赖信息](https://gitcode.com/ascend/MindSpeed-Core-MS/blob/dev/README.md)选择下载对应依赖版本。除驱动固件安装在物理机系统外，其余软件建议使用容器镜像进行安装。
 
 ### 驱动固件安装
 
-下载[驱动固件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha002/softwareinst/instg/instg_0003.html?Mode=PmIns&OS=Debian&Software=cannToolKit)，请根据系统和硬件产品型号选择匹配版本的`driver`和`fireware`。参考[安装NPU驱动固件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha002/softwareinst/instg/instg_0005.html?Mode=PmIns&OS=Debian&Software=cannToolKit)官方指导或执行以下命令安装：
+下载[驱动固件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/softwareinst/instg/instg_0003.html?Mode=PmIns&OS=Debian&Software=cannToolKit)，请根据系统和硬件产品型号选择匹配版本的`driver`和`firmware`。参考[安装NPU驱动固件](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/softwareinst/instg/instg_0005.html?Mode=PmIns&OS=Debian&Software=cannToolKit)官方指导或执行以下命令安装：
 
 ```shell
 chmod +x Ascend-hdk-<chip_type>-npu-driver_<version>_linux-<arch>.run
@@ -15,7 +17,7 @@ chmod +x Ascend-hdk-<chip_type>-npu-firmware_<version>.run
 
 ### CANN安装
 
-下载[CANN](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1.alpha002)，请根据系统和硬件产品型号选择匹配版本的。参考[安装CANN软件包](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha002/softwareinst/instg/instg_0008.html?Mode=PmIns&OS=Debian&Software=cannToolKit)官方指导或执行以下命令安装：
+下载[CANN](https://www.hiascend.com/developer/download/community/result?module=cann)，请根据系统和硬件产品型号选择匹配版本的。参考[安装CANN软件包](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/83RC1alpha003/softwareinst/instg/instg_0008.html?Mode=PmIns&OS=Debian&Software=cannToolKit)官方指导或执行以下命令安装：
 
 ```shell
 # 安装文件名跟随版本迭代及硬件版本，根据实际修改
