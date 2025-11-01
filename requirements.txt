@@ -40,9 +40,9 @@ codetiming
 latex2sympy2
 word2number
 safetensors==0.5.1
-huggingface_hub==0.32.3
+huggingface_hub==0.36.0
 accelerate==1.9.0
-transformers==4.51.0
+transformers==4.55.2
 sqlalchemy
 libcst==1.8.2
 inflection==0.5.1
