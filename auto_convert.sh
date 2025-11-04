@@ -56,7 +56,7 @@ if [ "$2" == "msa_latest" ]; then
 else
     echo "Cloning default MSAdapter..."
     rm -rf MSAdapter
-    git clone https://openi.pcl.ac.cn/OpenI/MSAdapter.git -b r0.3.0
+    git clone https://openi.pcl.ac.cn/OpenI/MSAdapter.git -b v0.5.0
     if [ $? -ne 0 ]; then
         echo "Error: git clone MSAdapter"
         exit 1
