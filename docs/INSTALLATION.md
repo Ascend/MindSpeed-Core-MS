@@ -1,5 +1,3 @@
-#### ！！！【重要通知】MSAdapter仓因平台网络问题暂不可用，或导致MindSpore-Core-MS仓库MindSpore后端一键启动暂不可用！！！
-
 ## 安装指导
 
 请参考首页[依赖信息](https://gitcode.com/ascend/MindSpeed-Core-MS/blob/dev/README.md)选择下载对应依赖版本。除驱动固件安装在物理机系统外，其余软件建议使用容器镜像进行安装。

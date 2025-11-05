@@ -26,8 +26,8 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | 昇腾NPU驱动固件  | [Ascend HDK 25.2.0](https://www.hiascend.com/hardware/firmware-drivers/community?product=1&model=30&cann=8.3.RC1.alpha003&driver=Ascend+HDK+25.2.0) |
 | 昇腾 CANN        | [8.3.RC1](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1.alpha003)                                               |
-| MindSpore        | 在研版本                                                                                          |
-| MSAdapter        | 在研版本                                                                               |
+| MindSpore        | [2.7.1](https://www.mindspore.cn/install/)                                                                                          |
+| MSAdapter        | [v0.5.0](https://openi.pcl.ac.cn/OpenI/MSAdapter/src/tag/v0.5.0)                                                                               |
 | Python           | >=3.9                                                                                                                              |
 | Python三方库依赖 | requirements.txt                                                                                                                   |
 
