@@ -22,16 +22,51 @@ MindSpeed-Core-MS 是链接华为自研AI框架[MindSpore](https://www.mindspore
 
 MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指导](./docs/INSTALLATION.md)。
 
-| 依赖软件         | 版本                                                                                                                               |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 昇腾NPU驱动固件  | [Ascend HDK 25.2.0](https://www.hiascend.com/hardware/firmware-drivers/community?product=1&model=30&cann=8.3.RC1.alpha003&driver=Ascend+HDK+25.2.0) |
-| 昇腾 CANN        | [8.3.RC1](https://www.hiascend.com/developer/download/community/result?module=cann&cann=8.3.RC1.alpha003)                                               |
-| MindSpore        | [2.7.1](https://www.mindspore.cn/install/)                                                                                          |
-| MSAdapter        | [master](https://openi.pcl.ac.cn/OpenI/MSAdapter/src/branch/master)                                                                               |
-| Python           | >=3.9                                                                                                                              |
-| Python三方库依赖 | requirements.txt                                                                                                                   |
+<table>
+  <tr>
+    <th>依赖软件</th>
+    <th>版本</th>
+  </tr>
+  <tr>
+    <td>昇腾NPU驱动</td>
+    <td rowspan="2">在研版本</td>
+  <tr>
+    <td>昇腾NPU固件</td>
+  </tr>
+  <tr>
+    <td>Toolkit（开发套件）</td>
+      <td rowspan="3">在研版本</td>
+  </tr>
+  <tr>
+    <td>Kernel（算子包）</td>
+  </tr>
+  <tr>
+    <td>NNAL（Ascend Transformer Boost加速库）</td>
+  </tr>
+  <tr>
+  </tr>
+  <tr>
+    <td>Python</td>
+    <td>3.10</td>
+  </tr>
+  <tr>
+    <td>MindSpore</td>
+    <td>在研版本</td>
+  </tr>
+  <tr>
+    <td>MSAdapter</td>
+    <td>在研版本</td>
+  </tr>
+<tr>
+    <td>Python三方库依赖</td>
+    <td>requirements</td>
+  </tr>
+</table>
 
-注：Python 三方库依赖文件`requirements.txt`列举的是模型训练所需要的Python三方库。
+注意事项：
+
+- 由于master分支使用在研版本的驱动以及CANN包，因此master上的一些新特性老版本配套可能有不支持情况，要使用稳定版本，请切换到商发分支并下载对应依赖版本进行安装。
+- Python 三方库依赖文件`requirements.txt`列举的是模型训练所需要的Python三方库。
 
 # 使用指南
 
