@@ -12,7 +12,7 @@
     </a>
 </p>
 
-MindSpeed-Core-MS 是链接华为自研AI框架[MindSpore](https://www.mindspore.cn/install/)+华为[昇腾大模型加速解决方案MindSpeed](https://www.hiascend.cn/software/mindspeed)的重要组件，旨在提供华为全栈易用的端到端的自然语言模型以及多模态模型训练解决方案。MindSpeed-Core-MS 提供了代码一键适配功能，可帮助用户将模型使能加速库MindSpeed/MindSpeed-LLM/MindSpeed-MM以及三方库依赖由PyTorch无缝切换为MindSpore，以此获得更极致的性能体验。另外，MindSpeed-Core-MS 也提供了动态图调试工具，使用户在分布式训练场景下更容易地进行代码调试和debug。
+MindSpeed-Core-MS 是连接华为自研AI框架[MindSpore](https://www.mindspore.cn/install/)+华为[昇腾大模型加速解决方案MindSpeed](https://www.hiascend.cn/software/mindspeed)的重要组件，旨在提供华为全栈易用的端到端的自然语言模型以及多模态模型训练解决方案。MindSpeed-Core-MS 提供了代码一键适配功能，可帮助用户将模型使能加速库MindSpeed/MindSpeed-LLM/MindSpeed-MM以及三方库依赖由PyTorch无缝切换为MindSpore，以此获得更极致的性能体验。另外，MindSpeed-Core-MS 也提供了动态图调试工具，使用户在分布式训练场景下更容易地进行代码调试。
 
 ---
 
@@ -198,6 +198,7 @@ MindSpeed-Core-MS已发布版本维护策略：
 
 | **MindSpeed-Core-MS版本** | **维护策略** | **当前状态** | **发布时间** | **后续状态** | **EOL日期** |
 | ------------------------------- | ------------------ | ------------------ | ------------------ | ------------------ | ----------------- |
+| r0.5.0                     | Demo               | 维护               |          2025/12/30          |          预计2026/06/30起无维护          |  
 | r0.4.0                     | Demo               | 维护               |          2025/9/30          |          预计2026/03/30起无维护          |                 |
 | r0.3.0                     | Demo               | 维护               |          2025/7/30          |          预计2025/12/30起无维护          |                 |
 | feature-0.2                     | Demo               | 无维护               |          2025/4/15          |          2025/09/30起无维护          |                 |

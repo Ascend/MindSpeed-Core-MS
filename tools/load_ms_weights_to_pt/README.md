@@ -1,6 +1,6 @@
 # MS权重加载工具
 
-适用场景：基于MindSpeed/Megatron生态的Pytorch模型，直接加载MindSpore兼容方案保存的.pt格式权重文件。
+适用场景：基于MindSpeed/Megatron生态的PyTorch模型，直接加载MindSpore兼容方案保存的.pt格式权重文件。
 
 ## 依赖文件
 
@@ -26,7 +26,7 @@ python transfer.py --mindspeed_llm_path ${Your_MindSpeed_Core_MS_PATH}/MindSpeed
 ```
 
 命令执行后会在MindSpeed-Core-MS/MindSpeed-LLM/mindspeed_llm/tasks/megatron_adaptor.py文件中打patch，覆盖MindSpeed-LLM底层的torch.load()。  
-**步骤二**：打开--no-load-rng开关，并按MindSpeed/Megatron使用方式执行训练
+**步骤二**：在训练参数中增加`--no-load-rng`，并按MindSpeed/Megatron使用方式执行训练
 
 ### 方式二：用户自定义使用
 

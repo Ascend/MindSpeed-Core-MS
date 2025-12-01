@@ -2,7 +2,7 @@
 
 ## 0 前言
 
-用户在将模型迁移到MindSpeed + MindSpore后端（后文用**MA**代替）后，需要进行精度调试。昇腾官网[PyTorch训练模型迁移精度调试](https://www.hiascend.com/document/detail/zh/Pytorch/700/ptmoddevg/trainingmigrguide/LMaccuracy_0002.html)指南提供的精度调试通用思路同样适用于MindSpore框架。本指南重点阐述在MindSpeed + MindSpore后端上进行精度调试调优的一些具体操作和案例，旨在帮助用户快速上手进行精度调试。
+用户在将模型迁移到MindSpeed + MindSpore后端后，需要进行精度调试。昇腾官网[PyTorch训练模型迁移精度调试](https://www.hiascend.com/document/detail/zh/Pytorch/700/ptmoddevg/trainingmigrguide/LMaccuracy_0002.html)指南提供的精度调试通用思路同样适用于MindSpore框架。本指南重点阐述在MindSpeed + MindSpore后端上进行精度调试调优的一些具体操作和案例，旨在帮助用户快速上手进行精度调试。
 
 ## 1 精度调优
 
@@ -44,7 +44,7 @@
     - 学习率：基础学习率值、学习率衰减策略等
     - batchsize&step：包括micro_batch_size和global_batch_size，训练的总step数
     - 优化器参数：
-        - 基本参数：包括优化器类型、学习率、weight_decay、momemtum等优化器参数
+        - 基本参数：包括优化器类型、学习率、weight_decay、momentum等优化器参数
         - 参数分组策略：对于有优化器参数分组的情况，检查每个分组的参数是否一致
         - 训练参数个数：对于有参数冻结的场景，检查传入优化器的参数是否一致
 - 对比规模较大的模型，优先等比例缩减模型规模，使用单机进行精度对比，其次再等比例扩展模型规模，使用多机进行精度对比
@@ -67,7 +67,7 @@
 以上现象都可能导致评估指标不符合预期。如果出现以上现象，可参考以下几点进行精度调试。
 
 - 数据集对比
-    - 数据对比checklit
+    - 数据对比checklist
 
     | 数据集对比项  | 详细说明 |
     | ---- | ---- |
@@ -181,7 +181,7 @@ pta与ms在Glm4 8k单机d2t2p2场景下精度对不齐。
 
 ##### 解决步骤
 
-1.缩小网络规模和gbs，关闭PP，dump数据。 发现第三次正向的output_layer的weight和params均与pta不一致。因为dump工具仅能dump反向的的y和dx，无法观察到dw，增加了定位难度。
+1.缩小网络规模和gbs，关闭PP，dump数据。 发现第三次正向的output_layer的weight和params均与pta不一致。因为dump工具仅能dump反向的y和dx，无法观察到dw，增加了定位难度。
 
 <img src="sources/glm4_output.png" height="600px" width="900px">
 
@@ -194,11 +194,11 @@ megatron/core/tensor_parallel/layers.py:
 
 <img src="sources/glm4_dw.png" height="600px" width="900px">
 
-因为有.t()，会导致内存不连续。发现PT无contiguous而MS有。 给PT加上contiguous()后，精度一致。
+因为有.t()，会导致内存不连续。发现PTA无contiguous而MS有。 给PTA加上contiguous()后，精度一致。
 
 ##### 问题根因
 
-pta的ColumnParallelLinear中的Matmul反向计算，对于out做了.t()后没有进行contiguous()操作，而ms这边加了
+PTA的ColumnParallelLinear中的Matmul反向计算，对于out做了.t()后没有进行contiguous()操作，而ms这边加了
 
 ##### 解决方案
 
