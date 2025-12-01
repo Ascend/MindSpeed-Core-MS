@@ -33,21 +33,21 @@ pip install protobuf==3.20.0
 
 ## 数据预处理
 
-以 DeepScaler 为例：
+以 DeepScaleR 为例：
 
-1. 数据集下载地址：[DeepScaler](https://huggingface.co/datasets/agentica-org/DeepScaleR-Preview-Dataset/tree/main)
+1. 数据集下载地址：[DeepScaleR](https://huggingface.co/datasets/agentica-org/DeepScaleR-Preview-Dataset/tree/main)
 
    数据集下载可以基于网页直接下载，也可以基于命令行下载，比如：
 
    ```shell
-   # 读取deepscaler数据集
+   # 读取DeepScaleR数据集
    mkdir dataset
    cd dataset/
    wget https://huggingface.co/datasets/agentica-org/DeepScaleR-Preview-Dataset/resolve/main/deepscaler.json --no-check
    cd ..
    ```
 
-2. 以 deepscaler 数据集为例，配置数据预处理的 deepscaler.yaml 文件，并放置于 `MindSpeed-RL/configs/datasets` 文件夹下。
+2. 以 DeepScaleR 数据集为例，配置数据预处理的 deepscaler.yaml 文件，并放置于 `MindSpeed-RL/configs/datasets` 文件夹下。
 
    deepscaler.yaml 配置示例：
 
@@ -162,7 +162,7 @@ bash examples/ckpt/ckpt_convert_qwen25_mcore2hf.sh
    load: ./ckpt
    ```
 
-   > 注：yaml 中需添加参数`megatron_training.ai_framework：mindspore`
+   > 注：yaml 中需添加参数`megatron_training.ai_framework:mindspore`
 
    卡数配置参数介绍
 

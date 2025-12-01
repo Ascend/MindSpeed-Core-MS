@@ -49,7 +49,7 @@ python tools/convert/patch_merge/modules/coverage.py --json-file <JSON_FILE> --l
 
 ## 三、约束条件
 
-1. 目前仅支持融合 megatron core r0.8.0，因此需要首先拉取 MindSpeed-Core-MS r0.3.0 分支，执行 `auto_convert_llm.sh` 后，再将路径作为 `run_merge.sh` 的 `ROOT_DIR`
+1. 目前仅支持融合 Megatron core r0.8.0，因此需要首先拉取 MindSpeed-Core-MS r0.3.0 分支，执行 `auto_convert_llm.sh` 后，再将路径作为 `run_merge.sh` 的 `ROOT_DIR`
 2. patch融合中，为了获取 patch 对应的文件路径，使用了 importlib 进行模拟导入，因此需要**在 MindSpeed-Core-MS 运行环境下进行 patch融合**
 
 ## 四、Debug工具
