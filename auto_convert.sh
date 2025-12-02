@@ -20,7 +20,7 @@ MindSpeed_Core_MS_PATH=$(pwd)
 if [ "$1" == "llm" ]; then
     echo "Cloning MindSpeed-LLM..."
     rm -rf MindSpeed-LLM/
-    git clone https://gitcode.com/Ascend/MindSpeed-LLM.git -b master
+    git clone https://gitcode.com/Ascend/MindSpeed-LLM.git -b 2.3.0
     if [ $? -ne 0 ]; then
         echo "Error: git clone MindSpeed-LLM"
         exit 1
@@ -30,7 +30,7 @@ if [ "$1" == "llm" ]; then
 elif [ "$1" == "mm" ]; then
     echo "Cloning MindSpeed-MM..."
     rm -rf MindSpeed-MM/
-    git clone https://gitcode.com/Ascend/MindSpeed-MM.git -b master
+    git clone https://gitcode.com/Ascend/MindSpeed-MM.git -b 2.3.0
     if [ $? -ne 0 ]; then
         echo "Error: git clone MindSpeed-MM"
         exit 1
@@ -46,7 +46,7 @@ fi
 if [ "$2" == "msa_latest" ]; then
     echo "Cloning latest msadapter..."
     rm -rf msadapter
-    git clone https://gitee.com/mindspore/msadapter.git -b master
+    git clone https://gitee.com/mindspore/msadapter.git -b r0.4.0
     if [ $? -ne 0 ]; then
         echo "Error: git clone msadapter"
         exit 1
@@ -67,7 +67,7 @@ fi
 
 echo "Cloning MindSpeed..."
 rm -rf MindSpeed/
-git clone https://gitcode.com/Ascend/MindSpeed.git -b master
+git clone https://gitcode.com/Ascend/MindSpeed.git -b 2.3.0_core_r0.12.1
 if [ $? -ne 0 ]; then
     echo "Error: git clone MindSpeed"
     exit 1
