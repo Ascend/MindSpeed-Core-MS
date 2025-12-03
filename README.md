@@ -12,7 +12,7 @@
     </a>
 </p>
 
-MindSpeed-Core-MS 是链接华为自研AI框架[MindSpore](https://www.mindspore.cn/install/)+华为[昇腾大模型加速解决方案MindSpeed](https://www.hiascend.cn/software/mindspeed)的重要组件，旨在提供华为全栈易用的端到端的自然语言模型以及多模态模型训练解决方案。MindSpeed-Core-MS 提供了代码一键适配功能，可帮助用户将模型使能加速库MindSpeed/MindSpeed-LLM/MindSpeed-MM以及三方库依赖由PyTorch无缝切换为MindSpore，以此获得更极致的性能体验。另外，MindSpeed-Core-MS 也提供了动态图调试工具，使用户在分布式训练场景下更容易地进行代码调试和debug。
+MindSpeed-Core-MS 是连接华为自研AI框架[MindSpore](https://www.mindspore.cn/install/)+华为[昇腾大模型加速解决方案MindSpeed](https://www.hiascend.cn/software/mindspeed)的重要组件，旨在提供华为全栈易用的端到端的自然语言模型以及多模态模型训练解决方案。MindSpeed-Core-MS 提供了代码一键适配功能，可帮助用户将模型使能加速库MindSpeed/MindSpeed-LLM/MindSpeed-MM以及三方库依赖由PyTorch无缝切换为MindSpore，以此获得更极致的性能体验。另外，MindSpeed-Core-MS 也提供了动态图调试工具，使用户在分布式训练场景下更容易地进行代码调试。
 
 ---
 
@@ -35,7 +35,7 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
   </tr>
   <tr>
     <td>Toolkit（开发套件）</td>
-      <td rowspan="3">在研版本</td>
+      <td rowspan="3">CANN 8.5.0</td>
   </tr>
   <tr>
     <td>Kernel（算子包）</td>
@@ -65,7 +65,6 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 
 注意事项：
 
-- 由于master分支使用在研版本的驱动以及CANN包，因此master上的一些新特性老版本配套可能有不支持情况，要使用稳定版本，请切换到商发分支并下载对应依赖版本进行安装。
 - Python 三方库依赖文件`requirements.txt`列举的是模型训练所需要的Python三方库。
 
 # 使用指南
@@ -93,7 +92,7 @@ MindSpeed-Core-MS的依赖配套如下表，安装步骤参考[基础安装指�
 执行以下命令拉取MindSpeed-Core-MS代码仓，并安装Python三方依赖库
 
 ```shell
-git clone https://gitcode.com/ascend/MindSpeed-Core-MS.git -b master
+git clone https://gitcode.com/ascend/MindSpeed-Core-MS.git -b r0.5.0
 cd MindSpeed-Core-MS
 pip install -r requirements.txt
 ```
@@ -104,7 +103,7 @@ MindSpeed-Core-MS提供了一键适配命令脚本，集成了基于MindSpeed进
 
 **注意：各个使用场景下代码仓不能混用，建议针对各场景使用独立目录。**
 
-### 大语言模型：[MindSpeed-LLM](https://gitcode.com/Ascend/MindSpeed-LLM/blob/master/docs/mindspore/readme.md)
+### 大语言模型：[MindSpeed-LLM](https://gitcode.com/Ascend/MindSpeed-LLM/blob/2.3.0/docs/mindspore/readme.md)
 
 执行以下操作进行一键适配后，用户即可进行大语言模型训练：
 
@@ -115,7 +114,7 @@ cd MindSpeed-LLM
 
 此处提供以下大语言模型训练拉起流程作为参考。
 
-- [**DEEPSEEK-V3预训练**](https://gitcode.com/ascend/MindSpeed-LLM/blob/master/examples/mindspore/deepseek3/README.md)
+- [**DEEPSEEK-V3预训练**](https://gitcode.com/ascend/MindSpeed-LLM/blob/2.3.0/examples/mindspore/deepseek3/README.md)
 
 若在环境中`PYTHONPATH`等环境变量失效（例如退出容器后再进入等），可执行如下命令重新设置环境变量
 
@@ -127,7 +126,7 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter:${MindSpeed_Core_MS_PATH}/
 
 ---
 
-### 多模态模型：[MindSpeed-MM](https://gitcode.com/Ascend/MindSpeed-MM/blob/master/docs/mindspore/readme.md)
+### 多模态模型：[MindSpeed-MM](https://gitcode.com/Ascend/MindSpeed-MM/blob/2.3.0/docs/mindspore/readme.md)
 
 执行以下操作进行一键适配后，用户即可进行多模态模型训练：
 
@@ -138,7 +137,7 @@ cd MindSpeed-MM
 
 此处提供以下多模态模型训练拉起流程作为参考。
 
-- [**Qwen2.5VL 微调**](https://gitcode.com/ascend/MindSpeed-MM/blob/master/examples/mindspore/qwen2.5vl/README.md)
+- [**Qwen2.5VL 微调**](https://gitcode.com/ascend/MindSpeed-MM/blob/2.3.0/examples/mindspore/qwen2.5vl/README.md)
 
 若在环境中`PYTHONPATH`等环境变量失效（例如退出容器后再进入等），可执行如下命令重新设置环境变量
 
@@ -150,7 +149,7 @@ export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter:${MindSpeed_Core_MS_PATH}/
 
 ---
 
-### 强化学习：[MindSpeed-RL](https://gitcode.com/Ascend/MindSpeed-RL/blob/master/README.md)
+### 强化学习：[MindSpeed-RL](https://gitcode.com/Ascend/MindSpeed-RL/blob/2.3.0/README.md)
 
 执行以下操作进行一键适配后，用户即可进行强化学习模型训练：
 
@@ -198,6 +197,7 @@ MindSpeed-Core-MS已发布版本维护策略：
 
 | **MindSpeed-Core-MS版本** | **维护策略** | **当前状态** | **发布时间** | **后续状态** | **EOL日期** |
 | ------------------------------- | ------------------ | ------------------ | ------------------ | ------------------ | ----------------- |
+| r0.5.0                     | Demo               | 维护               |          2025/12/30         |          预计2026/06/30起无维护          |                 |
 | r0.4.0                     | Demo               | 维护               |          2025/9/30          |          预计2026/03/30起无维护          |                 |
 | r0.3.0                     | Demo               | 维护               |          2025/7/30          |          预计2025/12/30起无维护          |                 |
 | feature-0.2                     | Demo               | 无维护               |          2025/4/15          |          2025/09/30起无维护          |                 |
