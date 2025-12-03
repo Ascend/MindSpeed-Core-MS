@@ -1,8 +1,8 @@
 # 代码转写工具
 
-Megatron、MindSpeed、MindSpeed-LLM等仓库中基于Pytorch的原生代码的部分写法，与基于MindSpore框架的写法有部分差异。
-这部分代码需要通过转写工具转写为可基于MindSpore框架运行的代码。此转写工具可将pytorch代码批量转写为
-[MSAdapter](https://openi.pcl.ac.cn/OpenI/MSAdapter.git) 兼容性代码，仍保留MSAdapter兼容仓库的pytorch对应接口; 后续方案可直接转换为MindSpore原生代码（敬请期待）。
+Megatron、MindSpeed、MindSpeed-LLM等仓库中基于PyTorch的原生代码的部分写法，与基于MindSpore框架的写法有部分差异。
+这部分代码需要通过转写工具转写为可基于MindSpore框架运行的代码。此转写工具可将PyTorch代码批量转写为
+[MSAdapter](https://openi.pcl.ac.cn/OpenI/MSAdapter.git) 兼容性代码，仍保留MSAdapter兼容仓库的PyTorch对应接口; 后续方案可直接转换为MindSpore原生代码（敬请期待）。
 
 **概览**
 该工具基于 [libcst](https://libcst.dev/) 实现静态语法树转换，

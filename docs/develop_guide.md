@@ -131,7 +131,7 @@ MindSpore使用[函数式自动微分](https://www.mindspore.cn/tutorials/zh-CN/
 
 对于MindSpeed PyTorch后端已支持但MindSpore后端不支持的模型，用户只需针对PyTorch后端提供的模型shell脚本进行少量适配修改，即可迁移至MindSpore后端。shell脚本适配的主体原则如下：
 
-- 启动命修改为 `msrun`，并加入 `--ai-framework mindspore`参数；
+- 启动命令修改为 `msrun`，并加入 `--ai-framework mindspore`参数；
   以下是一个启动命令适配的示例。
 
   适配前（PTA）：
@@ -257,7 +257,7 @@ MindSpore使用[函数式自动微分](https://www.mindspore.cn/tutorials/zh-CN/
 
 下面以计算通信融合算子`MATMUL_ALL_REDUCE`为例介绍自定算子接入的开发流程（背景见[计算通信并行CoC特性说明](https://gitee.com/ascend/MindSpeed-LLM/blob/master/docs/pytorch/features/communication-over-computation.md)）。
 
-- 1. MSAdapter中接入自定义算子。`MATMUL_ALL_REDUCE`融合算子是硬件使能软件`CANN`提供的加速算子，需要利用MindSpore的自定义算子机制实现接入，以使Pyhon侧能够调用。
+- 1. MSAdapter中接入自定义算子。`MATMUL_ALL_REDUCE`融合算子是硬件使能软件`CANN`提供的加速算子，需要利用MindSpore的自定义算子机制实现接入，以使Python侧能够调用。
 
     - 首先在`MSAdapter/csrc/atb_ops`目录下新增`lcal_coc.cpp`文件，实现`matmul_all_reduce`函数并使用PyBind11将该函数注册成为Python模块接口。在开发C++算子时需要特别注意算子的输入输出。
 

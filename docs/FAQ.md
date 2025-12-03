@@ -7,7 +7,7 @@
 
 ## 2 数据转换时报错OSError:cannot load library 'libsndfile.so':libsndfile.so: cannot open sharedobject file: No such file or directory,该怎么解决？
 
-该报错通常是由于操作系统中缺乏依赖库libsndfile1所致,可以执行以下命令安装相应的依赖库（根据具体操作系统类型选择）：
+该报错通常是由于操作系统中缺乏依赖库libsndfile1所致，可以执行以下命令安装相应的依赖库（根据具体操作系统类型选择）：
 
 ```shell
 yum/apt install libsndfile1

@@ -14,7 +14,7 @@ MindSpeed+PyTorch+Ascend NPU(PTA)场景后文使用**PTA**代替，以下不再�
 #### 典型性能统计指标
 
 - 单步时间(s)：执行完一个完整batch数据的时间。
-- 吞吐(Samples/s)：网络模型在单位时间内可以处理的处理的最大样本数。throughput=BS∗N/step_time。其中，BS为每个数据并行维度的batch size大小，N为集群中数据并行维度的大小，step_time为在分布式集群中，执行完一个完整BS的时间（单位为s）。
+- 吞吐(Samples/s)：网络模型在单位时间内可以处理的最大样本数。throughput=BS∗N/step_time。其中，BS为每个数据并行维度的batch size大小，N为集群中数据并行维度的大小，step_time为在分布式集群中，执行完一个完整BS的时间（单位为s）。
 - MFU(%)：Model FLOPs Utilization，即模型算力利用率，是指模型一次前反向计算消耗的矩阵算力与机器算力的比值。它直接反映了模型在训练过程中对计算资源的有效利用程度。MFU的值受到多种因素的影响，包括但不限于：
     - 模型架构：不同架构的模型在分布式训练中的算力利用率可能存在显著差异。例如，Transformer架构的模型由于其并行性和矩阵运算密集的特点，通常能够在分布式训练中实现较高的MFU。
     - 分布式训练策略：包括数据并行、模型并行、流水线并行等不同的并行策略及这些策略的具体实现方式（如梯度累积、张量并行等），都会对MFU产生重要影响。
@@ -206,7 +206,7 @@ gate.add_(inf_mask)
 
 #### 问题定位
 
-1. 经通过加打印初步定位是actor和reference两个模型的compute_log_prob存在的内存泄漏。
+1. 通过加打印初步定位是actor和reference两个模型的compute_log_prob存在的内存泄漏。
 
 ```python
 print("========MEM actor.compute_log_prob after dispatch_transfer_dock_data, mem allocated is: ", torch.cuda.memory_allocated(), flush=True)
@@ -217,7 +217,7 @@ print("========MEM actor.compute_log_prob after dispatch_transfer_dock_data, mem
 2. 内存数据获取
 
 由于grpo训练是在ray框架下进行的，无法使用mindspore自带的memory tracker采集内存数据。
-使用profiling获取模型的内存数据，需要将采集profiling中的中的profile_memory=True，这里采集actor下compute_log_prob下的内存数据，具体如下：
+使用profiling获取模型的内存数据，需要将采集profiling中的profile_memory=True，这里采集actor下compute_log_prob下的内存数据，具体如下：
 
 ```python
 from mindspore import Profiler
