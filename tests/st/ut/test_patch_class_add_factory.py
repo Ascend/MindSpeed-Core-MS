@@ -120,7 +120,7 @@ class MyClass:
         {
             "patch_import": "pkg.mod.PatchMyClass",
             "condition": [],
-            "orign_import": "megatron.pkg.mod.MyClass",
+            "origin_import": "megatron.pkg.mod.MyClass",
             "raw_patch": {
                 "patch_import": "pkg.mod.PatchMyClass",
                 "patch_name": "MyClass",
@@ -130,7 +130,7 @@ class MyClass:
         {
             "patch_import": "pkg.mod.PatchMyClass2",
             "condition": ["args.rank == 0"],
-            "orign_import": "megatron.pkg.mod.MyClass",
+            "origin_import": "megatron.pkg.mod.MyClass",
             "raw_patch": {
                 "patch_import": "pkg.mod.PatchMyClass2",
                 "patch_name": "MyClass",
@@ -171,7 +171,7 @@ def test_patch_class_factory_merged_name_builder_unique():
         {
             "patch_import": "pkg.mod.PatchA",
             "condition": [],
-            "orign_import": "megatron.pkg.mod.MyClass",
+            "origin_import": "megatron.pkg.mod.MyClass",
             "raw_patch": {
                 "patch_import": "pkg.mod.PatchA",
                 "patch_name": "MyClass",
@@ -181,7 +181,7 @@ def test_patch_class_factory_merged_name_builder_unique():
         {
             "patch_import": "pkg.mod.PatchB",
             "condition": [],
-            "orign_import": "megatron.pkg.mod.MyClass",
+            "origin_import": "megatron.pkg.mod.MyClass",
             "raw_patch": {
                 "patch_import": "pkg.mod.PatchB",
                 "patch_name": "MyClass",
