@@ -33,11 +33,11 @@ def patched_test_func(a, b):
         
         # Create patch information
         patch = {
-            'module_orign_name': (None, None, 'test_func'),
+            'module_origin_name': (None, None, 'test_func'),
             'module_patch_name': (None, None, 'patched_test_func'),
             'patch_import_root': '.',
-            'orign_import_root': '.',
-            'orign_import': 'module.test_func',
+            'origin_import_root': '.',
+            'origin_import': 'module.test_func',
             'raw_patch': {
                 'patch_import': 'module.patched_test_func',
                 'patch_name': 'patched_test_func',
@@ -90,11 +90,11 @@ class PatchedTestClass:
         
         # Create patch information
         patch = {
-            'module_orign_name': (None, 'TestClass', None),
+            'module_origin_name': (None, 'TestClass', None),
             'module_patch_name': (None, 'PatchedTestClass', None),
             'patch_import_root': '.',
-            'orign_import_root': '.',
-            'orign_import': 'module.TestClass',
+            'origin_import_root': '.',
+            'origin_import': 'module.TestClass',
             'raw_patch': {
                 'patch_import': 'module.PatchedTestClass',
                 'patch_name': 'PatchedTestClass',
@@ -141,11 +141,11 @@ def patched_get_value(self):
         
         # Create patch information
         patch = {
-            'module_orign_name': (None, 'TestClass', 'get_value'),
+            'module_origin_name': (None, 'TestClass', 'get_value'),
             'module_patch_name': (None, None, 'patched_get_value'),
             'patch_import_root': '.',
-            'orign_import_root': '.',
-            'orign_import': 'module.TestClass.get_value',
+            'origin_import_root': '.',
+            'origin_import': 'module.TestClass.get_value',
             'raw_patch': {
                 'patch_import': 'module.patched_get_value',
                 'patch_name': 'patched_get_value',
@@ -190,11 +190,11 @@ class TestVarClass:
         
         # Create patch information
         patch = {
-            'module_orign_name': (None, None, 'TEST_VAR'),
+            'module_origin_name': (None, None, 'TEST_VAR'),
             'module_patch_name': (None, 'TestVarClass', None),
             'patch_import_root': '.',
-            'orign_import_root': '.',
-            'orign_import': 'module.TEST_VAR',
+            'origin_import_root': '.',
+            'origin_import': 'module.TEST_VAR',
             'raw_patch': {
                 'patch_import': 'module.TestVarClass',
                 'patch_name': 'TestVarClass',
@@ -235,11 +235,11 @@ def new_function():
         
         # Create patch information
         patch = {
-            'module_orign_name': (None, None, 'non_existent_function'),
+            'module_origin_name': (None, None, 'non_existent_function'),
             'module_patch_name': (None, None, 'new_function'),
             'patch_import_root': '.',
-            'orign_import_root': '.',
-            'orign_import': 'module.non_existent_function',
+            'origin_import_root': '.',
+            'origin_import': 'module.non_existent_function',
             'raw_patch': {
                 'patch_import': 'module.new_function',
                 'patch_name': 'new_function',
@@ -283,11 +283,11 @@ def patched_test_func():
         
         # Create patch information
         patch = {
-            'module_orign_name': (None, None, 'test_func'),
+            'module_origin_name': (None, None, 'test_func'),
             'module_patch_name': (None, None, 'patched_test_func'),
             'patch_import_root': '.',
-            'orign_import_root': '.',
-            'orign_import': 'module.test_func',
+            'origin_import_root': '.',
+            'origin_import': 'module.test_func',
             'raw_patch': {
                 'patch_import': 'module.patched_test_func',
                 'patch_name': 'patched_test_func',
@@ -334,11 +334,11 @@ class PatchedClass(BaseClass):
         
         # Create patch information
         patch = {
-            'module_orign_name': (None, 'OriginalClass', None),
+            'module_origin_name': (None, 'OriginalClass', None),
             'module_patch_name': (None, 'PatchedClass', None),
             'patch_import_root': '.',
-            'orign_import_root': '.',
-            'orign_import': 'module.OriginalClass',
+            'origin_import_root': '.',
+            'origin_import': 'module.OriginalClass',
             'raw_patch': {
                 'patch_import': 'module.PatchedClass',
                 'patch_name': 'PatchedClass',
@@ -381,11 +381,11 @@ def patched_new_method(self):
         
         # Create patch information
         patch = {
-            'module_orign_name': (None, 'TestClass', 'new_method'),
+            'module_origin_name': (None, 'TestClass', 'new_method'),
             'module_patch_name': (None, None, 'patched_new_method'),
             'patch_import_root': '.',
-            'orign_import_root': '.',
-            'orign_import': 'module.TestClass.new_method',
+            'origin_import_root': '.',
+            'origin_import': 'module.TestClass.new_method',
             'raw_patch': {
                 'patch_import': 'module.patched_new_method',
                 'patch_name': 'patched_new_method',
@@ -427,11 +427,11 @@ class NewClass:
         
         # Create patch information
         patch = {
-            'module_orign_name': (None, 'NonExistentClass', None),
+            'module_origin_name': (None, 'NonExistentClass', None),
             'module_patch_name': (None, 'NewClass', None),
             'patch_import_root': '.',
-            'orign_import_root': '.',
-            'orign_import': 'module.NonExistentClass',
+            'origin_import_root': '.',
+            'origin_import': 'module.NonExistentClass',
             'raw_patch': {
                 'patch_import': 'module.NewClass',
                 'patch_name': 'NewClass',
@@ -472,11 +472,11 @@ class TestClass:
         
         # Create patch information
         patch = {
-            'module_orign_name': (None, None, 'TEST_VARIABLE'),
+            'module_origin_name': (None, None, 'TEST_VARIABLE'),
             'module_patch_name': (None, 'TestClass', None),
             'patch_import_root': '.',
-            'orign_import_root': '.',
-            'orign_import': 'module.TEST_VARIABLE',
+            'origin_import_root': '.',
+            'origin_import': 'module.TEST_VARIABLE',
             'raw_patch': {
                 'patch_import': 'module.TestClass',
                 'patch_name': 'TestClass',
@@ -527,8 +527,8 @@ class KeptClass:
         patch_infos = [
             {
                 'module_patch_name': (None, 'RemovedClass', None),
-                'orign_import_root': 'original.module',
-                'module_orign_name': (None, 'OriginalClass', None)
+                'origin_import_root': 'original.module',
+                'module_origin_name': (None, 'OriginalClass', None)
             }
         ]
         
@@ -561,8 +561,8 @@ class RemovedClass:
         patch_infos = [
             {
                 'module_patch_name': (None, 'RemovedClass', None),
-                'orign_import_root': 'original.module',
-                'module_orign_name': (None, 'OriginalClass', None)
+                'origin_import_root': 'original.module',
+                'module_origin_name': (None, 'OriginalClass', None)
             }
         ]
         

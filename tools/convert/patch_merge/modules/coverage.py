@@ -8,12 +8,12 @@ import json
 import argparse
 
 
-def get_printing_str(orign_import, raw_patch):
+def get_printing_str(origin_import, raw_patch):
     patch_import = raw_patch["patch_import"]
     patch_name = raw_patch["patch_name"]
     condition = raw_patch["condition"]
 
-    pstr = f"=== In patch call, orign_import: {orign_import}, patch_import: {patch_import}, patch_name: {patch_name}, condition: {condition}"
+    pstr = f"=== In patch call, origin_import: {origin_import}, patch_import: {patch_import}, patch_name: {patch_name}, condition: {condition}"
     return pstr
 
 
@@ -24,7 +24,7 @@ def get_debug_print_node(patch):
     if patch is None:
         pstr = f"=== In original call"
     else:
-        pstr = get_printing_str(patch["orign_import"], patch["raw_patch"])
+        pstr = get_printing_str(patch["origin_import"], patch["raw_patch"])
 
     debug_node = cst.parse_statement(f"print(\"\"\"{pstr}\"\"\", flush=True)")
 
@@ -55,17 +55,17 @@ def check_log(patch_json_file, log_file):
     hit_patch_cnt = 0
     hit_module_cnt = 0
     not_hit_patches = defaultdict(list)
-    for orign_import, patches in raw_patches.items():
+    for origin_import, patches in raw_patches.items():
         # Remove the quotation marks at the beginning and end
-        orign_import = orign_import[1:-1] if orign_import[0] == '\"' or orign_import[0] == '\'' else orign_import
+        origin_import = origin_import[1:-1] if origin_import[0] == '\"' or origin_import[0] == '\'' else origin_import
         hit = False
         for patch in patches:
-            pstr = get_printing_str(orign_import, patch)
+            pstr = get_printing_str(origin_import, patch)
             if pstr in log:
                 hit_patch_cnt += 1
                 hit = True
             else:
-                not_hit_patches[orign_import].append(patch)
+                not_hit_patches[origin_import].append(patch)
         
         if hit:
             hit_module_cnt += 1

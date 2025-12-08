@@ -26,7 +26,7 @@ from tools.convert.patch_merge.modules.patch_func_router import (  # noqa: E402
 def _make_patch(
     patch_import: str,
     condition,
-    orign_import: str = "megatron.pkg.mod.func",
+    origin_import: str = "megatron.pkg.mod.func",
     cond_imports=None,
 ):
     """Build a patch dictionary aligned with real parser expectations for reuse."""
@@ -35,7 +35,7 @@ def _make_patch(
     return {
         "patch_import": patch_import,
         "condition": condition,
-        "orign_import": orign_import,
+        "origin_import": origin_import,
         "raw_patch": {
             "patch_import": patch_import,
             "patch_name": patch_import.split(".")[-1],

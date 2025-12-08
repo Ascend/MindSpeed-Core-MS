@@ -154,14 +154,14 @@ class PatchMerger:
         Handling error patch and printing
         """
         print(f"[ERROR] Exception {str(e)} while patching module {module_name}, raw patches: ")
-        raw_patches = [(patch_info['orign_import'], patch_info['raw_patch']) for patch_info in module_patch_infos]
+        raw_patches = [(patch_info['origin_import'], patch_info['raw_patch']) for patch_info in module_patch_infos]
         pprint(raw_patches)
         print(f"**********************")
         print(traceback.format_exc())
         print(f"**********************")
 
-        for orign_import, raw_patch in raw_patches:
-            self.bad_handled_cases[orign_import].append(raw_patch)
+        for origin_import, raw_patch in raw_patches:
+            self.bad_handled_cases[origin_import].append(raw_patch)
 
     @staticmethod
     def parse_path(source_packages, parent_module_path, module_name):
@@ -285,27 +285,27 @@ class PatchMerger:
             
             return parent_module_path, module_name
 
-        for orign_import, module_raw_patches in self.raw_patches.items():
-            orign_import = orign_import[1:-1] if orign_import.startswith("'") else orign_import # fix "'megatron.xxx.xxx'"
-            split_name = orign_import.rsplit('.', 1)
-            parent_module_path, module_name = split(orign_import)
+        for origin_import, module_raw_patches in self.raw_patches.items():
+            origin_import = origin_import[1:-1] if origin_import.startswith("'") else origin_import # fix "'megatron.xxx.xxx'"
+            split_name = origin_import.rsplit('.', 1)
+            parent_module_path, module_name = split(origin_import)
 
             # parse original import module
             try:
-                orign_import_root, original_file, class_name, func_name = PatchMerger.parse_path(handled_packages, parent_module_path, module_name)
+                origin_import_root, original_file, class_name, func_name = PatchMerger.parse_path(handled_packages, parent_module_path, module_name)
             except Exception as e:
-                print(f"[ERROR] While parsing original import: {orign_import}, raising exception {e}")
-                print(orign_import)
+                print(f"[ERROR] While parsing original import: {origin_import}, raising exception {e}")
+                print(origin_import)
                 pprint(module_raw_patches)
                 print(f"**********************")
                 print(traceback.format_exc())
                 print(f"**********************")
-                self.bad_parsed_cases[orign_import].extend(module_raw_patches)
+                self.bad_parsed_cases[origin_import].extend(module_raw_patches)
                 continue
 
             if class_name is None and func_name is None:
-                raise Exception(f"[ERROR] While parsing original import{orign_import}, both class_name and func_name are None")
-            module_orign_name = get_module_name(class_name, func_name)
+                raise Exception(f"[ERROR] While parsing original import{origin_import}, both class_name and func_name are None")
+            module_origin_name = get_module_name(class_name, func_name)
 
             self.num_patches += len(module_raw_patches)
 
@@ -317,12 +317,12 @@ class PatchMerger:
                     patch_import_root, patch_file, class_patch_name, func_patch_name = PatchMerger.parse_path(handled_packages, parent_module_path, module_name)
                 except Exception as e:
                     print(f"[ERROR] While parsing patch import {patch_import}, raising exception: {e}")
-                    print(orign_import)
+                    print(origin_import)
                     pprint(module_raw_patch)
                     print(f"**********************")
                     print(traceback.format_exc())
                     print(f"**********************")
-                    self.bad_parsed_cases[orign_import].append(module_raw_patch)
+                    self.bad_parsed_cases[origin_import].append(module_raw_patch)
                     continue
 
                 if class_patch_name is None and func_patch_name is None:
@@ -334,13 +334,13 @@ class PatchMerger:
                 is_wrapper = module_patch_name.endswith("_wrapper") or module_patch_name.endswith("_decorator")
 
                 patch_info = {
-                    "orign_file": original_file,
-                    'orign_import': orign_import,
-                    'orign_import_root': orign_import_root,
+                    "origin_file": original_file,
+                    'origin_import': origin_import,
+                    'origin_import_root': origin_import_root,
                     "patch_file": patch_file,
                     'patch_import': patch_import,
                     'patch_import_root': patch_import_root,
-                    "module_orign_name": (module_orign_name, class_name, func_name),
+                    "module_origin_name": (module_origin_name, class_name, func_name),
                     "module_patch_name": (module_patch_name, class_patch_name, func_patch_name),
                     "condition": condition,
                     "raw_patch": module_raw_patch
@@ -348,14 +348,14 @@ class PatchMerger:
 
                 # separate patch infos
                 if not is_wrapper and not condition:
-                    self.add_merge_info(self.patch_replace_info, original_file, module_orign_name, patch_info)
+                    self.add_merge_info(self.patch_replace_info, original_file, module_origin_name, patch_info)
                     continue
                 if is_class_patch:
-                    self.add_merge_info(self.patch_class_infos, original_file, module_orign_name, patch_info)
+                    self.add_merge_info(self.patch_class_infos, original_file, module_origin_name, patch_info)
                 elif is_wrapper:
-                    self.add_merge_info(self.patch_wrapper_infos, original_file, module_orign_name, patch_info)
+                    self.add_merge_info(self.patch_wrapper_infos, original_file, module_origin_name, patch_info)
                 else:
-                    self.add_merge_info(self.patch_func_infos, original_file, module_orign_name, patch_info)
+                    self.add_merge_info(self.patch_func_infos, original_file, module_origin_name, patch_info)
 
         print(f"[INFO] =======================total {len(self.raw_patches)}====================")
         print(f"[INFO] =======================parsed failed {len(self.bad_parsed_cases)}====================")
@@ -365,19 +365,19 @@ class PatchMerger:
         Annotate the register/register_patch statement in megatron_adaptor based on the input patch.
         A dict is used to record the modified code and then flash it into the file all at once after processing is completed.
         """
-        orign_import = patch['orign_import']
-        parent, module = orign_import.rsplit('.', 1)
+        origin_import = patch['origin_import']
+        parent, module = origin_import.rsplit('.', 1)
         parent, module = re.escape(parent), re.escape('.' + module)
-        orign_import = re.escape(orign_import)
+        origin_import = re.escape(origin_import)
         _, class_patch_name, func_patch_name = patch['module_patch_name']
         patch_name = func_patch_name if func_patch_name is not None else class_patch_name
         patch_name = re.escape(patch_name)
 
-        module_orign_name, _, _ = patch['module_orign_name']
+        module_origin_name, _, _ = patch['module_origin_name']
         patterns = [
-            rf'^((?:[^\S\n])*)(?:MegatronAdaptation|patch_manages?r|pm|aspm|MindSporeAdaptation)\.(?:register|register_patch)\(\s*[\'\"]{orign_import}[\'\"]\s*,\s*{patch_name}(?:,\s*force_patch=.*?)?\)',
+            rf'^((?:[^\S\n])*)(?:MegatronAdaptation|patch_manages?r|pm|aspm|MindSporeAdaptation)\.(?:register|register_patch)\(\s*[\'\"]{origin_import}[\'\"]\s*,\s*{patch_name}(?:,\s*force_patch=.*?)?\)',
             rf'^((?:[^\S\n])*)(?:MegatronAdaptation|patch_manages?r|pm|aspm|MindSporeAdaptation)\.(?:register|register_patch)\(\s*[\'\"]{parent}[\'\"]\s*[\'\"]{module}[\'\"]\s*,\s*{patch_name}\)',
-            rf'^((?:[^\S\n])*){module_orign_name}\s*=\s*{patch_name}\s*$'
+            rf'^((?:[^\S\n])*){module_origin_name}\s*=\s*{patch_name}\s*$'
         ]
 
         def replacer(match):
@@ -406,7 +406,7 @@ class PatchMerger:
                 # Comment only one patch at a time to prevent patches with the same name from not being found later
                 return
 
-        raise Exception(f"Register patch not found in adaptor, comment failed. patch {patch['orign_import']}: {patch['raw_patch']}")
+        raise Exception(f"Register patch not found in adaptor, comment failed. patch {patch['origin_import']}: {patch['raw_patch']}")
 
     def handle_annotate(self, patch_infos):
         """
@@ -434,11 +434,11 @@ class PatchMerger:
         """
         patch_class_node_to_remove = defaultdict(list)
 
-        for orign_file, all_module_patch_infos in self.patch_replace_info.items():  # All the patched modules in the file
-            print(f"[INFO] Merging file in merge_replacement: {orign_file}")
+        for origin_file, all_module_patch_infos in self.patch_replace_info.items():  # All the patched modules in the file
+            print(f"[INFO] Merging file in merge_replacement: {origin_file}")
             # 1. read original cst
-            source_cst = self.get_cst(orign_file)
-            orign_source_cst, updated_source_cst = source_cst, None
+            source_cst = self.get_cst(origin_file)
+            origin_source_cst, updated_source_cst = source_cst, None
             source_wrapper = MetadataWrapper(source_cst)
 
             # 2. collect extra imports in patch and do replacement
@@ -460,7 +460,7 @@ class PatchMerger:
 
                     # 4. record class node to be removed in patch_file, instead we import from original file
                     # Only handle replacing class by class
-                    if replacer.func_orign_name is None and replacer.func_patch_name is None:
+                    if replacer.func_origin_name is None and replacer.func_patch_name is None:
                         patch_class_node_to_remove[(patch_file, module_name)].append(patch_info)
 
                     # 5. annotate megatron_adaptor
@@ -473,8 +473,8 @@ class PatchMerger:
                     self.handle_exc(e, module_name, module_patch_infos)
 
             # 7. update original cst in dict
-            if source_cst != orign_source_cst:
-                self.set_cst(orign_file, source_cst)
+            if source_cst != origin_source_cst:
+                self.set_cst(origin_file, source_cst)
 
         # 8. do remove nodes in patch cst
         for (patch_file, module_name), patch_infos in patch_class_node_to_remove.items():
@@ -493,28 +493,28 @@ class PatchMerger:
         '''
         Conditional class substitution: Add a factory class and change class instantiation/static method calls to factory class calls
         '''
-        for orign_file, all_module_patch_infos in self.patch_class_infos.items():
-            print(f"[INFO] Merging file in merge_class_patch: {orign_file}")
+        for origin_file, all_module_patch_infos in self.patch_class_infos.items():
+            print(f"[INFO] Merging file in merge_class_patch: {origin_file}")
             # 1. read original cst
-            source_cst = self.get_cst(orign_file)
-            orign_source_cst, updated_source_cst = source_cst, None
+            source_cst = self.get_cst(origin_file)
+            origin_source_cst, updated_source_cst = source_cst, None
             source_wrapper = MetadataWrapper(source_cst)
 
             for module_name, module_patch_infos in all_module_patch_infos.items():
                 try:
                     # 2. walk through all Callings and modify callings to factory call
                     cls_name = module_name
-                    orign_import = module_patch_infos[0]['orign_import']
+                    origin_import = module_patch_infos[0]['origin_import']
                     files = grep_in_files(os.path.join(self.root, "Megatron-LM", "megatron"), cls_name)
                     print(f"[INFO] walking {len(files)} files in megatron where {cls_name} is found...")
                     walked_cst = {}
                     for file_path in files:
-                        if file_path == orign_file:
+                        if file_path == origin_file:
                             continue
                         call_cst = self.get_cst(file_path)
                         wrapper = MetadataWrapper(call_cst)
                         parent_provider = wrapper.resolve(ParentNodeProvider)
-                        walker = PatchClassCallTransformer(cls_name, orign_import, parent_provider)
+                        walker = PatchClassCallTransformer(cls_name, origin_import, parent_provider)
 
                         new_code = wrapper.visit(walker)
                         print(f"[DEBUG] After walking file {file_path}, has_change={walker.has_change}")
@@ -539,18 +539,18 @@ class PatchMerger:
                     self.handle_exc(e, module_name, module_patch_infos)
 
             # 6. update original cst in dict
-            if source_cst != orign_source_cst:
-                self.set_cst(orign_file, source_cst)
+            if source_cst != origin_source_cst:
+                self.set_cst(origin_file, source_cst)
 
     def merge_with_router(self, patch_infos, router_trans_cls):
         """
         Conditional function substitution/wrapper: Create a routing function and route to the corresponding patch function based on the conditions
         """
-        for orign_file, all_module_patch_infos in patch_infos.items():
-            print(f"[INFO] Merging file {orign_file} in merge_with_router with {router_trans_cls.__name__}")
+        for origin_file, all_module_patch_infos in patch_infos.items():
+            print(f"[INFO] Merging file {origin_file} in merge_with_router with {router_trans_cls.__name__}")
             # 1. read original cst
-            source_cst = self.get_cst(orign_file)
-            orign_source_cst, updated_source_cst = source_cst, None
+            source_cst = self.get_cst(origin_file)
+            origin_source_cst, updated_source_cst = source_cst, None
             source_wrapper = MetadataWrapper(source_cst)
 
             for module_name, module_patch_infos in all_module_patch_infos.items():
@@ -571,8 +571,8 @@ class PatchMerger:
                     self.handle_exc(e, module_name, module_patch_infos)
 
             # 5. update original cst in dict
-            if source_cst != orign_source_cst:
-                self.set_cst(orign_file, source_cst)
+            if source_cst != origin_source_cst:
+                self.set_cst(origin_file, source_cst)
 
     @time_tracker
     def merge_func_patch(self):
