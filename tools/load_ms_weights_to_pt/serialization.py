@@ -605,10 +605,12 @@ func_name_dict = {
     '_rebuild_from_type_v2': _rebuild_from_type_v2,
     '_rebuild_tensor_v2': _rebuild_tensor_v2,
 }
- 
-if __name__ == "__main__":
+
+
+def main():
+
     state_dict = load_ms_weights(".pt")
- 
+
     def recursive_print(state, prefix=None):
         if isinstance(state, dict):
             for k, v in state.items():
@@ -624,4 +626,10 @@ if __name__ == "__main__":
         else:
             state_name = ".".join(prefix)
             print(f"{state_name} {type(state)} {state}", flush=True)
+
+
     recursive_print(state_dict, [])
+
+
+if __name__ == "__main__":
+    main()
