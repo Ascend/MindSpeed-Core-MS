@@ -6,9 +6,9 @@ import sys
 import libcst as cst
 from libcst.metadata import PositionProvider, ScopeProvider, ParentNodeProvider
 import inflection
-from .coverage import get_debug_print_node
+from tools.convert.patch_merge.modules.coverage import get_debug_print_node
 
-from .patch_import_collector import MImport
+from tools.convert.patch_merge.modules.patch_import_collector import MImport
 
 
 class PatchWrapperRouterTransformer(cst.CSTTransformer):
@@ -36,7 +36,7 @@ class PatchWrapperRouterTransformer(cst.CSTTransformer):
         self.debug_printing_str = []
 
         self.modified_patch_nodes = None
-
+        self.metadata = None
 
     def _merged_name_builder(self, name, patch):
         """
@@ -227,7 +227,7 @@ class PatchWrapperRouterTransformer(cst.CSTTransformer):
                 if isinstance(parent, cst.ClassDef):
                     break
                 node = parent
-            class_name = parent.name.value
+                class_name = parent.name.value
             if class_name != self.cls_name:  # not this class's method
                 return updated_node
 
