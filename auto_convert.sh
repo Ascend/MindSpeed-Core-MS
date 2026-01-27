@@ -46,7 +46,7 @@ fi
 if [ "$2" == "msa_latest" ]; then
     echo "Cloning latest msadapter..."
     rm -rf msadapter
-    git clone https://gitee.com/mindspore/msadapter.git -b master
+    git clone https://atomgit.com/mindspore/msadapter.git -b master
     if [ $? -ne 0 ]; then
         echo "Error: git clone msadapter"
         exit 1

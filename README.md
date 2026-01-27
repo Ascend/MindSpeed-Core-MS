@@ -120,9 +120,8 @@ cd MindSpeed-LLM
 若在环境中`PYTHONPATH`等环境变量失效（例如退出容器后再进入等），可执行如下命令重新设置环境变量
 
 ```shell
-# 在MindSpeed-Core-MS目录下执行
-MindSpeed_Core_MS_PATH=$(pwd)
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter:${MindSpeed_Core_MS_PATH}/MSAdapter/msa_thirdparty:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-LLM:$PYTHONPATH
+# 在MindSpeed-Core-MS目录下执行环境变量设置脚本
+source tests/scripts/set_path.sh
 ```
 
 ---
@@ -143,9 +142,8 @@ cd MindSpeed-MM
 若在环境中`PYTHONPATH`等环境变量失效（例如退出容器后再进入等），可执行如下命令重新设置环境变量
 
 ```shell
-# 在MindSpeed-Core-MS目录下执行
-MindSpeed_Core_MS_PATH=$(pwd)
-export PYTHONPATH=${MindSpeed_Core_MS_PATH}/MSAdapter:${MindSpeed_Core_MS_PATH}/MSAdapter/msa_thirdparty:${MindSpeed_Core_MS_PATH}/Megatron-LM:${MindSpeed_Core_MS_PATH}/MindSpeed:${MindSpeed_Core_MS_PATH}/MindSpeed-MM/:$PYTHONPATH
+# 在MindSpeed-Core-MS目录下执行环境变量设置脚本
+source tests/scripts/set_path_mm.sh
 ```
 
 ---
